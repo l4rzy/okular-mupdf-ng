@@ -116,7 +116,7 @@ std::optional<std::vector<std::byte>> encodeImpl(const T& value, std::string* er
 template <typename T> bool decodeImpl(std::span<const std::byte> bytes, T* value, std::string* error)
 {
     // Reject invalid destinations and impossible frame sizes before invoking
-    // the codec, which also avoids unbounded work on attacker-controlled input.
+    // the codec. zpp also bounds each decoded container allocation below.
     if (!value || bytes.empty() || bytes.size() > Limit::MaxFrameBytes)
         return setError(error, "message is empty or too large");
 
@@ -125,7 +125,7 @@ template <typename T> bool decodeImpl(std::span<const std::byte> bytes, T* value
     auto input = zpp::bits::in(bytes,
                                zpp::bits::size4b { },
                                zpp::bits::endian::little { },
-                               zpp::bits::alloc_limit<Limit::MaxDecodedAllocationBytes> { },
+                               zpp::bits::alloc_limit<Limit::MaxContainerAllocationBytes> { },
                                zpp::bits::nesting_limit<Limit::MaxDepth> { });
     std::uint32_t magic = 0;
     std::uint32_t version = 0;

@@ -16,10 +16,10 @@ inline constexpr std::uint32_t FrameMaxDataBytes = 128U * 1024U * 1024U;
 
 // --- Serialization & Protocol Decoding Limits ---
 inline constexpr std::uint64_t MaxString = 1U * 1024U * 1024U;
-inline constexpr std::uint64_t MaxBytes = 64U * 1024U * 1024U;
-inline constexpr std::uint64_t MaxItems = 200'000;
 inline constexpr std::size_t MaxDepth = 32;
-inline constexpr std::size_t MaxDecodedAllocationBytes = 128U * 1024U * 1024U;
+// zpp applies this limit to each decoded container allocation, not to the
+// aggregate allocation of a complete message.
+inline constexpr std::size_t MaxContainerAllocationBytes = 128U * 1024U * 1024U;
 
 // --- Rendering & Geometry Limits ---
 inline constexpr int MaxRenderDimension = 16'384;
