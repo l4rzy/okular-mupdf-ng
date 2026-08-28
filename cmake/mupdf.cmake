@@ -1,10 +1,18 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/mupdf.version" _mupdf_version_lines LIMIT_COUNT 2)
+list(GET _mupdf_version_lines 0 _mupdf_file_version)
+string(STRIP "${_mupdf_file_version}" _mupdf_file_version)
+if(NOT _mupdf_file_version MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "Invalid version in cmake/mupdf.version: ${_mupdf_file_version}")
+endif()
+set(MUPDF_REQUIRED_VERSION "${_mupdf_file_version}" CACHE STRING "Required MuPDF version (from cmake/mupdf.version)")
+
 option(USE_SYSTEM_MUPDF "Use the system MuPDF package instead of bundled MuPDF" OFF)
 
 if(USE_SYSTEM_MUPDF)
-    pkg_check_modules(MUPDF_SYSTEM REQUIRED IMPORTED_TARGET mupdf>=1.28)
+    pkg_check_modules(MUPDF_SYSTEM REQUIRED IMPORTED_TARGET mupdf>=${MUPDF_REQUIRED_VERSION})
 
     add_library(MuPDF::Engine INTERFACE IMPORTED GLOBAL)
     set_target_properties(MuPDF::Engine PROPERTIES
@@ -14,23 +22,23 @@ else()
         "Path to the pinned MuPDF source tree")
     if(NOT EXISTS "${MUPDF_SOURCE_DIR}/Makefile"
        AND MUPDF_SOURCE_DIR STREQUAL "${CMAKE_SOURCE_DIR}/thirdparty/mupdf"
-       AND EXISTS "${CMAKE_SOURCE_DIR}/thirdparty/mupdf-1.28.2-source/Makefile")
-        set(MUPDF_SOURCE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/mupdf-1.28.2-source")
+       AND EXISTS "${CMAKE_SOURCE_DIR}/thirdparty/mupdf-${MUPDF_REQUIRED_VERSION}-source/Makefile")
+        set(MUPDF_SOURCE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/mupdf-${MUPDF_REQUIRED_VERSION}-source")
     endif()
 
     if(NOT EXISTS "${MUPDF_SOURCE_DIR}/Makefile"
        OR NOT EXISTS "${MUPDF_SOURCE_DIR}/include/mupdf/fitz/version.h")
         message(FATAL_ERROR
-            "Bundled MuPDF source not found. Set MUPDF_SOURCE_DIR to the MuPDF 1.28.2 source tree.")
+            "Bundled MuPDF source not found. Set MUPDF_SOURCE_DIR to the MuPDF ${MUPDF_REQUIRED_VERSION} source tree.")
     endif()
 
     file(STRINGS "${MUPDF_SOURCE_DIR}/include/mupdf/fitz/version.h" MUPDF_VERSION_LINE
         REGEX "^#define FZ_VERSION \"")
     string(REGEX MATCH "FZ_VERSION \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" _ "${MUPDF_VERSION_LINE}")
     set(MUPDF_VERSION "${CMAKE_MATCH_1}")
-    if(NOT MUPDF_VERSION STREQUAL "1.28.2")
+    if(NOT MUPDF_VERSION VERSION_EQUAL MUPDF_REQUIRED_VERSION)
         message(FATAL_ERROR
-            "MuPDF 1.28.2 is required, found ${MUPDF_VERSION} in ${MUPDF_SOURCE_DIR}")
+            "MuPDF ${MUPDF_REQUIRED_VERSION} is required, found ${MUPDF_VERSION} in ${MUPDF_SOURCE_DIR}")
     endif()
 
     find_program(MUPDF_MAKE_EXECUTABLE NAMES make gmake REQUIRED)

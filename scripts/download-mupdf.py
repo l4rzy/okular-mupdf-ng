@@ -14,8 +14,18 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-MUPDF_VERSION = "1.28.3"
-MUPDF_SHA256 = "37c3209dc0e06fa4f3781ed44839ad933a9e6143eb4731f99e069204715bcef2"
+def _load_version_file() -> tuple[str, str]:
+    p = (Path(__file__).resolve().parent / "../cmake/mupdf.version").resolve()
+    lines = [ln.strip() for ln in p.read_text().splitlines() if ln.strip()]
+    if len(lines) < 2 or not lines[0] or len(lines[1]) != 64:
+        print(f"invalid {p}: expected 'version\\nsha256'", file=sys.stderr)
+        sys.exit(1)
+    return lines[0], lines[1].lower()
+
+
+_MUPDF_DEFAULT_VERSION, _MUPDF_DEFAULT_SHA256 = _load_version_file()
+MUPDF_VERSION = _MUPDF_DEFAULT_VERSION
+MUPDF_SHA256 = _MUPDF_DEFAULT_SHA256
 
 if sys.version_info < (3, 12):
     print("Python 3.12 or newer is required", file=sys.stderr)
