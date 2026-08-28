@@ -1,8 +1,9 @@
+scripts/__pycache__/
 build/
 build-release/
 build-asan/
 reference/
-thirdparty/mupdf-1.28.2-source/
+thirdparty/mupdf-*/
 dist/*
 !dist/PKGBUILD
 !dist/mupdfng.png

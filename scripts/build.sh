@@ -40,7 +40,7 @@ case "$1" in
 esac
 
 if ! compgen -G 'thirdparty/mupdf*/Makefile' > /dev/null; then
-  ./scripts/download-mupdf.sh
+  python3 ./scripts/download-mupdf.py
 fi
 
 echo "==> Configuring ($BUILD_TYPE) in $BUILD_DIR..."

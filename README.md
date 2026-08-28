@@ -39,10 +39,10 @@ signature locking rules are preserved.
 - NSS/NSPR for certificate and signature operations.
 - Build dependencies required by MuPDF, including FreeType, HarfBuzz, Gumbo,
   JPEG, JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
-- `curl` and `tar` when using the bundled MuPDF source for the first time.
+- `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
 
-The default build statically links the pinned MuPDF 1.28.2 source. It is
-downloaded to `thirdparty/mupdf-1.28.2-source/` automatically when absent. A
+The default build statically links the pinned MuPDF 1.28.3 source. It is
+downloaded to `thirdparty/mupdf-1.28.3-source/` automatically when absent (override with `MUPDF_VERSION=1.28.x python3 ./scripts/download-mupdf.py`). A
 system MuPDF package can instead be selected with `-DUSE_SYSTEM_MUPDF=ON`.
 
 OCR uses the build-time `TESSDATA_DIR` setting, which defaults to

@@ -1,16 +1,16 @@
 # Maintainer: rzy <me@23ro.org>
 pkgname=okular-mupdf-ng
 _pkgname=okular-mupdf-ng
-pkgver=0.6.1.r368.g9f53495
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('GPL-3.0-or-later')
 depends=('okular' 'qt6-base' 'qt6-5compat')
-makedepends=('brotli' 'clang' 'cmake' 'curl' 'extra-cmake-modules' 'freetype2'
-             'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
-             'libjpeg-turbo' 'openjpeg2' 'pkgconf' 'qt6-tools')
+makedepends=('brotli' 'clang' 'cmake' 'extra-cmake-modules' 'freetype2'
+              'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
+              'libjpeg-turbo' 'openjpeg2' 'pkgconf' 'python' 'qt6-tools')
 provides=('okular-backend-mupdf')
 conflicts=('okular-backend-mupdf')
 # Replace with source=("git+$url.git") when the PKGBUILD is standalone.
@@ -41,7 +41,7 @@ pkgver() {
 
 prepare() {
   cd "$srcdir/$_pkgname"
-  ./scripts/download-mupdf.sh
+  python3 ./scripts/download-mupdf.py
 }
 
 build() {
