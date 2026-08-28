@@ -1,0 +1,8 @@
+build/
+build-release/
+build-asan/
+reference/
+thirdparty/mupdf-1.28.2-source/
+dist/*
+!dist/PKGBUILD
+!dist/mupdfng.png

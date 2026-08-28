@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name="okular-generator-mupdf-ngrc"/>
+  <group name="General">
+    <entry key="MemoryLimit" type="Enum">
+      <default>Size64MiB</default>
+      <choices>
+        <choice name="Size32MiB" />
+        <choice name="Size64MiB" />
+        <choice name="Size128MiB" />
+        <choice name="Size256MiB" />
+      </choices>
+    </entry>
+  </group>
+  <group name="Rendering">
+    <entry key="GraphicsAntialiasingBits" type="Enum">
+      <default>Medium</default>
+      <choices>
+        <choice name="Disabled" />
+        <choice name="Minimum" />
+        <choice name="Low" />
+        <choice name="Medium" />
+        <choice name="High" />
+      </choices>
+    </entry>
+    <entry key="TextAntialiasingBits" type="Enum">
+      <default>Medium</default>
+      <choices>
+        <choice name="Disabled" />
+        <choice name="Minimum" />
+        <choice name="Low" />
+        <choice name="Medium" />
+        <choice name="High" />
+      </choices>
+    </entry>
+    <entry key="ImageRenderingQuality" type="Enum">
+      <default>Balance</default>
+      <choices>
+        <choice name="Balance" />
+        <choice name="Quality" />
+        <choice name="Speed" />
+      </choices>
+    </entry>
+    <entry key="ImageInterpolation" type="Bool">
+      <default>true</default>
+    </entry>
+  </group>
+  <group name="OCR">
+    <entry key="OcrLanguage" type="String">
+      <default>eng.traineddata</default>
+    </entry>
+    <entry key="OcrTriggerMode" type="Enum">
+      <default>Twenty</default>
+      <choices>
+        <choice name="Never" />
+        <choice name="Five" />
+        <choice name="Twenty" />
+        <choice name="Always" />
+      </choices>
+    </entry>
+    <entry key="OcrAsync" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry key="OcrQuality" type="Enum">
+      <default>Balance</default>
+      <choices>
+        <choice name="Speed" />
+        <choice name="Balance" />
+        <choice name="Accuracy" />
+      </choices>
+    </entry>
+    <entry key="OcrNotify" type="Bool">
+      <default>false</default>
+    </entry>
+  </group>
+  <group name="Signatures">
+    <entry key="UseDefaultCertDB" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry key="dBCertificatePath" type="Path">
+      <default>/etc/pki/nssdb</default>
+    </entry>
+  </group>
+  <group name="EPUB">
+    <entry key="EpubFontSize" type="Int">
+      <default>11</default>
+      <min>10</min>
+      <max>20</max>
+    </entry>
+    <entry key="EpubFontFamily" type="Enum">
+      <default>Default</default>
+      <choices>
+        <choice name="Default" />
+        <choice name="Serif" />
+        <choice name="SansSerif" />
+        <choice name="Monospace" />
+      </choices>
+    </entry>
+    <entry key="EpubPageSize" type="Enum">
+      <default>A5</default>
+      <choices>
+        <choice name="B5" />
+        <choice name="A5" />
+        <choice name="SixByNine" />
+        <choice name="Letter" />
+      </choices>
+    </entry>
+    <entry key="EpubCustomCss" type="String">
+      <default></default>
+    </entry>
+  </group>
+  <group name="Advanced">
+    <entry key="TessDataDirectories" type="StringList" hidden="true">
+      <default code="true">QStringList()</default>
+    </entry>
+  </group>
+</kcfg>

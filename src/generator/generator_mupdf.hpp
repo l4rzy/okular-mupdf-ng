@@ -1,0 +1,173 @@
+// SPDX-FileCopyrightText: 2008 Pino Toscano <pino@kde.org>
+// SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef GENERATOR_MUPDF_H
+#define GENERATOR_MUPDF_H
+
+#include <okular/core/action.h>
+#include <okular/core/area.h>
+#include <okular/core/document.h>
+#include <okular/core/fontinfo.h>
+#include <okular/core/generator.h>
+#include <okular/core/sourcereference.h>
+#include <okular/core/version.h>
+#include <okular/interfaces/configinterface.h>
+#include <okular/interfaces/saveinterface.h>
+
+#include <QByteArray>
+#include <QHash>
+#include <QMutex>
+#include <memory>
+
+#include <atomic>
+
+#include "generator/config/settings.hpp"
+#include "generator/proxy/annotation.hpp"
+#include "generator/proxy/certificate_store.hpp"
+#include "generator/proxy/form/coordinator.hpp"
+#include "generator/proxy/form/signature.hpp"
+#include "plugin/ocr/ocr.hpp"
+#include "plugin/worker_client.hpp"
+
+namespace Mu::Generator {
+
+/// Okular-facing coordinator for the isolated MuPDF worker.
+///
+/// Lifecycle overview:
+/// 1. Open a document through WorkerClient and translate its models into Okular pages.
+/// 2. Forward rendering, text, form, save, print, and signing requests to the worker.
+/// 3. Keep the source and UI state needed to recover after a worker restart.
+/// 4. Cancel asynchronous OCR work before document teardown or worker recovery.
+class Main : public Okular::Generator, public Okular::SaveInterface, public Okular::ConfigInterface {
+    Q_OBJECT
+    Q_INTERFACES(Okular::Generator)
+    Q_INTERFACES(Okular::SaveInterface)
+    Q_INTERFACES(Okular::ConfigInterface)
+
+public:
+    // Okular Generator Func: creates the generator and initializes worker services.
+    Main(QObject* parent, const QVariantList& args);
+    // Okular Generator Func: stops worker activity and releases generator resources.
+    virtual ~Main();
+
+    // Okular Generator Func: opens a file and creates its Okular pages.
+    Okular::Document::OpenResult
+    loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& pages, const QString& password) override;
+    // Okular Generator Func: opens memory data and creates its Okular pages.
+    Okular::Document::OpenResult loadDocumentFromDataWithPassword(const QByteArray& fileData,
+                                                                  QVector<Okular::Page*>& pages,
+                                                                  const QString& password) override;
+    // Okular Generator Func: replaces the backing file while preserving page state.
+    SwapBackingFileResult swapBackingFile(const QString& newFileName, QList<Okular::Page*>& newPages) override;
+
+    // Okular Generator Func: returns the requested document metadata.
+    Okular::DocumentInfo generateDocumentInfo(const QSet<Okular::DocumentInfo::Key>& keys) const override;
+    // Okular Generator Func: returns the document outline from the worker.
+    const Okular::DocumentSynopsis* generateDocumentSynopsis() override;
+    // Okular Generator Func: returns the fonts used on a page.
+    Okular::FontInfo::List fontsForPage(int page) override;
+    // Okular Generator Func: returns generator-specific metadata.
+    QVariant metaData(const QString& key, const QVariant& option) const override;
+    // Okular Generator Func: reports pixel metric for page size localization.
+    PageSizeMetric pagesSizeMetric() const override;
+    // Okular Generator Func: checks whether a document permission is granted.
+
+    // Okular Generator Func: returns embedded files as Okular objects.
+    const QList<Okular::EmbeddedFile*>* embeddedFiles() const override;
+    // Okular Generator Func: reports the supported save options.
+    bool supportsOption(SaveOption option) const override;
+    // Okular Generator Func: saves the current document through the worker.
+    bool save(const QString& fileName, SaveOptions options, QString* errorText) override;
+    // Okular Generator Func: returns the annotation adapter used by Okular.
+    Okular::AnnotationProxy* annotationProxy() const override;
+
+    // Okular Generator Func: reports that worker-backed signing is supported.
+    bool canSign() const override;
+    // Okular Generator Func: signs the document using the supplied data.
+    std::pair<Okular::SigningResult, QString> sign(const Okular::NewSignatureData& data,
+                                                   const QString& rFilename) override;
+    // Okular Generator Func: returns the certificate store used for signing.
+    Okular::CertificateStore* certificateStore() const override;
+
+protected:
+    // Okular Generator Func: clears the current document and worker state.
+    bool doCloseDocument() override;
+    // Okular Generator Func: renders a page or tile for Okular.
+    QImage image(Okular::PixmapRequest* page) override;
+    // Okular Generator Func: extracts native text or starts/reads OCR.
+    Okular::TextPage* textPage(Okular::TextRequest* request) override;
+    // Okular Generator Func: prints through a temporary worker output file.
+    Okular::Document::PrintError print(QPrinter& printer) override;
+
+    // Okular Generator Func: reloads settings and reports rendering changes.
+    bool reparseConfig() override;
+    // Okular Generator Func: adds the generator settings page to Okular.
+    void addPages(KConfigDialog* dialog) override;
+
+private:
+    // Updates OCR scheduling from the pages currently visible in Okular.
+    void observeOcrFocus();
+    // Reopens the retained source after a worker restart and verifies that it
+    // still represents the active Okular document.
+    bool reopenWorkerDocument();
+    // Permanently disables the active document after an unrecoverable worker failure.
+    void failClosed(const QString& message);
+    // Clears transient Okular display state without removing document data.
+    void clearPageDisplayState(int page);
+    // Tracks settings that are fixed when the generator process starts.
+    void updateRestartRequiredSettings(const Config::EpubSettings& currentEpubSettings);
+
+    // Converts worker page information into Okular-owned pages and wires their
+    // annotations, links, and form proxies to the current worker session.
+    Okular::Document::OpenResult
+    initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::PageInfo>& pageInfos, const QString& password);
+    // Must be called while userMutex() is held; releases cached embedded files.
+    void clearEmbeddedFilesCache();
+
+    // -----------------------------------------------------------------------
+    // Trusted plugin facade for all worker operations. It owns the IPC client
+    // and keeps MuPDF outside the Okular process.
+    // -----------------------------------------------------------------------
+    Plugin::WorkerClient m_worker;
+    std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
+
+    std::unique_ptr<Okular::DocumentSynopsis> m_synopsis;
+    mutable std::unique_ptr<QList<Okular::EmbeddedFile*>> m_embeddedFilesCache;
+    mutable Proxy::Annotation m_annotationProxy;
+    QString m_password;
+    QString m_documentName;
+    // Exactly one source is retained while a document is open so a restarted
+    // worker can reopen the same document without asking Okular for it again.
+    QString m_sourcePath;
+    QByteArray m_sourceData;
+    QString m_documentHash;
+    Model::DocumentType m_documentType = Model::DocumentType::Pdf;
+    QVector<Okular::Page*> m_okularPages;
+    std::unique_ptr<Proxy::CertificateStore> m_certStore;
+    std::unique_ptr<Proxy::Form::Coordinator> m_formCoordinator;
+    bool m_formsDirty = false;
+
+    mutable QMutex m_ocrMutex;
+    // Set once recovery is no longer safe. Rendering then returns an error
+    // placeholder instead of sending further work to the worker.
+    std::atomic_bool m_workerUnavailable = false;
+    // Results are retained until the next textPage request as a fallback for
+    // hosts that do not immediately consume signalTextGenerationDone.
+    QHash<int, QVector<Plugin::Caching::OCR::CacheItem>> m_readyOcrPages;
+    int m_lastOcrFocusPage = -1;
+    // Replaced for each document/recovery generation so queued OCR callbacks
+    // can identify work made stale by teardown.
+    std::shared_ptr<std::atomic<bool>> m_ocrCancellationToken;
+
+    Config::RenderingSettings m_renderingSettings;
+    // EPUB settings are fixed during worker startup; changes require restarting
+    // Okular rather than being sent to the already-sandboxed worker.
+    Config::EpubSettings m_startupEpubSettings;
+    bool m_restartRequired = false;
+    bool m_restartNoticeShown = false;
+};
+
+} // namespace Mu::Generator
+
+#endif

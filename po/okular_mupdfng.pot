@@ -1,0 +1,328 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-16 00:02-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: src/generator/placeholder_image.cpp:29
+msgid "Rendering page..."
+msgstr ""
+
+#: src/generator/placeholder_image.cpp:36
+msgid ""
+"Document renderer unavailable\n"
+"Restart Okular to try again."
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:26
+#: src/generator/config/mupdfsettingswidget.cpp:34
+msgid "Disabled"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:27
+#: src/generator/config/mupdfsettingswidget.cpp:35
+msgid "Minimum"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:28
+#: src/generator/config/mupdfsettingswidget.cpp:36
+msgid "Low"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:29
+#: src/generator/config/mupdfsettingswidget.cpp:37
+msgid "Medium"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:30
+#: src/generator/config/mupdfsettingswidget.cpp:38
+msgid "High"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:42
+msgid "Balance"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:43
+msgid "Quality"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:44
+msgid "Speed"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:48
+msgid "32 MiB"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:49
+msgid "64 MiB"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:50
+msgid "128 MiB"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:51
+msgid "256 MiB"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:55 rc.cpp:27
+msgid "B5 (176 × 250 mm)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:56 rc.cpp:28
+msgid "A5 (148 × 210 mm)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:57 rc.cpp:29
+msgid "6×9 (152 × 229 mm)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:58 rc.cpp:30
+msgid "Letter (216 × 279 mm)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:62
+msgid "Default"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:63
+msgid "Serif"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:64
+msgid "Sans-serif"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:65
+msgid "Monospace"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:104
+msgid "Speed (150dpi)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:105
+msgid "Balance (225dpi)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:106
+msgid "Accuracy (300dpi)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:110
+msgid "0 (Never)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:111
+msgid "5 characters"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:112
+msgid "20 characters"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:113
+msgid "∞ (Always)"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:115
+msgid ""
+"Automatically run OCR when the page contains fewer extracted characters than "
+"the selected threshold.\n"
+"Choose \"Never\" to disable automatic OCR or \"Always\" to run OCR on every "
+"page."
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:142
+msgid "NSS database unavailable"
+msgstr ""
+
+#: src/generator/config/mupdfsettingswidget.cpp:144
+msgid "Manage Certificates - %1"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:146
+msgid "The document renderer stopped responding. Restart Okular to try again."
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:176
+msgid "OCR complete for page %1"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:180
+msgid "Running OCR on page %1..."
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:255
+msgid "MuPDF-NG"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:257
+msgid "MuPDF-NG Backend Configuration"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:584
+msgid "Format"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:587
+msgid "Security"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:589
+msgid "Yes"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:589
+msgid "No"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:590
+msgid "Optimized"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:593 rc.cpp:26
+msgid "Page Size"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:596
+msgid "Signed (%1 signature)"
+msgid_plural "Signed (%1 signatures)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/generator/generator_mupdf.cpp:596
+msgid "Not Signed"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:597
+msgid "Digital Signatures"
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:807
+msgid "Failed to save PDF document."
+msgstr ""
+
+#: src/generator/generator_mupdf.cpp:811
+msgid "MuPDF worker is unavailable."
+msgstr ""
+
+#: rc.cpp:1
+msgid "General"
+msgstr ""
+
+#: rc.cpp:2
+msgid "Rendering Quality"
+msgstr ""
+
+#: rc.cpp:3
+msgid "Graphics Antialiasing"
+msgstr ""
+
+#: rc.cpp:4
+msgid "Text Antialiasing"
+msgstr ""
+
+#: rc.cpp:5
+msgid "Image Quality"
+msgstr ""
+
+#: rc.cpp:6
+msgid "Interpolate images"
+msgstr ""
+
+#: rc.cpp:7
+msgid "Performance"
+msgstr ""
+
+#: rc.cpp:8
+msgid "Memory Usage"
+msgstr ""
+
+#: rc.cpp:9
+msgid "PDF"
+msgstr ""
+
+#: rc.cpp:10
+msgid "Optical Character Recognition"
+msgstr ""
+
+#: rc.cpp:11
+msgid "Tesseract Model"
+msgstr ""
+
+#: rc.cpp:12
+msgid "Tesseract Quality"
+msgstr ""
+
+#: rc.cpp:13
+msgid "Auto-trigger OCR when page has less than"
+msgstr ""
+
+#: rc.cpp:14
+msgid "Run OCR asynchronously (non-blocking page display)"
+msgstr ""
+
+#: rc.cpp:15
+msgid "Show notifications on OCR status"
+msgstr ""
+
+#: rc.cpp:16
+msgid "NSS Crypto Engine"
+msgstr ""
+
+#: rc.cpp:17
+msgid "Default Certificate Database:"
+msgstr ""
+
+#: rc.cpp:18
+msgid "/etc/pki/nssdb"
+msgstr ""
+
+#: rc.cpp:19
+msgid "Custom Certificate Database"
+msgstr ""
+
+#: rc.cpp:20
+msgid "Manage Certificates"
+msgstr ""
+
+#: rc.cpp:21
+msgid "EPUB"
+msgstr ""
+
+#: rc.cpp:22
+msgid "Page Layout"
+msgstr ""
+
+#: rc.cpp:23
+msgid "Font Size"
+msgstr ""
+
+#: rc.cpp:24
+msgid " pt"
+msgstr ""
+
+#: rc.cpp:25
+msgid "Font Family"
+msgstr ""
+
+#: rc.cpp:31
+msgid "Custom CSS"
+msgstr ""

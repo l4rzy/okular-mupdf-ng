@@ -1,0 +1,62 @@
+# Maintainer: rzy <me@23ro.org>
+pkgname=okular-mupdf-ng
+_pkgname=okular-mupdf-ng
+pkgver=0.6.1.r368.g9f53495
+pkgrel=1
+pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
+arch=('x86_64')
+url="https://github.com/l4rzy/okular-mupdf-ng"
+license=('GPL-3.0-or-later')
+depends=('okular' 'qt6-base' 'qt6-5compat')
+makedepends=('brotli' 'clang' 'cmake' 'curl' 'extra-cmake-modules' 'freetype2'
+             'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
+             'libjpeg-turbo' 'openjpeg2' 'pkgconf' 'qt6-tools')
+provides=('okular-backend-mupdf')
+conflicts=('okular-backend-mupdf')
+# Replace with source=("git+$url.git") when the PKGBUILD is standalone.
+source=("$_pkgname::git+file://$startdir/.."
+        "mupdfng.png")
+sha256sums=('SKIP'
+            'a20f4625c48e547afd612ccd5adfa31370393f1ed6c5a807716f9220c84e9d47')
+_PREFIX="${PREFIX:-/usr}"
+
+pkgver() {
+  local json_file="$srcdir/$_pkgname/src/generator/libokularGenerator_mupdfng.json"
+  local base_ver
+  if [ -f "$json_file" ]; then
+    base_ver=$(jq -r '.KPlugin.Version' "$json_file" 2>/dev/null)
+  fi
+
+  if [ -d "$srcdir/$_pkgname/.git" ]; then
+    cd "$srcdir/$_pkgname"
+    if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
+      printf "%s" "$base_ver"
+      return
+    fi
+    printf "%s.r%s.g%s" "$base_ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  else
+    printf "%s" "$base_ver"
+  fi
+}
+
+prepare() {
+  cd "$srcdir/$_pkgname"
+  ./scripts/download-mupdf.sh
+}
+
+build() {
+  cmake -B build -S "$srcdir/$_pkgname" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
+    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+    -DUSE_SYSTEM_MUPDF=OFF \
+    -DBUILD_TESTING=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$srcdir/mupdfng.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/mupdfng.png"
+}

@@ -1,0 +1,4 @@
+File=mupdfsettings.kcfg
+ClassName=MuPDFSettings
+Mutators=true
+Singleton=true

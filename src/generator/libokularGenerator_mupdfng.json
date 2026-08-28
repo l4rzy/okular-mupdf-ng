@@ -1,0 +1,32 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "pino@kde.org",
+                "Name": "Pino Toscano"
+            },
+            {
+                "Email": "me@23ro.org",
+                "Name": "l4rzy"
+            }
+        ],
+        "Copyright": "© 2008 Pino Toscano\n© 2026 l4rzy",
+        "Description": "A secure and fast PDF and EPUB generator for Okular - Beta quality",
+        "License": "GPLv3",
+        "MimeTypes": [
+            "application/x-pdf",
+            "application/pdf",
+            "application/epub+zip"
+        ],
+        "Name": "MuPDF-NG Backend for Okular",
+        "ServiceTypes": [
+            "okular/Generator"
+        ],
+        "Version": "0.1.1",
+        "Website": "https://github.com/l4rzy/okular-mupdf-ng",
+        "Icon": "mupdfng"
+    },
+    "X-KDE-Priority": 20,
+    "X-KDE-okularAPIVersion": 1,
+    "X-KDE-okularHasInternalSettings": true
+}
