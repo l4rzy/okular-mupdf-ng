@@ -315,9 +315,9 @@ WorkerTransport::openData(const QByteArray& data, const QString& password, QList
         m_tempPath.clear();
     }
     QTemporaryFile file(Util::tempDirectory() + QStringLiteral("/data-XXXXXX.pdf"));
-    file.setAutoRemove(false);
     if (!file.open() || file.write(data) != data.size() || !file.flush())
         return OpenStatus::Failed;
+    file.setAutoRemove(false);
     m_tempPath = file.fileName();
     const OpenStatus status = openFile(m_tempPath, password, pages, type, false);
     if (status == OpenStatus::Failed) {

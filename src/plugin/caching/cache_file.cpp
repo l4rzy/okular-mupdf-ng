@@ -9,6 +9,8 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include <limits>
+
 namespace Mu::Plugin::Caching {
 
 namespace {
@@ -40,11 +42,15 @@ QString directory(const QString& name)
 std::optional<QByteArray> readBounded(const QString& path, qint64 maxBytes)
 {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly) || file.size() > maxBytes)
+    if (!file.open(QIODevice::ReadOnly))
+        return std::nullopt;
+
+    const qint64 initialSize = file.size();
+    if (initialSize < 0 || initialSize > maxBytes)
         return std::nullopt;
 
     const QByteArray data = file.readAll();
-    return data.size() == file.size() ? std::optional<QByteArray>(data) : std::nullopt;
+    return data.size() == initialSize ? std::optional<QByteArray>(data) : std::nullopt;
 }
 
 bool writeAtomically(const QString& path, const QByteArray& data)
