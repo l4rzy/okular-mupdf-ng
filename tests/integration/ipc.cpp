@@ -4,6 +4,7 @@
 #include "plugin/worker_client.hpp"
 
 #include <QCryptographicHash>
+#include <QDir>
 #include <QFile>
 #include <QImage>
 #include <QSignalSpy>
@@ -11,6 +12,8 @@
 #include <QTest>
 
 #include <algorithm>
+
+#include "plugin/util/temp_dir.hpp"
 
 extern "C" {
 #include <mupdf/pdf.h>
@@ -141,6 +144,18 @@ private slots:
         const auto result = m_client.ocrResult(*job);
         QVERIFY(result.status == ::Mu::Model::OcrStatus::Success
                 || result.status == ::Mu::Model::OcrStatus::Unavailable);
+        QVERIFY(m_client.close());
+    }
+
+    void pooledFramesStayAvailableAtSlotLimit()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), ::Mu::Model::OpenStatus::Success);
+        // More than the 8 pooled slots must continue through transient frames.
+        for (int dimension = 24; dimension < 64; ++dimension) {
+            const QImage image = m_client.render(0, dimension, dimension);
+            QVERIFY2(!image.isNull(), "pooled frame fallback failed");
+        }
         QVERIFY(m_client.close());
     }
 

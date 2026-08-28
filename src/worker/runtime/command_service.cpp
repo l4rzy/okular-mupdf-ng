@@ -400,7 +400,7 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     }
 
     bool newSlot = false;
-    if (!slot && total <= FramePoolBytes - m_framePoolBytes) {
+    if (!slot && m_frameSlots.size() < MaxFramePoolSlots && total <= FramePoolBytes - m_framePoolBytes) {
         auto fd = createMemfd("mupdf-frame", total, &error);
         if (!fd)
             return failure(request.id, ErrorCode::ResourceLimit, "render", error);
@@ -415,7 +415,7 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
 
     // Pooled slots retain their descriptor and writable mapping between
     // renders. The transient fallback preserves the existing safe lifecycle
-    // when every compatible slot is leased or the pool budget is full.
+    // when every compatible slot is leased or either pool budget is full.
     std::optional<Sys::FileDescriptor> transientFrame;
     Mapping transientMapping;
     void* address = nullptr;
