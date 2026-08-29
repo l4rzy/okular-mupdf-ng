@@ -160,14 +160,16 @@ private slots:
         const QDomElement rootElement = synopsis->documentElement();
         QCOMPARE(rootElement.tagName(), QStringLiteral("Chapter 1"));
         QCOMPARE(rootElement.attribute(QStringLiteral("Open")), QStringLiteral("true"));
-        QVERIFY(rootElement.hasAttribute(QStringLiteral("Viewport")));
+        QCOMPARE(rootElement.attribute(QStringLiteral("Viewport")), QStringLiteral("0;C2:0:0:2"));
+        QVERIFY(!rootElement.hasAttribute(QStringLiteral("Destination")));
 
         const QDomNode childNode = rootElement.firstChild();
         QVERIFY(!childNode.isNull());
         const QDomElement childElement = childNode.toElement();
         QCOMPARE(childElement.tagName(), QStringLiteral("Item"));
         QVERIFY(!childElement.hasAttribute(QStringLiteral("Open")));
-        QCOMPARE(childElement.attribute(QStringLiteral("DestinationURI")), QStringLiteral("https://example.com/sec1"));
+        QCOMPARE(childElement.attribute(QStringLiteral("URL")), QStringLiteral("https://example.com/sec1"));
+        QVERIFY(!childElement.hasAttribute(QStringLiteral("DestinationURI")));
     }
 
     void textPageConversionConstructsNormalizedBoxes()

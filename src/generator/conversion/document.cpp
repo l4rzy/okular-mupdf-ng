@@ -119,7 +119,7 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
                 element.setAttribute(QStringLiteral("Open"), QStringLiteral("true"));
             if (node.link.valid) {
                 if (node.link.external) {
-                    element.setAttribute(QStringLiteral("DestinationURI"), QString::fromStdString(node.link.uri));
+                    element.setAttribute(QStringLiteral("URL"), QString::fromStdString(node.link.uri));
                 } else {
                     element.setAttribute(QStringLiteral("Viewport"), viewportFromModel(node.link.viewport).toString());
                 }
