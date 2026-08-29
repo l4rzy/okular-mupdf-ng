@@ -3,6 +3,8 @@
 A secure and fast PDF and EPUB generator for Okular.
 > Warning: This software is beta-quality
 
+![Screenshot](screenshot.png)
+
 ---
 
 ## Architecture
@@ -41,9 +43,10 @@ signature locking rules are preserved.
   JPEG, JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
 
-The default build statically links the pinned MuPDF 1.28.3 source. It is
-downloaded to `thirdparty/mupdf-1.28.3-source/` automatically when absent (override with `MUPDF_VERSION=1.28.x python3 ./scripts/download-mupdf.py`). A
-system MuPDF package can instead be selected with `-DUSE_SYSTEM_MUPDF=ON`.
+The default build statically links the pinned MuPDF source. The build
+script downloads it to `thirdparty/mupdf-{version}-source/` automatically when
+absent and verifies its SHA-256. A compatible system MuPDF package can instead
+be selected with `-DUSE_SYSTEM_MUPDF=ON`.
 
 OCR uses the build-time `TESSDATA_DIR` setting, which defaults to
 `/usr/share/tessdata`. Additional tessdata directories can be configured in

@@ -70,15 +70,17 @@ worker session. Control requests are serialized shared-model messages. Input
 documents and output files are passed only as descriptors; the worker does not
 open arbitrary document paths.
 
-Rendered frames use a separate descriptor path:
+Rendered frames use a separate descriptor path. Each frame contains a fixed
+header followed by RGBA pixels, and the plugin validates its header and
+geometry before exposing the mapped pixels directly through a `QImage`; no
+pixel copy is made.
 
-1. The worker renders into an anonymous `memfd` containing a fixed frame
-   header followed by RGBA pixels.
-2. It passes the descriptor with `SCM_RIGHTS` and a transfer identifier.
-3. The plugin validates the header and geometry, copies pixels into a `QImage`,
-   then acknowledges the transfer.
-4. The worker retains the descriptor until that acknowledgement or session
-   teardown.
+The worker keeps up to eight reusable `memfd` slots with a combined 128 MiB
+budget. A new slot's descriptor is passed with `SCM_RIGHTS` once, then later
+renders reuse the plugin's existing read-only mapping. When the final `QImage`
+reference is destroyed, the plugin releases the slot lease and the worker may
+reuse it. If no compatible slot is available, the worker uses a transient
+frame, which the plugin unmaps when its final `QImage` reference is destroyed.
 
 One rendered frame is limited to 128 MiB of pixel data. Larger requests fail
 cleanly instead of creating an unbounded transfer.
@@ -126,10 +128,11 @@ operation is exclusively through private plugin IPC.
 
 ## Build and test layout
 
-The default build downloads and statically links the pinned MuPDF 1.28.2 source
-tree. MuPDF is built with PDF and EPUB support while unused document formats,
-MuJS, and curl support are disabled. Linker garbage collection removes unused
-static sections. `-DUSE_SYSTEM_MUPDF=ON` opts into a compatible system package.
+The default build downloads and statically links the pinned MuPDF found 
+in `cmake/mupdf.version`. MuPDF is built with PDF and EPUB support while unused
+document formats, MuJS, and curl support are disabled. Linker garbage collection
+removes unused static sections. `-DUSE_SYSTEM_MUPDF=ON` opts into a compatible
+system package.
 
 MuPDF-linked worker, EPUB, OCR, signature, and integration tests are collected
 in one `test_mupdf` executable to avoid repeatedly linking large static MuPDF
