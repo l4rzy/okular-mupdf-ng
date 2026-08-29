@@ -7,6 +7,11 @@ A secure and fast PDF and EPUB generator for Okular.
 
 ---
 
+## How to install
+Prebuilt packages for Archlinux & Ubuntu 26.04 are available to download [here](https://github.com/l4rzy/okular-mupdf-ng/releases)
+
+---
+
 ## Architecture
 
 The document engine runs in an isolated worker process, where potentially unsafe
@@ -30,12 +35,10 @@ and the source-tree layout.
 | **Printing** | Print export (PDF / PostScript) | Partial (PDF export only) | ✓ (PDF & PostScript) |
 | **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
 
-New signatures do not lock existing form fields by default. Existing PDF
-signature locking rules are preserved.
 
 ## Requirements
 
-- A C++23 compiler, CMake 3.20 or newer, Ninja, `pkg-config`, and the usual
+- A C++23 compiler (Clang preferred), CMake 3.20 or newer, Ninja, `pkg-config`, and the usual
   build tools.
 - Qt 6, KDE Frameworks 6, and Okular 6 development packages.
 - NSS/NSPR for certificate and signature operations.
@@ -66,9 +69,6 @@ make dev
 make release
 # or: ./scripts/build.sh release
 
-# Debug build with sanitizers and tests
-make asan
-
 # Configure, build, and run the debug test suite
 make test
 
@@ -85,10 +85,7 @@ For an already configured build tree, run all tests with:
 ctest --test-dir build --output-on-failure
 ```
 
-Tests that link MuPDF statically are collected in `test_mupdf`; lightweight
-plugin, generator, and security tests remain separate executables.
-
-## Arch Linux / Manjaro
+## Arch Linux
 
 The package recipe lives in `dist/` and downloads the pinned MuPDF source in
 its `prepare()` step:
@@ -96,13 +93,6 @@ its `prepare()` step:
 ```bash
 cd dist
 makepkg -si
-```
-
-To use another install prefix:
-
-```bash
-cd dist
-PREFIX=/usr/ makepkg -si
 ```
 
 ## License
