@@ -148,20 +148,21 @@ jobs:
       - name: Build Debian package
         run: |
           cmake --build build -j$(nproc)
-          cpack --config build/CPackConfig.cmake -G DEB
+          cpack --config build/CPackConfig.cmake -B build/packages -G DEB
 
       - name: Validate Debian package
         run: |
-          package=$(find build -maxdepth 1 -name '*.deb' -print -quit)
+          set -x
+          package=$(find build/packages -maxdepth 1 -name '*.deb' -print -quit)
           test -n "$package"
           expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
           test "$(dpkg-deb --field "$package" Package)" = okular-mupdf-ng
           test "$(dpkg-deb --field "$package" Version)" = "${expected_version}-1"
           test "$(dpkg-deb --field "$package" Architecture)" = amd64
           dependencies=$(dpkg-deb --field "$package" Depends)
-          grep -Eq '(^|, )okular([ (]|,|$)' <<< "$dependencies"
-          grep -Eq '(^|, )tesseract-ocr([ (]|,|$)' <<< "$dependencies"
-          dpkg-deb --contents "$package" | grep -q '/okular_generators/libokularGenerator_mupdfng\.so$'
+          printf '%s\n' "$dependencies" | grep -Eq '(^|, )okular([ (]|,|$)'
+          printf '%s\n' "$dependencies" | grep -Eq '(^|, )tesseract-ocr([ (]|,|$)'
+          dpkg-deb --contents "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           dpkg-deb --contents "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
           dpkg-deb --contents "$package" | grep -q '/mupdfsettings\.kcfg$'
           dpkg-deb --contents "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
@@ -172,7 +173,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debian-package
-          path: build/*.deb
+          path: build/packages/*.deb
           if-no-files-found: error
 
   release:
