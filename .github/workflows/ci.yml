@@ -99,6 +99,7 @@ jobs:
             cmake \
             dpkg-dev \
             extra-cmake-modules \
+            file \
             git \
             libbrotli-dev \
             libfreetype-dev \
