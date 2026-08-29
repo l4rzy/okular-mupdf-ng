@@ -14,10 +14,8 @@ makedepends=('brotli' 'clang' 'cmake' 'extra-cmake-modules' 'freetype2'
 provides=('okular-backend-mupdf')
 conflicts=('okular-backend-mupdf')
 # Replace with source=("git+$url.git") when the PKGBUILD is standalone.
-source=("$_pkgname::git+file://$startdir/.."
-        "mupdfng.png")
-sha256sums=('SKIP'
-            'a20f4625c48e547afd612ccd5adfa31370393f1ed6c5a807716f9220c84e9d47')
+source=("$_pkgname::git+file://$startdir/..")
+sha256sums=('SKIP')
 _PREFIX="${PREFIX:-/usr}"
 
 pkgver() {
@@ -58,5 +56,4 @@ build() {
 
 package() {
   DESTDIR="$pkgdir" cmake --install build
-  install -Dm644 "$srcdir/mupdfng.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/mupdfng.png"
 }

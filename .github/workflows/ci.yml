@@ -13,70 +13,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build (Clang - Debug)
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-    runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-      options: --privileged
-
-    env:
-      QT_QPA_PLATFORM: offscreen
-      CC: clang
-      CXX: clang++
-
-    steps:
-      - name: Update System & Install Dependencies
-        run: |
-          pacman -Sy --noconfirm archlinux-keyring
-          pacman -Syu --noconfirm --needed \
-            base-devel \
-            git \
-            cmake \
-            ninja \
-            extra-cmake-modules \
-            clang \
-            qt6-base \
-            qt6-5compat \
-            qt6-declarative \
-            kcoreaddons \
-            ki18n \
-            kconfig \
-            kconfigwidgets \
-            kio \
-            kiconthemes \
-            okular \
-            mupdf \
-            mujs \
-            openssl \
-            nss \
-            libseccomp \
-            zlib \
-            tesseract \
-            tesseract-data-eng \
-            appstream
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure CMake
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DBUILD_TESTING=OFF \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_COMPILER=clang \
-            -DENABLE_MU_DEBUG=ON
-
-      - name: Compile Project
-        run: |
-          cmake --build build -j$(nproc)
-
-  package-and-release:
-    name: Build Arch Package & Release (Clang)
+  package-arch:
+    name: Build Arch Linux Package (Clang)
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     container:
@@ -132,10 +70,130 @@ jobs:
           cd dist
           sudo -u builder CC=clang CXX=clang++ makepkg -sf --noconfirm
 
-      - name: Attach Package to GitHub Release
+      - name: Upload Arch Linux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+
+  package-deb:
+    name: Build Debian Package (Ubuntu 26.04)
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            ca-certificates \
+            clang \
+            cmake \
+            dpkg-dev \
+            extra-cmake-modules \
+            git \
+            libbrotli-dev \
+            libfreetype-dev \
+            libgumbo-dev \
+            libharfbuzz-dev \
+            libjbig2dec0-dev \
+            libjpeg-dev \
+            libleptonica-dev \
+            libnss3-dev \
+            libopenjp2-7-dev \
+            libseccomp-dev \
+            libkf6config-dev \
+            libkf6configwidgets-dev \
+            libkf6coreaddons-dev \
+            libkf6i18n-dev \
+            libkf6kio-dev \
+            ninja-build \
+            okular-dev \
+            pkg-config \
+            python3 \
+            qt6-base-dev \
+            tesseract-ocr \
+            zlib1g-dev
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download bundled MuPDF source
+        run: python3 ./scripts/download-mupdf.py
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DUSE_SYSTEM_MUPDF=OFF \
+            -DBUILD_TESTING=OFF \
+            -DENABLE_MU_DEBUG=OFF \
+            -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
+
+      - name: Build Debian package
+        run: |
+          cmake --build build -j$(nproc)
+          cpack --config build/CPackConfig.cmake -G DEB
+
+      - name: Validate Debian package
+        run: |
+          package=$(find build -maxdepth 1 -name '*.deb' -print -quit)
+          test -n "$package"
+          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          test "$(dpkg-deb --field "$package" Package)" = okular-mupdf-ng
+          test "$(dpkg-deb --field "$package" Version)" = "${expected_version}-1"
+          test "$(dpkg-deb --field "$package" Architecture)" = amd64
+          dependencies=$(dpkg-deb --field "$package" Depends)
+          grep -Eq '(^|, )okular([ (]|,|$)' <<< "$dependencies"
+          grep -Eq '(^|, )tesseract-ocr([ (]|,|$)' <<< "$dependencies"
+          dpkg-deb --contents "$package" | grep -q '/okular_generators/libokularGenerator_mupdfng\.so$'
+          dpkg-deb --contents "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
+          dpkg-deb --contents "$package" | grep -q '/mupdfsettings\.kcfg$'
+          dpkg-deb --contents "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
+          dpkg-deb --contents "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
+          dpkg-deb --info "$package"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package
+          path: build/*.deb
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [package-arch, package-deb]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-package'
+          path: release-assets
+          merge-multiple: true
+
+      - name: Attach packages to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.pkg.tar.zst
+          files: |
+            release-assets/*.pkg.tar.zst
+            release-assets/*.deb
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

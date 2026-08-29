@@ -74,9 +74,15 @@ configure_file(
     "${MUPDF_GENERATED_INCLUDE_DIR}/shared/transport/compat.hpp"
     @ONLY)
 
-set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_PREFIX}/lib/okular-mupdf-ng/okular-mupdf-worker"
+set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/okular-mupdf-worker"
     CACHE PATH "Installed path of the okular-mupdf-worker binary")
 add_subdirectory(src)
+
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.png"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
+    RENAME copyright)
 
 # Embed worker binary paths so the plugin can locate it without install
 target_compile_definitions(okularGenerator_mupdfng PRIVATE
@@ -100,3 +106,21 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/po")
 endif()
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
+
+set(CPACK_PACKAGE_NAME "okular-mupdf-ng")
+set(CPACK_PACKAGE_VERSION "${MU_COMPAT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "l4rzy <me@23ro.org>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "MuPDF backend generator plugin for KDE Okular")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/l4rzy/okular-mupdf-ng")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/COPYING")
+set(CPACK_DEBIAN_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
+set(CPACK_DEBIAN_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}")
+set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
+set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
+set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION_SUMMARY}")
+set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "okular, tesseract-ocr")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+include(CPack)

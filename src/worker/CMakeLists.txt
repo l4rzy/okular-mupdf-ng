@@ -117,7 +117,7 @@ endif()
 target_compile_definitions(okular-mupdf-worker PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
 
 install(TARGETS okular-mupdf-worker
-    DESTINATION lib/okular-mupdf-ng
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/okular-mupdf-ng"
 )
 
 # Expose the build-time path so the plugin can find the binary without install
