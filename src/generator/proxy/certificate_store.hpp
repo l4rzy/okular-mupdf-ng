@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef QMUPDF_CERTIFICATE_STORE_HPP
-#define QMUPDF_CERTIFICATE_STORE_HPP
+#ifndef MU_GENERATOR_PROXY_CERTIFICATE_STORE_HPP
+#define MU_GENERATOR_PROXY_CERTIFICATE_STORE_HPP
 
 #include <okular/core/signatureutils.h>
 

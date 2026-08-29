@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef QMUPDF_EMBEDDED_FILE_HPP
-#define QMUPDF_EMBEDDED_FILE_HPP
+#ifndef MU_GENERATOR_PROXY_EMBEDDED_FILE_HPP
+#define MU_GENERATOR_PROXY_EMBEDDED_FILE_HPP
 
 #include <okular/core/document.h>
 
