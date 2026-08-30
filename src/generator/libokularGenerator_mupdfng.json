@@ -11,7 +11,7 @@
             }
         ],
         "Copyright": "© 2008 Pino Toscano\n© 2026 l4rzy",
-        "Description": "A secure and fast PDF and EPUB generator for Okular - Beta quality",
+        "Description": "A secure and fast PDF and EPUB generator for Okular",
         "License": "GPLv3",
         "MimeTypes": [
             "application/x-pdf",
@@ -22,7 +22,7 @@
         "ServiceTypes": [
             "okular/Generator"
         ],
-        "Version": "0.1.5",
+        "Version": "0.1.6",
         "Website": "https://github.com/l4rzy/okular-mupdf-ng",
         "Icon": "mupdfng"
     },

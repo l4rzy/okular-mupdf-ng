@@ -1,7 +1,7 @@
 # okular-mupdf-ng
 
 A secure and fast PDF and EPUB generator for Okular.
-> Warning: This software is beta-quality
+> Beta: Real-world testers are welcome. Please report any issue via Github Issues.
 
 ![Screenshot](screenshot.png)
 
