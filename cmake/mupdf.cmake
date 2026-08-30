@@ -88,6 +88,8 @@ else()
             "${MUPDF_MAKE_EXECUTABLE}"
             -C "${MUPDF_SOURCE_DIR}"
             -j${MUPDF_BUILD_JOBS}
+            "CC=${CMAKE_C_COMPILER}"
+            "CXX=${CMAKE_CXX_COMPILER}"
             OUT=${MUPDF_BUILD_DIR}
             build=${MUPDF_BUILD_PROFILE}
             mujs=no

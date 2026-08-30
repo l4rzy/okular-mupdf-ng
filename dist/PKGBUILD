@@ -1,7 +1,7 @@
 # Maintainer: rzy <me@23ro.org>
 pkgname=okular-mupdf-ng
 _pkgname=okular-mupdf-ng
-pkgver=0.1.1
+pkgver=0.1.6
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
 arch=('x86_64')
@@ -43,7 +43,7 @@ prepare() {
 }
 
 build() {
-  cmake -B build -S "$srcdir/$_pkgname" \
+  cmake -B build -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
