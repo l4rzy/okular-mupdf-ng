@@ -37,8 +37,7 @@ QString formatDate(const Model::Timestamp& timestamp)
 
 QString certificateName(const Model::Certificate& certificate)
 {
-    // Nicknames are the user-facing NSS identity; fall back to the subject
-    // when a certificate was imported without one.
+    // Nicknames are user-facing labels; fall back to the subject when absent.
     return certificate.nickname.empty() ? QString::fromStdString(certificate.subjectCommonName)
                                         : QString::fromStdString(certificate.nickname);
 }
@@ -94,19 +93,20 @@ CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget
 void CertificateManagerDialog::refreshCertificates()
 {
     // Query NSS on every refresh so imports/deletions made by this dialog are
-    // reflected without maintaining a second in-memory certificate list.
+    // reflected in both the table and its exact deletion records.
     QString error;
-    const auto certificates = Plugin::Crypto::CertificateDatabase::listCertificates(m_databasePath, &error);
+    m_certificates = Plugin::Crypto::CertificateDatabase::listCertificates(m_databasePath, &error);
     if (!error.isEmpty()) {
+        m_certificates.clear();
         m_table->clearContents();
         m_table->setRowCount(0);
         m_deleteButton->setEnabled(false);
         showWarning(tr("Certificate Database"), error);
         return;
     }
-    m_table->setRowCount(static_cast<int>(certificates.size()));
-    for (int row = 0; row < static_cast<int>(certificates.size()); ++row) {
-        const auto& certificate = certificates.at(row);
+    m_table->setRowCount(static_cast<int>(m_certificates.size()));
+    for (int row = 0; row < static_cast<int>(m_certificates.size()); ++row) {
+        const auto& certificate = m_certificates.at(row).certificate;
         const QStringList values { certificateName(certificate),
                                    QString::fromStdString(certificate.subjectCommonName),
                                    QString::fromStdString(certificate.issuerCommonName),
@@ -114,7 +114,7 @@ void CertificateManagerDialog::refreshCertificates()
                                    formatDate(certificate.validityEnd) };
         for (int column = 0; column < values.size(); ++column)
             m_table->setItem(row, column, new QTableWidgetItem(values.at(column)));
-        m_table->item(row, 0)->setData(Qt::UserRole, QString::fromStdString(certificate.nickname));
+        m_table->item(row, 0)->setData(Qt::UserRole, row);
     }
     m_deleteButton->setEnabled(false);
 }
@@ -267,20 +267,25 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& certifica
 
 void CertificateManagerDialog::deleteSelectedCertificate()
 {
-    // The nickname is stored in UserRole rather than reconstructed from the
-    // display text, which may fall back to the subject common name.
     const int row = m_table->currentRow();
     if (row < 0)
         return;
-    const QString nickname = m_table->item(row, 0)->data(Qt::UserRole).toString();
+    const QTableWidgetItem* item = m_table->item(row, 0);
+    if (!item)
+        return;
+    const int certificateIndex = item->data(Qt::UserRole).toInt();
+    if (certificateIndex < 0 || certificateIndex >= m_certificates.size())
+        return;
+    const auto& record = m_certificates.at(certificateIndex);
+    const QString name = certificateName(record.certificate);
     if (QMessageBox::question(this,
                               CertificateManager::dialogTitle(tr("Delete Certificate"), m_databasePath),
-                              tr("Delete certificate \"%1\" from the NSS database?").arg(nickname))
+                              tr("Delete certificate \"%1\" from the NSS database?").arg(name))
         != QMessageBox::Yes)
         return;
 
     QString error;
-    if (!Plugin::Crypto::CertificateDatabase::deleteCertificate(m_databasePath, nickname, &error)) {
+    if (!Plugin::Crypto::CertificateDatabase::deleteCertificate(m_databasePath, record.identity, &error)) {
         showWarning(tr("Delete Certificate"), error);
         return;
     }

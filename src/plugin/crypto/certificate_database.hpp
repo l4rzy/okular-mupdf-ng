@@ -8,10 +8,24 @@
 #include <QDateTime>
 #include <QList>
 #include <QString>
+#include <QtGlobal>
 
 #include "shared/model/types.hpp"
 
 namespace Mu::Plugin::Crypto::CertificateDatabase {
+
+/// Identifies a certificate within one NSS PKCS#11 slot.
+struct CertificateIdentity {
+    quint64 moduleId = 0;
+    quint64 slotId = 0;
+    QByteArray sha256Fingerprint;
+};
+
+/// Certificate-manager data: display fields plus the exact deletion target.
+struct CertificateRecord {
+    Model::Certificate certificate;
+    CertificateIdentity identity;
+};
 
 struct SelfSignedCertificateOptions {
     /// Persistent nickname used to identify the certificate in NSS.
@@ -34,8 +48,8 @@ struct SelfSignedCertificateOptions {
     QDateTime validUntil;
 };
 
-/// Lists certificates with private keys from the selected persistent NSS database.
-[[nodiscard]] QList<Model::Certificate> listCertificates(const QString& databasePath, QString* error = nullptr);
+/// Lists internal-slot certificates with private keys from the selected persistent NSS database.
+[[nodiscard]] QList<CertificateRecord> listCertificates(const QString& databasePath, QString* error = nullptr);
 /// Imports a certificate and requires a matching private key to be present.
 bool importCertificate(const QString& databasePath,
                        const QByteArray& data,
@@ -50,8 +64,8 @@ bool importPkcs12(const QString& databasePath,
 bool createSelfSignedCertificate(const QString& databasePath,
                                  const SelfSignedCertificateOptions& options,
                                  QString* error = nullptr);
-/// Removes a certificate and its associated persistent key objects.
-bool deleteCertificate(const QString& databasePath, const QString& nickname, QString* error = nullptr);
+/// Removes the exact internal-slot certificate and its associated persistent key objects.
+bool deleteCertificate(const QString& databasePath, const CertificateIdentity& identity, QString* error = nullptr);
 
 } // namespace Mu::Plugin::Crypto::CertificateDatabase
 

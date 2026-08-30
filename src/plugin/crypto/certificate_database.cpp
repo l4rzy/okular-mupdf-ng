@@ -18,6 +18,7 @@
 #include <secport.h>
 #pragma pop_macro("slots")
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QRandomGenerator>
 #include <QSet>
@@ -234,6 +235,72 @@ using DecoderHandle = Plugin::Crypto::NssPkcs12Decoder;
 
 using ArenaHandle = Plugin::Crypto::NssArena;
 
+QByteArray certificateFingerprint(const CERTCertificate* certificate)
+{
+    if (!certificate || !certificate->derCert.data || certificate->derCert.len == 0
+        || static_cast<quint64>(certificate->derCert.len) > static_cast<quint64>(std::numeric_limits<int>::max()))
+        return { };
+    return QCryptographicHash::hash(QByteArray(reinterpret_cast<const char*>(certificate->derCert.data),
+                                               static_cast<int>(certificate->derCert.len)),
+                                    QCryptographicHash::Sha256);
+}
+
+CertificateIdentity certificateIdentity(PK11SlotInfo* slot, const CERTCertificate* certificate)
+{
+    return { static_cast<quint64>(PK11_GetModuleID(slot)),
+             static_cast<quint64>(PK11_GetSlotID(slot)),
+             certificateFingerprint(certificate) };
+}
+
+bool matchesSlot(const CertificateIdentity& identity, PK11SlotInfo* slot)
+{
+    return slot && identity.sha256Fingerprint.size() == QCryptographicHash::hashLength(QCryptographicHash::Sha256)
+        && identity.moduleId == static_cast<quint64>(PK11_GetModuleID(slot))
+        && identity.slotId == static_cast<quint64>(PK11_GetSlotID(slot));
+}
+
+CertificateHandle findCertificateInSlot(PK11SlotInfo* slot, const QByteArray& fingerprint)
+{
+    if (!slot || fingerprint.size() != QCryptographicHash::hashLength(QCryptographicHash::Sha256))
+        return nullptr;
+    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot));
+    if (!certificates)
+        return nullptr;
+    for (CERTCertListNode* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
+         node = CERT_LIST_NEXT(node)) {
+        if (node->cert && certificateFingerprint(node->cert) == fingerprint)
+            return CertificateHandle(CERT_DupCertificate(node->cert));
+    }
+    return nullptr;
+}
+
+QSet<QByteArray> certificateFingerprintsInSlot(PK11SlotInfo* slot)
+{
+    QSet<QByteArray> fingerprints;
+    if (!slot)
+        return fingerprints;
+    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot));
+    if (!certificates)
+        return fingerprints;
+    for (CERTCertListNode* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
+         node = CERT_LIST_NEXT(node)) {
+        const QByteArray fingerprint = certificateFingerprint(node->cert);
+        if (!fingerprint.isEmpty())
+            fingerprints.insert(fingerprint);
+    }
+    return fingerprints;
+}
+
+SECStatus deleteCertificateInSlot(PK11SlotInfo* slot, CERTCertificate* certificate)
+{
+    if (!slot || !certificate)
+        return SECFailure;
+    PrivateKeyHandle privateKey(PK11_FindPrivateKeyFromCert(slot, certificate, nullptr));
+    if (!privateKey)
+        return SEC_DeletePermCertificate(certificate);
+    return PK11_DeleteTokenCertAndKey(certificate, nullptr);
+}
+
 bool checkSelfSignedOptions(const SelfSignedCertificateOptions& options,
                             QString* nickname,
                             QString* commonName,
@@ -411,13 +478,33 @@ bool encodeSignAndImport(SlotHandle& slot,
 
 } // namespace
 
-QList<Model::Certificate> listCertificates(const QString& databasePath, QString* error)
+QList<CertificateRecord> listCertificates(const QString& databasePath, QString* error)
 {
     clearError(error);
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadOnly, error))
         return { };
     std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
-    return Plugin::Crypto::Internal::listSigningCertificates();
+    SlotHandle slot(PK11_GetInternalKeySlot());
+    if (!slot) {
+        setError(error, nssError());
+        return { };
+    }
+    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
+    QList<CertificateRecord> result;
+    if (!certificates)
+        return result;
+    for (CERTCertListNode* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
+         node = CERT_LIST_NEXT(node)) {
+        if (!node->cert)
+            continue;
+        PrivateKeyHandle privateKey(PK11_FindPrivateKeyFromCert(slot.get(), node->cert, nullptr));
+        if (!privateKey)
+            continue;
+        const CertificateIdentity identity = certificateIdentity(slot.get(), node->cert);
+        if (!identity.sha256Fingerprint.isEmpty())
+            result.append({ Plugin::Crypto::Internal::describeCertificate(node->cert), identity });
+    }
+    return result;
 }
 
 bool importCertificate(const QString& databasePath, const QByteArray& data, const QString& nickname, QString* error)
@@ -452,12 +539,11 @@ bool importCertificate(const QString& databasePath, const QByteArray& data, cons
         setError(error, nssError());
         return false;
     }
-    CERTCertDBHandle* database = CERT_GetDefaultCertDB();
-    CertificateHandle imported = ::Mu::Plugin::Crypto::findCertificateByNickname(database, nickname.trimmed());
-    PrivateKeyHandle key(imported ? PK11_FindKeyByAnyCert(imported.get(), nullptr) : nullptr);
+    PrivateKeyHandle key(PK11_FindKeyByDERCert(slot.get(), certificate.get(), nullptr));
     if (!key) {
+        CertificateHandle imported = findCertificateInSlot(slot.get(), certificateFingerprint(certificate.get()));
         if (imported) {
-            const SECStatus deleteStatus = ::Mu::Plugin::Crypto::deleteCertificateAndKeys(imported.get());
+            const SECStatus deleteStatus = deleteCertificateInSlot(slot.get(), imported.get());
             if (deleteStatus != SECSuccess) {
                 setError(error,
                          QStringLiteral("The certificate has no private key, and rollback failed: %1").arg(nssError()));
@@ -531,22 +617,16 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
                      QStringLiteral("The PKCS#12 bundle is invalid or unsupported: %1").arg(nssError(validateError)));
             return false;
         }
-        const QSet<QString> beforeImport = [&] {
-            QSet<QString> names;
-            for (const auto& certificate : Plugin::Crypto::Internal::listSigningCertificates())
-                names.insert(QString::fromStdString(certificate.nickname));
-            return names;
-        }();
+        const QSet<QByteArray> beforeImport = certificateFingerprintsInSlot(slot.get());
         const bool imported = SEC_PKCS12DecoderImportBags(decoderHandle.get()) == SECSuccess;
         if (!imported) {
             const PRErrorCode importError = PR_GetError();
-            for (const auto& certificate : Plugin::Crypto::Internal::listSigningCertificates()) {
-                const QString nickname = QString::fromStdString(certificate.nickname);
-                if (beforeImport.contains(nickname))
+            const QSet<QByteArray> afterImport = certificateFingerprintsInSlot(slot.get());
+            for (const QByteArray& fingerprint : afterImport) {
+                if (beforeImport.contains(fingerprint))
                     continue;
-                CERTCertDBHandle* db = CERT_GetDefaultCertDB();
-                CertificateHandle cert = ::Mu::Plugin::Crypto::findCertificateByNickname(db, nickname);
-                if (cert && ::Mu::Plugin::Crypto::deleteCertificateAndKeys(cert.get()) != SECSuccess) {
+                CertificateHandle certificate = findCertificateInSlot(slot.get(), fingerprint);
+                if (certificate && deleteCertificateInSlot(slot.get(), certificate.get()) != SECSuccess) {
                     MU_LOG(warning,
                            "Mu::Generator::CertificateManager",
                            std::string("Could not roll back imported certificate: ") + nssError().toStdString());
@@ -619,23 +699,23 @@ bool createSelfSignedCertificate(const QString& databasePath,
     return encodeSignAndImport(slot, unsignedHandle, privateKeyHandle, publicKeyHandle, nickname, error);
 }
 
-bool deleteCertificate(const QString& databasePath, const QString& nickname, QString* error)
+bool deleteCertificate(const QString& databasePath, const CertificateIdentity& identity, QString* error)
 {
     clearError(error);
-    if (nickname.trimmed().isEmpty()) {
-        setError(error, QStringLiteral("No certificate was selected"));
-        return false;
-    }
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
     std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
-    CERTCertDBHandle* database = CERT_GetDefaultCertDB();
-    CertificateHandle certificate = ::Mu::Plugin::Crypto::findCertificateByNickname(database, nickname);
+    SlotHandle slot(PK11_GetInternalKeySlot());
+    if (!matchesSlot(identity, slot.get())) {
+        setError(error, QStringLiteral("The selected certificate was not found"));
+        return false;
+    }
+    CertificateHandle certificate = findCertificateInSlot(slot.get(), identity.sha256Fingerprint);
     if (!certificate) {
         setError(error, QStringLiteral("The selected certificate was not found"));
         return false;
     }
-    if (::Mu::Plugin::Crypto::deleteCertificateAndKeys(certificate.get()) != SECSuccess) {
+    if (deleteCertificateInSlot(slot.get(), certificate.get()) != SECSuccess) {
         setError(error, nssError());
         return false;
     }

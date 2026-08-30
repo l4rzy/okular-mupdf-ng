@@ -178,22 +178,6 @@ inline NssCertificate findCertificateByNickname(CERTCertDBHandle* certdb, const 
     return NssCertificate(CERT_FindCertByNickname(certdb, name.constData()));
 }
 
-/// Deletes a certificate and any persistent key objects associated with it.
-inline SECStatus deleteCertificateAndKeys(CERTCertificate* cert)
-{
-    if (!cert)
-        return SECFailure;
-    // Find keys before deleting cert, as cert is needed to locate them.
-    NssPrivateKey priv(PK11_FindKeyByAnyCert(cert, nullptr));
-    NssPublicKey pub(CERT_ExtractPublicKey(cert));
-    SECStatus rv = SEC_DeletePermCertificate(cert);
-    if (priv)
-        PK11_DeleteTokenPrivateKey(priv.get(), PR_FALSE);
-    if (pub)
-        PK11_DeleteTokenPublicKey(pub.get());
-    return rv;
-}
-
 /// Deletes persistent private and public key objects after a failed import.
 inline void deleteTokenKeypair(SECKEYPrivateKey* priv, SECKEYPublicKey* pub)
 {

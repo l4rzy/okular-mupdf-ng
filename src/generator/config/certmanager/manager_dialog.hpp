@@ -6,6 +6,9 @@
 
 #include <QByteArray>
 #include <QDialog>
+#include <QList>
+
+#include "plugin/crypto/certificate_database.hpp"
 
 class QTableWidget;
 class QPushButton;
@@ -14,8 +17,8 @@ namespace Mu::Generator {
 
 /// Modal editor for certificates stored in the active NSS database.
 ///
-/// The dialog owns only its Qt widgets. Certificate records are read and
-/// modified through CertificateDatabase, so NSS remains the source of truth.
+/// Certificate records are read and modified through CertificateDatabase, so
+/// NSS remains the source of truth.
 class CertificateManagerDialog final : public QDialog {
     Q_OBJECT
 
@@ -37,7 +40,7 @@ private:
     void importCertificateData(const QByteArray& certificateData);
     // Collects self-signed options and stores the resulting certificate.
     void createSelfSignedCertificate();
-    // Deletes the certificate identified by the selected row's hidden nickname.
+    // Deletes the certificate identified by the selected row's stored record.
     void deleteSelectedCertificate();
     // Adds the selected NSS database to the warning title for disambiguation.
     void showWarning(const QString& title, const QString& message);
@@ -46,6 +49,7 @@ private:
     QPushButton* m_addButton;
     QPushButton* m_deleteButton;
     QPushButton* m_closeButton;
+    QList<Plugin::Crypto::CertificateDatabase::CertificateRecord> m_certificates;
     // Empty means NSS's default database; otherwise this is the selected DB.
     QString m_databasePath;
 };

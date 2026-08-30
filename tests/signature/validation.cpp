@@ -22,6 +22,7 @@
 #undef slots
 #include <cert.h>
 #include <certdb.h>
+#include <pk11pub.h>
 #pragma pop_macro("slots")
 #include <cstring>
 #include <secoid.h>
@@ -47,6 +48,14 @@ Mu::Worker::Engine::CmsResult createCms(const std::array<std::uint8_t, 32>& dige
     return { result.result,
              result.details.toStdString(),
              std::vector<std::uint8_t>(result.cms.cbegin(), result.cms.cend()) };
+}
+
+auto findManagedCertificate(const QList<::Mu::Plugin::Crypto::CertificateDatabase::CertificateRecord>& certificates,
+                            const std::string& nickname)
+{
+    return std::find_if(certificates.cbegin(), certificates.cend(), [&](const auto& record) {
+        return record.certificate.nickname == nickname;
+    });
 }
 
 } // namespace
@@ -321,16 +330,73 @@ private slots:
 
         const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
-        const auto certificate = std::find_if(certificates.cbegin(), certificates.cend(), [](const auto& value) {
-            return value.nickname == "okular-mupdf-generated";
-        });
+        const auto certificate = findManagedCertificate(certificates, "okular-mupdf-generated");
         QVERIFY(certificate != certificates.cend());
-        QCOMPARE(certificate->subjectCommonName, std::string("Generated, Signing + Certificate"));
-        QCOMPARE(certificate->issuerDistinguishedName, certificate->subjectDistinguishedName);
+        QCOMPARE(certificate->certificate.subjectCommonName, std::string("Generated, Signing + Certificate"));
+        QCOMPARE(certificate->certificate.issuerDistinguishedName, certificate->certificate.subjectDistinguishedName);
 
-        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(
-                     m_nssDb.path(), QStringLiteral("okular-mupdf-generated"), &error),
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
+            qPrintable(error));
+    }
+
+    void deletesCertificateByInternalSlotIdentity()
+    {
+        const QString firstNickname = QStringLiteral("okular-mupdf-manager-first");
+        const QString secondNickname = QStringLiteral("okular-mupdf-manager-second");
+        QString error;
+        ::Mu::Plugin::Crypto::CertificateDatabase::SelfSignedCertificateOptions options;
+        options.commonName = firstNickname;
+        options.validFrom = QDateTime::currentDateTime().addSecs(-60);
+        options.validUntil = options.validFrom.addYears(1);
+        options.nickname = firstNickname;
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(m_nssDb.path(), options, &error),
+            qPrintable(error));
+        options.nickname = secondNickname;
+        options.commonName = secondNickname;
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(m_nssDb.path(), options, &error),
+            qPrintable(error));
+
+        const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto first = findManagedCertificate(certificates, firstNickname.toStdString());
+        const auto second = findManagedCertificate(certificates, secondNickname.toStdString());
+        QVERIFY(first != certificates.cend());
+        QVERIFY(second != certificates.cend());
+
+        PK11SlotInfo* internalSlot = PK11_GetInternalKeySlot();
+        QVERIFY(internalSlot);
+        QCOMPARE(first->identity.moduleId, static_cast<quint64>(PK11_GetModuleID(internalSlot)));
+        QCOMPARE(first->identity.slotId, static_cast<quint64>(PK11_GetSlotID(internalSlot)));
+        PK11_FreeSlot(internalSlot);
+
+        const QByteArray firstDer(reinterpret_cast<const char*>(first->certificate.der.data()),
+                                  static_cast<int>(first->certificate.der.size()));
+        QCOMPARE(first->identity.sha256Fingerprint, QCryptographicHash::hash(firstDer, QCryptographicHash::Sha256));
+
+        auto wrongSlot = first->identity;
+        wrongSlot.slotId ^= 1;
+        auto wrongFingerprint = first->identity;
+        wrongFingerprint.sha256Fingerprint[0] ^= 1;
+        const std::array invalidIdentities { wrongSlot, wrongFingerprint };
+        for (const auto& identity : invalidIdentities) {
+            QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), identity, &error));
+            QVERIFY2(error.contains(QStringLiteral("not found"), Qt::CaseInsensitive), qPrintable(error));
+        }
+
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), first->identity, &error),
                  qPrintable(error));
+        const auto afterFirstDelete =
+            ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(findManagedCertificate(afterFirstDelete, firstNickname.toStdString()) == afterFirstDelete.cend());
+        const auto remaining = findManagedCertificate(afterFirstDelete, secondNickname.toStdString());
+        QVERIFY(remaining != afterFirstDelete.cend());
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), remaining->identity, &error),
+            qPrintable(error));
     }
 
     void validatesSelfSignedCertificateWithoutChainRecursion()
@@ -383,7 +449,12 @@ private slots:
         QCOMPARE(trustedField.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
         QCOMPARE(trustedField.certificateStatus, ::Mu::Model::CertificateStatus::Trusted);
 
-        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), nickname, &error),
+        const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto managedCertificate = findManagedCertificate(certificates, nickname.toStdString());
+        QVERIFY(managedCertificate != certificates.cend());
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(
+                     m_nssDb.path(), managedCertificate->identity, &error),
                  qPrintable(error));
     }
 
@@ -437,13 +508,12 @@ private slots:
 
         const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
-        const auto certificate = std::find_if(certificates.cbegin(), certificates.cend(), [](const auto& value) {
-            return value.nickname == "okular-mupdf-pkcs12-source";
-        });
+        const auto certificate = findManagedCertificate(certificates, "okular-mupdf-pkcs12-source");
         QVERIFY(certificate != certificates.cend());
 
-        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), sourceNickname, &error),
-                 qPrintable(error));
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
+            qPrintable(error));
     }
 
     void rejectsInactiveCertificateDatabase()
@@ -511,44 +581,46 @@ private slots:
                  qPrintable(error));
         const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
-        const auto certificate = std::find_if(certificates.cbegin(), certificates.cend(), [](const auto& value) {
-            return value.nickname == "modern-pkcs12-test";
-        });
+        const auto certificate = findManagedCertificate(certificates, "modern-pkcs12-test");
         QVERIFY(certificate != certificates.cend());
-        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(
-                     m_nssDb.path(), QStringLiteral("modern-pkcs12-test"), &error),
-                 qPrintable(error));
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
+            qPrintable(error));
     }
 
     void publicOnlyCertificateImportRollback()
     {
-        const QString database = QStringLiteral("sql:") + m_nssDb.path();
-        QTemporaryFile certFile;
-        QVERIFY(certFile.open());
-        const QString certPath = certFile.fileName();
-        certFile.close();
-
-        // Export the root public certificate as DER
-        QVERIFY2(runCertutil({ QStringLiteral("-L"),
-                               QStringLiteral("-n"),
-                               QStringLiteral("okular-mupdf-test-root"),
-                               QStringLiteral("-d"),
-                               database,
-                               QStringLiteral("-r"),
-                               QStringLiteral("-o"),
-                               certPath }),
-                 "certutil could not export public root certificate");
+        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
+            QSKIP("openssl is required for the public-only certificate rollback test");
+        QTemporaryDir source;
+        QVERIFY(source.isValid());
+        const QString keyPath = source.filePath(QStringLiteral("key.pem"));
+        const QString certPath = source.filePath(QStringLiteral("certificate.pem"));
+        QVERIFY2(runOpenSsl({ QStringLiteral("req"),
+                              QStringLiteral("-x509"),
+                              QStringLiteral("-newkey"),
+                              QStringLiteral("rsa:2048"),
+                              QStringLiteral("-nodes"),
+                              QStringLiteral("-keyout"),
+                              keyPath,
+                              QStringLiteral("-out"),
+                              certPath,
+                              QStringLiteral("-subj"),
+                              QStringLiteral("/CN=Public Only Import Test"),
+                              QStringLiteral("-days"),
+                              QStringLiteral("1") }),
+                 "openssl could not create the public-only certificate");
 
         QFile certReader(certPath);
         QVERIFY(certReader.open(QIODevice::ReadOnly));
-        const QByteArray certDer = certReader.readAll();
+        const QByteArray certificateData = certReader.readAll();
         certReader.close();
-        QVERIFY(!certDer.isEmpty());
+        QVERIFY(!certificateData.isEmpty());
 
         QString error;
-        // Attempt to import public-only certificate as a signing cert
+        // This certificate's key lives outside NSS, so import must roll back.
         const bool imported = ::Mu::Plugin::Crypto::CertificateDatabase::importCertificate(
-            m_nssDb.path(), certDer, QStringLiteral("orphan-public-cert"), &error);
+            m_nssDb.path(), certificateData, QStringLiteral("orphan-public-cert"), &error);
         QVERIFY(!imported);
         QVERIFY2(error.contains(QStringLiteral("has no associated private key")), qPrintable(error));
 
@@ -558,6 +630,10 @@ private slots:
             return cert.nickname == "orphan-public-cert";
         });
         QVERIFY(it == signingCerts.cend());
+        CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
+        QVERIFY(certdb);
+        CERTCertificate* certificate = CERT_FindCertByNickname(certdb, "orphan-public-cert");
+        QVERIFY(!certificate);
     }
 
     void rejectsInvalidSelfSignedCertificateInput()
