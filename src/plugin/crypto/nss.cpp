@@ -73,7 +73,7 @@ loadCmsSignerCertificate(NSSCMSSignedData* signedData, NSSCMSSignerInfo* signerI
     if (!signedData || !certdb)
         return result;
 
-    if (NSS_CMSSignedData_ImportCerts(signedData, certdb, certUsageObjectSigner, PR_FALSE) != SECSuccess) {
+    if (NSS_CMSSignedData_ImportCerts(signedData, certdb, Internal::PdfCmsCertUsage, PR_FALSE) != SECSuccess) {
         MU_LOG(warning,
                "Mu::Plugin::Crypto",
                std::string("could not import certificates embedded in PDF signature error=")
@@ -96,14 +96,14 @@ loadCmsSignerCertificate(NSSCMSSignedData* signedData, NSSCMSSignerInfo* signerI
     return result;
 }
 
-bool isTrustedForObjectSigning(const CERTCertificate* certificate)
+bool isTrustedForEmailSigning(const CERTCertificate* certificate)
 {
-    // Object-signing trust is the relevant NSS trust bit for PDF signatures;
+    // Email-signing trust is the relevant NSS trust bit for PDF signatures;
     // CA trust alone does not make an end-entity signer trusted here.
     CERTCertTrust trust { };
     if (!certificate || CERT_GetCertTrust(certificate, &trust) != SECSuccess)
         return false;
-    return (trust.objectSigningFlags & (CERTDB_TRUSTED | CERTDB_TRUSTED_CA)) != 0;
+    return (trust.emailFlags & (CERTDB_TRUSTED | CERTDB_TRUSTED_CA)) != 0;
 }
 
 CertificateStatus certificateStatusAt(CERTCertDBHandle* certdb, CERTCertificate* certificate, PRTime validationTime)
@@ -122,13 +122,19 @@ CertificateStatus certificateStatusAt(CERTCertDBHandle* certdb, CERTCertificate*
     }
     // NSS 3.126 can recurse indefinitely while building a chain for some
     // self-signed CMS certificates. A self-signed certificate has no issuer
-    // chain to validate; use its explicit object-signing trust state instead.
+    // chain to validate; use its explicit email-signing trust state instead.
     if (isSelfSigned(certificate))
-        return isTrustedForObjectSigning(certificate) ? CertificateStatus::Trusted : CertificateStatus::UntrustedIssuer;
+        return isTrustedForEmailSigning(certificate) ? CertificateStatus::Trusted : CertificateStatus::UntrustedIssuer;
     SECCertificateUsage returnedUsages = 0;
     if (certdb
-        && CERT_VerifyCertificate(
-               certdb, certificate, PR_TRUE, certUsageObjectSigner, validationTime, nullptr, nullptr, &returnedUsages)
+        && CERT_VerifyCertificate(certdb,
+                                  certificate,
+                                  PR_TRUE,
+                                  Internal::PdfCertificateVerificationUsage,
+                                  validationTime,
+                                  nullptr,
+                                  nullptr,
+                                  &returnedUsages)
             == SECSuccess)
         return CertificateStatus::Trusted;
     const PRErrorCode error = PR_GetError();

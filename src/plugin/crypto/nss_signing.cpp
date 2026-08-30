@@ -5,6 +5,7 @@
 #include "plugin/crypto/nss.hpp"
 #include "plugin/crypto/nss_error_internal.hpp"
 #include "plugin/crypto/nss_handles.hpp"
+#include "plugin/crypto/nss_internal.hpp"
 
 #include <array>
 
@@ -95,7 +96,7 @@ CmsResult createDetachedCmsFromDigest(const QString& certNickname,
     NSSCMSSignerInfo* signer = NSS_CMSSignerInfo_Create(message.get(), cert.get(), SEC_OID_SHA256);
     if (!signer)
         return signingFailure(QStringLiteral("Could not create CMS signer information"));
-    if (NSS_CMSSignerInfo_IncludeCerts(signer, NSSCMSCM_CertChain, certUsageObjectSigner) != SECSuccess)
+    if (NSS_CMSSignerInfo_IncludeCerts(signer, NSSCMSCM_CertChain, Internal::PdfCmsCertUsage) != SECSuccess)
         return signingFailure(QStringLiteral("Could not include CMS certificate chain"));
     if (NSS_CMSSignedData_AddSignerInfo(signedData, signer) != SECSuccess)
         return signingFailure(QStringLiteral("Could not add CMS signer information"));

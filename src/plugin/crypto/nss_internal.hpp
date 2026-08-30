@@ -6,6 +6,7 @@
 
 #pragma push_macro("slots")
 #undef slots
+#include <certt.h>
 #include <secoidt.h>
 #pragma pop_macro("slots")
 
@@ -16,6 +17,11 @@
 #include "shared/model/types.hpp"
 
 namespace Mu::Plugin::Crypto::Internal {
+
+/// PDF signatures follow NSS's S/MIME email-signing policy. CMS APIs consume
+/// SECCertUsage, while certificate verification consumes a bitmask type.
+inline constexpr SECCertUsage PdfCmsCertUsage = certUsageEmailSigner;
+inline constexpr SECCertificateUsage PdfCertificateVerificationUsage = certificateUsageEmailSigner;
 
 /// Returns the mutex protecting process-global NSS state.
 std::mutex& nssMutex();

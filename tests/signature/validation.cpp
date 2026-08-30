@@ -196,7 +196,7 @@ private slots:
                                QStringLiteral("-s"),
                                QStringLiteral("CN=Okular MuPDF Test Root"),
                                QStringLiteral("-t"),
-                               QStringLiteral("CT,CT,CT"),
+                               QStringLiteral(",CT,"),
                                QStringLiteral("-k"),
                                QStringLiteral("rsa"),
                                QStringLiteral("-g"),
@@ -222,7 +222,7 @@ private slots:
                                QStringLiteral("-c"),
                                QStringLiteral("okular-mupdf-test-root"),
                                QStringLiteral("-t"),
-                               QStringLiteral("u,u,u"),
+                               QStringLiteral(",u,"),
                                QStringLiteral("-k"),
                                QStringLiteral("rsa"),
                                QStringLiteral("-g"),
@@ -374,7 +374,7 @@ private slots:
         QVERIFY(certificate);
         CERTCertTrust trust { };
         QVERIFY(CERT_GetCertTrust(certificate, &trust) == SECSuccess);
-        trust.objectSigningFlags |= CERTDB_TRUSTED;
+        trust.emailFlags |= CERTDB_TRUSTED;
         QVERIFY(CERT_ChangeCertTrust(certdb, certificate, &trust) == SECSuccess);
         CERT_DestroyCertificate(certificate);
 
@@ -682,7 +682,7 @@ private slots:
         QVERIFY2(foundSignature, "PDF contains no signed signature field");
     }
 
-    void writesSignedPdf()
+    void writesPdfWithTrustedEmailSigningChain()
     {
         const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR) + QStringLiteral("/pdfreference1.0.pdf");
         QFile source(sourcePath);
@@ -737,6 +737,9 @@ private slots:
 
             ::Mu::Plugin::Crypto::validateDetachedPdfSignature(field, signedSource);
             QCOMPARE(field.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
+            QVERIFY(field.certificate.subjectDistinguishedName != field.certificate.issuerDistinguishedName);
+            QCOMPARE(field.certificateStatusCurrent, ::Mu::Model::CertificateStatus::Trusted);
+            QCOMPARE(field.certificateStatus, ::Mu::Model::CertificateStatus::Trusted);
             QCOMPARE(field.hashAlgorithm, ::Mu::Model::HashAlgorithm::Sha256);
             QVERIFY(field.signsTotalDocument);
         }
