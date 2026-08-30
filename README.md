@@ -8,7 +8,7 @@ A secure and fast PDF and EPUB generator for Okular.
 ---
 
 ## How to install
-Prebuilt packages for Archlinux & Ubuntu 26.04 are available to download [here](https://github.com/l4rzy/okular-mupdf-ng/releases)
+Prebuilt packages for Arch Linux, Ubuntu 26.04, and openSUSE Tumbleweed are available to download [here](https://github.com/l4rzy/okular-mupdf-ng/releases)
 
 ---
 
