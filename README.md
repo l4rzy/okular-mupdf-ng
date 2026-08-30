@@ -42,14 +42,17 @@ and the source-tree layout.
   build tools.
 - Qt 6, KDE Frameworks 6, and Okular 6 development packages.
 - NSS/NSPR for certificate and signature operations.
-- Build dependencies required by MuPDF, including FreeType, HarfBuzz, Gumbo,
-  JPEG, JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
+- Build dependencies required by MuPDF, including FreeType, HarfBuzz, JPEG,
+  JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
 
 The default build statically links the pinned MuPDF source. The build
 script downloads it to `thirdparty/mupdf-{version}-source/` automatically when
-absent and verifies its SHA-256. A compatible system MuPDF package can instead
-be selected with `-DUSE_SYSTEM_MUPDF=ON`.
+absent and verifies its SHA-256. The bundled build uses MuPDF's bundled Gumbo
+source by default; pass `-DUSE_SYSTEM_GUMBO=ON` to use a system Gumbo package
+instead.
+A compatible system MuPDF package can instead be selected with
+`-DUSE_SYSTEM_MUPDF=ON`.
 
 OCR uses the build-time `TESSDATA_DIR` setting, which defaults to
 `/usr/share/tessdata`. Additional tessdata directories can be configured in

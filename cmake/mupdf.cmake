@@ -10,6 +10,7 @@ endif()
 set(MUPDF_REQUIRED_VERSION "${_mupdf_file_version}" CACHE STRING "Required MuPDF version (from cmake/mupdf.version)")
 
 option(USE_SYSTEM_MUPDF "Use the system MuPDF package instead of bundled MuPDF" OFF)
+option(USE_SYSTEM_GUMBO "Use the system Gumbo package instead of bundled Gumbo" OFF)
 
 if(USE_SYSTEM_MUPDF)
     pkg_check_modules(MUPDF_SYSTEM REQUIRED IMPORTED_TARGET mupdf>=${MUPDF_REQUIRED_VERSION})
@@ -54,12 +55,18 @@ else()
 
     pkg_check_modules(MUPDF_LEPTONICA REQUIRED IMPORTED_TARGET lept)
     pkg_check_modules(MUPDF_FREETYPE REQUIRED IMPORTED_TARGET freetype2)
-    pkg_check_modules(MUPDF_GUMBO REQUIRED IMPORTED_TARGET gumbo)
     pkg_check_modules(MUPDF_HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
     pkg_check_modules(MUPDF_JPEG REQUIRED IMPORTED_TARGET libjpeg)
     pkg_check_modules(MUPDF_JBIG2DEC REQUIRED IMPORTED_TARGET jbig2dec)
     pkg_check_modules(MUPDF_OPENJPEG REQUIRED IMPORTED_TARGET libopenjp2)
     pkg_check_modules(MUPDF_BROTLI REQUIRED IMPORTED_TARGET libbrotlidec libbrotlienc)
+
+    if(USE_SYSTEM_GUMBO)
+        set(MUPDF_USE_SYSTEM_GUMBO yes)
+        pkg_check_modules(MUPDF_GUMBO REQUIRED IMPORTED_TARGET gumbo)
+    else()
+        set(MUPDF_USE_SYSTEM_GUMBO no)
+    endif()
 
     if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
         set(MUPDF_BUILD_PROFILE release)
@@ -90,6 +97,7 @@ else()
             archive=no
             barcode=no
             USE_SYSTEM_LIBS=yes
+            USE_SYSTEM_GUMBO=${MUPDF_USE_SYSTEM_GUMBO}
             USE_SYSTEM_TESSERACT=no
             USE_SYSTEM_LEPTONICA=yes
             USE_SYSTEM_CURL=no
@@ -114,12 +122,33 @@ else()
             "${MUPDF_THIRD_LIBRARY}"
             "${MUPDF_THREADS_LIBRARY}")
 
+    set(MUPDF_ENGINE_LINK_LIBRARIES
+        "-Wl,--start-group"
+        "${MUPDF_CORE_LIBRARY}"
+        "${MUPDF_THIRD_LIBRARY}"
+        "${MUPDF_THREADS_LIBRARY}"
+        "-Wl,--end-group"
+        PkgConfig::MUPDF_LEPTONICA
+        PkgConfig::MUPDF_FREETYPE)
+    if(USE_SYSTEM_GUMBO)
+        list(APPEND MUPDF_ENGINE_LINK_LIBRARIES PkgConfig::MUPDF_GUMBO)
+    endif()
+    list(APPEND MUPDF_ENGINE_LINK_LIBRARIES
+        PkgConfig::MUPDF_HARFBUZZ
+        PkgConfig::MUPDF_JPEG
+        PkgConfig::MUPDF_JBIG2DEC
+        PkgConfig::MUPDF_OPENJPEG
+        PkgConfig::MUPDF_BROTLI
+        ZLIB::ZLIB
+        Threads::Threads
+        "${CMAKE_DL_LIBS}"
+        m)
+
     add_library(MuPDF::Engine INTERFACE IMPORTED GLOBAL)
     set_target_properties(MuPDF::Engine PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${MUPDF_SOURCE_DIR}/include"
         INTERFACE_LINK_OPTIONS "-Wl,--gc-sections"
-        INTERFACE_LINK_LIBRARIES
-            "-Wl,--start-group;${MUPDF_CORE_LIBRARY};${MUPDF_THIRD_LIBRARY};${MUPDF_THREADS_LIBRARY};-Wl,--end-group;PkgConfig::MUPDF_LEPTONICA;PkgConfig::MUPDF_FREETYPE;PkgConfig::MUPDF_GUMBO;PkgConfig::MUPDF_HARFBUZZ;PkgConfig::MUPDF_JPEG;PkgConfig::MUPDF_JBIG2DEC;PkgConfig::MUPDF_OPENJPEG;PkgConfig::MUPDF_BROTLI;ZLIB::ZLIB;Threads::Threads;${CMAKE_DL_LIBS};m")
+        INTERFACE_LINK_LIBRARIES "${MUPDF_ENGINE_LINK_LIBRARIES}")
     add_dependencies(MuPDF::Engine mupdf_static_build)
 endif()
 

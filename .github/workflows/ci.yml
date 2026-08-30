@@ -103,7 +103,6 @@ jobs:
             git \
             libbrotli-dev \
             libfreetype-dev \
-            libgumbo-dev \
             libharfbuzz-dev \
             libjbig2dec0-dev \
             libjpeg-dev \
@@ -200,7 +199,6 @@ jobs:
             freetype2-devel \
             gcc-c++ \
             git \
-            gumbo-devel \
             harfbuzz-devel \
             jbig2dec-devel \
             kf6-kconfig-devel \
@@ -218,12 +216,19 @@ jobs:
             okular-devel \
             openjpeg2-devel \
             pkgconf-pkg-config \
-            python3 \
+            python314-base \
             rpm-build \
             tesseract-ocr \
             tesseract-ocr-traineddata-eng \
             qt6-base-devel \
             zlib-devel
+
+      - name: Provide Python 3 command
+        run: |
+          ln --symbolic --force /usr/bin/python3.14 /usr/local/bin/python3
+          test "$(command -v python3)" = /usr/local/bin/python3
+          test "$(readlink -f "$(command -v python3)")" = /usr/bin/python3.14
+          python3 -c 'import sys; assert sys.version_info >= (3, 12)'
 
       - name: Verify OCR language data
         run: test -f /usr/share/tessdata/eng.traineddata
@@ -245,6 +250,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
             -DUSE_SYSTEM_MUPDF=OFF \
+            -DUSE_SYSTEM_GUMBO=OFF \
             -DBUILD_TESTING=OFF \
             -DENABLE_MU_DEBUG=OFF \
             -DTESSDATA_DIR=/usr/share/tessdata
@@ -278,7 +284,7 @@ jobs:
       - name: Upload openSUSE RPM package
         uses: actions/upload-artifact@v4
         with:
-          name: opensuse-tumbleweed-rpm
+          name: opensuse-tumbleweed-rpm-package
           path: build/packages/*.rpm
           if-no-files-found: error
 
