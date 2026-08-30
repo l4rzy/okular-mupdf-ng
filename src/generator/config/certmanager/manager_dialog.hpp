@@ -34,7 +34,7 @@ private:
     // Shows the editor and forwards accepted text to the database adapter.
     void editCertificateData(const QByteArray& initialData);
     // Validates the pasted bytes and collects the NSS nickname before import.
-    void importCertificateData(const QByteArray& data);
+    void importCertificateData(const QByteArray& certificateData);
     // Collects self-signed options and stores the resulting certificate.
     void createSelfSignedCertificate();
     // Deletes the certificate identified by the selected row's hidden nickname.

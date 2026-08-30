@@ -265,9 +265,9 @@ bool isValidFormValue(const FormValue& value, std::string_view* reason)
 {
     // The variant determines which limits apply. Choice indices are checked
     // for sign here; field validation performs bounds checks against choices.
-    const auto fail = [reason](std::string_view value) {
+    const auto fail = [reason](std::string_view message) {
         if (reason)
-            *reason = value;
+            *reason = message;
         return false;
     };
 

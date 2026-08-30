@@ -180,7 +180,7 @@ void CertificateManagerDialog::importCertificateFile()
         showWarning(tr("Import Certificate"), file.errorString());
         return;
     }
-    const QByteArray data = file.readAll();
+    const QByteArray certificateData = file.readAll();
     if (file.error() != QFileDevice::NoError) {
         showWarning(tr("Import Certificate"), file.errorString());
         return;
@@ -198,7 +198,7 @@ void CertificateManagerDialog::importCertificateFile()
         if (!accepted)
             return;
         QString error;
-        if (!Plugin::Crypto::CertificateDatabase::importPkcs12(m_databasePath, data, password, &error)) {
+        if (!Plugin::Crypto::CertificateDatabase::importPkcs12(m_databasePath, certificateData, password, &error)) {
             showWarning(tr("Import Certificate"), error);
             return;
         }
@@ -206,7 +206,7 @@ void CertificateManagerDialog::importCertificateFile()
         return;
     }
 
-    editCertificateData(data);
+    editCertificateData(certificateData);
 }
 
 void CertificateManagerDialog::pasteCertificate()
@@ -236,10 +236,10 @@ void CertificateManagerDialog::editCertificateData(const QByteArray& initialData
     importCertificateData(editor->toPlainText().toUtf8());
 }
 
-void CertificateManagerDialog::importCertificateData(const QByteArray& data)
+void CertificateManagerDialog::importCertificateData(const QByteArray& certificateData)
 {
     // Reject empty input before prompting for an NSS nickname.
-    if (data.isEmpty()) {
+    if (certificateData.isEmpty()) {
         showWarning(tr("Import Certificate"), tr("The certificate data is empty"));
         return;
     }
@@ -258,7 +258,7 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& data)
     QString error;
     // CertificateDatabase performs parsing and private-key checks; refresh only
     // after it reports a successful import.
-    if (!Plugin::Crypto::CertificateDatabase::importCertificate(m_databasePath, data, nickname, &error)) {
+    if (!Plugin::Crypto::CertificateDatabase::importCertificate(m_databasePath, certificateData, nickname, &error)) {
         showWarning(tr("Import Certificate"), error);
         return;
     }
