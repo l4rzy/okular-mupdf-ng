@@ -2,6 +2,7 @@ scripts/__pycache__/
 build/
 build-release/
 build-asan/
+build-gcc/
 reference/
 thirdparty/mupdf-*/
 dist/*

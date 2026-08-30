@@ -1,9 +1,12 @@
-.PHONY: all dev release asan test format clean
+.PHONY: all dev gcc release asan test format clean
 
 all: dev
 
 dev:
 	@./scripts/build.sh dev
+
+gcc:
+	@./scripts/build.sh gcc
 
 release:
 	@./scripts/build.sh release

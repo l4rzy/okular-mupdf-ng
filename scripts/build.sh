@@ -17,9 +17,14 @@ case "$1" in
     BUILD_TYPE="Debug"
     RUN_TESTS=1
     ;;
+  gcc)
+    BUILD_DIR="build-gcc"
+    BUILD_TYPE="Debug"
+    RUN_TESTS=1
+    ;;
   clean)
     echo "Cleaning build directories..."
-    rm -rf build build-release build-asan
+    rm -rf build build-release build-asan build-gcc
     exit 0
     ;;
   format)
@@ -34,7 +39,7 @@ case "$1" in
     RUN_TESTS=1
     ;;
   *)
-    echo "Usage: $0 [dev|release|asan|test|format|clean]"
+    echo "Usage: $0 [dev|release|asan|gcc|test|format|clean]"
     exit 1
     ;;
 esac
@@ -44,11 +49,18 @@ if ! compgen -G 'thirdparty/mupdf*/Makefile' > /dev/null; then
 fi
 
 echo "==> Configuring ($BUILD_TYPE) in $BUILD_DIR..."
+if [ "$1" = "gcc" ]; then
+  CC=gcc
+  CXX=g++
+else
+  CC=clang
+  CXX=clang++
+fi
 cmake_args=(
 -G Ninja
 -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
--DCMAKE_C_COMPILER=clang
--DCMAKE_CXX_COMPILER=clang++
+-DCMAKE_C_COMPILER="$CC"
+-DCMAKE_CXX_COMPILER="$CXX"
 "-DCMAKE_C_FLAGS=$WARNING_FLAGS"
 "-DCMAKE_CXX_FLAGS=$WARNING_FLAGS"
 )
