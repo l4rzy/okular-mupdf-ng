@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include <argparse/argparse.hpp>
+#include <cxxopts/cxxopts.hpp>
 #include <mupdf/fitz/version.h>
 
 #include "runtime/worker_server.hpp"
@@ -39,23 +39,17 @@ void appendUniquePath(std::vector<std::string>& paths, std::string path)
         paths.push_back(std::move(path));
 }
 
-// Argument parser using argparse.hpp
-void configureArgumentParser(argparse::ArgumentParser& arguments)
+cxxopts::Options makeWorkerOptions()
 {
-    arguments.add_description(
-        "Sandboxed MuPDF worker for the okular-mupdf-ng Okular generator. It processes PDF and EPUB documents over "
-        "private IPC.");
-    arguments.add_epilog(
-        "This program is launched by the Okular plugin. It does not open document paths or render documents directly.");
-    arguments.add_argument("--socket")
-        .metavar("PATH")
-        .help("control Unix-domain socket for private plugin IPC")
-        .required();
-    arguments.add_argument("--fd-socket")
-        .metavar("PATH")
-        .help("Unix-domain socket for private descriptor transfer")
-        .required();
-    arguments.add_argument("--tessdata-dir").metavar("PATH").help("Tesseract data directory").append();
+    cxxopts::Options options(
+        "okular-mupdf-worker",
+        "Sandboxed MuPDF worker for the okular-mupdf-ng Okular generator.");
+    options.add_options()("socket", "control Unix-domain socket for private plugin IPC", cxxopts::value<std::string>(), "PATH")(
+        "fd-socket", "Unix-domain socket for private descriptor transfer", cxxopts::value<std::string>(), "PATH")(
+        "tessdata-dir", "Tesseract data directory", cxxopts::value<std::vector<std::string>>(), "PATH")(
+        "h,help", "Print usage")("version", "Print version");
+    options.custom_help("[OPTION...]");
+    return options;
 }
 
 } // namespace
@@ -71,29 +65,39 @@ void configureArgumentParser(argparse::ArgumentParser& arguments)
 /// 5. Enter the non-blocking polling event loop in `WorkerServer::run` until termination or parent disconnect.
 int main(int argc, char* argv[])
 {
-    // Step 1: Parse required command-line IPC socket paths passed by the plugin host.
-    argparse::ArgumentParser arguments("okular-mupdf-worker",
-                                       std::string("okular-mupdf-worker ") + std::string(::Mu::IPC::COMPAT) + "\nMuPDF "
-                                           + FZ_VERSION);
-    configureArgumentParser(arguments);
-    std::vector<std::string> commandLine;
-    commandLine.reserve(static_cast<std::size_t>(argc));
-    for (int index = 0; index < argc; ++index)
-        commandLine.emplace_back(argv[index]);
-
+    auto options = makeWorkerOptions();
+    cxxopts::ParseResult result;
     try {
-        arguments.parse_args(commandLine);
+        result = options.parse(argc, argv);
+        if (result.count("help")) {
+            std::cout << options.help() << "\n";
+            std::cout << "This program is launched by the Okular plugin. It does not open document paths or render documents directly.\n";
+            return 0;
+        }
+        if (result.count("version")) {
+            std::cout << "okular-mupdf-worker " << ::Mu::IPC::COMPAT << "\nMuPDF " << FZ_VERSION << "\n";
+            return 0;
+        }
+        if (!result.count("socket")) {
+            throw cxxopts::exceptions::missing_argument("socket");
+        }
+        if (!result.count("fd-socket")) {
+            throw cxxopts::exceptions::missing_argument("fd-socket");
+        }
+    } catch (const cxxopts::exceptions::exception& error) {
+        std::cerr << "error: " << error.what() << "\n\n" << options.help() << "\n";
+        return 2;
     } catch (const std::exception& error) {
-        std::cerr << "error: " << error.what() << "\n\n" << arguments;
+        std::cerr << "error: " << error.what() << "\n\n" << options.help() << "\n";
         return 2;
     }
-    const auto socketPath = arguments.get<std::string>("--socket");
-    const auto fdSocketPath = arguments.get<std::string>("--fd-socket");
+    const auto socketPath = result["socket"].as<std::string>();
+    const auto fdSocketPath = result["fd-socket"].as<std::string>();
     // Keep the build-time default first: sandbox activation requires it, while
     // command-line directories are optional additional read-only tessdata trees.
     std::vector<std::string> tessDataDirectories { makeAbsolutePath(DefaultTessDataDirectory) };
-    if (const auto configuredDirectories = arguments.present<std::vector<std::string>>("--tessdata-dir")) {
-        for (const auto& directory : *configuredDirectories)
+    if (result.count("tessdata-dir")) {
+        for (const auto& directory : result["tessdata-dir"].as<std::vector<std::string>>())
             appendUniquePath(tessDataDirectories, makeAbsolutePath(directory));
     }
 
