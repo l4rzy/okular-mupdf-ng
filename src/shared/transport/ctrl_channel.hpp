@@ -19,13 +19,10 @@
 #include <string>
 #include <vector>
 
-#include "shared/protocol/limits.hpp"
 #include "shared/transport/common.hpp"
 #include "shared/transport/poll.hpp"
 
 namespace Mu::IPC {
-
-using Limit::MaxFrameBytes;
 
 enum class ReadStatus {
     /// No complete frame is currently buffered and a nonblocking read found nothing.

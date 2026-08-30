@@ -107,26 +107,29 @@ std::optional<std::vector<std::byte>> encodeImpl(const T& value, std::string* er
     // The allocation limit applies while zpp grows the output; the final size
     // check below keeps the wire-size contract explicit at this boundary.
     std::vector<std::byte> data;
-    auto output = zpp::bits::out(
-        data, zpp::bits::size4b { }, zpp::bits::endian::little { }, zpp::bits::alloc_limit<Limit::MaxFrameBytes> { });
+    auto output = zpp::bits::out(data,
+                                 zpp::bits::size4b { },
+                                 zpp::bits::endian::little { },
+                                 zpp::bits::alloc_limit<Limit::MaxControlMessageBytes> { });
     const auto result = output(WireMagic, WireVersion, kindOf<T>(), value);
     if (zpp::bits::failure(result)) {
         // zpp uses allocation-related errors for both capacity and message-size
-        // failures; normalize both to the public FrameLimit category.
+        // failures; normalize both to the public ControlMessageLimit category.
         const auto code = static_cast<std::errc>(result);
-        const bool frameLimit = code == std::errc::no_buffer_space || code == std::errc::message_size;
+        const bool controlMessageLimit = code == std::errc::no_buffer_space || code == std::errc::message_size;
         if (errorCode)
-            *errorCode = frameLimit ? EncodeError::FrameLimit : EncodeError::Serialization;
-        return setError(error, frameLimit ? "message exceeds frame limit" : errorMessage(code)), std::nullopt;
+            *errorCode = controlMessageLimit ? EncodeError::ControlMessageLimit : EncodeError::Serialization;
+        return setError(error, controlMessageLimit ? "message exceeds control-message limit" : errorMessage(code)),
+               std::nullopt;
     }
 
     data.resize(output.position());
     // The allocator limit protects growth, while this check protects the final
     // serialized size if the codec's accounting changes in the future.
-    if (data.size() > Limit::MaxFrameBytes) {
+    if (data.size() > Limit::MaxControlMessageBytes) {
         if (errorCode)
-            *errorCode = EncodeError::FrameLimit;
-        setError(error, "message exceeds frame limit");
+            *errorCode = EncodeError::ControlMessageLimit;
+        setError(error, "message exceeds control-message limit");
         return std::nullopt;
     }
     return data;
@@ -136,7 +139,7 @@ template <typename T> bool decodeImpl(std::span<const std::byte> bytes, T* value
 {
     // Reject invalid destinations and impossible frame sizes before invoking
     // the codec. zpp also bounds each decoded container allocation below.
-    if (!value || bytes.empty() || bytes.size() > Limit::MaxFrameBytes)
+    if (!value || bytes.empty() || bytes.size() > Limit::MaxControlMessageBytes)
         return setError(error, "message is empty or too large");
 
     // Keep decoded data private until the whole frame, including its trailing

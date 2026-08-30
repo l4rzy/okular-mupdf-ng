@@ -10,9 +10,11 @@
 
 namespace Mu::Limit {
 
-// --- Transport & Control Channel Limits ---
-inline constexpr std::uint32_t MaxFrameBytes = 64U * 1024U * 1024U;
-inline constexpr std::uint32_t FrameMaxDataBytes = 128U * 1024U * 1024U;
+// --- Control-Channel Serialized Message Limits ---
+inline constexpr std::uint32_t MaxControlMessageBytes = 64U * 1024U * 1024U;
+
+// --- Shared-Memory Render Frame Limits ---
+inline constexpr std::uint32_t MaxSharedFrameBytes = 128U * 1024U * 1024U;
 
 // --- Serialization & Protocol Decoding Limits ---
 inline constexpr std::uint64_t MaxString = 1U * 1024U * 1024U;

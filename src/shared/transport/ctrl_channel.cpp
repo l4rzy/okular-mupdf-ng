@@ -3,6 +3,8 @@
 
 #include "shared/transport/ctrl_channel.hpp"
 
+#include "shared/protocol/limits.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -76,7 +78,7 @@ bool decodeFrameLength(std::span<const std::byte> header, std::uint32_t* length,
     // Decode the same big-endian representation emitted by encodeFrameLength.
     *length = (std::to_integer<std::uint32_t>(header[0]) << 24) | (std::to_integer<std::uint32_t>(header[1]) << 16)
         | (std::to_integer<std::uint32_t>(header[2]) << 8) | std::to_integer<std::uint32_t>(header[3]);
-    if (!*length || *length > MaxFrameBytes) {
+    if (!*length || *length > Limit::MaxControlMessageBytes) {
         if (error)
             *error = "control frame has an invalid length";
         return false;
@@ -333,7 +335,7 @@ void CtrlChannel::close()
 
 bool writeFrame(CtrlChannel& socket, std::span<const std::byte> payload, int timeoutMs, std::string* error)
 {
-    if (payload.empty() || payload.size() > MaxFrameBytes) {
+    if (payload.empty() || payload.size() > Limit::MaxControlMessageBytes) {
         if (error)
             *error = "control frame is empty or too large";
         return false;

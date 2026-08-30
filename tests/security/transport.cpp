@@ -19,6 +19,7 @@
 #include "plugin/util/temp_dir.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/ipc_debug.hpp"
+#include "shared/protocol/limits.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 #include "shared/transport/compat.hpp"
 #include "shared/transport/ctrl_channel.hpp"
@@ -51,6 +52,16 @@ private slots:
             &header, 3, 3, 8, 1, 7, uint64_t(sizeof(::Mu::IPC::FrameBufferHeader)) + uint64_t(3) * 8));
         QVERIFY(!::Mu::IPC::validateFrameHeader(
             &header, 2, 3, 3, 1, 7, uint64_t(sizeof(::Mu::IPC::FrameBufferHeader)) + uint64_t(3) * 3));
+        const std::uint64_t maxDataBytes = ::Mu::Limit::MaxSharedFrameBytes - sizeof(::Mu::IPC::FrameBufferHeader);
+        QCOMPARE(maxDataBytes + sizeof(::Mu::IPC::FrameBufferHeader), std::uint64_t(::Mu::Limit::MaxSharedFrameBytes));
+        const std::uint32_t maxWidth = static_cast<std::uint32_t>(maxDataBytes / 4U);
+        ::Mu::IPC::FrameBufferHeader maximumHeader {
+            ::Mu::IPC::FRAME_SHM_MAGIC, ::Mu::IPC::FRAME_SHM_VERSION, 9, maxWidth, 1, maxWidth * 4U, 1, { }
+        };
+        QVERIFY(::Mu::IPC::validateFrameHeader(
+            &maximumHeader, maxWidth, 1, maxWidth * 4U, 1, 9, ::Mu::Limit::MaxSharedFrameBytes));
+        QVERIFY(!::Mu::IPC::validateFrameHeader(
+            &maximumHeader, maxWidth, 1, maxWidth * 4U, 1, 9, std::uint64_t(::Mu::Limit::MaxSharedFrameBytes) + 1));
         // A mapping smaller than the header itself must be rejected without
         // reading the header fields beyond the mapped region.
         QVERIFY(!::Mu::IPC::validateFrameHeader(
@@ -102,9 +113,9 @@ private slots:
         QCOMPARE(decodedResponse.id, std::uint64_t(9));
         QVERIFY(std::holds_alternative<::Mu::Model::PingResponse>(decodedResponse.payload));
 
-        // The native writer rejects an oversized frame before narrowing its
+        // The native writer rejects an oversized control message before narrowing its
         // length to the 32-bit control-plane header.
-        const std::vector<std::byte> oversized(::Mu::IPC::MaxFrameBytes + 1);
+        const std::vector<std::byte> oversized(::Mu::Limit::MaxControlMessageBytes + 1);
         QVERIFY(!::Mu::IPC::writeFrame(client, oversized, 1000, &error));
     }
 

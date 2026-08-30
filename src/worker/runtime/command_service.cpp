@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "runtime/command_service.hpp"
+#include "runtime/render_budget.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -372,23 +373,28 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     if (!m_session.fdChannel)
         return failure(request.id, ErrorCode::Unavailable, "render", "FD channel unavailable");
 
-    std::optional<DocumentBase::RenderTile> tile;
     if (render.tile) {
         const auto& t = *render.tile;
         if (!isValidRenderTile(render.width, render.height, t.x, t.y, t.width, t.height))
             return failure(request.id, ErrorCode::InvalidRequest, "render", "tile is outside the image");
+    }
 
+    // Fit oversized requests before allocation. The frame remains valid while
+    // Okular scales the returned lower-resolution image into its original bounds.
+    const auto fitted = fitRenderRequestToFrameBudget(render);
+    std::optional<DocumentBase::RenderTile> tile;
+    if (fitted.request.tile) {
+        const auto& t = *fitted.request.tile;
         tile = DocumentBase::RenderTile { t.x, t.y, t.width, t.height };
     }
 
-    // Calculate dimensions, byte strides, and payload size
-    const auto rw = tile ? tile->width : render.width;
-    const auto rh = tile ? tile->height : render.height;
-    const auto outputStride = static_cast<std::uint32_t>(rw) * 4;
-    const auto dataSize = static_cast<std::uint64_t>(rh) * outputStride;
+    const auto rw = fitted.frameWidth;
+    const auto rh = fitted.frameHeight;
+    const auto outputStride = fitted.frameStride;
+    const auto dataSize = fitted.frameDataBytes;
     const auto total = sizeof(IPC::FrameBufferHeader) + dataSize;
 
-    if (dataSize > IPC::FRAME_MAX_DATA_BYTES)
+    if (total > Limit::MaxSharedFrameBytes)
         return failure(request.id, ErrorCode::ResourceLimit, "render", "frame exceeds transfer limit");
 
     std::string error;
@@ -445,8 +451,10 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     };
 
     // Step 3: Render raster pixmap into mapped SHM buffer
-    if (!m_document->renderToBuffer(
-            { render.page, render.width, render.height, tile }, IPC::framePixelData(address), outputStride, &error)) {
+    if (!m_document->renderToBuffer({ fitted.request.page, fitted.request.width, fitted.request.height, tile },
+                                    IPC::framePixelData(address),
+                                    outputStride,
+                                    &error)) {
         discardNewSlot();
         return failure(request.id, ErrorCode::Internal, "render", error.empty() ? "MuPDF returned no image" : error);
     }

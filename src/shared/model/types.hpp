@@ -553,7 +553,8 @@ struct RenderFrame {
     std::uint64_t slotId = 0;
     /// Lease generation required to release a pooled slot.
     std::uint64_t leaseId = 0;
-    /// Pixel dimensions and row stride in bytes.
+    /// Actual pixel dimensions and row stride in bytes. Dimensions can be
+    /// lower than the request when the shared-memory frame budget is reached.
     std::int32_t width = 0, height = 0, stride = 0;
     /// PixelFormatRgba8888 for the current frame protocol.
     std::uint32_t format = PixelFormatRgba8888;
@@ -677,7 +678,8 @@ struct RenderTile {
     std::int32_t x = 0, y = 0, width = 0, height = 0;
 };
 
-/// Page render request, optionally restricted to a tile.
+/// Page render request, optionally restricted to a tile. A response may use a
+/// lower raster resolution when the requested RGBA frame exceeds its limit.
 struct RenderRequest {
     std::int32_t page = -1, width = 0, height = 0;
     std::optional<RenderTile> tile;

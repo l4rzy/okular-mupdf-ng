@@ -104,19 +104,19 @@ bool WorkerServer::writeResponse(const ResponseMessage& response, std::string* e
     ZppCodec::EncodeError encodeErrorCode = ZppCodec::EncodeError::None;
     const auto data = ZppCodec::encode(response, &encodeError, &encodeErrorCode);
     if (!data) {
-        if (encodeErrorCode != ZppCodec::EncodeError::FrameLimit) {
+        if (encodeErrorCode != ZppCodec::EncodeError::ControlMessageLimit) {
             if (error)
                 *error = std::move(encodeError);
             return false;
         }
 
-        // The original response cannot fit in the protocol frame. Preserve its
+        // The original response cannot fit in a control message. Preserve its
         // request ID so the plugin receives a normal terminal response instead.
-        const ResponseMessage limitResponse {
-            response.id,
-            std::monostate { },
-            ::Mu::Model::Error { ::Mu::Model::ErrorCode::ResourceLimit, "response", "response exceeds frame limit" }
-        };
+        const ResponseMessage limitResponse { response.id,
+                                              std::monostate { },
+                                              ::Mu::Model::Error { ::Mu::Model::ErrorCode::ResourceLimit,
+                                                                   "response",
+                                                                   "response exceeds control-message limit" } };
         if (error)
             error->clear();
         return ZppCodec::writeMessage(*m_client, limitResponse, Timeout::ControlWriteMs, error, "worker");
@@ -205,13 +205,13 @@ bool WorkerServer::writePageLinks(std::string* error)
     ZppCodec::EncodeError encodeError = ZppCodec::EncodeError::None;
     std::string serializationError;
     const auto data = ZppCodec::encode(message, &serializationError, &encodeError);
-    if (!data && encodeError == ZppCodec::EncodeError::FrameLimit) {
+    if (!data && encodeError == ZppCodec::EncodeError::ControlMessageLimit) {
         m_commandService->cancelPageLinks();
         const NotificationMessage limitMessage { ::Mu::Model::PageLinksNotification {
             notification->generation,
             { },
             true,
-            "page-link notification exceeds frame limit",
+            "page-link notification exceeds control-message limit",
         } };
         return ZppCodec::writeMessage(*m_client, limitMessage, Timeout::ControlWriteMs, error, "worker");
     }

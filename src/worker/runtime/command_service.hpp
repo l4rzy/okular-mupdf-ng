@@ -15,6 +15,7 @@
 #include "engine/document_base.hpp"
 #include "engine/ocr/jobs.hpp"
 #include "shared/model/types.hpp"
+#include "shared/protocol/limits.hpp"
 #include "shared/transport/common.hpp"
 #include "shared/transport/ctrl_channel.hpp"
 #include "shared/transport/fd_channel.hpp"
@@ -67,7 +68,7 @@ constexpr std::size_t MaxOpenLinks = 100'000;
 constexpr std::size_t MaxEmbeddedFileBytes = 32U * 1024U * 1024U;
 constexpr std::size_t MaxEmbeddedFileCount = 1'024;
 constexpr std::size_t MaxOutlineResponseNodes = 50'000;
-constexpr std::uint64_t FramePoolBytes = 128U * 1024U * 1024U;
+constexpr std::uint64_t FramePoolBytes = ::Mu::Limit::MaxSharedFrameBytes;
 constexpr std::size_t MaxFramePoolSlots = 8;
 
 // Deferred request queue limits during synchronous nested IPC loops

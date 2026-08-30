@@ -17,18 +17,18 @@
 
 namespace Mu::IPC::ZppCodec {
 
-/// Distinguishes serialization failures from frames that exceed the IPC limit.
+/// Distinguishes serialization failures from control messages that exceed the IPC limit.
 enum class EncodeError {
     None, ///< Encoding succeeded or no error has been reported yet.
     Serialization, ///< The message could not be serialized.
-    FrameLimit, ///< The encoded message exceeds the maximum IPC frame size.
+    ControlMessageLimit, ///< The encoded message exceeds the control-message limit.
 };
 
 /// Encodes one complete protocol message, including its wire envelope.
 ///
 /// The returned bytes are the protocol payload passed to CtrlChannel, while
 /// CtrlChannel supplies the outer length prefix. On failure, `error` receives
-/// a diagnostic and `errorCode` identifies whether the frame limit was hit.
+/// a diagnostic and `errorCode` identifies whether the control-message limit was hit.
 std::optional<std::vector<std::byte>>
 encode(const Model::RequestMessage& value, std::string* error = nullptr, EncodeError* errorCode = nullptr);
 std::optional<std::vector<std::byte>>

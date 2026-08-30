@@ -22,8 +22,7 @@
 ///  5. The plugin unmaps the segment when the last QImage copy is destroyed.
 ///
 /// Maximum frame size supported:
-///   FRAME_MAX_DATA_BYTES = 128 MiB
-/// Frames larger than this are rejected with an error response.
+///   Limit::MaxSharedFrameBytes = 128 MiB, including FrameBufferHeader
 
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
@@ -33,10 +32,6 @@ namespace Mu::IPC {
 /// Magic number written at byte 0 of every frame SHM segment.
 inline constexpr std::uint32_t FRAME_SHM_MAGIC = 0x4D554650u; // 'MUFP'
 inline constexpr std::uint32_t FRAME_SHM_VERSION = 1u;
-
-/// Upper bound on the pixel-data portion of a single frame segment.
-/// Requests exceeding 128 MiB of RGBA pixel data return an error.
-inline constexpr std::uint32_t FRAME_MAX_DATA_BYTES = Limit::FrameMaxDataBytes;
 
 /// @brief Header placed at offset 0 of a per-request frame SHM segment.
 ///
@@ -76,10 +71,10 @@ inline const void* framePixelData(const void* base)
 /// @brief Validate a frame SHM header against the expected request geometry.
 ///
 /// Checks magic/version, that the header request ID, dimensions, and pixel
-/// format match the render request/response, and that the pixel data fits both
-/// FRAME_MAX_DATA_BYTES and the actual mapping size. @p mappedSize is the size
-/// of the mapped segment (including the header); when the mapping covers
-/// exactly the header the pixel-data region has length zero.
+/// format match the render request/response, and that the mapping fits
+/// Limit::MaxSharedFrameBytes. @p mappedSize is the size of the mapped segment
+/// (including the header); when the mapping covers exactly the header the
+/// pixel-data region has length zero.
 inline bool validateFrameHeader(const FrameBufferHeader* hdr,
                                 std::uint32_t width,
                                 std::uint32_t height,
@@ -90,16 +85,17 @@ inline bool validateFrameHeader(const FrameBufferHeader* hdr,
 {
     if (!hdr)
         return false;
-    if (mappedSize < sizeof(*hdr))
+    if (mappedSize < sizeof(FrameBufferHeader))
         return false;
     const std::uint64_t rowBytes = static_cast<std::uint64_t>(width) * 4;
     const std::uint64_t pixelBytes = static_cast<std::uint64_t>(height) * stride;
-    const std::uint64_t pixelBudget =
-        mappedSize >= sizeof(FrameBufferHeader) ? mappedSize - sizeof(FrameBufferHeader) : 0;
-    return width > 0 && height > 0 && stride > 0 && rowBytes <= stride && hdr->magic == FRAME_SHM_MAGIC
-        && hdr->version == FRAME_SHM_VERSION && hdr->requestId == requestId && hdr->width == width
-        && hdr->height == height && hdr->stride == stride && hdr->format == format && pixelBytes <= FRAME_MAX_DATA_BYTES
-        && pixelBytes <= pixelBudget;
+    const std::uint64_t pixelBudget = mappedSize - sizeof(FrameBufferHeader);
+    const bool hasValidLayout = width > 0 && height > 0 && stride > 0 && rowBytes <= stride;
+    const bool matchesExpectedFrame = hdr->magic == FRAME_SHM_MAGIC && hdr->version == FRAME_SHM_VERSION
+        && hdr->requestId == requestId && hdr->width == width && hdr->height == height && hdr->stride == stride
+        && hdr->format == format;
+    const bool fitsMapping = mappedSize <= Limit::MaxSharedFrameBytes && pixelBytes <= pixelBudget;
+    return hasValidLayout && matchesExpectedFrame && fitsMapping;
 }
 
 /// Validates a render-frame descriptor and its mapped shared-memory header.

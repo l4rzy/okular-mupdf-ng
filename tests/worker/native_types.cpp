@@ -1,4 +1,5 @@
 #include "runtime/command_service.hpp"
+#include "runtime/render_budget.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/ipc_debug.hpp"
@@ -206,18 +207,18 @@ private slots:
         QCOMPARE(output.pages.front().links.size(), size_t(1));
     }
 
-    void oversizedResponseReportsFrameLimit()
+    void oversizedResponseReportsControlMessageLimit()
     {
         using namespace Mu;
         Model::EmbeddedFile file;
-        file.data.resize(Limit::MaxFrameBytes, 0x7f);
+        file.data.resize(Limit::MaxControlMessageBytes, 0x7f);
         const Model::ResponseMessage response { 9, Model::EmbeddedFilesResponse { { std::move(file) } }, std::nullopt };
         std::string error;
         ::Mu::IPC::ZppCodec::EncodeError errorCode = ::Mu::IPC::ZppCodec::EncodeError::None;
         const auto bytes = ::Mu::IPC::ZppCodec::encode(response, &error, &errorCode);
         QVERIFY(!bytes);
-        QCOMPARE(errorCode, ::Mu::IPC::ZppCodec::EncodeError::FrameLimit);
-        QVERIFY(error.find("message exceeds frame limit") != std::string::npos);
+        QCOMPARE(errorCode, ::Mu::IPC::ZppCodec::EncodeError::ControlMessageLimit);
+        QVERIFY(error.find("message exceeds control-message limit") != std::string::npos);
     }
 #ifdef MU_DEBUG_ENABLED
     void typedDebugFormattingIncludesPayload()
@@ -413,6 +414,59 @@ private slots:
         Annotation embeddedNul = validAnnot;
         embeddedNul.author = std::string("author\0suffix", 13);
         QVERIFY(!isValidAnnotation(embeddedNul, &reason));
+    }
+
+    void renderRequestsFitSharedFrameBudget()
+    {
+        using namespace ::Mu;
+
+        const Model::RenderRequest withinBudget { 1, 8'000, 4'000, std::nullopt };
+        const auto unchanged = Worker::Runtime::fitRenderRequestToFrameBudget(withinBudget);
+        QCOMPARE(unchanged.request.width, withinBudget.width);
+        QCOMPARE(unchanged.request.height, withinBudget.height);
+        QCOMPARE(unchanged.frameDataBytes, std::uint64_t(8'000) * 4'000 * 4U);
+
+        const Model::RenderRequest fullPage { 2, 16'384, 16'384, std::nullopt };
+        const auto fullFallback = Worker::Runtime::fitRenderRequestToFrameBudget(fullPage);
+        QVERIFY(fullFallback.frameWidth < static_cast<std::uint32_t>(fullPage.width));
+        QVERIFY(fullFallback.frameWidth > 0);
+        QVERIFY(fullFallback.frameHeight > 0);
+        QCOMPARE(fullFallback.request.width, static_cast<std::int32_t>(fullFallback.frameWidth));
+        QCOMPARE(fullFallback.request.height, static_cast<std::int32_t>(fullFallback.frameHeight));
+        QVERIFY(sizeof(IPC::FrameBufferHeader) + fullFallback.frameDataBytes <= Limit::MaxSharedFrameBytes);
+
+        const Model::RenderRequest tiled {
+            3, 2'000'000, 1'000'000, Model::RenderTile { 500'000, 250'000, 500'000, 500'000 }
+        };
+        const auto tileFallback = Worker::Runtime::fitRenderRequestToFrameBudget(tiled);
+        QVERIFY(tileFallback.frameWidth < static_cast<std::uint32_t>(tiled.tile->width));
+        QVERIFY(tileFallback.request.tile);
+        const auto& scaledTile = *tileFallback.request.tile;
+        QVERIFY(Model::isValidRenderTile(tileFallback.request.width,
+                                         tileFallback.request.height,
+                                         scaledTile.x,
+                                         scaledTile.y,
+                                         scaledTile.width,
+                                         scaledTile.height));
+        QCOMPARE(scaledTile.width, static_cast<std::int32_t>(tileFallback.frameWidth));
+        QCOMPARE(scaledTile.height, static_cast<std::int32_t>(tileFallback.frameHeight));
+        QVERIFY(sizeof(IPC::FrameBufferHeader) + tileFallback.frameDataBytes <= Limit::MaxSharedFrameBytes);
+        const auto tileXError = static_cast<std::int64_t>(tiled.tile->x) * tileFallback.request.width
+            - static_cast<std::int64_t>(scaledTile.x) * tiled.width;
+        const auto tileYError = static_cast<std::int64_t>(tiled.tile->y) * tileFallback.request.height
+            - static_cast<std::int64_t>(scaledTile.y) * tiled.height;
+        QVERIFY(tileXError >= -tiled.width && tileXError <= tiled.width);
+        QVERIFY(tileYError >= -tiled.height && tileYError <= tiled.height);
+
+        const Model::RenderRequest extremeTile {
+            4,
+            Limit::MaxTiledRenderDimension,
+            Limit::MaxTiledRenderDimension,
+            Model::RenderTile { 0, 0, Limit::MaxTiledRenderDimension, Limit::MaxTiledRenderDimension }
+        };
+        const auto extremeFallback = Worker::Runtime::fitRenderRequestToFrameBudget(extremeTile);
+        QVERIFY(extremeFallback.frameWidth < static_cast<std::uint32_t>(extremeTile.tile->width));
+        QVERIFY(sizeof(IPC::FrameBufferHeader) + extremeFallback.frameDataBytes <= Limit::MaxSharedFrameBytes);
     }
 };
 
