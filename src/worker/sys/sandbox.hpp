@@ -28,7 +28,8 @@ bool applyResourceLimits(Status& status);
  * Activation is best-effort; the returned status and reason describe degraded phases.
  *
  * @param readOnlyDirectories The first directory is required; subsequent directories are optional read-only paths.
- * @param preservedFds Active file descriptors to exempt from inherited descriptor closure.
+ * @param preservedFds Active file descriptors to exempt from Release descriptor closure and, for standard descriptors,
+ * from redirection to /dev/null.
  * @return Detailed status structure indicating which security layers were successfully engaged.
  */
 Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,

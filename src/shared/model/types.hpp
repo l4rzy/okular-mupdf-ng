@@ -576,8 +576,11 @@ struct SandboxStatus {
         return landlock && seccomp && linuxNamespace && resourceLimits;
     }
 
-    /// Returns true if at least one isolation mechanism is engaged.
-    [[nodiscard]] constexpr bool isPartiallyActive() const noexcept { return landlock || seccomp || linuxNamespace; }
+    /// Returns true if some isolation mechanisms are active but full hardening is unavailable.
+    [[nodiscard]] constexpr bool isPartiallyActive() const noexcept
+    {
+        return !isFullyHardened() && (landlock || seccomp || linuxNamespace);
+    }
 };
 
 /// Opaque handle for a previously extracted annotation.

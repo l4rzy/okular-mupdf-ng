@@ -312,7 +312,7 @@ bool closeInheritedDescriptors(const std::vector<int>& preservedFds, Status& sta
 #endif
 }
 
-bool redirectStandardDescriptors(Status& status)
+bool redirectStandardDescriptors(const std::vector<int>& preservedFds, Status& status)
 {
 #ifdef __linux__
     const int nullFd = ::open("/dev/null", O_RDWR | O_CLOEXEC);
@@ -322,6 +322,8 @@ bool redirectStandardDescriptors(Status& status)
 
     bool success = true;
     for (const int standardFd : { STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO }) {
+        if (std::find(preservedFds.begin(), preservedFds.end(), standardFd) != preservedFds.end())
+            continue;
         if (::dup2(nullFd, standardFd) < 0) {
             recordErrno(status, "Redirecting standard descriptor");
             success = false;
@@ -331,6 +333,7 @@ bool redirectStandardDescriptors(Status& status)
         ::close(nullFd);
     return success;
 #else
+    (void)preservedFds;
     (void)status;
     return true;
 #endif
@@ -679,8 +682,8 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories, co
     // Optional: enforce W^X when supported by the running kernel.
     tryEnableMemoryProtection(status);
 #ifndef MU_DEBUG_ENABLED
-    // Release: keep standard descriptors available to libraries.
-    redirectStandardDescriptors(status);
+    // Release: redirect standard descriptors unless explicitly preserved.
+    redirectStandardDescriptors(preservedFds, status);
     // Release: remove all inherited descriptors except the active IPC channels.
     closeInheritedDescriptors(preservedFds, status);
 #else

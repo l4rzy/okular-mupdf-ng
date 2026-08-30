@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <algorithm>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -41,15 +42,79 @@ void appendUniquePath(std::vector<std::string>& paths, std::string path)
 
 cxxopts::Options makeWorkerOptions()
 {
-    cxxopts::Options options(
-        "okular-mupdf-worker",
-        "Sandboxed MuPDF worker for the okular-mupdf-ng Okular generator.");
-    options.add_options()("socket", "control Unix-domain socket for private plugin IPC", cxxopts::value<std::string>(), "PATH")(
+    cxxopts::Options options("okular-mupdf-worker", "Sandboxed MuPDF worker for the okular-mupdf-ng Okular generator.");
+    options.add_options()(
+        "socket", "control Unix-domain socket for private plugin IPC", cxxopts::value<std::string>(), "PATH")(
         "fd-socket", "Unix-domain socket for private descriptor transfer", cxxopts::value<std::string>(), "PATH")(
         "tessdata-dir", "Tesseract data directory", cxxopts::value<std::vector<std::string>>(), "PATH")(
-        "h,help", "Print usage")("version", "Print version");
+        "sandbox-check",
+        "Activate the sandbox in this short-lived process and report its status; use --sandbox-check=json for JSON "
+        "output",
+        cxxopts::value<std::string>()->implicit_value("human"),
+        "FORMAT")("h,help", "Print usage")("version", "Print version");
     options.custom_help("[OPTION...]");
     return options;
+}
+
+std::string escapeJsonString(const std::string& value)
+{
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (char c : value) {
+        switch (c) {
+        case '\"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20) {
+                char buf[7];
+                std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                out += buf;
+            } else
+                out += c;
+        }
+    }
+    return out;
+}
+
+void printSandboxStatusHuman(const Mu::Model::SandboxStatus& status)
+{
+    std::cout << "Sandbox check on host:\n"
+              << "  landlock: " << (status.landlock ? "yes" : "no") << " abi=" << status.landlockAbi << "\n"
+              << "  seccomp: " << (status.seccomp ? "yes" : "no") << "\n"
+              << "  linuxNamespace: " << (status.linuxNamespace ? "yes" : "no") << "\n"
+              << "  resourceLimits: " << (status.resourceLimits ? "yes" : "no") << "\n"
+              << "  memoryProtection: " << (status.memoryProtection ? "yes" : "no") << "\n"
+              << "  fullyHardened: " << (status.isFullyHardened() ? "yes" : "no") << "\n"
+              << "  partiallyActive: " << (status.isPartiallyActive() ? "yes" : "no") << "\n";
+    if (!status.reason.empty())
+        std::cout << "  reason: " << status.reason << "\n";
+    std::cout.flush();
+}
+
+void printSandboxStatusJson(const Mu::Model::SandboxStatus& status)
+{
+    std::cout << "{\"landlock\":" << (status.landlock ? "true" : "false") << ",\"landlockAbi\":" << status.landlockAbi
+              << ",\"seccomp\":" << (status.seccomp ? "true" : "false")
+              << ",\"linuxNamespace\":" << (status.linuxNamespace ? "true" : "false")
+              << ",\"resourceLimits\":" << (status.resourceLimits ? "true" : "false")
+              << ",\"memoryProtection\":" << (status.memoryProtection ? "true" : "false")
+              << ",\"fullyHardened\":" << (status.isFullyHardened() ? "true" : "false")
+              << ",\"partiallyActive\":" << (status.isPartiallyActive() ? "true" : "false") << ",\"reason\":\""
+              << escapeJsonString(status.reason) << "\"}\n";
+    std::cout.flush();
 }
 
 } // namespace
@@ -65,18 +130,50 @@ cxxopts::Options makeWorkerOptions()
 /// 5. Enter the non-blocking polling event loop in `WorkerServer::run` until termination or parent disconnect.
 int main(int argc, char* argv[])
 {
+    std::vector<std::string> tessDataDirectories { makeAbsolutePath(DefaultTessDataDirectory) };
     auto options = makeWorkerOptions();
     cxxopts::ParseResult result;
     try {
         result = options.parse(argc, argv);
         if (result.count("help")) {
             std::cout << options.help() << "\n";
-            std::cout << "This program is launched by the Okular plugin. It does not open document paths or render documents directly.\n";
+            std::cout << "This program is launched by the Okular plugin. It does not open document paths or render "
+                         "documents directly.\n";
+            std::cout << "When --sandbox-check is given, no IPC sockets are required.\n";
             return 0;
         }
         if (result.count("version")) {
             std::cout << "okular-mupdf-worker " << ::Mu::IPC::COMPAT << "\nMuPDF " << FZ_VERSION << "\n";
             return 0;
+        }
+        if (result.count("tessdata-dir")) {
+            for (const auto& directory : result["tessdata-dir"].as<std::vector<std::string>>())
+                appendUniquePath(tessDataDirectories, makeAbsolutePath(directory));
+        }
+        if (result.count("sandbox-check")) {
+            if (result.count("sandbox-check") > 1)
+                throw cxxopts::exceptions::incorrect_argument_type("sandbox-check may be specified only once");
+            if (!result.unmatched().empty())
+                throw cxxopts::exceptions::incorrect_argument_type(
+                    "sandbox-check accepts no positional arguments; use --sandbox-check=json for JSON output");
+            const std::string format = result["sandbox-check"].as<std::string>();
+            if (format != "human" && format != "json")
+                throw cxxopts::exceptions::incorrect_argument_type("sandbox-check: expected no format or '=json', got '"
+                                                                   + format + "'");
+            const bool json = (format == "json");
+            // Preserve output for the report even in Release, which redirects
+            // and closes nonessential inherited descriptors.
+            const std::vector<int> preserve { STDOUT_FILENO, STDERR_FILENO };
+            const auto status = ::Mu::Worker::Sandbox::activate(tessDataDirectories, preserve);
+            if (json)
+                printSandboxStatusJson(status);
+            else
+                printSandboxStatusHuman(status);
+            if (status.isFullyHardened())
+                return 0;
+            if (status.isPartiallyActive())
+                return 1;
+            return 2;
         }
         if (!result.count("socket")) {
             throw cxxopts::exceptions::missing_argument("socket");
@@ -93,13 +190,6 @@ int main(int argc, char* argv[])
     }
     const auto socketPath = result["socket"].as<std::string>();
     const auto fdSocketPath = result["fd-socket"].as<std::string>();
-    // Keep the build-time default first: sandbox activation requires it, while
-    // command-line directories are optional additional read-only tessdata trees.
-    std::vector<std::string> tessDataDirectories { makeAbsolutePath(DefaultTessDataDirectory) };
-    if (result.count("tessdata-dir")) {
-        for (const auto& directory : result["tessdata-dir"].as<std::vector<std::string>>())
-            appendUniquePath(tessDataDirectories, makeAbsolutePath(directory));
-    }
 
     // Step 2: Connect auxiliary file descriptor channel to the parent generator process.
     // This channel uses SCM_RIGHTS to receive document file descriptors and shared memory frames.
@@ -128,10 +218,10 @@ int main(int argc, char* argv[])
     // Best-effort sandboxing is intentional: worker availability is preferred
     // on hosts where some Linux hardening controls are unavailable. The parent
     // can inspect the degraded status reported through Ping.
-    if (!sandbox.isPartiallyActive()) {
-        MU_LOG(critical, "Mu::Worker", std::string("worker unconfined; all sandboxing failed: ") + sandbox.reason);
-    } else if (!sandbox.isFullyHardened()) {
+    if (sandbox.isPartiallyActive()) {
         MU_LOG(warning, "Mu::Worker", std::string("sandbox partially active: ") + sandbox.reason);
+    } else if (!sandbox.isFullyHardened()) {
+        MU_LOG(critical, "Mu::Worker", std::string("worker unconfined; all sandboxing failed: ") + sandbox.reason);
     }
 
     // Step 5: Enter main multiplexing event loop, handling requests until client disconnects or exits.
