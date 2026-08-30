@@ -148,13 +148,19 @@ jobs:
         run: |
           cmake --build build -j$(nproc)
           cpack --config build/CPackConfig.cmake -B build/packages -G DEB
+          package=$(find build/packages -maxdepth 1 -name '*.deb' -print -quit)
+          test -n "$package"
+          package_name=$(dpkg-deb --field "$package" Package)
+          package_version=$(dpkg-deb --field "$package" Version)
+          package_architecture=$(dpkg-deb --field "$package" Architecture)
+          mv "$package" "build/packages/${package_name}_${package_version}_${package_architecture}_ubuntu-26.04.deb"
 
       - name: Validate Debian package
         run: |
           set -x
-          package=$(find build/packages -maxdepth 1 -name '*.deb' -print -quit)
-          test -n "$package"
           expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          package="build/packages/okular-mupdf-ng_${expected_version}-1_amd64_ubuntu-26.04.deb"
+          test -f "$package"
           test "$(dpkg-deb --field "$package" Package)" = okular-mupdf-ng
           test "$(dpkg-deb --field "$package" Version)" = "${expected_version}-1"
           test "$(dpkg-deb --field "$package" Architecture)" = amd64
@@ -259,13 +265,20 @@ jobs:
         run: |
           cmake --build build -j$(nproc)
           cpack --config build/CPackConfig.cmake -B build/packages -G RPM
+          package=$(find build/packages -maxdepth 1 -name '*.rpm' -print -quit)
+          test -n "$package"
+          package_name=$(rpm --queryformat '%{NAME}' -qp "$package")
+          package_version=$(rpm --queryformat '%{VERSION}' -qp "$package")
+          package_release=$(rpm --queryformat '%{RELEASE}' -qp "$package")
+          package_architecture=$(rpm --queryformat '%{ARCH}' -qp "$package")
+          mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.opensuse-tumbleweed.${package_architecture}.rpm"
 
       - name: Validate RPM package
         run: |
           set -x
-          package=$(find build/packages -maxdepth 1 -name '*.rpm' -print -quit)
-          test -n "$package"
           expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          package="build/packages/okular-mupdf-ng-${expected_version}-1.opensuse-tumbleweed.x86_64.rpm"
+          test -f "$package"
           test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng
           test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1"
           test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = x86_64
