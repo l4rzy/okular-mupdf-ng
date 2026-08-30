@@ -244,7 +244,7 @@ private slots:
                                QStringLiteral("-z"),
                                noise.fileName() }),
                  "certutil could not create the signing certificate");
-        QVERIFY2(::Mu::Plugin::Crypto::ensureNssInitialized(m_nssDb.path()),
+        QVERIFY2(::Mu::Plugin::Crypto::initializeNss(m_nssDb.path()) == ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite,
                  "NSS certificate database could not be initialized");
         QCOMPARE(::Mu::Plugin::Crypto::activeNssDatabasePath(), m_nssDb.path());
     }

@@ -40,7 +40,7 @@ struct ParsedCmsContext {
         ParsedCmsContext res;
         if (!signature || len == 0 || len > std::numeric_limits<unsigned int>::max())
             return res;
-        if (!ensureNssInitialized())
+        if (initializeNss() == NssRuntimeMode::Unavailable)
             return res;
 
         SECItem sigItem = { siBuffer, signature, static_cast<unsigned int>(len) };

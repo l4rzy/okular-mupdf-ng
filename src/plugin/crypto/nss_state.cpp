@@ -36,15 +36,45 @@ QString nssErrorMessage(PRErrorCode error)
         .arg(error);
 }
 
+namespace {
+
+inline std::pair<QString, QString> splitNssScheme(const QString& value)
+{
+    if (value.startsWith(QStringLiteral("sql:"), Qt::CaseInsensitive))
+        return { value.left(4).toLower(), value.mid(4) };
+    if (value.startsWith(QStringLiteral("dbm:"), Qt::CaseInsensitive))
+        return { value.left(4).toLower(), value.mid(4) };
+    return { {}, value };
+}
+
+} // namespace
+
 QString stripNssScheme(const QString& path)
 {
     // NSS returns scheme-qualified paths, while callers expose the filesystem
     // path used to configure the database.
-    if (path.startsWith(QStringLiteral("sql:")))
-        return path.mid(4);
-    if (path.startsWith(QStringLiteral("dbm:")))
-        return path.mid(4);
-    return path;
+    const auto [scheme, stripped] = splitNssScheme(path);
+    return scheme.isEmpty() ? path : stripped;
+}
+
+QString canonicalNssDatabasePath(const QString& path)
+{
+    const QString trimmedPath = path.trimmed();
+    if (trimmedPath.isEmpty())
+        return { };
+
+    const auto [scheme, stripped] = splitNssScheme(trimmedPath);
+    if (stripped.isEmpty())
+        return { };
+
+    const QString canonicalScheme = scheme.isEmpty() ? QStringLiteral("sql:") : scheme;
+    const QString filePath = stripped;
+
+    const QFileInfo fileInfo(filePath);
+    QString canonicalPath = fileInfo.canonicalFilePath();
+    if (canonicalPath.isEmpty())
+        canonicalPath = QDir::cleanPath(fileInfo.absoluteFilePath());
+    return canonicalScheme + canonicalPath;
 }
 
 QString chooseNssDbPath(const QString& envDb,
@@ -73,120 +103,121 @@ QString defaultSystemNssDbPath()
 {
     // Prefer an explicit environment override, then the user's database, then
     // the system database. The user path is the final deterministic fallback.
-    const QString envNssDb = qEnvironmentVariable("NSS_DEFAULT_DB");
-    const QString userPkiDb = QDir::homePath() + QStringLiteral("/.pki/nssdb");
-    const QString sysPkiDb = QStringLiteral("/etc/pki/nssdb");
+    const QString configuredEnvNssDb = qEnvironmentVariable("NSS_DEFAULT_DB").trimmed();
+    const QString canonicalEnvNssDb = Internal::canonicalNssDatabasePath(configuredEnvNssDb);
+    const bool envHasScheme = Internal::stripNssScheme(configuredEnvNssDb) != configuredEnvNssDb;
+    const QString envNssDb = envHasScheme ? canonicalEnvNssDb : Internal::stripNssScheme(canonicalEnvNssDb);
+    const QString userPkiDb =
+        Internal::stripNssScheme(Internal::canonicalNssDatabasePath(QDir::homePath() + QStringLiteral("/.pki/nssdb")));
+    const QString sysPkiDb =
+        Internal::stripNssScheme(Internal::canonicalNssDatabasePath(QStringLiteral("/etc/pki/nssdb")));
     return Internal::chooseNssDbPath(envNssDb,
-                                     !envNssDb.isEmpty() && QFileInfo::exists(envNssDb),
+                                     !envNssDb.isEmpty() && QFileInfo(Internal::stripNssScheme(envNssDb)).isDir(),
                                      userPkiDb,
-                                     QFileInfo::exists(userPkiDb),
+                                     QFileInfo(userPkiDb).isDir(),
                                      sysPkiDb,
-                                     QFileInfo::exists(sysPkiDb));
+                                     QFileInfo(sysPkiDb).isDir());
 }
 
 } // namespace Mu::Plugin::Crypto
 
 namespace {
 
-QString g_nssDatabasePath;
-bool g_hasPersistentNssDatabase = false;
+using Mu::Plugin::Crypto::NssRuntimeMode;
 
-QString normalizedNssDatabasePath(const QString& databasePath)
+QString g_nssDatabaseIdentity;
+NssRuntimeMode g_nssMode = NssRuntimeMode::Unavailable;
+
+bool isPersistentMode(NssRuntimeMode mode)
 {
-    // NSS expects a scheme-qualified database path; normalize equivalent
-    // caller forms before comparing or initializing the process-global state.
-    const QString targetPath =
-        databasePath.trimmed().isEmpty() ? Mu::Plugin::Crypto::defaultSystemNssDbPath() : databasePath.trimmed();
-    if (targetPath.startsWith(QStringLiteral("sql:")) || targetPath.startsWith(QStringLiteral("dbm:")))
-        return targetPath;
-    return QStringLiteral("sql:") + targetPath;
+    return mode == NssRuntimeMode::ReadOnly || mode == NssRuntimeMode::ReadWrite;
 }
 
-bool tryInitPersistentNssDatabase(const QByteArray& nssPathBytes, const QString& targetPath)
+void recordNssRuntime(NssRuntimeMode mode, const QString& databaseIdentity = { })
 {
-    // Record persistent state only after NSS accepts the database path; failed
-    // initialization must not make later callers believe a store is active.
-    if (NSS_InitReadWrite(nssPathBytes.constData()) != SECSuccess)
-        return false;
     CERT_SetUsePKIXForValidation(PR_TRUE);
-    g_nssDatabasePath = targetPath;
-    g_hasPersistentNssDatabase = true;
-    return true;
+    g_nssMode = mode;
+    g_nssDatabaseIdentity = isPersistentMode(mode) ? databaseIdentity : QString { };
 }
 
-bool tryInitNoDbNssDatabase()
+void logPersistentInitializationFailure(const char* access, const QString& databaseIdentity, PRErrorCode error)
 {
-    // NoDB is an explicit fallback for temporary NSS operations and must never
-    // be reported as a persistent user certificate store.
-    if (NSS_NoDB_Init(nullptr) != SECSuccess)
-        return false;
-    CERT_SetUsePKIXForValidation(PR_TRUE);
-    g_nssDatabasePath.clear();
-    g_hasPersistentNssDatabase = false;
-    return true;
+    MU_LOG(warning,
+           "Mu::Plugin::Crypto",
+           std::string("Error initializing ") + access + " NSS cert DB at " + databaseIdentity.toStdString()
+               + " (PR_GetError code: " + std::to_string(error) + ")");
 }
 
 } // namespace
 
 namespace Mu::Plugin::Crypto {
 
-bool ensureNssInitialized(const QString& databasePath, bool allowNoDbFallback)
+NssRuntimeMode initializeNss(const QString& databasePath)
 {
-    // Initialization is one-way for the process. Once NSS is active, reject a
-    // conflicting requested database rather than silently switching stores.
     const QString requestedPath = databasePath.trimmed();
-    const QString targetPath = normalizedNssDatabasePath(requestedPath);
-    const QByteArray nssPathBytes = targetPath.toUtf8();
+    const QString configuredPath = requestedPath.isEmpty() ? defaultSystemNssDbPath() : requestedPath;
+    const QString databaseIdentity = Internal::canonicalNssDatabasePath(configuredPath);
     std::lock_guard<std::mutex> lock(Internal::nssMutex());
 
     if (NSS_IsInitialized()) {
-        if (!requestedPath.isEmpty() && (!g_hasPersistentNssDatabase || g_nssDatabasePath != targetPath))
-            return false;
-        return g_hasPersistentNssDatabase || allowNoDbFallback;
+        // NSS initialization is process-global and one-way. An explicit path
+        // must identify the already-active persistent database.
+        if (g_nssMode == NssRuntimeMode::Unavailable)
+            return NssRuntimeMode::Unavailable;
+        if (!requestedPath.isEmpty() && (!isPersistentMode(g_nssMode) || g_nssDatabaseIdentity != databaseIdentity))
+            return NssRuntimeMode::Unavailable;
+        return g_nssMode;
     }
-    if (tryInitPersistentNssDatabase(nssPathBytes, targetPath))
-        return true;
 
-    const PRErrorCode err = PR_GetError();
-    MU_LOG(warning,
-           "Mu::Plugin::Crypto",
-           std::string("Error initializing NSS cert DB at ") + targetPath.toStdString()
-               + " (PR_GetError code: " + std::to_string(err) + ")");
+    if (!databaseIdentity.isEmpty()) {
+        const QByteArray nssPathBytes = databaseIdentity.toUtf8();
+        if (NSS_InitReadWrite(nssPathBytes.constData()) == SECSuccess) {
+            recordNssRuntime(NssRuntimeMode::ReadWrite, databaseIdentity);
+            return g_nssMode;
+        }
+        const PRErrorCode readWriteError = PR_GetError();
 
-    if (!allowNoDbFallback)
-        return false;
+        if (NSS_Init(nssPathBytes.constData()) == SECSuccess) {
+            recordNssRuntime(NssRuntimeMode::ReadOnly, databaseIdentity);
+            return g_nssMode;
+        }
+        logPersistentInitializationFailure("read/write", databaseIdentity, readWriteError);
+        logPersistentInitializationFailure("read-only", databaseIdentity, PR_GetError());
+    }
 
-    // NoDB mode is useful for operations that only need temporary certificate
-    // material, but it cannot expose the user's persistent certificate store.
+    // NoDB still supports CMS integrity checks using certificates embedded in
+    // the signature, but it does not provide a persistent trust or key store.
     MU_LOG(warning, "Mu::Plugin::Crypto", "Falling back to NSS NoDB mode");
-    if (tryInitNoDbNssDatabase())
-        return true;
+    if (NSS_NoDB_Init(nullptr) == SECSuccess) {
+        recordNssRuntime(NssRuntimeMode::NoDb);
+        return g_nssMode;
+    }
 
     MU_LOG(critical, "Mu::Plugin::Crypto", "Failed to initialize NSS even in NoDB mode");
-    return false;
+    return NssRuntimeMode::Unavailable;
+}
+
+NssRuntimeMode activeNssMode()
+{
+    std::lock_guard<std::mutex> lock(Internal::nssMutex());
+    return NSS_IsInitialized() ? g_nssMode : NssRuntimeMode::Unavailable;
 }
 
 QString activeNssDatabasePath()
 {
     std::lock_guard<std::mutex> lock(Internal::nssMutex());
-    if (!NSS_IsInitialized() || !g_hasPersistentNssDatabase || g_nssDatabasePath.isEmpty())
+    if (!NSS_IsInitialized() || !isPersistentMode(g_nssMode) || g_nssDatabaseIdentity.isEmpty())
         return { };
-    return Internal::stripNssScheme(g_nssDatabasePath);
+    return Internal::stripNssScheme(g_nssDatabaseIdentity);
 }
 
 bool isNssDatabaseActive(const QString& databasePath)
 {
-    // Compare normalized paths while holding the same mutex used by startup.
     const QString requestedPath = databasePath.trimmed();
+    const QString requestedIdentity = Internal::canonicalNssDatabasePath(requestedPath);
     std::lock_guard<std::mutex> lock(Internal::nssMutex());
-    return NSS_IsInitialized() && g_hasPersistentNssDatabase
-        && (requestedPath.isEmpty() || g_nssDatabasePath == normalizedNssDatabasePath(requestedPath));
-}
-
-bool hasPersistentNssDatabase()
-{
-    std::lock_guard<std::mutex> lock(Internal::nssMutex());
-    return NSS_IsInitialized() && g_hasPersistentNssDatabase;
+    return NSS_IsInitialized() && isPersistentMode(g_nssMode)
+        && (requestedPath.isEmpty() || g_nssDatabaseIdentity == requestedIdentity);
 }
 
 } // namespace Mu::Plugin::Crypto

@@ -25,15 +25,25 @@ struct CmsResult {
     QByteArray cms;
 };
 
-/// Initializes process-wide NSS, preferring the requested persistent database.
-/// NoDB fallback is opt-in because it cannot expose the user's certificate store.
-bool ensureNssInitialized(const QString& databasePath = { }, bool allowNoDbFallback = false);
+/// Capability of the process-wide NSS runtime selected during initialization.
+enum class NssRuntimeMode {
+    Unavailable,
+    NoDb,
+    ReadOnly,
+    ReadWrite,
+};
+
+/// Initializes process-wide NSS using read/write, read-only, then NoDB mode.
+/// Once initialized, the process cannot switch to a different database.
+/// Returns Unavailable for a conflicting explicit path without changing the
+/// runtime reported by activeNssMode().
+[[nodiscard]] NssRuntimeMode initializeNss(const QString& databasePath = { });
+/// Returns the capability of the active process-wide NSS runtime.
+[[nodiscard]] NssRuntimeMode activeNssMode();
 /// Returns the active persistent database path without its NSS scheme prefix.
 [[nodiscard]] QString activeNssDatabasePath();
 /// Reports whether the requested database is the active NSS database.
 [[nodiscard]] bool isNssDatabaseActive(const QString& databasePath);
-/// Reports whether NSS is initialized with a persistent certificate database.
-[[nodiscard]] bool hasPersistentNssDatabase();
 /// Selects the first existing database from the configured system locations.
 [[nodiscard]] QString defaultSystemNssDbPath();
 /// Lists certificates that NSS can use for signing.

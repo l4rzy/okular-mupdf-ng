@@ -77,16 +77,29 @@ void clearError(QString* error)
         error->clear();
 }
 
-bool ensureCertificateDatabase(const QString& databasePath, QString* error)
+enum class DatabaseAccess {
+    ReadOnly,
+    ReadWrite,
+};
+
+bool ensureCertificateDatabase(const QString& databasePath, DatabaseAccess access, QString* error)
 {
-    // Certificate management requires a persistent database; NoDB mode cannot
-    // provide the objects that these operations create, list, or remove.
-    if (Plugin::Crypto::ensureNssInitialized(databasePath) && Plugin::Crypto::isNssDatabaseActive(databasePath))
+    const auto requestedMode = Plugin::Crypto::initializeNss(databasePath);
+    if (requestedMode == Plugin::Crypto::NssRuntimeMode::ReadWrite)
         return true;
-    if (!Plugin::Crypto::hasPersistentNssDatabase())
-        setError(error, QStringLiteral("A persistent NSS certificate database is unavailable"));
-    else
+    if (requestedMode == Plugin::Crypto::NssRuntimeMode::ReadOnly) {
+        if (access == DatabaseAccess::ReadOnly)
+            return true;
+        setError(error, QStringLiteral("The active NSS certificate database is read-only"));
+        return false;
+    }
+
+    const auto activeMode = Plugin::Crypto::activeNssMode();
+    if (activeMode == Plugin::Crypto::NssRuntimeMode::ReadOnly
+        || activeMode == Plugin::Crypto::NssRuntimeMode::ReadWrite)
         setError(error, QStringLiteral("The selected NSS database is not active; restart Okular after changing it"));
+    else
+        setError(error, QStringLiteral("A persistent NSS certificate database is unavailable"));
     return false;
 }
 
@@ -401,7 +414,7 @@ bool encodeSignAndImport(SlotHandle& slot,
 QList<Model::Certificate> listCertificates(const QString& databasePath, QString* error)
 {
     clearError(error);
-    if (!ensureCertificateDatabase(databasePath, error))
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadOnly, error))
         return { };
     std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
     return Plugin::Crypto::Internal::listSigningCertificates();
@@ -418,7 +431,7 @@ bool importCertificate(const QString& databasePath, const QByteArray& data, cons
         setError(error, QStringLiteral("The certificate data is too large"));
         return false;
     }
-    if (!ensureCertificateDatabase(databasePath, error))
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
     std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
     QByteArray package = data;
@@ -468,7 +481,7 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
         setError(error, QStringLiteral("The PKCS#12 bundle is too large"));
         return false;
     }
-    if (!ensureCertificateDatabase(databasePath, error))
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
 
     SensitiveBytes passwordBytes(encodePkcs12Password(password));
@@ -559,7 +572,7 @@ bool createSelfSignedCertificate(const QString& databasePath,
     PRTime validUntil = 0;
     if (!checkSelfSignedOptions(options, &nickname, &commonName, &country, &validFrom, &validUntil, error))
         return false;
-    if (!ensureCertificateDatabase(databasePath, error))
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
     std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
 
@@ -613,7 +626,7 @@ bool deleteCertificate(const QString& databasePath, const QString& nickname, QSt
         setError(error, QStringLiteral("No certificate was selected"));
         return false;
     }
-    if (!ensureCertificateDatabase(databasePath, error))
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
     std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
     CERTCertDBHandle* database = CERT_GetDefaultCertDB();

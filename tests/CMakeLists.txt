@@ -97,6 +97,26 @@ add_layer_test(test_plugin_epubcache plugin/test_epubcache.cpp plugin
 target_include_directories(test_plugin_epubcache PRIVATE ../src)
 target_link_libraries(test_plugin_epubcache PRIVATE Qt6::Core)
 
+# NSS initialization is process-global, so exercise each runtime mode in a
+# separate test process even though the modes share one test executable.
+add_executable(test_nss_runtime
+    plugin/test_nss_runtime.cpp
+    ../src/plugin/crypto/nss.cpp
+    ../src/plugin/crypto/nss_state.cpp
+    ../src/plugin/crypto/nss_signing.cpp
+    ../src/plugin/crypto/certificate_info.cpp
+    ../src/plugin/crypto/certificate_database.cpp
+    ../src/shared/logging.cpp)
+target_include_directories(test_nss_runtime PRIVATE ../src ../src/shared ${NSS_INCLUDE_DIRS})
+target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test ${NSS_LIBRARIES})
+foreach(runtime_test IN ITEMS readWriteMode readOnlyMode noDbMode)
+    add_test(NAME test_nss_runtime_${runtime_test} COMMAND test_nss_runtime ${runtime_test})
+    set_tests_properties(test_nss_runtime_${runtime_test} PROPERTIES
+        LABELS "plugin;signature;security"
+        TIMEOUT 45
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endforeach()
+
 add_layer_test(test_generator_placeholder_image generator/test_placeholder_image.cpp generator
     ../src/generator/placeholder_image.cpp)
 target_include_directories(test_generator_placeholder_image PRIVATE ../src)

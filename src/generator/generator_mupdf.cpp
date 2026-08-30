@@ -70,7 +70,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     // Step 2: Build the UI-side adapters before the worker can emit events.
     m_ocrCancellationToken = std::make_shared<std::atomic<bool>>(false);
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
-    Plugin::Crypto::ensureNssInitialized(certDbPath);
+    (void)Plugin::Crypto::initializeNss(certDbPath);
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
         &m_worker, [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages) {

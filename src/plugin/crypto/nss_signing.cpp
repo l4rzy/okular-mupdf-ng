@@ -23,6 +23,13 @@ using namespace ::Mu::Model;
 
 namespace {
 
+bool hasWritableSigningDatabase()
+{
+    // Do not advertise or use identities unless the complete signing and
+    // certificate-management workflow has a writable persistent store.
+    return initializeNss() == NssRuntimeMode::ReadWrite;
+}
+
 bool authenticateSigningKey(CERTCertificate* cert, const QString& password)
 {
     // NSS may already have an authenticated slot. Otherwise authenticate with
@@ -63,8 +70,10 @@ CmsResult createDetachedCmsFromDigest(const QString& certNickname,
 {
     // Build a detached CMS object around a caller-computed digest. The RAII
     // wrappers below release NSS objects on every construction failure.
-    if (!ensureNssInitialized())
-        return { SigningResult::GenericError, QStringLiteral("NSS is unavailable"), { } };
+    if (!hasWritableSigningDatabase())
+        return { SigningResult::GenericError,
+                 QStringLiteral("A writable NSS certificate database is unavailable"),
+                 { } };
     CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
     if (!certdb)
         return { SigningResult::GenericError, QStringLiteral("NSS certificate database is unavailable"), { } };
@@ -122,9 +131,7 @@ CmsResult createDetachedCmsFromDigest(const QString& certNickname,
 
 bool checkSigningCertificatePassword(const QString& certNickname, const QString& password)
 {
-    // This is a validation-only operation; it does not create or persist a
-    // signing result.
-    if (!ensureNssInitialized() || certNickname.isEmpty())
+    if (!hasWritableSigningDatabase() || certNickname.isEmpty())
         return false;
     CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
     NssCertificate cert = findCertificateByNickname(certdb, certNickname);
@@ -134,7 +141,7 @@ bool checkSigningCertificatePassword(const QString& certNickname, const QString&
 QList<Certificate> signingCertificates()
 {
     // Return copied model data, never NSS-owned certificate handles.
-    if (!ensureNssInitialized())
+    if (!hasWritableSigningDatabase())
         return { };
     return Internal::listSigningCertificates();
 }
@@ -143,7 +150,7 @@ QString signingCertificateCommonName(const QString& certNickname)
 {
     // Prefer the readable Common Name, but retain a useful identity when a
     // certificate has only a subject DN or an incomplete subject.
-    if (!ensureNssInitialized() || certNickname.isEmpty())
+    if (!hasWritableSigningDatabase() || certNickname.isEmpty())
         return { };
     CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
     NssCertificate cert = findCertificateByNickname(certdb, certNickname);
