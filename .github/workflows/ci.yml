@@ -110,6 +110,7 @@ jobs:
             libnss3-dev \
             libopenjp2-7-dev \
             libseccomp-dev \
+            mold \
             libkf6config-dev \
             libkf6configwidgets-dev \
             libkf6coreaddons-dev \
@@ -139,6 +140,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DBUILD_TESTING=OFF \
             -DENABLE_MU_DEBUG=OFF \
@@ -217,6 +219,7 @@ jobs:
             libjpeg8-devel \
             libseccomp-devel \
             make \
+            mold \
             ninja \
             mozilla-nss-devel \
             okular-devel \
@@ -255,6 +258,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DUSE_SYSTEM_GUMBO=OFF \
             -DBUILD_TESTING=OFF \
@@ -343,6 +347,7 @@ jobs:
             libjpeg-turbo-devel \
             libseccomp-devel \
             make \
+            mold \
             ninja-build \
             nss-devel \
             okular-devel \
@@ -376,6 +381,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DUSE_SYSTEM_GUMBO=OFF \
             -DBUILD_TESTING=OFF \

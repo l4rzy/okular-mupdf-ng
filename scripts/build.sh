@@ -70,6 +70,14 @@ fi
 if [ "$1" = "asan" ]; then
   cmake_args+=(-DENABLE_SANITIZERS=ON)
 fi
+# Link with mold when available and supported (CMake >= 3.29); otherwise the
+# default linker is used unchanged.
+if command -v mold > /dev/null 2>&1; then
+  cmake_version=$(cmake --version | awk 'NR==1{print $3}')
+  if [ "$(printf '%s\n3.29\n' "$cmake_version" | sort -V | head -1)" = "3.29" ]; then
+    cmake_args+=(-DCMAKE_LINKER_TYPE=MOLD)
+  fi
+fi
 cmake -B "$BUILD_DIR" -S . "${cmake_args[@]}"
 
 echo "==> Building ($BUILD_TYPE)..."

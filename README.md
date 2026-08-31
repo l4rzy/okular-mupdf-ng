@@ -39,7 +39,7 @@ and the source-tree layout.
 
 ## Requirements
 
-- A C++23 compiler (Clang preferred), CMake 3.20 or newer, Ninja, `pkg-config`, and the usual
+- A C++23 compiler (Clang preferred), CMake 3.20 or newer, Ninja, mold, `pkg-config`, and the usual
   build tools.
 - Qt 6, KDE Frameworks 6, and Okular 6 development packages.
 - NSS/NSPR for certificate and signature operations.
