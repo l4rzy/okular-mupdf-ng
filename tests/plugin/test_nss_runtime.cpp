@@ -3,6 +3,7 @@
 
 #include "plugin/crypto/certificate_database.hpp"
 #include "plugin/crypto/nss.hpp"
+#include "plugin/crypto/nss_internal.hpp"
 
 #include <QBuffer>
 #include <QDir>
@@ -12,6 +13,11 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+
+#pragma push_macro("slots")
+#undef slots
+#include <pk11pub.h>
+#pragma pop_macro("slots")
 
 #include <array>
 #include <cstdint>
@@ -128,6 +134,59 @@ class TestNssRuntime : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void defaultPathSelection_data()
+    {
+        QTest::addColumn<bool>("environmentExists");
+        QTest::addColumn<bool>("userExists");
+        QTest::addColumn<bool>("systemExists");
+        QTest::addColumn<QString>("expectedPath");
+
+        QTest::newRow("environment") << true << true << true << QStringLiteral("environment");
+        QTest::newRow("user") << false << true << true << QStringLiteral("user");
+        QTest::newRow("system") << false << false << true << QStringLiteral("system");
+        QTest::newRow("user fallback") << false << false << false << QStringLiteral("user");
+    }
+
+    void defaultPathSelection()
+    {
+        QFETCH(bool, environmentExists);
+        QFETCH(bool, userExists);
+        QFETCH(bool, systemExists);
+        QFETCH(QString, expectedPath);
+
+        QCOMPARE(::Mu::Plugin::Crypto::Internal::chooseNssDbPath(QStringLiteral("environment"),
+                                                                 environmentExists,
+                                                                 QStringLiteral("user"),
+                                                                 userExists,
+                                                                 QStringLiteral("system"),
+                                                                 systemExists),
+                 expectedPath);
+    }
+
+    void defaultFallbackMode()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        EnvironmentGuard home("HOME");
+        EnvironmentGuard defaultDatabase("NSS_DEFAULT_DB");
+        qputenv("HOME", root.path().toUtf8());
+        qunsetenv("NSS_DEFAULT_DB");
+        if (QDir::homePath() != root.path())
+            QSKIP("Qt does not permit changing the home directory after application startup");
+        if (QFileInfo(QStringLiteral("/etc/pki/nssdb")).isDir())
+            QSKIP("the system NSS database takes precedence over the user fallback");
+
+        const QString database = root.filePath(QStringLiteral(".pki/nssdb"));
+        QCOMPARE(::Mu::Plugin::Crypto::defaultSystemNssDbPath(), database);
+        // Selection alone must not touch the filesystem; the defaulted
+        // initializeNss() owns creating the directory.
+        QVERIFY(!QFileInfo(database).isDir());
+
+        QCOMPARE(::Mu::Plugin::Crypto::initializeNss(), ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
+        QVERIFY(QFileInfo(database).isDir());
+        QCOMPARE(::Mu::Plugin::Crypto::activeNssDatabasePath(), QFileInfo(database).canonicalFilePath());
+    }
 
     void readWriteMode()
     {
@@ -290,6 +349,66 @@ private slots:
             QStringLiteral("nickname"), { }, std::array<std::uint8_t, 32> { });
         QCOMPARE(signingResult.result, ::Mu::Model::SigningResult::GenericError);
         QVERIFY(signingResult.details.contains(QStringLiteral("writable"), Qt::CaseInsensitive));
+    }
+
+    void freshDatabaseMode()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString database = root.filePath(QStringLiteral("missing/database"));
+        QVERIFY(QDir().mkpath(database));
+        QVERIFY(QFileInfo(database).isDir());
+
+        QCOMPARE(::Mu::Plugin::Crypto::initializeNss(QStringLiteral("sql:") + database),
+                 ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
+        QCOMPARE(::Mu::Plugin::Crypto::activeNssMode(), ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
+        QCOMPARE(::Mu::Plugin::Crypto::activeNssDatabasePath(), QFileInfo(database).canonicalFilePath());
+
+        PK11SlotInfo* internalSlot = PK11_GetInternalKeySlot();
+        QVERIFY(internalSlot);
+        const bool needsUserInit = PK11_NeedUserInit(internalSlot);
+        PK11_FreeSlot(internalSlot);
+        QVERIFY(!needsUserInit);
+
+        QString error;
+        QVERIFY(::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(database, &error).isEmpty());
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+    }
+
+    void urlSchemeDatabasePath()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const QString database = root.filePath(QStringLiteral("database"));
+        QVERIFY(QDir().mkpath(database));
+        const QString canonicalDatabase = QFileInfo(database).canonicalFilePath();
+
+        struct Case {
+            const char* description;
+            QString input;
+            QString expected;
+        };
+
+        const std::array cases {
+            Case { "plain path", database, QStringLiteral("sql:") + canonicalDatabase },
+            Case { "file scheme", QStringLiteral("file:") + database, QStringLiteral("sql:") + canonicalDatabase },
+            Case { "uppercase file scheme",
+                   QStringLiteral("FILE:") + database,
+                   QStringLiteral("sql:") + canonicalDatabase },
+            Case { "file authority", QStringLiteral("file://") + database, QStringLiteral("sql:") + canonicalDatabase },
+            Case { "sql scheme", QStringLiteral("sql:") + database, QStringLiteral("sql:") + canonicalDatabase },
+            Case { "empty file url", QStringLiteral("file:"), QString { } },
+            Case { "empty input", QStringLiteral("  "), QString { } },
+        };
+
+        for (const auto& test : cases)
+            QVERIFY2(::Mu::Plugin::Crypto::Internal::canonicalNssDatabasePath(test.input) == test.expected,
+                     qPrintable(QStringLiteral("%1: input \"%2\"").arg(test.description, test.input)));
+
+        QCOMPARE(::Mu::Plugin::Crypto::initializeNss(QStringLiteral("file:") + database),
+                 ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
+        QCOMPARE(::Mu::Plugin::Crypto::activeNssDatabasePath(), canonicalDatabase);
+        QVERIFY(::Mu::Plugin::Crypto::isNssDatabaseActive(QStringLiteral("file:") + database));
     }
 };
 

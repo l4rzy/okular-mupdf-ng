@@ -3,6 +3,7 @@
 
 #include "plugin/crypto/nss.hpp"
 #include "plugin/crypto/nss_error_internal.hpp"
+#include "plugin/crypto/nss_handles.hpp"
 #include "plugin/crypto/nss_internal.hpp"
 
 #pragma push_macro("slots")
@@ -14,6 +15,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QUrl>
 
 #include <mutex>
 
@@ -44,7 +46,7 @@ inline std::pair<QString, QString> splitNssScheme(const QString& value)
         return { value.left(4).toLower(), value.mid(4) };
     if (value.startsWith(QStringLiteral("dbm:"), Qt::CaseInsensitive))
         return { value.left(4).toLower(), value.mid(4) };
-    return { {}, value };
+    return { { }, value };
 }
 
 } // namespace
@@ -63,7 +65,18 @@ QString canonicalNssDatabasePath(const QString& path)
     if (trimmedPath.isEmpty())
         return { };
 
-    const auto [scheme, stripped] = splitNssScheme(trimmedPath);
+    // URL-form values such as "file:/tmp/nssdb" (e.g. stored by KUrlRequester)
+    // are local paths, not NSS database schemes, and must not be treated as
+    // relative paths.
+    QString effectivePath = trimmedPath;
+    if (effectivePath.startsWith(QStringLiteral("file:"), Qt::CaseInsensitive)) {
+        effectivePath = QUrl(effectivePath).toLocalFile();
+        if (effectivePath.isEmpty())
+            return { };
+        effectivePath = QDir::cleanPath(effectivePath);
+    }
+
+    const auto [scheme, stripped] = splitNssScheme(effectivePath);
     if (stripped.isEmpty())
         return { };
 
@@ -105,18 +118,21 @@ QString defaultSystemNssDbPath()
     // the system database. The user path is the final deterministic fallback.
     const QString configuredEnvNssDb = qEnvironmentVariable("NSS_DEFAULT_DB").trimmed();
     const QString canonicalEnvNssDb = Internal::canonicalNssDatabasePath(configuredEnvNssDb);
-    const bool envHasScheme = Internal::stripNssScheme(configuredEnvNssDb) != configuredEnvNssDb;
-    const QString envNssDb = envHasScheme ? canonicalEnvNssDb : Internal::stripNssScheme(canonicalEnvNssDb);
+    // An explicitly configured scheme (e.g. dbm:) is honored, so selection runs
+    // on plain paths and the scheme is re-attached only when the environment
+    // database is the one returned.
+    const bool envHasScheme = !Internal::splitNssScheme(configuredEnvNssDb).first.isEmpty();
+    const QString envNssDb = Internal::stripNssScheme(canonicalEnvNssDb);
     const QString userPkiDb =
         Internal::stripNssScheme(Internal::canonicalNssDatabasePath(QDir::homePath() + QStringLiteral("/.pki/nssdb")));
     const QString sysPkiDb =
         Internal::stripNssScheme(Internal::canonicalNssDatabasePath(QStringLiteral("/etc/pki/nssdb")));
-    return Internal::chooseNssDbPath(envNssDb,
-                                     !envNssDb.isEmpty() && QFileInfo(Internal::stripNssScheme(envNssDb)).isDir(),
-                                     userPkiDb,
-                                     QFileInfo(userPkiDb).isDir(),
-                                     sysPkiDb,
-                                     QFileInfo(sysPkiDb).isDir());
+    const bool envExists = !envNssDb.isEmpty() && QFileInfo(envNssDb).isDir();
+    const QString selectedPath = Internal::chooseNssDbPath(
+        envNssDb, envExists, userPkiDb, QFileInfo(userPkiDb).isDir(), sysPkiDb, QFileInfo(sysPkiDb).isDir());
+    if (envExists && selectedPath == envNssDb && envHasScheme)
+        return canonicalEnvNssDb;
+    return selectedPath;
 }
 
 } // namespace Mu::Plugin::Crypto
@@ -131,6 +147,24 @@ NssRuntimeMode g_nssMode = NssRuntimeMode::Unavailable;
 bool isPersistentMode(NssRuntimeMode mode)
 {
     return mode == NssRuntimeMode::ReadOnly || mode == NssRuntimeMode::ReadWrite;
+}
+
+void initializeInternalToken()
+{
+    Mu::Plugin::Crypto::NssSlot slot(PK11_GetInternalKeySlot());
+    if (!slot) {
+        MU_LOG(warning, "Mu::Plugin::Crypto", "Unable to access the NSS internal key slot");
+        return;
+    }
+    if (!PK11_NeedUserInit(slot.get()))
+        return;
+    if (PK11_InitPin(slot.get(), "", "") != SECSuccess) {
+        const PRErrorCode error = PR_GetError();
+        MU_LOG(warning,
+               "Mu::Plugin::Crypto",
+               std::string("Unable to initialize the NSS internal key slot (PR_GetError code: ") + std::to_string(error)
+                   + ")");
+    }
 }
 
 void recordNssRuntime(NssRuntimeMode mode, const QString& databaseIdentity = { })
@@ -148,6 +182,23 @@ void logPersistentInitializationFailure(const char* access, const QString& datab
                + " (PR_GetError code: " + std::to_string(error) + ")");
 }
 
+// Creates the directory of a *defaulted* database selection. chooseNssDbPath()
+// only returns directories that already exist, except for the final
+// ~/.pki/nssdb fallback, so this is the single point where a missing default
+// database directory is created. Explicit caller paths are deliberately never
+// created: a typo must degrade to NoDB mode instead of silently initializing
+// an empty database.
+void ensureDefaultDatabaseDirectory(const QString& databaseIdentity)
+{
+    const QString databaseDir = Mu::Plugin::Crypto::Internal::stripNssScheme(databaseIdentity);
+    if (databaseDir.isEmpty() || QFileInfo(databaseDir).isDir())
+        return;
+    if (!QDir().mkpath(databaseDir))
+        MU_LOG(warning,
+               "Mu::Plugin::Crypto",
+               std::string("Unable to create the default NSS database directory at ") + databaseDir.toStdString());
+}
+
 } // namespace
 
 namespace Mu::Plugin::Crypto {
@@ -155,8 +206,11 @@ namespace Mu::Plugin::Crypto {
 NssRuntimeMode initializeNss(const QString& databasePath)
 {
     const QString requestedPath = databasePath.trimmed();
-    const QString configuredPath = requestedPath.isEmpty() ? defaultSystemNssDbPath() : requestedPath;
+    const bool defaultedDatabase = requestedPath.isEmpty();
+    const QString configuredPath = defaultedDatabase ? defaultSystemNssDbPath() : requestedPath;
     const QString databaseIdentity = Internal::canonicalNssDatabasePath(configuredPath);
+    if (defaultedDatabase)
+        ensureDefaultDatabaseDirectory(databaseIdentity);
     std::lock_guard<std::mutex> lock(Internal::nssMutex());
 
     if (NSS_IsInitialized()) {
@@ -172,6 +226,7 @@ NssRuntimeMode initializeNss(const QString& databasePath)
     if (!databaseIdentity.isEmpty()) {
         const QByteArray nssPathBytes = databaseIdentity.toUtf8();
         if (NSS_InitReadWrite(nssPathBytes.constData()) == SECSuccess) {
+            initializeInternalToken();
             recordNssRuntime(NssRuntimeMode::ReadWrite, databaseIdentity);
             return g_nssMode;
         }

@@ -109,7 +109,14 @@ add_executable(test_nss_runtime
     ../src/shared/logging.cpp)
 target_include_directories(test_nss_runtime PRIVATE ../src ../src/shared ${NSS_INCLUDE_DIRS})
 target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test ${NSS_LIBRARIES})
-foreach(runtime_test IN ITEMS readWriteMode readOnlyMode noDbMode)
+foreach(runtime_test IN ITEMS
+        defaultPathSelection
+        defaultFallbackMode
+        readWriteMode
+        readOnlyMode
+        noDbMode
+        freshDatabaseMode
+        urlSchemeDatabasePath)
     add_test(NAME test_nss_runtime_${runtime_test} COMMAND test_nss_runtime ${runtime_test})
     set_tests_properties(test_nss_runtime_${runtime_test} PROPERTIES
         LABELS "plugin;signature;security"

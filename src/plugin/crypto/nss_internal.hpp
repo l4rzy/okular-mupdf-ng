@@ -29,6 +29,9 @@ std::mutex& nssMutex();
 [[nodiscard]] Model::HashAlgorithm hashAlgorithmForDigest(SECOidTag digestAlgorithm);
 /// Removes a supported NSS database scheme from a path.
 [[nodiscard]] QString stripNssScheme(const QString& path);
+/// Returns the "sql:"-prefixed canonical filesystem path for a configured
+/// database, accepting URL-form values such as "file:/tmp/nssdb".
+[[nodiscard]] QString canonicalNssDatabasePath(const QString& path);
 /// Chooses the first existing database path in configuration priority order.
 [[nodiscard]] QString chooseNssDbPath(const QString& envDb,
                                       bool envExists,
