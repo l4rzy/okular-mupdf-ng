@@ -1,18 +1,29 @@
 # Maintainer: rzy <me@23ro.org>
-pkgname=okular-mupdf-ng
+pkgbase=okular-mupdf-ng
+pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
-pkgver=0.1.6
+pkgver=0.1.6.r32.g171809b
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('GPL-3.0-or-later')
-depends=('okular' 'qt6-base' 'qt6-5compat')
+# nss is required at configure time via pkg_check_modules(NSS REQUIRED); mupdf
+# provides the headers and pkg-config file for the dynamic variant.
 makedepends=('brotli' 'clang' 'cmake' 'extra-cmake-modules' 'freetype2'
-              'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
-              'libjpeg-turbo' 'openjpeg2' 'pkgconf' 'python' 'qt6-tools')
-provides=('okular-backend-mupdf')
-conflicts=('okular-backend-mupdf')
+             'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
+             'libjpeg-turbo' 'mupdf' 'nss' 'openjpeg2' 'pkgconf' 'python'
+             'qt6-tools')
+# The bundled-MuPDF build links MuPDF's third-party libraries from the system
+# (USE_SYSTEM_LIBS=yes), so they remain direct runtime dependencies of the
+# static package. Global depends serves the pre-build dependency check; each
+# package function overrides depends for its own link variant.
+_common_depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'openssl' 'libseccomp')
+depends=("${_common_depends[@]}"
+         'brotli' 'freetype2' 'harfbuzz' 'jbig2dec' 'leptonica'
+         'libjpeg-turbo' 'openjpeg2' 'zlib')
+provides=(okular-backend-mupdf)
+conflicts=(okular-backend-mupdf okular-mupdf-ng-dynamic)
 # Replace with source=("git+$url.git") when the PKGBUILD is standalone.
 source=("$_pkgname::git+file://$startdir/..")
 sha256sums=('SKIP')
@@ -43,17 +54,45 @@ prepare() {
 }
 
 build() {
-  cmake -B build -S "$srcdir/$_pkgname" -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
-    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
-    -DUSE_SYSTEM_MUPDF=OFF \
-    -DBUILD_TESTING=OFF
-  cmake --build build
+  # USE_SYSTEM_MUPDF is resolved at configure time, so each link variant needs
+  # its own build directory. Bundled MuPDF is compiled only for the static one.
+  # The dynamic variant accepts the MuPDF version actually shipped by Arch,
+  # which lags the bundled pin; verified to link against 1.28.0.
+  local _variant _mupdf_mode
+  local -a _mupdf_flags
+  for _variant in static dynamic; do
+    if [ "$_variant" = dynamic ]; then
+      _mupdf_mode=ON
+      _mupdf_flags=(-DMUPDF_SYSTEM_MIN_VERSION=1.28.0)
+    else
+      _mupdf_mode=OFF
+      _mupdf_flags=()
+    fi
+    cmake -B "build-$_variant" -S "$srcdir/$_pkgname" -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_COMPILER=clang \
+      -DCMAKE_CXX_COMPILER=clang++ \
+      -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
+      -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+      -DUSE_SYSTEM_MUPDF=$_mupdf_mode \
+      "${_mupdf_flags[@]}" \
+      -DBUILD_TESTING=OFF
+    cmake --build "build-$_variant"
+  done
 }
 
-package() {
-  DESTDIR="$pkgdir" cmake --install build
+package_okular-mupdf-ng() {
+  pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, statically linked MuPDF)"
+  provides=(okular-backend-mupdf)
+  conflicts=(okular-backend-mupdf okular-mupdf-ng-dynamic)
+  DESTDIR="$pkgdir" cmake --install build-static
+}
+
+package_okular-mupdf-ng-dynamic() {
+  pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, dynamically linked against system MuPDF)"
+  # The system MuPDF pulls its third-party libraries in transitively.
+  depends=("${_common_depends[@]}" 'mupdf')
+  provides=(okular-backend-mupdf)
+  conflicts=(okular-backend-mupdf okular-mupdf-ng)
+  DESTDIR="$pkgdir" cmake --install build-dynamic
 }
