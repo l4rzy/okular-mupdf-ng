@@ -3,6 +3,7 @@
 
 #include "plugin/crypto/certificate_database.hpp"
 #include "plugin/crypto/nss.hpp"
+#include "plugin/crypto/nss_handles.hpp"
 #include "plugin/crypto/nss_internal.hpp"
 
 #include <QBuffer>
@@ -409,6 +410,13 @@ private slots:
                  ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
         QCOMPARE(::Mu::Plugin::Crypto::activeNssDatabasePath(), canonicalDatabase);
         QVERIFY(::Mu::Plugin::Crypto::isNssDatabaseActive(QStringLiteral("file:") + database));
+    }
+
+    void keypairRollbackGuard()
+    {
+        // Absent key material trivially succeeds; a false return would make
+        // every rollback report a partial failure it did not have.
+        QVERIFY(::Mu::Plugin::Crypto::deleteTokenKeypair(nullptr, nullptr));
     }
 };
 

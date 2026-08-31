@@ -178,13 +178,14 @@ inline NssCertificate findCertificateByNickname(CERTCertDBHandle* certdb, const 
     return NssCertificate(CERT_FindCertByNickname(certdb, name.constData()));
 }
 
-/// Deletes persistent private and public key objects after a failed import.
-inline void deleteTokenKeypair(SECKEYPrivateKey* priv, SECKEYPublicKey* pub)
+/// Deletes persistent private and public key objects; returns false when any
+/// deletion fails so callers can report the partial rollback.
+[[nodiscard]]
+inline bool deleteTokenKeypair(SECKEYPrivateKey* priv, SECKEYPublicKey* pub)
 {
-    if (priv)
-        PK11_DeleteTokenPrivateKey(priv, PR_TRUE);
-    if (pub)
-        PK11_DeleteTokenPublicKey(pub);
+    const bool deletedPrivate = !priv || PK11_DeleteTokenPrivateKey(priv, PR_TRUE) == SECSuccess;
+    const bool deletedPublic = !pub || PK11_DeleteTokenPublicKey(pub) == SECSuccess;
+    return deletedPrivate && deletedPublic;
 }
 
 /// Restores a readable device to its original position when leaving scope.

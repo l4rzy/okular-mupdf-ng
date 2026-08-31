@@ -116,7 +116,8 @@ foreach(runtime_test IN ITEMS
         readOnlyMode
         noDbMode
         freshDatabaseMode
-        urlSchemeDatabasePath)
+        urlSchemeDatabasePath
+        keypairRollbackGuard)
     add_test(NAME test_nss_runtime_${runtime_test} COMMAND test_nss_runtime ${runtime_test})
     set_tests_properties(test_nss_runtime_${runtime_test} PROPERTIES
         LABELS "plugin;signature;security"

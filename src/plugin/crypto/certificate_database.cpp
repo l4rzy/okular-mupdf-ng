@@ -301,6 +301,18 @@ SECStatus deleteCertificateInSlot(PK11SlotInfo* slot, CERTCertificate* certifica
     return PK11_DeleteTokenCertAndKey(certificate, nullptr);
 }
 
+// Attempts key cleanup after a failed import and returns a suffix describing
+// key material that could not be removed.
+QString keyRollbackSuffix(SECKEYPrivateKey* priv, SECKEYPublicKey* pub)
+{
+    if (::Mu::Plugin::Crypto::deleteTokenKeypair(priv, pub))
+        return { };
+    MU_LOG(warning,
+           "Mu::Generator::CertificateManager",
+           std::string("Could not remove generated NSS key material: ") + nssError().toStdString());
+    return QStringLiteral(" The generated key material could not be removed: %1").arg(nssError());
+}
+
 bool checkSelfSignedOptions(const SelfSignedCertificateOptions& options,
                             QString* nickname,
                             QString* commonName,
@@ -465,12 +477,11 @@ bool encodeSignAndImport(SlotHandle& slot,
         && PK11_ImportCert(slot.get(), certificate.get(), privateKey->pkcs11ID, nicknameBytes.constData(), PR_FALSE)
             == SECSuccess;
     const QString importError = imported ? QString { } : nssError();
-    if (!imported)
-        ::Mu::Plugin::Crypto::deleteTokenKeypair(privateKey.get(), publicKey.get());
     if (!imported) {
+        const QString keySuffix = keyRollbackSuffix(privateKey.get(), publicKey.get());
         const QString action = certificate ? QStringLiteral("store the self-signed certificate in the NSS database")
                                            : QStringLiteral("decode the generated self-signed certificate");
-        setError(error, QStringLiteral("Could not %1: %2").arg(action, importError));
+        setError(error, QStringLiteral("Could not %1: %2%3").arg(action, importError, keySuffix));
         return false;
     }
     return true;
@@ -617,22 +628,38 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
                      QStringLiteral("The PKCS#12 bundle is invalid or unsupported: %1").arg(nssError(validateError)));
             return false;
         }
+        // Rollback diffs all certificate fingerprints on the import slot:
+        // PK11_ListCertsInSlot() covers keyless CA/intermediate/public-only
+        // objects, fingerprints make nickname duplicates irrelevant, and
+        // nssMutex serializes every in-process mutation. Only an external
+        // writer on the same database could slip between the snapshots; NSS
+        // provides no import transaction.
         const QSet<QByteArray> beforeImport = certificateFingerprintsInSlot(slot.get());
         const bool imported = SEC_PKCS12DecoderImportBags(decoderHandle.get()) == SECSuccess;
         if (!imported) {
             const PRErrorCode importError = PR_GetError();
             const QSet<QByteArray> afterImport = certificateFingerprintsInSlot(slot.get());
+            int rollbackFailures = 0;
             for (const QByteArray& fingerprint : afterImport) {
                 if (beforeImport.contains(fingerprint))
                     continue;
                 CertificateHandle certificate = findCertificateInSlot(slot.get(), fingerprint);
-                if (certificate && deleteCertificateInSlot(slot.get(), certificate.get()) != SECSuccess) {
+                // A missing handle for a new fingerprint is itself a rollback
+                // failure, not a skip.
+                if (!certificate || deleteCertificateInSlot(slot.get(), certificate.get()) != SECSuccess) {
+                    ++rollbackFailures;
                     MU_LOG(warning,
                            "Mu::Generator::CertificateManager",
                            std::string("Could not roll back imported certificate: ") + nssError().toStdString());
                 }
             }
-            setError(error, QStringLiteral("The PKCS#12 bundle could not be imported: %1").arg(nssError(importError)));
+            QString message = QStringLiteral("The PKCS#12 bundle could not be imported: %1").arg(nssError(importError));
+            if (rollbackFailures > 0)
+                message += rollbackFailures == 1
+                    ? QStringLiteral(" One imported certificate could not be removed and remains in the database.")
+                    : QStringLiteral(" %1 imported certificates could not be removed and remain in the database.")
+                          .arg(rollbackFailures);
+            setError(error, message);
             return false;
         }
     }
@@ -687,13 +714,15 @@ bool createSelfSignedCertificate(const QString& databasePath,
         ? CERT_CreateCertificate(QRandomGenerator::global()->generate() | 1U, subject, validity.get(), request.get())
         : nullptr;
     if (!unsignedCertificate) {
-        ::Mu::Plugin::Crypto::deleteTokenKeypair(privateKeyHandle.get(), publicKeyHandle.get());
-        setError(error, QStringLiteral("Could not construct the self-signed certificate"));
+        const QString keySuffix = keyRollbackSuffix(privateKeyHandle.get(), publicKeyHandle.get());
+        setError(error, QStringLiteral("Could not construct the self-signed certificate") + keySuffix);
         return false;
     }
     CertificateHandle unsignedHandle(unsignedCertificate);
     if (!addSelfSignedExtensions(unsignedHandle.get(), error)) {
-        ::Mu::Plugin::Crypto::deleteTokenKeypair(privateKeyHandle.get(), publicKeyHandle.get());
+        const QString keySuffix = keyRollbackSuffix(privateKeyHandle.get(), publicKeyHandle.get());
+        if (error)
+            error->append(keySuffix);
         return false;
     }
     return encodeSignAndImport(slot, unsignedHandle, privateKeyHandle, publicKeyHandle, nickname, error);
