@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/signature_image.hpp"
+#include "plugin/util/signature_image.hpp"
 
 #include <algorithm>
 
@@ -9,14 +9,14 @@
 #include <QFile>
 #include <QImageReader>
 
-namespace Mu::Generator::SignatureImage {
+namespace Mu::Plugin::Util::SignatureImage {
 
 // =============================================================================
 // Background Image File Loading & PNG Encoding
 // =============================================================================
 
 std::vector<std::uint8_t>
-prepareBackgroundImage(const QString& path, const Okular::NormalizedRect& rect, double pageWidth, double pageHeight)
+prepareBackgroundImage(const QString& path, double rectWidth, double rectHeight, double pageWidth, double pageHeight)
 {
     // Signature images are imported into generated documents, so keep input
     // reads bounded and return an empty result for any unreadable source.
@@ -24,9 +24,9 @@ prepareBackgroundImage(const QString& path, const Okular::NormalizedRect& rect, 
         return { };
 
     // Calculate target image pixel dimensions based on page point dimensions
-    // and normalized bounding box (2x factor for retina/HiDPI rendering)
-    double width = (pageWidth > 0 ? pageWidth : 595.0) * (rect.width() > 0 ? rect.width() : 0.3) * 2.0;
-    double height = (pageHeight > 0 ? pageHeight : 842.0) * (rect.height() > 0 ? rect.height() : 0.1) * 2.0;
+    // and normalized bounding box extent (2x factor for retina/HiDPI rendering)
+    double width = (pageWidth > 0 ? pageWidth : 595.0) * (rectWidth > 0 ? rectWidth : 0.3) * 2.0;
+    double height = (pageHeight > 0 ? pageHeight : 842.0) * (rectHeight > 0 ? rectHeight : 0.1) * 2.0;
 
     // Constrain to standard signature stamp pixel bounds to prevent PDF bloat
     const int targetWidth = std::clamp(static_cast<int>(width), 64, 384);
@@ -55,4 +55,4 @@ prepareBackgroundImage(const QString& path, const Okular::NormalizedRect& rect, 
                                      reinterpret_cast<const std::uint8_t*>(pngBytes.constData()) + pngBytes.size());
 }
 
-} // namespace Mu::Generator::SignatureImage
+} // namespace Mu::Plugin::Util::SignatureImage

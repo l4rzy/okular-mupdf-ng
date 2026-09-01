@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/generator_mupdf.hpp"
+#include "generator/mupdfng.hpp"
 
 #include <okular/core/fileprinter.h>
 #include <okular/core/page.h>
@@ -36,15 +36,15 @@
 #include "generator/proxy/form/radio_button.hpp"
 #include "generator/proxy/form/radio_grouping.hpp"
 #include "generator/proxy/form/text.hpp"
-#include "generator/signature_image.hpp"
 #include "mupdfsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/ocr/ocr.hpp"
+#include "plugin/util/signature_image.hpp"
 #include "plugin/util/temp_dir.hpp"
 #include "shared/logging.hpp"
 #include "shared/transport/common.hpp"
 
-K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "libokularGenerator_mupdfng.json")
+K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "mupdfng.json")
 
 namespace Mu::Generator {
 
@@ -1089,7 +1089,8 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
         const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
         if (commonName.isEmpty())
             return { Okular::KeyMissing, QStringLiteral("Signing certificate was not found") };
-        const auto bgImage = SignatureImage::prepareBackgroundImage(data.backgroundImagePath(), rect);
+        const auto bgImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
+            data.backgroundImagePath(), rect.width(), rect.height());
         const auto result = m_worker.sign({ { },
                                             data.page() >= 0 ? data.page() : 0,
                                             { rect.left, rect.top, rect.right, rect.bottom },
@@ -1138,4 +1139,4 @@ Okular::CertificateStore* Main::certificateStore() const
 
 } // namespace Mu::Generator
 
-#include "generator_mupdf.moc"
+#include "mupdfng.moc"

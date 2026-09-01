@@ -38,7 +38,7 @@ set(okularGenerator_mupdfng_SRCS
   plugin/crypto/nss_signing.cpp
   plugin/crypto/certificate_info.cpp
   generator/config/settings.cpp
-  generator/generator_mupdf.cpp
+  generator/mupdfng.cpp
   generator/proxy/certificate_store.cpp
   generator/config/mupdfsettingswidget.cpp
   generator/config/csseditor/editor.cpp
@@ -52,13 +52,13 @@ set(okularGenerator_mupdfng_SRCS
   plugin/caching/epub_cache.cpp
   plugin/caching/ocr_cache.cpp
   generator/placeholder.cpp
-  generator/signature_image.cpp
+  plugin/util/signature_image.cpp
   shared/logging.cpp
   shared/model/validation.cpp
   shared/protocol/zpp_codec.cpp
   shared/model/validation.hpp
   generator/placeholder.hpp
-  generator/signature_image.hpp
+  plugin/util/signature_image.hpp
   shared/protocol/zpp_codec.hpp
   generator/proxy/annotation.hpp
   generator/conversion/annotation.hpp
@@ -86,7 +86,7 @@ set(okularGenerator_mupdfng_SRCS
   plugin/ocr/ocr.hpp
   plugin/util/temp_dir.hpp
   shared/protocol/ipc_debug.hpp
-  generator/generator_mupdf.hpp
+  generator/mupdfng.hpp
   generator/config/settings.hpp
   generator/proxy/certificate_store.hpp
   generator/proxy/embedded_file.hpp

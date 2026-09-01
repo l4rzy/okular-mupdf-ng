@@ -42,7 +42,7 @@ add_executable(test_mupdf
     ../src/plugin/crypto/nss_state.cpp
     ../src/plugin/crypto/nss_signing.cpp
     ../src/plugin/crypto/certificate_info.cpp
-    ../src/generator/signature_image.cpp
+    ../src/plugin/util/signature_image.cpp
     ../src/generator/conversion/certificate.cpp
     ../src/plugin/crypto/certificate_database.cpp
     ../src/generator/proxy/certificate_store.cpp
@@ -153,7 +153,7 @@ add_layer_test(test_generator_proxies generator/test_proxies.cpp generator
     ../src/generator/conversion/certificate.cpp
     ../src/generator/conversion/document.cpp
     ../src/generator/conversion/text.cpp
-    ../src/generator/signature_image.cpp)
+    ../src/plugin/util/signature_image.cpp)
 target_include_directories(test_generator_proxies PRIVATE ../src)
 target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui)
 

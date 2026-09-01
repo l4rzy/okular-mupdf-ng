@@ -6,8 +6,8 @@
 #include <okular/core/document.h>
 
 #include "generator/conversion/annotation.hpp"
-#include "generator/signature_image.hpp"
 #include "plugin/crypto/nss.hpp"
+#include "plugin/util/signature_image.hpp"
 #include "plugin/worker_client.hpp"
 
 namespace Mu::Generator::Proxy {
@@ -66,7 +66,8 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                     return std::make_pair(Okular::KeyMissing, QStringLiteral("Signing certificate was not found"));
                 const QString imagePath =
                     !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
-                const auto bgImage = SignatureImage::prepareBackgroundImage(imagePath, bounds);
+                const auto bgImage =
+                    Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
                 return signingResult(backend->sign({ { },
                                                      page,
                                                      { bounds.left, bounds.top, bounds.right, bounds.bottom },

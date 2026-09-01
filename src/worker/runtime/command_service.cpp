@@ -844,9 +844,7 @@ ResponseMessage CommandService::ocrResult(const RequestMessage& r, const OcrResu
 
 ResponseMessage CommandService::ping(std::uint64_t id) const
 {
-    SandboxStatus ss;
-    ss.reason = "nothing";
-    return success(id, PingResponse { std::string(::Mu::IPC::COMPAT), ::getpid(), ss });
+    return success(id, PingResponse { std::string(::Mu::IPC::COMPAT), ::getpid(), m_session.sandbox });
 }
 
 ResponseMessage CommandService::textBoxes(const RequestMessage& r, const TextBoxesRequest& b)

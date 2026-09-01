@@ -10,7 +10,7 @@
 #include "generator/conversion/certificate.hpp"
 
 #ifdef MUPDF_FORMFIELD_REMOTE_SIGNING
-#include "generator/signature_image.hpp"
+#include "plugin/util/signature_image.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/model/types.hpp"
 #endif
@@ -206,7 +206,8 @@ std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSigna
     if (!m_backend || !m_backend->isConnected()) {
         return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
     }
-    const auto bgImage = SignatureImage::prepareBackgroundImage(data.backgroundImagePath(), rect());
+    const auto bgImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
+        data.backgroundImagePath(), rect().width(), rect().height());
     const auto result = m_backend->sign({ { },
                                           m_data.page,
                                           { },
