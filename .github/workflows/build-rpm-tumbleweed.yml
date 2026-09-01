@@ -1,0 +1,126 @@
+name: Build openSUSE Tumbleweed RPM (Clang)
+
+on:
+  workflow_call:
+
+jobs:
+  package-rpm-tumbleweed:
+    name: Build openSUSE Tumbleweed RPM (Clang)
+    runs-on: ubuntu-latest
+    container:
+      image: opensuse/tumbleweed:latest
+
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          zypper --non-interactive refresh
+          zypper --non-interactive install --no-recommends \
+            ca-certificates \
+            clang \
+            cmake \
+            kf6-extra-cmake-modules \
+            file \
+            freetype2-devel \
+            gcc-c++ \
+            git \
+            harfbuzz-devel \
+            jbig2dec-devel \
+            kf6-kconfig-devel \
+            kf6-kconfigwidgets-devel \
+            kf6-kcoreaddons-devel \
+            kf6-ki18n-devel \
+            kf6-kio-devel \
+            leptonica-devel \
+            libbrotli-devel \
+            libjpeg8-devel \
+            libseccomp-devel \
+            make \
+            mold \
+            ninja \
+            mozilla-nss-devel \
+            okular-devel \
+            openjpeg2-devel \
+            pkgconf-pkg-config \
+            python314-base \
+            rpm-build \
+            tesseract-ocr \
+            tesseract-ocr-traineddata-eng \
+            qt6-base-devel \
+            zlib-devel
+
+      - name: Provide Python 3 command
+        run: |
+          ln --symbolic --force /usr/bin/python3.14 /usr/local/bin/python3
+          test "$(command -v python3)" = /usr/local/bin/python3
+          test "$(readlink -f "$(command -v python3)")" = /usr/bin/python3.14
+          python3 -c 'import sys; assert sys.version_info >= (3, 12)'
+
+      - name: Verify OCR language data
+        run: test -f /usr/share/tessdata/eng.traineddata
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download bundled MuPDF source
+        run: python3 ./scripts/download-mupdf.py
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DCMAKE_LINKER_TYPE=MOLD \
+            -DUSE_SYSTEM_MUPDF=OFF \
+            -DUSE_SYSTEM_GUMBO=OFF \
+            -DBUILD_TESTING=OFF \
+            -DENABLE_MU_DEBUG=OFF \
+            -DTESSDATA_DIR=/usr/share/tessdata
+
+      - name: Build RPM package
+        run: |
+          cmake --build build -j$(nproc)
+          cpack --config build/CPackConfig.cmake -B build/packages -G RPM
+          package=$(find build/packages -maxdepth 1 -name '*.rpm' -print -quit)
+          test -n "$package"
+          package_name=$(rpm --queryformat '%{NAME}' -qp "$package")
+          package_version=$(rpm --queryformat '%{VERSION}' -qp "$package")
+          package_release=$(rpm --queryformat '%{RELEASE}' -qp "$package")
+          package_architecture=$(rpm --queryformat '%{ARCH}' -qp "$package")
+          mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.opensuse-tumbleweed.${package_architecture}.rpm"
+
+      - name: Validate RPM package
+        run: |
+          set -x
+          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          package="build/packages/okular-mupdf-ng-${expected_version}-1.opensuse-tumbleweed.x86_64.rpm"
+          test -f "$package"
+          test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng
+          test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1"
+          test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = x86_64
+          requirements=$(rpm --requires -qp "$package")
+          printf '%s\n' "$requirements" | grep -Fx okular
+          printf '%s\n' "$requirements" | grep -Fx tesseract-ocr
+          printf '%s\n' "$requirements" | grep -Fx tesseract-ocr-traineddata-eng
+          rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
+          rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
+          rpm --list -qp "$package" | grep -q '/mupdfsettings\.kcfg$'
+          rpm --list -qp "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
+          rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
+          rpm --checksig "$package"
+          rpm --info -qp "$package"
+
+      - name: Upload openSUSE RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensuse-tumbleweed-rpm-package
+          path: build/packages/*.rpm
+          if-no-files-found: error

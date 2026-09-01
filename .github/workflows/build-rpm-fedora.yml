@@ -1,0 +1,130 @@
+name: Build Fedora 43 aarch64 RPM (Clang)
+
+on:
+  workflow_call:
+
+jobs:
+  package-rpm-fedora-arm:
+    name: Build Fedora 43 aarch64 RPM (Clang)
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: fedora:43
+
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Verify native architecture
+        run: |
+          test "$(uname -m)" = aarch64
+          test "$(rpm --eval '%{_arch}')" = aarch64
+
+      - name: Install build dependencies
+        run: |
+          dnf --assumeyes upgrade --refresh
+          dnf --assumeyes install \
+            brotli-devel \
+            ca-certificates \
+            clang \
+            cmake \
+            cpio \
+            extra-cmake-modules \
+            file \
+            freetype-devel \
+            gcc-c++ \
+            git \
+            harfbuzz-devel \
+            jbig2dec-devel \
+            kf6-kconfig-devel \
+            kf6-kconfigwidgets-devel \
+            kf6-kcoreaddons-devel \
+            kf6-ki18n-devel \
+            kf6-kio-devel \
+            leptonica-devel \
+            libjpeg-turbo-devel \
+            libseccomp-devel \
+            make \
+            mold \
+            ninja-build \
+            nss-devel \
+            okular-devel \
+            openjpeg2-devel \
+            pkgconf-pkg-config \
+            python3 \
+            qt6-qtbase-devel \
+            rpm-build \
+            tesseract \
+            tesseract-langpack-eng \
+            zlib-ng-compat-devel
+
+      - name: Verify build environment
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12)'
+          test -f /usr/share/tesseract/tessdata/eng.traineddata
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download bundled MuPDF source
+        run: python3 ./scripts/download-mupdf.py
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+            -DCMAKE_LINKER_TYPE=MOLD \
+            -DUSE_SYSTEM_MUPDF=OFF \
+            -DUSE_SYSTEM_GUMBO=OFF \
+            -DBUILD_TESTING=OFF \
+            -DENABLE_MU_DEBUG=OFF \
+            -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
+            -DCPACK_RPM_PACKAGE_RELEASE_DIST=ON \
+            "-DCPACK_RPM_PACKAGE_REQUIRES=okular, tesseract, tesseract-langpack-eng"
+
+      - name: Build Fedora RPM package
+        run: |
+          cmake --build build -j$(nproc)
+          cpack --config build/CPackConfig.cmake -B build/packages -G RPM
+
+      - name: Validate Fedora RPM package
+        run: |
+          set -x
+          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          package="build/packages/okular-mupdf-ng-${expected_version}-1.fc43.aarch64.rpm"
+          test -f "$package"
+          test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng
+          test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1.fc43"
+          test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = aarch64
+          requirements=$(rpm --requires -qp "$package")
+          printf '%s\n' "$requirements" | grep -Fx okular
+          printf '%s\n' "$requirements" | grep -Fx tesseract
+          printf '%s\n' "$requirements" | grep -Fx tesseract-langpack-eng
+          rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
+          rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
+          rpm --list -qp "$package" | grep -q '/mupdfsettings\.kcfg$'
+          rpm --list -qp "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
+          rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
+          validation_root=$(mktemp -d)
+          rpm2cpio "$package" | (cd "$validation_root" && cpio --extract --make-directories --quiet)
+          plugin=$(find "$validation_root" -type f -name okularGenerator_mupdfng.so -print -quit)
+          worker=$(find "$validation_root" -type f -name okular-mupdf-worker -print -quit)
+          test -n "$plugin"
+          test -n "$worker"
+          file "$plugin" | grep -q 'ARM aarch64'
+          file "$worker" | grep -q 'ARM aarch64'
+          rpm --checksig "$package"
+          rpm --info -qp "$package"
+
+      - name: Upload Fedora 43 aarch64 RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: fedora-43-aarch64-rpm-package
+          path: build/packages/*.rpm
+          if-no-files-found: error
