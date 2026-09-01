@@ -131,6 +131,24 @@ add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generat
 target_include_directories(test_generator_placeholder PRIVATE ../src)
 target_link_libraries(test_generator_placeholder PRIVATE Okular::Core Qt6::Gui KF6::I18n)
 
+add_layer_test(test_plugin_ocrcontroller plugin/test_ocrcontroller.cpp plugin
+    ../src/plugin/ocr/controller.cpp
+    ../src/plugin/worker_client.cpp
+    ../src/plugin/worker_transport.cpp
+    ../src/shared/model/validation.cpp
+    ../src/shared/protocol/zpp_codec.cpp
+    ../src/plugin/caching/cache_file.cpp
+    ../src/plugin/crypto/nss.cpp
+    ../src/plugin/crypto/nss_state.cpp
+    ../src/plugin/crypto/nss_signing.cpp
+    ../src/plugin/crypto/certificate_info.cpp
+    ../src/plugin/crypto/certificate_database.cpp
+    ../src/plugin/caching/epub_cache.cpp)
+target_include_directories(test_plugin_ocrcontroller PRIVATE
+    ../src ../src/shared ${MUPDF_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
+target_include_directories(test_plugin_ocrcontroller SYSTEM PRIVATE ../thirdparty)
+target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_test_plugin_ocr mupdf_transport ${NSS_LIBRARIES} Qt6::Gui Qt6::Network Qt6::Concurrent)
+
 set(MUPDF_SETTINGS_SOURCE ${CMAKE_BINARY_DIR}/src/mupdfsettings.cpp)
 set_source_files_properties(${MUPDF_SETTINGS_SOURCE} PROPERTIES GENERATED TRUE)
 add_layer_test(test_generator_config generator/test_config.cpp generator

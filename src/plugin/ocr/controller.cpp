@@ -31,6 +31,17 @@ bool Controller::shouldTrigger(bool force, bool autoTrigger, unsigned threshold,
     return autoTrigger && existingTextBoxCount < threshold;
 }
 
+void Controller::observeVisiblePages(const QList<VisiblePage>& visiblePages, const Config& config)
+{
+    // Focus hysteresis keeps OCR anchored while the user scrolls: the page
+    // that dominates the viewport wins, with a bias toward the previous focus.
+    const int focusPage = dominantPage(visiblePages, m_lastFocusPage);
+    if (focusPage < 0)
+        return;
+    m_lastFocusPage = focusPage;
+    observe(focusPage, config);
+}
+
 void Controller::observe(int page, Config config)
 {
     // Observation may originate from generator callbacks; queue it so all
@@ -63,6 +74,17 @@ void Controller::observe(int page, Config config)
         Qt::QueuedConnection);
 }
 
+std::optional<QVector<Caching::OCR::CacheItem>> Controller::takeReady(int page)
+{
+    QMutexLocker locker(&m_readyMutex);
+    const auto ready = m_readyResults.find(page);
+    if (ready == m_readyResults.end())
+        return std::nullopt;
+    const auto boxes = std::move(ready.value());
+    m_readyResults.erase(ready);
+    return boxes;
+}
+
 void Controller::reset()
 {
     // Reset is the document-lifecycle boundary. The future may finish later,
@@ -75,6 +97,11 @@ void Controller::reset()
     m_activeJob.reset();
     m_pendingCache.reset();
     m_nativeTextBoxCounts.clear();
+    m_lastFocusPage = -1;
+    {
+        QMutexLocker locker(&m_readyMutex);
+        m_readyResults.clear();
+    }
 }
 
 bool Controller::shouldRun(int page)
@@ -156,6 +183,10 @@ void Controller::cacheLoadFinished()
     m_pendingCache.reset();
     const auto cached = m_cacheWatcher.result();
     if (cached.present) {
+        {
+            QMutexLocker locker(&m_readyMutex);
+            m_readyResults.insert(pending.page, cached.items);
+        }
         Q_EMIT completed(pending.page, cached.items, CompletionSource::CacheLoaded);
         startNext();
         return;
@@ -181,6 +212,10 @@ void Controller::finish(quint64 jobId, int page)
     if (result.status == Model::OcrStatus::Success) {
         QVector<Caching::OCR::CacheItem> boxes = Caching::OCR::Cache::convertToCacheItems(result.boxes);
         Caching::OCR::Cache::save(active.cacheKey, page, boxes);
+        {
+            QMutexLocker locker(&m_readyMutex);
+            m_readyResults.insert(page, boxes);
+        }
         Q_EMIT completed(page, std::move(boxes), CompletionSource::OcrCompleted);
     } else {
         MU_LOG(warning,

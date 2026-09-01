@@ -67,7 +67,6 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(SwapBackingFile);
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
-    m_ocrCancellationToken = std::make_shared<std::atomic<bool>>(false);
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
     (void)Plugin::Crypto::initializeNss(certDbPath);
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
@@ -99,11 +98,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     connect(&m_worker, &Plugin::WorkerClient::workerDied, this, [this](int code) {
         MU_LOG(
             warning, "Mu::Generator::Main", std::string("okular-mupdf-worker died with code ") + std::to_string(code));
-        if (m_ocrCancellationToken)
-            m_ocrCancellationToken->store(true);
         m_ocrController->reset();
-        QMutexLocker lock(&m_ocrMutex);
-        m_readyOcrPages.clear();
         if (m_formsDirty)
             failClosed(i18n(
                 "The document renderer stopped while unsaved form changes were present. Those changes were lost."));
@@ -163,14 +158,6 @@ Main::Main(QObject* parent, const QVariantList& args)
             [this](int page,
                    QVector<Plugin::Caching::OCR::CacheItem> boxes,
                    Plugin::OCR::Controller::CompletionSource source) {
-                // Teardown and recovery invalidate results that were queued by
-                // the previous document or worker generation.
-                if (m_ocrCancellationToken && m_ocrCancellationToken->load())
-                    return;
-                {
-                    QMutexLocker ocrLocker(&m_ocrMutex);
-                    m_readyOcrPages.insert(page, boxes);
-                }
                 QMutexLocker locker(userMutex());
                 if (page < 0 || page >= m_okularPages.size())
                     return;
@@ -195,9 +182,7 @@ Main::Main(QObject* parent, const QVariantList& args)
 Main::~Main()
 {
     // Cancel callbacks before removing queued events or releasing UI-owned data.
-    if (m_ocrCancellationToken) {
-        m_ocrCancellationToken->store(true);
-    }
+    m_ocrController->reset();
     QCoreApplication::removePostedEvents(this);
     {
         QMutexLocker locker(userMutex());
@@ -286,13 +271,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // Step 1: Reset state that is scoped to the previous document generation.
     m_password = password;
     m_placeholder.reset();
-    m_ocrCancellationToken = std::make_shared<std::atomic<bool>>(false);
     m_ocrController->reset();
-    m_lastOcrFocusPage = -1;
-    {
-        QMutexLocker ocrLocker(&m_ocrMutex);
-        m_readyOcrPages.clear();
-    }
 
     // Step 2: Obtain document identity before constructing Okular-owned pages.
     const auto info = m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash") });
@@ -493,17 +472,6 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
     return Okular::Document::OpenSuccess;
 }
 
-// Cancels queued OCR work and drops retained OCR results.
-void Main::resetOcrState()
-{
-    if (m_ocrCancellationToken)
-        m_ocrCancellationToken->store(true);
-    m_ocrController->reset();
-    m_lastOcrFocusPage = -1;
-    QMutexLocker ocrLocker(&m_ocrMutex);
-    m_readyOcrPages.clear();
-}
-
 // Must be called while userMutex() is held; drops cached UI objects derived
 // from the worker document.
 void Main::clearWorkerDerivedState()
@@ -520,7 +488,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPlaceholderDerivedState()
 {
-    resetOcrState();
+    m_ocrController->reset();
     m_formsDirty = false;
     {
         QMutexLocker locker(userMutex());
@@ -607,13 +575,9 @@ void Main::observeOcrFocus()
         const double height = visible->rect.bottom - visible->rect.top;
         visiblePages.append({ visible->pageNumber, width * height * page->width() * page->height() });
     }
-    const int focusPage = Plugin::OCR::dominantPage(visiblePages, m_lastOcrFocusPage);
-    if (focusPage < 0)
-        return;
-    m_lastOcrFocusPage = focusPage;
     const Config::OcrTarget target = Config::ocrTargetFor(m_documentHash, ocrSettings);
-    m_ocrController->observe(
-        focusPage,
+    m_ocrController->observeVisiblePages(
+        visiblePages,
         Config::ocrConfigFor(
             target, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings));
 }
@@ -648,12 +612,7 @@ bool Main::reopenWorkerDocument()
         return false;
     }
 
-    m_ocrCancellationToken = std::make_shared<std::atomic<bool>>(false);
     m_ocrController->reset();
-    {
-        QMutexLocker locker(&m_ocrMutex);
-        m_readyOcrPages.clear();
-    }
     MU_LOG(warning, "Mu::Generator::Main", "reopened document after worker restart");
     return true;
 }
@@ -699,7 +658,7 @@ void Main::clearPageDisplayState(int page)
 bool Main::doCloseDocument()
 {
     // Step 1: Make queued OCR completions harmless before releasing page state.
-    resetOcrState();
+    m_ocrController->reset();
     QCoreApplication::removePostedEvents(this);
     m_placeholder.reset();
     // Step 2: Clear form proxies and cached UI objects while Okular's user
@@ -883,17 +842,11 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         return Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height());
     }
 
-    {
-        // Async OCR emits a TextPage, but retain the result until this request
-        // consumes it for hosts that do not immediately handle that signal.
-        QMutexLocker locker(&m_ocrMutex);
-        const auto ready = m_readyOcrPages.find(pageNum);
-        if (ready != m_readyOcrPages.end()) {
-            const auto boxes = std::move(ready.value());
-            m_readyOcrPages.erase(ready);
-            return Conversion::ocrTextPage(boxes);
-        }
-    }
+    // Async OCR emits a TextPage, but the controller retains the result until
+    // this request consumes it for hosts that do not immediately handle that
+    // signal.
+    if (const auto ready = m_ocrController->takeReady(pageNum))
+        return Conversion::ocrTextPage(*ready);
     if (m_worker.isConnected()) {
         const std::vector<Model::TextBox> workerBoxes =
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);

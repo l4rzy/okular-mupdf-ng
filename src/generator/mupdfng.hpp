@@ -16,11 +16,7 @@
 #include <okular/interfaces/saveinterface.h>
 
 #include <QByteArray>
-#include <QHash>
-#include <QMutex>
 #include <memory>
-
-#include <atomic>
 
 #include "generator/config/settings.hpp"
 #include "generator/placeholder.hpp"
@@ -125,8 +121,6 @@ private:
     Okular::Document::OpenResult loadBlockedPlaceholderDocument(QVector<Okular::Page*>& pages);
     // Drops worker-derived UI state while the placeholder withholds the document.
     void clearPlaceholderDerivedState();
-    // Cancels queued OCR work and drops retained OCR results.
-    void resetOcrState();
     // Must be called while userMutex() is held; drops cached UI objects
     // derived from the worker document.
     void clearWorkerDerivedState();
@@ -148,6 +142,8 @@ private:
     // and keeps MuPDF outside the Okular process.
     // -----------------------------------------------------------------------
     Plugin::WorkerClient m_worker;
+    // Owns asynchronous OCR scheduling, focus tracking, and result retention;
+    // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
 
     std::unique_ptr<Okular::DocumentSynopsis> m_synopsis;
@@ -166,18 +162,10 @@ private:
     std::unique_ptr<Proxy::Form::Coordinator> m_formCoordinator;
     bool m_formsDirty = false;
 
-    mutable QMutex m_ocrMutex;
     // Single owner of interrupted-display state: sandbox-gate withholding
     // (restorable through an Okular reopen) and unrecoverable worker failure
     // (terminal for the generator lifetime).
     Placeholder m_placeholder;
-    // Results are retained until the next textPage request as a fallback for
-    // hosts that do not immediately consume signalTextGenerationDone.
-    QHash<int, QVector<Plugin::Caching::OCR::CacheItem>> m_readyOcrPages;
-    int m_lastOcrFocusPage = -1;
-    // Replaced for each document/recovery generation so queued OCR callbacks
-    // can identify work made stale by teardown.
-    std::shared_ptr<std::atomic<bool>> m_ocrCancellationToken;
 
     Config::RenderingSettings m_renderingSettings;
     // EPUB settings are fixed during worker startup; changes require restarting

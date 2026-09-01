@@ -5,6 +5,7 @@
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QMutex>
 #include <QObject>
 #include <QTimer>
 
@@ -28,7 +29,13 @@ public:
     enum class CompletionSource { CacheLoaded, OcrCompleted };
 
     explicit Controller(WorkerClient* backend, QObject* parent = nullptr);
+    // Computes the dominant visible page with focus hysteresis and schedules
+    // it for OCR; no-op when no page dominates.
+    void observeVisiblePages(const QList<VisiblePage>& visiblePages, const Config& config);
     void observe(int page, Config config);
+    // Takes the retained result for @p page, if any. Called from Okular render
+    // threads, so it is the only cross-thread surface of this class.
+    [[nodiscard]] std::optional<QVector<Caching::OCR::CacheItem>> takeReady(int page);
     void reset();
 
     static bool shouldTrigger(bool force, bool autoTrigger, unsigned threshold, std::size_t existingTextBoxCount);
@@ -70,6 +77,13 @@ private:
     // Native text counts are enough for OCR threshold decisions. The cache is
     // document-scoped because reset() is called whenever the worker document changes.
     QHash<int, std::size_t> m_nativeTextBoxCounts;
+    // Results retained after completed() until the UI consumes them, so hosts
+    // that do not immediately handle the signal can still fetch them. Guarded
+    // by m_readyMutex because textPage() reads it from render threads while
+    // completion runs on the controller's thread.
+    QHash<int, QVector<Caching::OCR::CacheItem>> m_readyResults;
+    mutable QMutex m_readyMutex;
+    int m_lastFocusPage = -1;
     std::uint64_t m_generation = 0;
 };
 
