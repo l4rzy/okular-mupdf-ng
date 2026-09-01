@@ -263,23 +263,23 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
                                              const QString& password)
 {
     // Step 1: Reset state that is scoped to the previous document generation.
-    m_password = password;
+    m_document.password = password;
     m_placeholder.reset();
     m_ocrController->reset();
 
     // Step 2: Obtain document identity before constructing Okular-owned pages.
     const auto info = m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash") });
-    m_documentType = Model::documentTypeFromMime(info.mimeType);
+    m_document.type = Model::documentTypeFromMime(info.mimeType);
 
     // Signature validation reads the original PDF bytes, which may come from a
     // file or from the in-memory source retained for worker recovery.
-    QFile signatureFile(m_sourcePath);
-    QBuffer signatureBuffer(&m_sourceData);
+    QFile signatureFile(m_document.sourcePath);
+    QBuffer signatureBuffer(&m_document.sourceData);
     QIODevice* signatureSource = nullptr;
-    if (m_documentType == Model::DocumentType::Pdf) {
-        if (!m_sourcePath.isEmpty() && signatureFile.open(QIODevice::ReadOnly))
+    if (m_document.type == Model::DocumentType::Pdf) {
+        if (!m_document.sourcePath.isEmpty() && signatureFile.open(QIODevice::ReadOnly))
             signatureSource = &signatureFile;
-        else if (!m_sourceData.isEmpty() && signatureBuffer.open(QIODevice::ReadOnly))
+        else if (!m_document.sourceData.isEmpty() && signatureBuffer.open(QIODevice::ReadOnly))
             signatureSource = &signatureBuffer;
     }
     std::vector<Proxy::Form::RadioGroupMember> radioMembers;
@@ -374,11 +374,11 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     m_okularPages = pages;
     m_formsDirty = false;
     m_formCoordinator->setAvailable(true);
-    m_documentHash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
+    m_document.hash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
     const QString title =
         QString::fromStdString(info.values.contains("title") ? info.values.at("title") : std::string());
     if (!title.trimmed().isEmpty())
-        m_documentName = title;
+        m_document.name = title;
     return Okular::Document::OpenSuccess;
 }
 
@@ -391,7 +391,7 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
     if (sandboxGated()) {
         // Retained so a Strict-gated document can still be reopened with it
         // once enforcement relaxes.
-        m_password = password;
+        m_document.password = password;
         return loadBlockedPlaceholderDocument(pages);
     }
     const auto docType = Config::documentTypeForFile(fileName);
@@ -407,9 +407,9 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
         return Okular::Document::OpenError;
     // Retain the source only after the worker accepted it; restart recovery
     // must never reopen a failed or partially initialized document.
-    m_documentName = QFileInfo(fileName).fileName();
-    m_sourcePath = fileName;
-    m_sourceData.clear();
+    m_document.name = QFileInfo(fileName).fileName();
+    m_document.sourcePath = fileName;
+    m_document.sourceData.clear();
     return initPages(pages, workerPages, password);
 }
 
@@ -421,7 +421,7 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     if (!m_worker.isConnected())
         return Okular::Document::OpenError;
     if (sandboxGated()) {
-        m_password = password;
+        m_document.password = password;
         return loadBlockedPlaceholderDocument(pages);
     }
     QList<Plugin::WorkerClient::PageInfo> workerPages;
@@ -436,10 +436,10 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     if (openStatus != Model::OpenStatus::Success)
         return Okular::Document::OpenError;
     // Keep in-memory documents for the same restart path used by file sources.
-    m_documentName =
+    m_document.name =
         docType == Model::DocumentType::Epub ? QStringLiteral("document.epub") : QStringLiteral("document.pdf");
-    m_sourcePath.clear();
-    m_sourceData = fileData;
+    m_document.sourcePath.clear();
+    m_document.sourceData = fileData;
     return initPages(pages, workerPages, password);
 }
 
@@ -506,7 +506,8 @@ void Main::reopenWithheldDocument()
 // Executes the queued close/open cycle on a clean stack.
 void Main::reopenWithheldDocumentInternal()
 {
-    const auto result = SandboxGate::reopenLocalDocument(const_cast<Okular::Document*>(document()), m_password);
+    const auto result =
+        SandboxGate::reopenLocalDocument(const_cast<Okular::Document*>(document()), m_document.password);
     if (result == SandboxGate::ReopenResult::NotLocal)
         Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), 0);
 }
@@ -521,7 +522,7 @@ Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& ne
     // Okular adopts temporary replacement-page contents into these existing
     // pages, then deletes the replacements after the swap.
     const QVector<Okular::Page*> currentPages = m_okularPages;
-    const QString password = m_password;
+    const QString password = m_document.password;
     doCloseDocument();
 
     QVector<Okular::Page*> loadedPages;
@@ -554,7 +555,7 @@ void Main::observeOcrFocus()
 {
     if (m_placeholder.isActive())
         return;
-    if (m_documentType == Model::DocumentType::Epub)
+    if (m_document.type == Model::DocumentType::Epub)
         return;
     const Okular::Document* doc = document();
     const Config::OcrSettings ocrSettings = Config::readOcrSettings();
@@ -569,7 +570,7 @@ void Main::observeOcrFocus()
         const double height = visible->rect.bottom - visible->rect.top;
         visiblePages.append({ visible->pageNumber, width * height * page->width() * page->height() });
     }
-    const Config::OcrTarget target = Config::ocrTargetFor(m_documentHash, ocrSettings);
+    const Config::OcrTarget target = Config::ocrTargetFor(m_document.hash, ocrSettings);
     m_ocrController->observeVisiblePages(
         visiblePages,
         Config::ocrConfigFor(
@@ -578,7 +579,7 @@ void Main::observeOcrFocus()
 
 bool Main::reopenWorkerDocument()
 {
-    if (m_okularPages.isEmpty() || (m_sourcePath.isEmpty() && m_sourceData.isEmpty()))
+    if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
 
     QList<Plugin::WorkerClient::PageInfo> pages;
@@ -586,8 +587,9 @@ bool Main::reopenWorkerDocument()
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after worker restart");
         return false;
     }
-    const auto openStatus = m_sourcePath.isEmpty() ? m_worker.openData(m_sourceData, m_password, pages, m_documentType)
-                                                   : m_worker.open(m_sourcePath, m_password, pages, m_documentType);
+    const auto openStatus = m_document.sourcePath.isEmpty()
+        ? m_worker.openData(m_document.sourceData, m_document.password, pages, m_document.type)
+        : m_worker.open(m_document.sourcePath, m_document.password, pages, m_document.type);
     if (openStatus != Model::OpenStatus::Success) {
         MU_LOG(warning, "Mu::Generator::Main", "failed to reopen document after worker restart");
         return false;
@@ -598,8 +600,8 @@ bool Main::reopenWorkerDocument()
     const auto metadata = m_worker.getDocumentInfo({ QStringLiteral("hash") });
     const auto hash = metadata.values.find("hash");
     const bool valid = pages.size() == m_okularPages.size() && metadata.pageCount == m_okularPages.size()
-        && (m_documentHash.isEmpty()
-            || (hash != metadata.values.end() && QString::fromStdString(hash->second) == m_documentHash));
+        && (m_document.hash.isEmpty()
+            || (hash != metadata.values.end() && QString::fromStdString(hash->second) == m_document.hash));
     if (!valid) {
         MU_LOG(warning, "Mu::Generator::Main", "reopened document does not match the active document");
         m_worker.close();
@@ -661,14 +663,9 @@ bool Main::doCloseDocument()
     QMutexLocker locker(userMutex());
     clearWorkerDerivedState();
     m_okularPages.clear();
-    m_documentName.clear();
-    m_sourcePath.clear();
-    m_sourceData.clear();
-    m_documentHash.clear();
-    m_password.clear();
 
     // Step 3: Reset local identity before asking the worker to discard its copy.
-    m_documentType = Model::DocumentType::Pdf;
+    m_document = { };
     // Closing is best effort: an unavailable worker has already lost its copy.
     if (m_worker.isConnected())
         m_worker.close();
@@ -695,7 +692,7 @@ Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo:
         const auto info = m_worker.getDocumentInfo();
         if (!info.values.empty()) {
             Okular::DocumentInfo di;
-            const QString mimeString = (m_documentType == Model::DocumentType::Epub)
+            const QString mimeString = (m_document.type == Model::DocumentType::Epub)
                 ? QStringLiteral("application/epub+zip")
                 : QStringLiteral("application/pdf");
             di.set(Okular::DocumentInfo::MimeType, mimeString);
@@ -828,7 +825,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         return nullptr;
     const int pageNum = request->page()->number();
 
-    if (m_documentType == Model::DocumentType::Epub) {
+    if (m_document.type == Model::DocumentType::Epub) {
         if (!m_worker.isConnected())
             return nullptr;
         const std::vector<Model::TextBox> workerBoxes =
@@ -846,7 +843,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
 #ifdef MUPDF_HAS_OCR
         const Config::OcrSettings ocrSettings = Config::readOcrSettings();
-        const Config::OcrTarget ocrTarget = Config::ocrTargetFor(m_documentHash, ocrSettings);
+        const Config::OcrTarget ocrTarget = Config::ocrTargetFor(m_document.hash, ocrSettings);
         const auto ocrConfig = Config::ocrConfigFor(
             ocrTarget, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings);
         const bool useOcr = Plugin::OCR::Controller::shouldTrigger(
@@ -884,7 +881,7 @@ QVariant Main::metaData(const QString& key, const QVariant& option) const
     Q_UNUSED(option)
 
     if (key == QLatin1String("DocumentTitle")) {
-        return m_documentName;
+        return m_document.name;
     }
 
     return QVariant();
@@ -899,7 +896,7 @@ Okular::Generator::PageSizeMetric Main::pagesSizeMetric() const
 // Okular Generator Func: returns embedded files as Okular objects.
 const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 {
-    if (m_documentType == Model::DocumentType::Epub)
+    if (m_document.type == Model::DocumentType::Epub)
         return nullptr;
     if (m_placeholder.isActive())
         return nullptr;
@@ -921,7 +918,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 // Okular Generator Func: reports the supported save options.
 bool Main::supportsOption(SaveOption option) const
 {
-    if (m_documentType == Model::DocumentType::Epub)
+    if (m_document.type == Model::DocumentType::Epub)
         return false;
     if (m_placeholder.isActive())
         return false;
@@ -954,7 +951,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
 // Okular Generator Func: returns the annotation adapter used by Okular.
 Okular::AnnotationProxy* Main::annotationProxy() const
 {
-    if (m_documentType == Model::DocumentType::Epub)
+    if (m_document.type == Model::DocumentType::Epub)
         return nullptr;
     return &m_annotationProxy;
 }
@@ -1071,7 +1068,7 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
 // Okular Generator Func: reports that worker-backed signing is supported.
 bool Main::canSign() const
 {
-    if (m_documentType == Model::DocumentType::Epub)
+    if (m_document.type == Model::DocumentType::Epub)
         return false;
     if (m_placeholder.isActive())
         return false;

@@ -152,14 +152,23 @@ private:
     std::unique_ptr<Okular::DocumentSynopsis> m_synopsis;
     mutable std::unique_ptr<QList<Okular::EmbeddedFile*>> m_embeddedFilesCache;
     mutable Proxy::Annotation m_annotationProxy;
-    QString m_password;
-    QString m_documentName;
-    // Exactly one source is retained while a document is open so a restarted
-    // worker can reopen the same document without asking Okular for it again.
-    QString m_sourcePath;
-    QByteArray m_sourceData;
-    QString m_documentHash;
-    Model::DocumentType m_documentType = Model::DocumentType::Pdf;
+
+    // Identity and retained source of the currently open document; reset as a
+    // whole on close and rebuilt by every load path.
+    struct Document {
+        QString password;
+        QString name;
+        // Exactly one source is retained while a document is open so a
+        // restarted worker can reopen the same document without asking Okular
+        // for it again.
+        QString sourcePath;
+        QByteArray sourceData;
+        QString hash;
+        Model::DocumentType type = Model::DocumentType::Pdf;
+    };
+
+    Document m_document;
+
     QVector<Okular::Page*> m_okularPages;
     std::unique_ptr<Proxy::CertificateStore> m_certStore;
     std::unique_ptr<Proxy::Form::Coordinator> m_formCoordinator;
