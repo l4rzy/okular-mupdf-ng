@@ -23,6 +23,7 @@
 #include <atomic>
 
 #include "generator/config/settings.hpp"
+#include "generator/placeholder.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/certificate_store.hpp"
 #include "generator/proxy/form/coordinator.hpp"
@@ -117,6 +118,23 @@ private:
     void clearPageDisplayState(int page);
     // Tracks settings that are fixed when the generator process starts.
     void updateRestartRequiredSettings(const Config::EpubSettings& currentEpubSettings);
+    // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
+    [[nodiscard]] bool sandboxGated() const;
+    // Loads a single synthetic placeholder page while Strict enforcement
+    // withholds the real document from the worker.
+    Okular::Document::OpenResult loadBlockedPlaceholderDocument(QVector<Okular::Page*>& pages);
+    // Drops worker-derived UI state while the placeholder withholds the document.
+    void clearPlaceholderDerivedState();
+    // Cancels queued OCR work and drops retained OCR results.
+    void resetOcrState();
+    // Must be called while userMutex() is held; drops cached UI objects
+    // derived from the worker document.
+    void clearWorkerDerivedState();
+    // Queues an Okular close/open cycle so placeholder deactivation restores
+    // the real document after Strict enforcement relaxes.
+    void reopenWithheldDocument();
+    // Executes the queued cycle; maps the module's outcome to user signals.
+    void reopenWithheldDocumentInternal();
 
     // Converts worker page information into Okular-owned pages and wires their
     // annotations, links, and form proxies to the current worker session.
@@ -149,9 +167,10 @@ private:
     bool m_formsDirty = false;
 
     mutable QMutex m_ocrMutex;
-    // Set once recovery is no longer safe. Rendering then returns an error
-    // placeholder instead of sending further work to the worker.
-    std::atomic_bool m_workerUnavailable = false;
+    // Single owner of interrupted-display state: sandbox-gate withholding
+    // (restorable through an Okular reopen) and unrecoverable worker failure
+    // (terminal for the generator lifetime).
+    Placeholder m_placeholder;
     // Results are retained until the next textPage request as a fallback for
     // hosts that do not immediately consume signalTextGenerationDone.
     QHash<int, QVector<Plugin::Caching::OCR::CacheItem>> m_readyOcrPages;

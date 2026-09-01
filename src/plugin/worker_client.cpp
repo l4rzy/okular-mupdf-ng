@@ -33,6 +33,8 @@ WorkerClient::WorkerClient(QObject* parent)
         &WorkerTransport::workerDied,
         this,
         [this](int exitCode) {
+            // The worker is gone; its sandbox status no longer applies.
+            m_sandboxStatus = { };
             Q_EMIT workerDied(exitCode);
             scheduleRestart();
         },
@@ -76,12 +78,15 @@ bool WorkerClient::startWorker(const QString& binaryPath)
     // remains thread-confined.
     bool result = false;
     const QStringList tessDataDirectories = m_tessDataDirectories;
+    Model::SandboxStatus status;
     QMetaObject::invokeMethod(
         m_transport,
-        [transport = m_transport, binaryPath, tessDataDirectories, &result] {
-            result = transport->start(binaryPath, tessDataDirectories);
+        [transport = m_transport, binaryPath, tessDataDirectories, &result, &status] {
+            result = transport->start(binaryPath, tessDataDirectories, &status);
         },
         Qt::BlockingQueuedConnection);
+    // The blocking call provides the happens-before edge for the status.
+    m_sandboxStatus = result ? status : Model::SandboxStatus { };
     return result;
 }
 
@@ -93,6 +98,7 @@ void WorkerClient::stop()
     m_restartTimer.stop();
     if (m_transport)
         QMetaObject::invokeMethod(m_transport, "stop", Qt::BlockingQueuedConnection);
+    m_sandboxStatus = { };
 }
 
 bool WorkerClient::isConnected() const
@@ -285,12 +291,7 @@ bool WorkerClient::setSettings(const DocumentSettings& settings)
 
 SandboxStatus WorkerClient::sandboxStatus() const
 {
-    SandboxStatus status;
-    if (m_transport) {
-        QMetaObject::invokeMethod(
-            m_transport, [&] { status = m_transport->sandboxStatus(); }, Qt::BlockingQueuedConnection);
-    }
-    return status;
+    return m_sandboxStatus;
 }
 
 void WorkerClient::pruneRestartHistory()

@@ -56,6 +56,11 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent, const Model::SandboxSt
     memLimit->addItem(i18n("128 MiB"), MuPDFSettings::EnumMemoryLimit::Size128MiB);
     memLimit->addItem(i18n("256 MiB"), MuPDFSettings::EnumMemoryLimit::Size256MiB);
 
+    auto* sandboxEnforcement = m_mupdfsw->kcfg_SandboxEnforcement;
+    sandboxEnforcement->clear();
+    sandboxEnforcement->addItem(i18n("Relaxed"), MuPDFSettings::EnumSandboxEnforcement::Relaxed);
+    sandboxEnforcement->addItem(i18n("Strict"), MuPDFSettings::EnumSandboxEnforcement::Strict);
+
     auto* epubPageSize = m_mupdfsw->kcfg_EpubPageSize;
     epubPageSize->clear();
     epubPageSize->addItem(i18n("B5 (176 × 250 mm)"), MuPDFSettings::EnumEpubPageSize::B5);

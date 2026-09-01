@@ -51,12 +51,13 @@ set(okularGenerator_mupdfng_SRCS
   plugin/caching/cache_file.cpp
   plugin/caching/epub_cache.cpp
   plugin/caching/ocr_cache.cpp
-  generator/placeholder_image.cpp
+  generator/placeholder.cpp
   generator/signature_image.cpp
   shared/logging.cpp
   shared/model/validation.cpp
   shared/protocol/zpp_codec.cpp
   shared/model/validation.hpp
+  generator/placeholder.hpp
   generator/signature_image.hpp
   shared/protocol/zpp_codec.hpp
   generator/proxy/annotation.hpp

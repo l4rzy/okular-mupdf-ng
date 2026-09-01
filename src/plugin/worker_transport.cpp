@@ -115,7 +115,9 @@ void WorkerTransport::releaseFrameSlot(quint64 session, quint64 slotId, quint64 
         MU_LOG(warning, "Mu::Plugin", "could not release render frame slot");
 }
 
-bool WorkerTransport::start(const QString& binaryPath, const QStringList& tessDataDirectories)
+bool WorkerTransport::start(const QString& binaryPath,
+                            const QStringList& tessDataDirectories,
+                            Model::SandboxStatus* sandboxStatus)
 {
     // Start is also the recovery path. Remove every artifact from a partial
     // previous session before allocating new authenticated endpoints.
@@ -170,7 +172,8 @@ bool WorkerTransport::start(const QString& binaryPath, const QStringList& tessDa
     if (!p || p->compat != IPC::COMPAT) {
         return failStart();
     }
-    m_sandboxStatus = p->sandbox;
+    if (sandboxStatus)
+        *sandboxStatus = p->sandbox;
     // The notifier is enabled only while no synchronous RPC is in flight;
     // call() drains notifications as part of its response loop.
     m_notifier = std::make_unique<QSocketNotifier>(m_ctrl.fd(), QSocketNotifier::Type::Read, this);
@@ -188,7 +191,6 @@ void WorkerTransport::cleanupSession()
         m_notifier->setEnabled(false);
         m_notifier.reset();
     }
-    m_sandboxStatus = { };
     m_ctrl.close();
     if (m_process.state() != QProcess::NotRunning) {
         m_process.terminate();

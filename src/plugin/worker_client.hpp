@@ -96,6 +96,10 @@ private:
     quint64 m_restartSequence = 0;
     bool m_restartDisabled = false;
     bool m_stopping = false;
+    // Cached copy of the worker's sandbox status, refreshed only at
+    // synchronized points (start, stop, worker death) so generator-thread
+    // reads need no cross-thread round trip.
+    Model::SandboxStatus m_sandboxStatus;
 };
 
 } // namespace Mu::Plugin

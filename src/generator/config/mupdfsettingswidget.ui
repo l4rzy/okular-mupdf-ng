@@ -221,6 +221,49 @@
            <number>12</number>
           </property>
           <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_sandbox_enforcement">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelSandboxEnforcement">
+              <property name="toolTip">
+               <string>Strict refuses to process documents unless the worker sandbox is fully hardened on this host.</string>
+              </property>
+              <property name="text">
+               <string>Sandbox Enforcement</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="line_sandbox_enforcement">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <horstretch>1</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Shape::HLine</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Shadow::Plain</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="kcfg_SandboxEnforcement">
+              <property name="toolTip">
+               <string>Strict refuses to process documents unless the worker sandbox is fully hardened on this host.</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
            <layout class="QHBoxLayout" name="horizontalLayout_overall_sec">
             <property name="spacing">
              <number>10</number>
@@ -629,12 +672,12 @@
             </item>
             <item>
              <widget class="KUrlRequester" name="kcfg_dBCertificatePath">
-               <property name="enabled">
-                <bool>false</bool>
-               </property>
-               <property name="mode">
-                <set>KFile::Directory|KFile::ExistingOnly|KFile::LocalOnly</set>
-               </property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="mode">
+               <set>KFile::Mode::Directory|KFile::Mode::ExistingOnly|KFile::Mode::LocalOnly</set>
+              </property>
              </widget>
             </item>
            </layout>

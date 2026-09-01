@@ -14,6 +14,13 @@
         <choice name="Size256MiB" />
       </choices>
     </entry>
+    <entry key="SandboxEnforcement" type="Enum">
+      <default>Relaxed</default>
+      <choices>
+        <choice name="Relaxed" />
+        <choice name="Strict" />
+      </choices>
+    </entry>
   </group>
   <group name="Rendering">
     <entry key="GraphicsAntialiasingBits" type="Enum">

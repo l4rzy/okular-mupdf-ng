@@ -125,10 +125,11 @@ foreach(runtime_test IN ITEMS
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endforeach()
 
-add_layer_test(test_generator_placeholder_image generator/test_placeholder_image.cpp generator
-    ../src/generator/placeholder_image.cpp)
-target_include_directories(test_generator_placeholder_image PRIVATE ../src)
-target_link_libraries(test_generator_placeholder_image PRIVATE Qt6::Gui KF6::I18n)
+add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generator
+    ../src/generator/placeholder.cpp
+    ../src/shared/logging.cpp)
+target_include_directories(test_generator_placeholder PRIVATE ../src)
+target_link_libraries(test_generator_placeholder PRIVATE Okular::Core Qt6::Gui KF6::I18n)
 
 set(MUPDF_SETTINGS_SOURCE ${CMAKE_BINARY_DIR}/src/mupdfsettings.cpp)
 set_source_files_properties(${MUPDF_SETTINGS_SOURCE} PROPERTIES GENERATED TRUE)

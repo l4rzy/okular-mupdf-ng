@@ -58,7 +58,8 @@ public:
     // These methods are invoked on the transport thread. The process, control
     // channel, FD channel, and temporary paths must never be accessed by the
     // generator thread directly.
-    Q_INVOKABLE bool start(const QString& hint, const QStringList& tessDataDirectories = { });
+    Q_INVOKABLE bool
+    start(const QString& hint, const QStringList& tessDataDirectories, Model::SandboxStatus* sandboxStatus);
     Q_INVOKABLE void stop();
     Q_INVOKABLE void abort();
     Q_INVOKABLE bool isConnected() const;
@@ -92,8 +93,6 @@ public:
     Q_INVOKABLE std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
     Q_INVOKABLE std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
     Q_INVOKABLE bool settings(const Model::DocumentSettings& settings);
-
-    [[nodiscard]] Model::SandboxStatus sandboxStatus() const noexcept { return m_sandboxStatus; }
 
 signals:
     void workerDied(int);
@@ -153,7 +152,6 @@ private:
     std::unique_ptr<QSocketNotifier> m_notifier;
     QString m_socketPath, m_fdSocketPath, m_tempPath, m_sourcePath;
     QString m_activeSignPassword;
-    Model::SandboxStatus m_sandboxStatus;
     Model::DocumentSettings m_settings;
     std::unordered_map<std::uint64_t, std::shared_ptr<FrameSlotMapping>> m_frameSlots;
     quint64 m_nextId = 1, m_nextTransfer = 1, m_linkGeneration = 0;

@@ -74,6 +74,19 @@ void reloadSettings()
     MuPDFSettings::self()->read();
 }
 
+SandboxEnforcement readSandboxEnforcement()
+{
+    // Generated enums are ints; map through the generated constants so a
+    // renamed or reordered choice cannot silently flip the security policy.
+    switch (MuPDFSettings::sandboxEnforcement()) {
+    case MuPDFSettings::EnumSandboxEnforcement::Strict:
+        return SandboxEnforcement::Strict;
+    case MuPDFSettings::EnumSandboxEnforcement::Relaxed:
+    default:
+        return SandboxEnforcement::Relaxed;
+    }
+}
+
 RenderingSettings readRenderingSettings()
 {
     // Read and normalize all rendering values into the worker-facing units.

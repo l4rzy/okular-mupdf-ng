@@ -55,6 +55,12 @@ struct OcrTarget {
     int dpi = 225;
 };
 
+/// Policy for running the worker when its sandbox is not fully hardened.
+enum class SandboxEnforcement {
+    Relaxed,
+    Strict,
+};
+
 inline Model::DocumentType documentTypeForMime(const QString& mime)
 {
     // Keep MIME-to-model mapping in shared code so file and data detection
@@ -107,6 +113,7 @@ void reloadSettings();
 RenderingSettings readRenderingSettings();
 EpubSettings readEpubSettings();
 OcrSettings readOcrSettings();
+SandboxEnforcement readSandboxEnforcement();
 QStringList readTessDataDirectories();
 QStringList normalizeTessDataDirectories(const QStringList& directories);
 QString readCertificateDatabasePath(const QString& defaultPath);

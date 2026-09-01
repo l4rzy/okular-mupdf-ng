@@ -28,7 +28,6 @@
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
 #include "generator/conversion/text.hpp"
-#include "generator/placeholder_image.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/form/checkbox.hpp"
 #include "generator/proxy/form/choice.hpp"
@@ -130,7 +129,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         },
         Qt::QueuedConnection);
     connect(&m_worker, &Plugin::WorkerClient::workerRestarted, this, [this] {
-        if (m_workerUnavailable.load())
+        if (m_placeholder.isActive())
             return;
         // Defer recovery to avoid reopening the document from inside a worker
         // lifecycle signal; the queued call runs on the generator's Qt thread.
@@ -223,6 +222,29 @@ bool Main::reparseConfig()
         && !m_worker.setSettings(Config::documentSettingsFor(m_renderingSettings, m_startupEpubSettings)))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
 
+    // Re-evaluate sandbox enforcement for the active document. Blocking
+    // immediately withholds the document (renders become placeholders and the
+    // worker copy is dropped); unblocking is deferred: deactivate() queues a
+    // full close/open cycle, and the placeholder stays active until the
+    // successful reopen clears it in initPages(), so no render can reach the
+    // worker while the document is still closed there.
+    const bool newBlocked = sandboxGated();
+    if (newBlocked != m_placeholder.isActive() && document()) {
+        MU_LOG(debug,
+               "Mu::Generator::Main",
+               std::string("sandbox enforcement changed: ") + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
+        if (newBlocked) {
+            // Side effects run after activate() publishes the flag, so any
+            // render triggered by them observes the active state.
+            m_placeholder.activate(SandboxGate::guidanceMessage(m_worker.sandboxStatus()),
+                                   Placeholder::Reason::SandboxGate);
+            m_worker.close();
+            clearPlaceholderDerivedState();
+        } else if (m_placeholder.deactivate()) {
+            reopenWithheldDocument();
+        }
+    }
+
     return changed;
 }
 
@@ -263,6 +285,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 {
     // Step 1: Reset state that is scoped to the previous document generation.
     m_password = password;
+    m_placeholder.reset();
     m_ocrCancellationToken = std::make_shared<std::atomic<bool>>(false);
     m_ocrController->reset();
     m_lastOcrFocusPage = -1;
@@ -392,6 +415,12 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
 {
     if (!m_worker.isConnected())
         return Okular::Document::OpenError;
+    if (sandboxGated()) {
+        // Retained so a Strict-gated document can still be reopened with it
+        // once enforcement relaxes.
+        m_password = password;
+        return loadBlockedPlaceholderDocument(pages);
+    }
     const auto docType = Config::documentTypeForFile(fileName);
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
@@ -418,6 +447,10 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
 {
     if (!m_worker.isConnected())
         return Okular::Document::OpenError;
+    if (sandboxGated()) {
+        m_password = password;
+        return loadBlockedPlaceholderDocument(pages);
+    }
     QList<Plugin::WorkerClient::PageInfo> workerPages;
     const auto docType = Config::documentTypeForData(fileData);
     if (docType == Model::DocumentType::Unknown)
@@ -437,11 +470,90 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     return initPages(pages, workerPages, password);
 }
 
+// Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
+bool Main::sandboxGated() const
+{
+    return Config::readSandboxEnforcement() == Config::SandboxEnforcement::Strict
+        && !m_worker.sandboxStatus().isFullyHardened();
+}
+
+// Loads a single synthetic placeholder page while Strict enforcement withholds
+// the real document from the worker. The page is only a display canvas for the
+// guidance message; switching enforcement to Relaxed reloads the real document
+// through Okular.
+Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular::Page*>& pages)
+{
+    // Side effects run after activate() publishes the flag; at load time the
+    // worker has no document and no derived state, so both are best-effort.
+    m_placeholder.activate(SandboxGate::guidanceMessage(m_worker.sandboxStatus()), Placeholder::Reason::SandboxGate);
+    m_worker.close();
+    clearPlaceholderDerivedState();
+    pages.append(SandboxGate::withheldPage(dpi().width(), dpi().height()));
+    m_okularPages = pages;
+    return Okular::Document::OpenSuccess;
+}
+
+// Cancels queued OCR work and drops retained OCR results.
+void Main::resetOcrState()
+{
+    if (m_ocrCancellationToken)
+        m_ocrCancellationToken->store(true);
+    m_ocrController->reset();
+    m_lastOcrFocusPage = -1;
+    QMutexLocker ocrLocker(&m_ocrMutex);
+    m_readyOcrPages.clear();
+}
+
+// Must be called while userMutex() is held; drops cached UI objects derived
+// from the worker document.
+void Main::clearWorkerDerivedState()
+{
+    m_synopsis.reset();
+    clearEmbeddedFilesCache();
+    if (m_formCoordinator) {
+        m_formCoordinator->clear();
+        m_formCoordinator->setAvailable(false);
+    }
+}
+
+// Drops worker-derived UI state while the placeholder withholds the document,
+// then refreshes pages so placeholder images replace stale real pixmaps.
+void Main::clearPlaceholderDerivedState()
+{
+    resetOcrState();
+    m_formsDirty = false;
+    {
+        QMutexLocker locker(userMutex());
+        clearWorkerDerivedState();
+    }
+    for (int page = 0; page < m_okularPages.size(); ++page) {
+        clearPageDisplayState(page);
+        const Okular::Document* currentDocument = document();
+        if (currentDocument)
+            const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(page);
+    }
+}
+
+// Queued because Okular invokes reparseConfig() synchronously; closing and
+// reopening the document from inside that call would re-enter Okular::Document.
+void Main::reopenWithheldDocument()
+{
+    QMetaObject::invokeMethod(this, [this] { reopenWithheldDocumentInternal(); }, Qt::QueuedConnection);
+}
+
+// Executes the queued close/open cycle on a clean stack.
+void Main::reopenWithheldDocumentInternal()
+{
+    const auto result = SandboxGate::reopenLocalDocument(const_cast<Okular::Document*>(document()), m_password);
+    if (result == SandboxGate::ReopenResult::NotLocal)
+        Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), 0);
+}
+
 // Okular Generator Func: replaces the backing file while preserving page state.
 Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& newFileName,
                                                                QList<Okular::Page*>& newPages)
 {
-    if (m_workerUnavailable.load())
+    if (m_placeholder.isActive())
         return SwapBackingFileError;
 
     // Okular adopts temporary replacement-page contents into these existing
@@ -478,6 +590,8 @@ Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& ne
 // Updates OCR scheduling from the pages currently visible in Okular.
 void Main::observeOcrFocus()
 {
+    if (m_placeholder.isActive())
+        return;
     if (m_documentType == Model::DocumentType::Epub)
         return;
     const Okular::Document* doc = document();
@@ -546,11 +660,12 @@ bool Main::reopenWorkerDocument()
 
 void Main::failClosed(const QString& message)
 {
-    if (m_workerUnavailable.exchange(true))
+    // Terminal state is sticky; repeated worker failures must not re-notify.
+    if (m_placeholder.isActive() && m_placeholder.reason() == Placeholder::Reason::WorkerUnavailable)
         return;
 
-    if (m_formCoordinator)
-        m_formCoordinator->setAvailable(false);
+    m_placeholder.activate(message, Placeholder::Reason::WorkerUnavailable);
+    clearPlaceholderDerivedState();
     Q_EMIT error(message, 0);
 
     const Okular::Document* currentDocument = document();
@@ -584,31 +699,19 @@ void Main::clearPageDisplayState(int page)
 bool Main::doCloseDocument()
 {
     // Step 1: Make queued OCR completions harmless before releasing page state.
-    if (m_ocrCancellationToken) {
-        m_ocrCancellationToken->store(true);
-    }
+    resetOcrState();
     QCoreApplication::removePostedEvents(this);
-    m_ocrController->reset();
-    m_lastOcrFocusPage = -1;
-    {
-        QMutexLocker ocrLocker(&m_ocrMutex);
-        m_readyOcrPages.clear();
-    }
+    m_placeholder.reset();
     // Step 2: Clear form proxies and cached UI objects while Okular's user
     // mutex protects their ownership.
     m_formsDirty = false;
     QMutexLocker locker(userMutex());
-    if (m_formCoordinator) {
-        m_formCoordinator->clear();
-        m_formCoordinator->setAvailable(false);
-    }
+    clearWorkerDerivedState();
     m_okularPages.clear();
     m_documentName.clear();
     m_sourcePath.clear();
     m_sourceData.clear();
     m_documentHash.clear();
-    m_synopsis.reset();
-    clearEmbeddedFilesCache();
     m_password.clear();
 
     // Step 3: Reset local identity before asking the worker to discard its copy.
@@ -632,6 +735,8 @@ void Main::clearEmbeddedFilesCache()
 // Okular Generator Func: returns the requested document metadata.
 Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo::Key>& keys) const
 {
+    if (m_placeholder.isActive())
+        return { };
     // Native text extraction is worker-owned.
     if (m_worker.isConnected()) {
         const auto info = m_worker.getDocumentInfo();
@@ -690,6 +795,9 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
         return m_synopsis.get();
     }
 
+    if (m_placeholder.isActive())
+        return nullptr;
+
     std::vector<Model::OutlineNode> nodes;
     if (m_worker.isConnected()) {
         nodes = m_worker.synopsis();
@@ -702,6 +810,8 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
 Okular::FontInfo::List Main::fontsForPage(int page)
 {
     QMutexLocker locker(userMutex());
+    if (m_placeholder.isActive())
+        return { };
     if (m_worker.isConnected()) {
         const std::vector<Model::Font> source = m_worker.fonts(page);
         Okular::FontInfo::List result;
@@ -721,8 +831,8 @@ QImage Main::image(Okular::PixmapRequest* request)
 
     const int pageNum = request->page()->number();
 
-    if (m_workerUnavailable.load())
-        return createPlaceholderImage(request->width(), request->height(), PlaceholderKind::Error);
+    if (m_placeholder.isActive())
+        return m_placeholder.image(request->width(), request->height());
 
     // Rendering is isolated in the worker process.
     if (m_worker.isConnected()) {
@@ -760,6 +870,8 @@ QImage Main::image(Okular::PixmapRequest* request)
 Okular::TextPage* Main::textPage(Okular::TextRequest* request)
 {
     if (request->shouldAbortExtraction())
+        return nullptr;
+    if (m_placeholder.isActive())
         return nullptr;
     const int pageNum = request->page()->number();
 
@@ -843,6 +955,8 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 {
     if (m_documentType == Model::DocumentType::Epub)
         return nullptr;
+    if (m_placeholder.isActive())
+        return nullptr;
     QMutexLocker locker(userMutex());
     // Convert shared embedded-file models to Okular objects on first
     // call. The generator owns the converted list via m_embeddedFilesCache.
@@ -863,6 +977,8 @@ bool Main::supportsOption(SaveOption option) const
 {
     if (m_documentType == Model::DocumentType::Epub)
         return false;
+    if (m_placeholder.isActive())
+        return false;
     return option == SaveChanges;
 }
 
@@ -870,7 +986,14 @@ bool Main::supportsOption(SaveOption option) const
 bool Main::save(const QString& fileName, SaveOptions options, QString* errorText)
 {
     Q_UNUSED(options)
-    if (!m_workerUnavailable.load() && m_worker.isConnected()) {
+    if (m_placeholder.isActive()) {
+        if (errorText)
+            *errorText = m_placeholder.reason() == Placeholder::Reason::SandboxGate
+                ? i18n("Strict sandbox enforcement blocks this document.")
+                : i18n("MuPDF worker is unavailable.");
+        return false;
+    }
+    if (m_worker.isConnected()) {
         if (m_worker.saveToFile(fileName))
             return true;
         if (errorText)
@@ -893,7 +1016,7 @@ Okular::AnnotationProxy* Main::annotationProxy() const
 // Okular Generator Func: prints through a temporary worker output file.
 Okular::Document::PrintError Main::print(QPrinter& printer)
 {
-    if (!m_worker.isConnected())
+    if (m_placeholder.isActive() || !m_worker.isConnected())
         return Okular::Document::FileConversionPrintError;
 
     const int totalPages = !m_okularPages.isEmpty() ? static_cast<int>(m_okularPages.size()) : 0;
@@ -956,6 +1079,11 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
 // Okular Generator Func: signs the document using the supplied data.
 std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
 {
+    if (m_placeholder.isActive())
+        return { Okular::GenericSigningError,
+                 m_placeholder.reason() == Placeholder::Reason::WorkerUnavailable
+                     ? QStringLiteral("MuPDF worker is unavailable")
+                     : QStringLiteral("Strict sandbox enforcement blocks this document") };
     if (m_worker.isConnected()) {
         const Okular::NormalizedRect rect = data.boundingRectangle();
         const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
@@ -997,6 +1125,8 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
 bool Main::canSign() const
 {
     if (m_documentType == Model::DocumentType::Epub)
+        return false;
+    if (m_placeholder.isActive())
         return false;
     return !Plugin::Crypto::signingCertificates().isEmpty();
 }
