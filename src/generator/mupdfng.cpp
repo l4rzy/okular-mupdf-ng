@@ -53,8 +53,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     : Generator(parent, args)
     , m_annotationProxy(&m_worker)
     , m_certStore(std::make_unique<Proxy::CertificateStore>())
-    , m_renderingSettings(Config::readRenderingSettings())
-    , m_startupEpubSettings(Config::readEpubSettings())
+    , m_settings(Config::readWorkerSettings())
 {
     // Step 1: Advertise only the Okular services implemented by this adapter.
     setFeature(Threaded);
@@ -195,16 +194,14 @@ Main::~Main()
 bool Main::reparseConfig()
 {
     Config::reloadSettings();
-    const Config::RenderingSettings renderingSettings = Config::readRenderingSettings();
-    const Config::EpubSettings epubSettings = Config::readEpubSettings();
-    updateRestartRequiredSettings(epubSettings);
-    const bool changed = Config::renderingOutputChanged(m_renderingSettings, renderingSettings);
-    const bool settingsChanged = renderingSettings != m_renderingSettings;
-    m_renderingSettings = renderingSettings;
+    const Config::WorkerSettings settings = Config::readWorkerSettings();
+    updateRestartRequiredSettings();
+    const bool changed = Config::renderingOutputChanged(m_settings.rendering, settings.rendering);
+    const bool settingsChanged = settings.rendering != m_settings.rendering;
+    m_settings.rendering = settings.rendering;
 
     // Propagate changed settings to the worker process.
-    if (settingsChanged && m_worker.isConnected()
-        && !m_worker.setSettings(Config::documentSettingsFor(m_renderingSettings, m_startupEpubSettings)))
+    if (settingsChanged && m_worker.isConnected() && !m_worker.setSettings(m_settings.documentSettings()))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
 
     // Re-evaluate sandbox enforcement for the active document. Blocking
@@ -237,30 +234,27 @@ bool Main::reparseConfig()
 void Main::addPages(KConfigDialog* dialog)
 {
     MuPDFSettingsWidget* w = new MuPDFSettingsWidget(dialog, m_worker.sandboxStatus());
-    dialog->addPage(w,
-                    MuPDFSettings::self(),
-                    i18n("MuPDF-NG"),
-                    QStringLiteral("okular-mupdf-ng"),
-                    i18n("MuPDF-NG Backend Configuration"));
+    dialog->addPage(
+        w, MuPDFSettings::self(), i18n("MuPDF-NG"), QStringLiteral("okular-mupdf-ng"), i18n("MuPDF-NG Configuration"));
     w->updateCustomCssButtonText();
     connect(dialog, &KConfigDialog::settingsChanged, this, [this, dialog] {
-        updateRestartRequiredSettings(Config::readEpubSettings());
-        if (!m_restartRequired || m_restartNoticeShown)
+        updateRestartRequiredSettings();
+        if (!m_restartState.required || m_restartState.noticeShown)
             return;
-        m_restartNoticeShown = true;
+        m_restartState.noticeShown = true;
         KMessageBox::information(
             dialog, i18n("This setting will take effect after restarting Okular."), i18n("Restart Required"));
     });
 }
 
-void Main::updateRestartRequiredSettings(const Config::EpubSettings& currentEpubSettings)
+void Main::updateRestartRequiredSettings()
 {
     // Worker process lifetime settings must not be applied to a running worker.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
-    m_restartRequired =
-        currentEpubSettings != m_startupEpubSettings || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
-    if (!m_restartRequired)
-        m_restartNoticeShown = false;
+    m_restartState.required =
+        Config::readEpubSettings() != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
+    if (!m_restartState.required)
+        m_restartState.noticeShown = false;
 }
 
 // Converts worker page information into Okular pages and page metadata.
@@ -404,7 +398,7 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
     QList<Plugin::WorkerClient::PageInfo> workerPages;
-    if (!m_worker.setSettings(Config::documentSettingsFor(m_renderingSettings, m_startupEpubSettings)))
+    if (!m_worker.setSettings(m_settings.documentSettings()))
         return Okular::Document::OpenError;
     const auto openStatus = m_worker.open(fileName, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
@@ -434,7 +428,7 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     const auto docType = Config::documentTypeForData(fileData);
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
-    if (!m_worker.setSettings(Config::documentSettingsFor(m_renderingSettings, m_startupEpubSettings)))
+    if (!m_worker.setSettings(m_settings.documentSettings()))
         return Okular::Document::OpenError;
     const auto openStatus = m_worker.openData(fileData, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
@@ -588,7 +582,7 @@ bool Main::reopenWorkerDocument()
         return false;
 
     QList<Plugin::WorkerClient::PageInfo> pages;
-    if (!m_worker.setSettings(Config::documentSettingsFor(m_renderingSettings, m_startupEpubSettings))) {
+    if (!m_worker.setSettings(m_settings.documentSettings())) {
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after worker restart");
         return false;
     }
@@ -765,7 +759,7 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
     return m_synopsis.get();
 }
 
-/// Okular Generator Func: returns the fonts used on a page.
+// Okular Generator Func: returns the fonts used on a page.
 Okular::FontInfo::List Main::fontsForPage(int page)
 {
     QMutexLocker locker(userMutex());
@@ -902,7 +896,6 @@ Okular::Generator::PageSizeMetric Main::pagesSizeMetric() const
     return Pixels;
 }
 
-// Okular Generator Func: checks whether a document permission is granted.
 // Okular Generator Func: returns embedded files as Okular objects.
 const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 {
@@ -1075,7 +1068,7 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
     return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
 }
 
-// Okular Generator Func: returns the certificate store used for signing.
+// Okular Generator Func: reports that worker-backed signing is supported.
 bool Main::canSign() const
 {
     if (m_documentType == Model::DocumentType::Epub)
@@ -1085,6 +1078,7 @@ bool Main::canSign() const
     return !Plugin::Crypto::signingCertificates().isEmpty();
 }
 
+// Okular Generator Func: returns the certificate store used for signing.
 Okular::CertificateStore* Main::certificateStore() const
 {
     return m_certStore.get();

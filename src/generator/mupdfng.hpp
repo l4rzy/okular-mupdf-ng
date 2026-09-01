@@ -68,7 +68,6 @@ public:
     QVariant metaData(const QString& key, const QVariant& option) const override;
     // Okular Generator Func: reports pixel metric for page size localization.
     PageSizeMetric pagesSizeMetric() const override;
-    // Okular Generator Func: checks whether a document permission is granted.
 
     // Okular Generator Func: returns embedded files as Okular objects.
     const QList<Okular::EmbeddedFile*>* embeddedFiles() const override;
@@ -113,7 +112,11 @@ private:
     // Clears transient Okular display state without removing document data.
     void clearPageDisplayState(int page);
     // Tracks settings that are fixed when the generator process starts.
-    void updateRestartRequiredSettings(const Config::EpubSettings& currentEpubSettings);
+    // Refreshes restart-required state: fresh EPUB settings are compared
+    // against the frozen startup set; the NSS database is the runtime-checked
+    // half — initialization is one-way per process, so a changed database
+    // path only applies after an Okular restart.
+    void updateRestartRequiredSettings();
     // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
     [[nodiscard]] bool sandboxGated() const;
     // Loads a single synthetic placeholder page while Strict enforcement
@@ -167,12 +170,19 @@ private:
     // (terminal for the generator lifetime).
     Placeholder m_placeholder;
 
-    Config::RenderingSettings m_renderingSettings;
-    // EPUB settings are fixed during worker startup; changes require restarting
-    // Okular rather than being sent to the already-sandboxed worker.
-    Config::EpubSettings m_startupEpubSettings;
-    bool m_restartRequired = false;
-    bool m_restartNoticeShown = false;
+    // Session-scope worker configuration; EPUB settings are fixed during
+    // worker startup (changes require restarting Okular rather than being
+    // sent to the already-sandboxed worker).
+    Config::WorkerSettings m_settings;
+
+    // Restart decision state: whether pending settings need an Okular
+    // restart, and whether the one-shot dialog notice was already shown.
+    struct RestartState {
+        bool required = false;
+        bool noticeShown = false;
+    };
+
+    RestartState m_restartState;
 };
 
 } // namespace Mu::Generator

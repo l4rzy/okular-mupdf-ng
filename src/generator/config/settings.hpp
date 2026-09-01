@@ -94,6 +94,21 @@ inline bool renderingOutputChanged(const RenderingSettings& previous, const Rend
         || previous.interpolateImages != current.interpolateImages;
 }
 
+/// Session-scope worker configuration: rendering values track the settings
+/// dialog; EPUB values stay fixed at process start (worker lifetime).
+struct WorkerSettings {
+    RenderingSettings rendering;
+    EpubSettings startupEpub;
+
+    /// Builds the worker-facing payload (clamped at the IPC boundary).
+    [[nodiscard]] Model::DocumentSettings documentSettings() const
+    {
+        return documentSettingsFor(rendering, startupEpub);
+    }
+
+    bool operator==(const WorkerSettings&) const = default;
+};
+
 inline OcrTarget ocrTargetFor(const QString& documentHash, const OcrSettings& settings)
 {
     // The document hash prevents OCR results from being reused for another
@@ -110,8 +125,8 @@ ocrConfigFor(const OcrTarget& target, int pageCount, double dpiX, double dpiY, c
 }
 
 void reloadSettings();
-RenderingSettings readRenderingSettings();
 EpubSettings readEpubSettings();
+WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();
 SandboxEnforcement readSandboxEnforcement();
 QStringList readTessDataDirectories();

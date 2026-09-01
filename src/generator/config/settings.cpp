@@ -87,23 +87,28 @@ SandboxEnforcement readSandboxEnforcement()
     }
 }
 
-RenderingSettings readRenderingSettings()
-{
-    // Read and normalize all rendering values into the worker-facing units.
-    return { graphicsAntialiasingBitsForConfig(MuPDFSettings::graphicsAntialiasingBits()),
-             textAntialiasingBitsForConfig(MuPDFSettings::textAntialiasingBits()),
-             static_cast<int>(MuPDFSettings::imageRenderingQuality()),
-             MuPDFSettings::imageInterpolation(),
-             memoryCacheBytesForConfig(MuPDFSettings::memoryLimit()) };
-}
-
 EpubSettings readEpubSettings()
 {
-    // Keep custom CSS encoded exactly as stored; CssEditor handles the UI form.
+    // Keep custom CSS encoded exactly as stored; CssEditor owns the UI form.
     return { MuPDFSettings::epubFontSize(),
              MuPDFSettings::epubFontFamily(),
              MuPDFSettings::epubPageSize(),
              MuPDFSettings::epubCustomCss() };
+}
+
+WorkerSettings readWorkerSettings()
+{
+    // One reader keeps the session-scope pair coherent: rendering values are
+    // normalized into worker-facing units; EPUB values stay encoded exactly
+    // as stored (CssEditor owns the UI form).
+    return {
+        { graphicsAntialiasingBitsForConfig(MuPDFSettings::graphicsAntialiasingBits()),
+          textAntialiasingBitsForConfig(MuPDFSettings::textAntialiasingBits()),
+          static_cast<int>(MuPDFSettings::imageRenderingQuality()),
+          MuPDFSettings::imageInterpolation(),
+          memoryCacheBytesForConfig(MuPDFSettings::memoryLimit()) },
+        readEpubSettings(),
+    };
 }
 
 OcrSettings readOcrSettings()
