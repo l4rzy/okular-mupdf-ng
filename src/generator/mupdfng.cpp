@@ -21,6 +21,7 @@
 #include <QPainter>
 #include <QPrinter>
 #include <QTemporaryFile>
+#include <QTextStream>
 #include <unordered_map>
 
 #include "generator/config/mupdfsettingswidget.hpp"
@@ -946,6 +947,36 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
     if (errorText)
         *errorText = i18n("MuPDF worker is unavailable.");
     return false;
+}
+
+// Okular Generator Func: reports the supported export formats.
+Okular::ExportFormat::List Main::exportFormats() const
+{
+    return { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
+}
+
+// Okular Generator Func: exports the document text to a file.
+bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
+{
+    if (!format.mimeType().inherits(QStringLiteral("text/plain")) || m_placeholder.isActive()
+        || !m_worker.isConnected())
+        return false;
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+
+    QTextStream stream(&file);
+    const int pageCount = document() ? document()->pages() : 0;
+    for (int page = 0; page < pageCount; ++page) {
+        if (!m_worker.isConnected())
+            return false;
+        const auto boxes = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true);
+        stream << Conversion::plainText(boxes);
+        if (page + 1 < pageCount)
+            stream << QLatin1Char('\n');
+    }
+    return true;
 }
 
 // Okular Generator Func: returns the annotation adapter used by Okular.

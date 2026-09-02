@@ -189,6 +189,28 @@ private slots:
         QCOMPARE(page->text(), QStringLiteral("HelloWorld"));
     }
 
+    void plainTextAssemblesLinesFromEndOfLineBoxes()
+    {
+        const std::vector<::Mu::Model::TextBox> boxes = {
+            { "Hello ", 10.0, 20.0, 50.0, 40.0, false },
+            { "World", 60.0, 20.0, 100.0, 40.0, true },
+            { "Second", 10.0, 50.0, 60.0, 70.0, true },
+        };
+        QCOMPARE(::Mu::Generator::Conversion::plainText(boxes), QStringLiteral("Hello World\nSecond\n"));
+    }
+
+    void plainTextSkipsEmptyTextAndHandlesEmptyInput()
+    {
+        QVERIFY(::Mu::Generator::Conversion::plainText({ }).isEmpty());
+
+        // An empty box terminated by endOfLine still yields its line break.
+        const std::vector<::Mu::Model::TextBox> boxes = {
+            { "", 10.0, 20.0, 50.0, 40.0, true },
+            { "Kept", 10.0, 50.0, 60.0, 70.0, true },
+        };
+        QCOMPARE(::Mu::Generator::Conversion::plainText(boxes), QStringLiteral("\nKept\n"));
+    }
+
     void annotationConversionPreservesOpacityAndCaretSymbol()
     {
         ::Mu::Model::Annotation source;

@@ -6,6 +6,7 @@
 
 #include <okular/core/textpage.h>
 
+#include <QString>
 #include <QVector>
 
 #include "plugin/ocr/ocr.hpp"
@@ -15,6 +16,9 @@ namespace Mu::Generator::Conversion {
 
 Okular::TextPage* textPage(const std::vector<Model::TextBox>& boxes, qreal width, qreal height);
 Okular::TextPage* ocrTextPage(const QVector<Plugin::Caching::OCR::CacheItem>& boxes);
+/// Assembles worker text boxes into plain text, preserving source lines
+/// (newlines follow endOfLine boxes; empty boxes contribute no text).
+QString plainText(const std::vector<Model::TextBox>& boxes);
 
 } // namespace Mu::Generator::Conversion
 

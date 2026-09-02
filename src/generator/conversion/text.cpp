@@ -63,4 +63,16 @@ Okular::TextPage* ocrTextPage(const QVector<Plugin::Caching::OCR::CacheItem>& bo
     return result;
 }
 
+QString plainText(const std::vector<Model::TextBox>& boxes)
+{
+    QString text;
+    for (const auto& box : boxes) {
+        if (!box.text.empty())
+            text += QString::fromStdString(box.text);
+        if (box.endOfLine)
+            text += QLatin1Char('\n');
+    }
+    return text;
+}
+
 } // namespace Mu::Generator::Conversion

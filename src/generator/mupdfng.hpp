@@ -75,6 +75,10 @@ public:
     bool supportsOption(SaveOption option) const override;
     // Okular Generator Func: saves the current document through the worker.
     bool save(const QString& fileName, SaveOptions options, QString* errorText) override;
+    // Okular Generator Func: reports the supported export formats.
+    Okular::ExportFormat::List exportFormats() const override;
+    // Okular Generator Func: exports the document text to a file.
+    bool exportTo(const QString& fileName, const Okular::ExportFormat& format) override;
     // Okular Generator Func: returns the annotation adapter used by Okular.
     Okular::AnnotationProxy* annotationProxy() const override;
 
