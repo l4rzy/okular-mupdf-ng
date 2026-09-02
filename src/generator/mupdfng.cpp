@@ -967,7 +967,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
         return false;
 
     QTextStream stream(&file);
-    const int pageCount = document() ? document()->pages() : 0;
+    const int pageCount = document() ? static_cast<int>(document()->pages()) : 0;
     for (int page = 0; page < pageCount; ++page) {
         if (!m_worker.isConnected())
             return false;
