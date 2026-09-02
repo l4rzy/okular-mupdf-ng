@@ -43,9 +43,9 @@
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/util/signature_image.hpp"
 #include "plugin/util/temp_dir.hpp"
+#include "shared/compat.hpp"
 #include "shared/logging.hpp"
 #include "shared/transport/common.hpp"
-#include "shared/transport/compat.hpp"
 
 K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "mupdfng.json")
 

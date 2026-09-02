@@ -68,10 +68,9 @@ if(NOT MU_COMPAT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
     message(FATAL_ERROR "KPlugin.Version must use MAJOR.MINOR.PATCH: ${MU_COMPAT_VERSION}")
 endif()
 set(MUPDF_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-file(MAKE_DIRECTORY "${MUPDF_GENERATED_INCLUDE_DIR}/shared/transport")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/compat.hpp.in"
-    "${MUPDF_GENERATED_INCLUDE_DIR}/shared/transport/compat.hpp"
+    "${MUPDF_GENERATED_INCLUDE_DIR}/shared/compat.hpp"
     @ONLY)
 
 set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/okular-mupdf-worker"

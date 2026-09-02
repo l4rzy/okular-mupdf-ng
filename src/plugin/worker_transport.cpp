@@ -25,10 +25,10 @@
 #include "plugin/caching/epub_cache.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/temp_dir.hpp"
+#include "shared/compat.hpp"
 #include "shared/logging.hpp"
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/zpp_codec.hpp"
-#include "shared/transport/compat.hpp"
 #include "shared/transport/fd_channel.hpp"
 #include "shared/transport/frame_buffer.hpp"
 

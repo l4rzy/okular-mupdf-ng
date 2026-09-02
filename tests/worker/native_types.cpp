@@ -1,11 +1,11 @@
 #include "runtime/command_service.hpp"
 #include "runtime/render_budget.hpp"
+#include "shared/compat.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/limits.hpp"
 #include "shared/protocol/zpp_codec.hpp"
-#include "shared/transport/compat.hpp"
 #include <QTest>
 
 class TestNativeWorkerTypes : public QObject {

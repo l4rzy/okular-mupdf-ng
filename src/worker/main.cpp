@@ -16,8 +16,8 @@
 #include <mupdf/fitz/version.h>
 
 #include "runtime/worker_server.hpp"
+#include "shared/compat.hpp"
 #include "shared/logging.hpp"
-#include "shared/transport/compat.hpp"
 #include "shared/transport/fd_channel.hpp"
 #include "sys/sandbox.hpp"
 

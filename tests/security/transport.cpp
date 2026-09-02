@@ -17,11 +17,11 @@
 #include <unistd.h>
 
 #include "plugin/util/temp_dir.hpp"
+#include "shared/compat.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/limits.hpp"
 #include "shared/protocol/zpp_codec.hpp"
-#include "shared/transport/compat.hpp"
 #include "shared/transport/ctrl_channel.hpp"
 #include "shared/transport/fd_channel.hpp"
 #include "shared/transport/frame_buffer.hpp"

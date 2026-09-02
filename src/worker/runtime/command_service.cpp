@@ -16,10 +16,10 @@
 #include "engine/ocr/ocr.hpp"
 #include "engine/pdf/document.hpp"
 #include "engine/signer.hpp"
+#include "shared/compat.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/zpp_codec.hpp"
-#include "shared/transport/compat.hpp"
 #include "shared/transport/frame_buffer.hpp"
 #include "sys/sys.hpp"
 
