@@ -56,7 +56,6 @@ using ::Mu::IPC::CtrlChannel;
 using ::Mu::IPC::FdChannel;
 using ::Mu::Worker::Engine::DocumentBase;
 using ::Mu::Worker::Engine::OcrJobs;
-using Sandbox::Status;
 
 // Resource limits protecting the worker process against DoS or memory exhaustion on untrusted input
 constexpr std::size_t MaxResponseBoxes = 200'000;

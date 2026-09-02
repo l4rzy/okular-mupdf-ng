@@ -20,7 +20,6 @@ namespace Mu::Worker::Runtime {
 
 using ::Mu::IPC::CtrlChannel;
 using ::Mu::IPC::FdChannel;
-using Sandbox::Status;
 
 /**
  * Native control-plane server managing the isolated worker process lifecycle.

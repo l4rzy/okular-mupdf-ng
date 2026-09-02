@@ -31,7 +31,6 @@ using ::Mu::Model::NotificationMessage;
 using ::Mu::Model::OcrDoneNotification;
 using ::Mu::Model::RequestMessage;
 using ::Mu::Model::ResponseMessage;
-using Sandbox::Status;
 
 namespace {
 

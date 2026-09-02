@@ -62,7 +62,6 @@ using ::Mu::Worker::Engine::OcrJobs;
 using ::Mu::Worker::Engine::runOcr;
 using ::Mu::Worker::Sys::createMemfd;
 using ::Mu::Worker::Sys::Mapping;
-using Sandbox::Status;
 
 namespace {
 
