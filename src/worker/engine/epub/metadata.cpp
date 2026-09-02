@@ -51,8 +51,9 @@ DocumentMetadata EpubDocument::metadata(const std::vector<std::string>& keys, st
     // excluded from the metadata hash, which covers document identity only.
     if (wanted("engineVersion"))
         result.values.emplace("engineVersion", FZ_VERSION);
-    if (wanted("documentHasPassword"))
-        result.values.emplace("documentHasPassword", m_passwordRequired ? "true" : "false");
+    // EPUB documents carry no xref structure and are never repaired.
+    if (wanted("repaired"))
+        result.values.emplace("repaired", "false");
 
     const bool wantHash = wanted("hash");
     fz_sha256 hash { };

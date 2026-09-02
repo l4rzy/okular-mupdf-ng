@@ -219,17 +219,13 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
         return failure(id, ErrorCode::InvalidRequest, "open", error);
     }
 
-    // Step 2: Authenticate password if document is encrypted.
-    // The locked state must be captured before unlock clears it; it drives
-    // the "documentHasPassword" metadata reported to the generator.
+    // Step 2: Authenticate password if document is encrypted
     m_documentPassword = password;
-    const bool passwordRequired = m_document->isLocked() && !password.empty();
     if (m_document->isLocked() && !m_document->unlock(password, &error)) {
         m_document->close();
         m_documentPassword.clear();
         return failure(id, ErrorCode::PermissionDenied, "open", "wrong password or document is locked");
     }
-    m_document->setPasswordRequired(passwordRequired);
 
     // Step 3: Enforce safety limit on maximum supported page count
     if (m_document->pageCount() > static_cast<int>(MaxOpenPages)) {

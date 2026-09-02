@@ -142,15 +142,19 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
     };
 
     // Engine-common values: the MuPDF version compiled into this worker binary
-    // is authoritative for the generator, and the runtime records whether the
-    // open required a non-empty password. Raw Info-dictionary date strings are
-    // reported as-is; the generator layer owns user-facing formatting. Common
-    // values are excluded from the metadata hash, which covers document
-    // identity only.
+    // is authoritative for the generator, and Info-dictionary date strings are
+    // normalized to ISO 8601 UTC so the generator can parse them with
+    // QDateTime::fromString(..., Qt::ISODate). Common values are excluded from
+    // the metadata hash, which covers document identity only.
     if (wanted("engineVersion"))
         result.values.emplace("engineVersion", FZ_VERSION);
-    if (wanted("documentHasPassword"))
-        result.values.emplace("documentHasPassword", m_passwordRequired ? "true" : "false");
+    if (wanted("repaired")) {
+        // MuPDF repairs broken xref tables silently; surface the repair state
+        // so the generator can warn the user. Queried inline rather than
+        // cached so repairs that happen lazily after open are caught too.
+        if (pdf_document* pdf = pdf_specifics(m_context, m_document))
+            result.values.emplace("repaired", pdf_was_repaired(m_context, pdf) ? "true" : "false");
+    }
 
     const bool wantHash = wanted("hash");
     fz_sha256 hash { };

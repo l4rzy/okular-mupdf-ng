@@ -69,6 +69,34 @@ private slots:
         ::Mu::Plugin::Caching::clearRootForTesting();
     }
 
+    // End-to-end: a document MuPDF had to repair is reported across IPC.
+    void repairedDocumentStateFlowsThroughIpc()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString broken = dir.filePath(QStringLiteral("broken.pdf"));
+        QVERIFY(QFile::copy(m_pdf, broken));
+        QFile file(broken);
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        const QByteArray data = file.readAll();
+        const qsizetype startxref = data.lastIndexOf("startxref");
+        QVERIFY(startxref > 0);
+        const qsizetype digitsStart = data.indexOf('\n', startxref) + 1;
+        const qsizetype digitsEnd = data.indexOf('\n', digitsStart);
+        QVERIFY(digitsEnd > digitsStart);
+        QByteArray corrupted = data;
+        for (qsizetype i = digitsStart; i < digitsEnd; ++i)
+            corrupted[i] = '9';
+        file.seek(0);
+        QVERIFY(file.write(corrupted) == corrupted.size());
+        file.close();
+
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(broken, { }, pages), ::Mu::Model::OpenStatus::Success);
+        const auto metadata = m_client.getDocumentInfo({ QStringLiteral("repaired") });
+        QCOMPARE(metadata.values.at("repaired"), std::string("true"));
+    }
+
     void pdfTransportPreservesMappedFramesAndTransfersOutput()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
@@ -79,6 +107,8 @@ private slots:
         QCOMPARE(metadata.pageCount, pages.size());
         QVERIFY(metadata.values.contains("hash"));
         QCOMPARE(metadata.values.at("hash").size(), std::size_t(64));
+        // The worker binary reports the MuPDF version it was built with.
+        QCOMPARE(metadata.values.at("engineVersion"), std::string(FZ_VERSION));
 
         const auto sandbox = m_client.sandboxStatus();
         QVERIFY(sandbox.landlock || sandbox.seccomp || sandbox.linuxNamespace || sandbox.memoryProtection);

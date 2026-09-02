@@ -121,6 +121,12 @@ private:
     // half — initialization is one-way per process, so a changed database
     // path only applies after an Okular restart.
     void updateRestartRequiredSettings();
+    // Reports xref-repair state to the user, mirroring the poppler generator's
+    // xrefReconstructionHandler.
+    void warnIfRepairedDocument(const Model::DocumentMetadata& info);
+    // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
+    // mirroring the poppler generator's GeneratorExtraDescription.
+    QString generatorExtraDescription() const;
     // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
     [[nodiscard]] bool sandboxGated() const;
     // Loads a single synthetic placeholder page while Strict enforcement

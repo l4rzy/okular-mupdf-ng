@@ -3,6 +3,15 @@
 
 #include <string_view>
 
+namespace Mu {
+
+// MuPDF version this project builds against (cmake/mupdf.version). The
+// worker additionally reports its runtime MuPDF version as the
+// "engineVersion" metadata key.
+inline constexpr std::string_view MUPDF_VERSION = "@MUPDF_REQUIRED_VERSION@";
+
+} // namespace Mu
+
 namespace Mu::IPC {
 
 // Compatibility version

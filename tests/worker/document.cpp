@@ -1111,7 +1111,54 @@ private slots:
         QCOMPARE(value->text, std::string("Default"));
     }
 
-    void metadataReportsDatesPasswordFlagAndEngineVersion()
+    void metadataReportsXrefRepairState()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        // 1. An intact document reports no repair.
+        const QString intactPath = dir.filePath(QStringLiteral("intact.pdf"));
+        fz_context* ctx = fz_new_context(nullptr, nullptr, FZ_STORE_UNLIMITED);
+        createTextPDF(ctx, intactPath);
+        fz_drop_context(ctx);
+        QFile intactFile(intactPath);
+        QVERIFY(intactFile.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument intact;
+        QVERIFY2(intact.openFd(::dup(intactFile.handle()), "intact.pdf", &error), error.c_str());
+        const auto intactMeta = intact.metadata({ "repaired" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(intactMeta.values.at("repaired"), std::string("false"));
+
+        // 2. A corrupted startxref offset forces MuPDF's silent repair path;
+        // the document still opens and the repair state is reported.
+        const QString brokenPath = dir.filePath(QStringLiteral("broken.pdf"));
+        QFile::copy(intactPath, brokenPath);
+        QFile brokenFile(brokenPath);
+        QVERIFY(brokenFile.open(QIODevice::ReadWrite));
+        QByteArray data = brokenFile.readAll();
+        const qsizetype startxref = data.lastIndexOf("startxref");
+        QVERIFY(startxref > 0);
+        const qsizetype digitsStart = data.indexOf('\n', startxref) + 1;
+        const qsizetype digitsEnd = data.indexOf('\n', digitsStart);
+        QVERIFY(digitsEnd > digitsStart);
+        for (qsizetype i = digitsStart; i < digitsEnd; ++i)
+            data[i] = '9';
+        brokenFile.seek(0);
+        brokenFile.write(data);
+        brokenFile.close();
+
+        QFile reopenedFile(brokenPath);
+        QVERIFY(reopenedFile.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument broken;
+        QVERIFY2(broken.openFd(::dup(reopenedFile.handle()), "broken.pdf", &error), error.c_str());
+        QCOMPARE(broken.pageCount(), 1);
+        const auto brokenMeta = broken.metadata({ "repaired" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(brokenMeta.values.at("repaired"), std::string("true"));
+    }
+
+    void metadataReportsDatesAndEngineVersion()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
@@ -1163,7 +1210,6 @@ private slots:
         QCOMPARE(all.values.at("creationDate"), std::string("2024-01-01T11:00:00Z"));
         QCOMPARE(all.values.at("modificationDate"), std::string("2024-02-03T04:05:06Z"));
         QCOMPARE(all.values.at("engineVersion"), std::string(FZ_VERSION));
-        QCOMPARE(all.values.at("documentHasPassword"), std::string("false"));
 
         // A non-empty key list filters common values like every other key.
         const auto filtered = doc.metadata({ "creationDate" }, &error);
@@ -1171,26 +1217,6 @@ private slots:
         QCOMPARE(filtered.values.size(), size_t(1));
         QCOMPARE(filtered.values.count("modificationDate"), size_t(0));
         QCOMPARE(filtered.values.count("engineVersion"), size_t(0));
-        QCOMPARE(filtered.values.count("documentHasPassword"), size_t(0));
-
-        // The runtime records password-required state on the encrypted open
-        // path and the metadata request reports it.
-        const QString encryptedPath = dir.filePath(QStringLiteral("encrypted.pdf"));
-        fz_context* encCtx = fz_new_context(nullptr, nullptr, FZ_STORE_UNLIMITED);
-        createEncryptedPDF(encCtx, encryptedPath, "secret");
-        fz_drop_context(encCtx);
-
-        ::Mu::Worker::Runtime::CommandService service({ });
-        QFile encryptedFile(encryptedPath);
-        QVERIFY(encryptedFile.open(QIODevice::ReadOnly));
-        const auto openResponse = service.openFdResponse(
-            1, ::dup(encryptedFile.handle()), "encrypted.pdf", "secret", ::Mu::Model::DocumentType::Pdf);
-        QVERIFY(!openResponse.error);
-
-        const auto metaResponse = service.dispatch({ 2, ::Mu::Model::MetadataRequest { { "documentHasPassword" } } });
-        QVERIFY(!metaResponse.error);
-        const auto& meta = std::get<::Mu::Model::MetadataResponse>(metaResponse.payload);
-        QCOMPARE(meta.metadata.values.at("documentHasPassword"), std::string("true"));
     }
 };
 

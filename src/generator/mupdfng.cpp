@@ -45,6 +45,7 @@
 #include "plugin/util/temp_dir.hpp"
 #include "shared/logging.hpp"
 #include "shared/transport/common.hpp"
+#include "shared/transport/compat.hpp"
 
 K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "mupdfng.json")
 
@@ -270,8 +271,10 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     m_ocrController->reset();
 
     // Step 2: Obtain document identity before constructing Okular-owned pages.
-    const auto info = m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash") });
+    const auto info =
+        m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired") });
     m_document.type = Model::documentTypeFromMime(info.mimeType);
+    warnIfRepairedDocument(info);
 
     // Signature validation reads the original PDF bytes, which may come from a
     // file or from the in-memory source retained for worker recovery.
@@ -443,6 +446,41 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     m_document.sourcePath.clear();
     m_document.sourceData = fileData;
     return initPages(pages, workerPages, password);
+}
+
+// Reports xref-repair state to the user, mirroring the poppler generator's
+// xrefReconstructionHandler. MuPDF repairs broken documents silently, so the
+// worker exposes the state as metadata and the generator turns it into the
+// same warning the poppler backend shows.
+void Main::warnIfRepairedDocument(const Model::DocumentMetadata& info)
+{
+    const auto repaired = info.values.find("repaired");
+    if (repaired == info.values.end() || repaired->second != "true")
+        return;
+    Q_EMIT warning(
+        i18n("Some errors were found in the document, Okular might not be able to show the content correctly"), 5000);
+}
+
+// Builds the "Using MuPDF ..." description shown by Okular's About dialog,
+// mirroring the poppler generator's GeneratorExtraDescription. The runtime
+// version of the worker binary is authoritative; when it diverges from the
+// MuPDF version pinned in cmake/mupdf.version, both are disclosed.
+QString Main::generatorExtraDescription() const
+{
+    QString runtimeVersion;
+    if (m_worker.isConnected()) {
+        const auto info = m_worker.getDocumentInfo({ QStringLiteral("engineVersion") });
+        const auto it = info.values.find("engineVersion");
+        if (it != info.values.end())
+            runtimeVersion = QString::fromStdString(it->second);
+    }
+    if (runtimeVersion.isEmpty())
+        return i18n("Using MuPDF %1", QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
+    if (runtimeVersion.toStdString() == Mu::MUPDF_VERSION)
+        return i18n("Using MuPDF %1", runtimeVersion);
+    return i18n("Using MuPDF %1\n\nBuilt against MuPDF %2",
+                runtimeVersion,
+                QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
 }
 
 // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
@@ -906,6 +944,9 @@ QVariant Main::metaData(const QString& key, const QVariant& option) const
 
     if (key == QLatin1String("DocumentTitle")) {
         return m_document.name;
+    }
+    if (key == QLatin1String("GeneratorExtraDescription")) {
+        return generatorExtraDescription();
     }
 
     return QVariant();
