@@ -16,6 +16,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QImage>
+#include <QLocale>
 #include <QMutexLocker>
 #include <QPageLayout>
 #include <QPainter>
@@ -698,6 +699,7 @@ Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo:
                 : QStringLiteral("application/pdf");
             di.set(Okular::DocumentInfo::MimeType, mimeString);
             di.set(Okular::DocumentInfo::Pages, QString::number(info.pageCount));
+
             const auto metadata = [&info](const char* key) {
                 const auto it = info.values.find(key);
                 return it == info.values.end() ? QString() : QString::fromStdString(it->second);
@@ -709,12 +711,33 @@ Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo:
                 if (!value.isEmpty())
                     di.set(key, value);
             };
+
+            // Dates arrive as ISO 8601 UTC instants from the worker; display
+            // parity with the poppler generator means converting to the local
+            // zone and rendering with the locale's long format. Absent or
+            // malformed values are skipped.
+            const auto setDateTimeIfRequested = [&](Okular::DocumentInfo::Key key, const char* field) {
+                if (!keys.contains(key))
+                    return;
+                const QString raw = metadata(field);
+                if (raw.isEmpty())
+                    return;
+                const QDateTime date = QDateTime::fromString(raw, Qt::ISODate);
+                if (!date.isValid())
+                    return;
+                di.set(key, QLocale().toString(date.toLocalTime(), QLocale::LongFormat));
+            };
+
             setIfRequested(Okular::DocumentInfo::Title, "title");
             setIfRequested(Okular::DocumentInfo::Subject, "subject");
             setIfRequested(Okular::DocumentInfo::Author, "author");
             setIfRequested(Okular::DocumentInfo::Keywords, "keywords");
             setIfRequested(Okular::DocumentInfo::Creator, "creator");
             setIfRequested(Okular::DocumentInfo::Producer, "producer");
+
+            setDateTimeIfRequested(Okular::DocumentInfo::CreationDate, "creationDate");
+            setDateTimeIfRequested(Okular::DocumentInfo::ModificationDate, "modificationDate");
+
             if (keys.contains(Okular::DocumentInfo::CustomKeys)) {
                 const QString fmt = metadata("format");
                 if (!fmt.isEmpty())

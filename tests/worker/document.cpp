@@ -1156,12 +1156,12 @@ private slots:
         ::Mu::Worker::Engine::PdfDocument doc;
         QVERIFY2(doc.openFd(::dup(infoFile.handle()), "info.pdf", &error), error.c_str());
 
-        // Unfiltered query: raw Info-dictionary date strings pass through
-        // without reformatting; engine-common values are present.
+        // Unfiltered query: date values are normalized to ISO 8601 UTC
+        // instants; engine-common values are present.
         const auto all = doc.metadata({ }, &error);
         QVERIFY2(error.empty(), error.c_str());
-        QCOMPARE(all.values.at("creationDate"), std::string("D:20240101120000+01'00'"));
-        QCOMPARE(all.values.at("modificationDate"), std::string("D:20240203040506"));
+        QCOMPARE(all.values.at("creationDate"), std::string("2024-01-01T11:00:00Z"));
+        QCOMPARE(all.values.at("modificationDate"), std::string("2024-02-03T04:05:06Z"));
         QCOMPARE(all.values.at("engineVersion"), std::string(FZ_VERSION));
         QCOMPARE(all.values.at("documentHasPassword"), std::string("false"));
 

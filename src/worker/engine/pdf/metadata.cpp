@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <ctime>
 #include <string>
 #include <string_view>
 
@@ -71,6 +73,35 @@ bool lookupMetadataValue(
     }
     fz_free(context, buffer);
     return true;
+}
+
+// Converts a raw Info-dictionary date string into an ISO 8601 UTC instant
+// ("2024-01-01T11:00:00Z") that QDateTime::fromString(..., Qt::ISODate)
+// consumes directly. Returns an empty string when MuPDF cannot parse the
+// value. Note: MuPDF interprets dates without an offset as UTC.
+std::string toIsoTimestamp(fz_context* context, const std::string& raw)
+{
+    const auto epoch = static_cast<std::time_t>(pdf_parse_date(context, raw.c_str()));
+    if (epoch < 0)
+        return { };
+
+    std::tm fields { };
+    if (!gmtime_r(&epoch, &fields))
+        return { };
+
+    char buffer[21]; // "YYYY-MM-DDTHH:MM:SSZ" + NUL
+    const int written = std::snprintf(buffer,
+                                      sizeof buffer,
+                                      "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                                      fields.tm_year + 1900,
+                                      fields.tm_mon + 1,
+                                      fields.tm_mday,
+                                      fields.tm_hour,
+                                      fields.tm_min,
+                                      fields.tm_sec);
+    if (written <= 0 || static_cast<std::size_t>(written) >= sizeof buffer)
+        return { };
+    return buffer;
 }
 
 } // namespace
@@ -150,8 +181,19 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
             fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(value.data()), value.size());
             fz_sha256_update(&hash, &separator, 1);
         }
-        if (wanted(name))
+        if (!wanted(name))
+            continue;
+
+        // Date fields are normalized to ISO 8601 UTC so the generator can
+        // parse them with QDateTime::fromString(..., Qt::ISODate). The hash
+        // above still covers the raw Info bytes as document identity.
+        if (name == "creationDate" || name == "modificationDate") {
+            std::string iso = toIsoTimestamp(m_context, value);
+            if (!iso.empty())
+                result.values.emplace(name, std::move(iso));
+        } else {
             result.values.emplace(name, std::move(value));
+        }
     }
 
     if (wanted("signatureCount")) {
