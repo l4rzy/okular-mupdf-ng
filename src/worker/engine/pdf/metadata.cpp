@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <mupdf/fitz.h>
+#include <mupdf/fitz/version.h>
 #include <mupdf/pdf.h>
 }
 
@@ -92,13 +93,15 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
     result.pageCount = m_pageCount;
     result.mimeType = "application/pdf";
 
-    constexpr std::array<std::pair<const char*, const char*>, 8> knownKeys { {
+    constexpr std::array<std::pair<const char*, const char*>, 10> knownKeys { {
         { "title", FZ_META_INFO_TITLE },
         { "subject", FZ_META_INFO_SUBJECT },
         { "author", FZ_META_INFO_AUTHOR },
         { "keywords", FZ_META_INFO_KEYWORDS },
         { "creator", FZ_META_INFO_CREATOR },
         { "producer", FZ_META_INFO_PRODUCER },
+        { "creationDate", FZ_META_INFO_CREATIONDATE },
+        { "modificationDate", FZ_META_INFO_MODIFICATIONDATE },
         { "format", FZ_META_FORMAT },
         { "security", FZ_META_ENCRYPTION },
     } };
@@ -106,6 +109,17 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
     const auto wanted = [&keys](const char* name) {
         return keys.empty() || std::find(keys.begin(), keys.end(), name) != keys.end();
     };
+
+    // Engine-common values: the MuPDF version compiled into this worker binary
+    // is authoritative for the generator, and the runtime records whether the
+    // open required a non-empty password. Raw Info-dictionary date strings are
+    // reported as-is; the generator layer owns user-facing formatting. Common
+    // values are excluded from the metadata hash, which covers document
+    // identity only.
+    if (wanted("engineVersion"))
+        result.values.emplace("engineVersion", FZ_VERSION);
+    if (wanted("documentHasPassword"))
+        result.values.emplace("documentHasPassword", m_passwordRequired ? "true" : "false");
 
     const bool wantHash = wanted("hash");
     fz_sha256 hash { };

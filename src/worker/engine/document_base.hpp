@@ -93,6 +93,10 @@ public:
     /// Returns true if the document is encrypted and requires a password to unlock.
     [[nodiscard]] virtual bool isLocked() const noexcept = 0;
 
+    /// Records whether the open sequence required a non-empty password.
+    /// Called by the runtime after a successful unlock sequence.
+    void setPasswordRequired(bool required) noexcept { m_passwordRequired = required; }
+
     /// Returns the total number of loadable pages in the document.
     [[nodiscard]] virtual int pageCount() const noexcept = 0;
 
@@ -202,6 +206,11 @@ protected:
     /// Helper to populate an error string pointer and return false.
     static bool fail(std::string* error, const char* message);
     static bool fail(std::string* error, std::string_view message);
+
+    /// True when the last successful open was locked and given a non-empty
+    /// password. Recorded by the runtime after a successful unlock sequence
+    /// and reported through the "documentHasPassword" metadata key.
+    bool m_passwordRequired = false;
 };
 
 } // namespace Mu::Worker::Engine

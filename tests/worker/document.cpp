@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstring>
 #include <fcntl.h>
 #include <set>
 #include <stdexcept>
@@ -1108,6 +1109,88 @@ private slots:
         const auto* value = std::get_if<::Mu::Model::FormTextValue>(&mutation->actualValue);
         QVERIFY(value != nullptr);
         QCOMPARE(value->text, std::string("Default"));
+    }
+
+    void metadataReportsDatesPasswordFlagAndEngineVersion()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString infoPath = dir.filePath(QStringLiteral("info.pdf"));
+
+        // Build a minimal PDF whose Info dictionary carries PDF date strings.
+        fz_context* ctx = fz_new_context(nullptr, nullptr, FZ_STORE_UNLIMITED);
+        std::string buildError;
+        fz_try(ctx)
+        {
+            pdf_document* pdfDoc = pdf_create_document(ctx);
+            const char* emptyContent = "q Q\n";
+            fz_buffer* contents =
+                fz_new_buffer_from_copied_data(ctx, (const unsigned char*)emptyContent, std::strlen(emptyContent));
+            pdf_obj* resources = pdf_new_dict(ctx, pdfDoc, 0);
+            pdf_obj* pageObj = pdf_add_page(ctx, pdfDoc, fz_unit_rect, 0, resources, contents);
+            pdf_insert_page(ctx, pdfDoc, -1, pageObj);
+            pdf_drop_obj(ctx, pageObj);
+            pdf_drop_obj(ctx, resources);
+            fz_drop_buffer(ctx, contents);
+
+            pdf_obj* info = pdf_dict_get(ctx, pdf_trailer(ctx, pdfDoc), PDF_NAME(Info));
+            if (!info) {
+                info = pdf_add_new_dict(ctx, pdfDoc, 4);
+                pdf_dict_put_drop(ctx, pdf_trailer(ctx, pdfDoc), PDF_NAME(Info), info);
+            }
+            pdf_dict_put_text_string(ctx, info, PDF_NAME(CreationDate), "D:20240101120000+01'00'");
+            pdf_dict_put_text_string(ctx, info, PDF_NAME(ModDate), "D:20240203040506");
+            pdf_save_document(ctx, pdfDoc, QFile::encodeName(infoPath).constData(), &pdf_default_write_options);
+            pdf_drop_document(ctx, pdfDoc);
+        }
+        fz_catch(ctx)
+        {
+            buildError = fz_caught_message(ctx);
+        }
+        fz_drop_context(ctx);
+        QVERIFY2(buildError.empty(), buildError.c_str());
+
+        QFile infoFile(infoPath);
+        QVERIFY(infoFile.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(infoFile.handle()), "info.pdf", &error), error.c_str());
+
+        // Unfiltered query: raw Info-dictionary date strings pass through
+        // without reformatting; engine-common values are present.
+        const auto all = doc.metadata({ }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(all.values.at("creationDate"), std::string("D:20240101120000+01'00'"));
+        QCOMPARE(all.values.at("modificationDate"), std::string("D:20240203040506"));
+        QCOMPARE(all.values.at("engineVersion"), std::string(FZ_VERSION));
+        QCOMPARE(all.values.at("documentHasPassword"), std::string("false"));
+
+        // A non-empty key list filters common values like every other key.
+        const auto filtered = doc.metadata({ "creationDate" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(filtered.values.size(), size_t(1));
+        QCOMPARE(filtered.values.count("modificationDate"), size_t(0));
+        QCOMPARE(filtered.values.count("engineVersion"), size_t(0));
+        QCOMPARE(filtered.values.count("documentHasPassword"), size_t(0));
+
+        // The runtime records password-required state on the encrypted open
+        // path and the metadata request reports it.
+        const QString encryptedPath = dir.filePath(QStringLiteral("encrypted.pdf"));
+        fz_context* encCtx = fz_new_context(nullptr, nullptr, FZ_STORE_UNLIMITED);
+        createEncryptedPDF(encCtx, encryptedPath, "secret");
+        fz_drop_context(encCtx);
+
+        ::Mu::Worker::Runtime::CommandService service({ });
+        QFile encryptedFile(encryptedPath);
+        QVERIFY(encryptedFile.open(QIODevice::ReadOnly));
+        const auto openResponse = service.openFdResponse(
+            1, ::dup(encryptedFile.handle()), "encrypted.pdf", "secret", ::Mu::Model::DocumentType::Pdf);
+        QVERIFY(!openResponse.error);
+
+        const auto metaResponse = service.dispatch({ 2, ::Mu::Model::MetadataRequest { { "documentHasPassword" } } });
+        QVERIFY(!metaResponse.error);
+        const auto& meta = std::get<::Mu::Model::MetadataResponse>(metaResponse.payload);
+        QCOMPARE(meta.metadata.values.at("documentHasPassword"), std::string("true"));
     }
 };
 

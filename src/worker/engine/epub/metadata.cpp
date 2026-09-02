@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <mupdf/fitz.h>
+#include <mupdf/fitz/version.h>
 }
 
 #include "shared/model/types.hpp"
@@ -43,6 +44,15 @@ DocumentMetadata EpubDocument::metadata(const std::vector<std::string>& keys, st
     const auto wanted = [&keys](const char* name) {
         return keys.empty() || std::find(keys.begin(), keys.end(), name) != keys.end();
     };
+
+    // Engine-common values: the MuPDF version compiled into this worker binary
+    // is authoritative for the generator, and the runtime records whether the
+    // open required a non-empty password (always false for EPUB). They are
+    // excluded from the metadata hash, which covers document identity only.
+    if (wanted("engineVersion"))
+        result.values.emplace("engineVersion", FZ_VERSION);
+    if (wanted("documentHasPassword"))
+        result.values.emplace("documentHasPassword", m_passwordRequired ? "true" : "false");
 
     const bool wantHash = wanted("hash");
     fz_sha256 hash { };
