@@ -1,30 +1,37 @@
-name: Build openSUSE Tumbleweed RPM (Clang)
+name: Build Fedora 44 x86_64 RPM (Clang)
 
 on:
   workflow_call:
 
 jobs:
-  package-rpm-tumbleweed:
-    name: Build openSUSE Tumbleweed RPM (Clang)
+  package-rpm-fedora-x64:
+    name: Build Fedora 44 x86_64 RPM (Clang)
     runs-on: ubuntu-latest
     container:
-      image: opensuse/tumbleweed:latest
+      image: fedora:44
 
     env:
       CC: clang
       CXX: clang++
 
     steps:
+      - name: Verify native architecture
+        run: |
+          test "$(uname -m)" = x86_64
+          test "$(rpm --eval '%{_arch}')" = x86_64
+
       - name: Install build dependencies
         run: |
-          zypper --non-interactive refresh
-          zypper --non-interactive install --no-recommends \
+          dnf --assumeyes upgrade --refresh
+          dnf --assumeyes install \
+            brotli-devel \
             ca-certificates \
             clang \
             cmake \
-            kf6-extra-cmake-modules \
+            cpio \
+            extra-cmake-modules \
             file \
-            freetype2-devel \
+            freetype-devel \
             gcc-c++ \
             git \
             harfbuzz-devel \
@@ -35,32 +42,26 @@ jobs:
             kf6-ki18n-devel \
             kf6-kio-devel \
             leptonica-devel \
-            libbrotli-devel \
-            libjpeg8-devel \
+            libjpeg-turbo-devel \
             libseccomp-devel \
             make \
             mold \
-            ninja \
-            mozilla-nss-devel \
+            ninja-build \
+            nss-devel \
             okular-devel \
             openjpeg2-devel \
             pkgconf-pkg-config \
-            python314-base \
+            python3 \
+            qt6-qtbase-devel \
             rpm-build \
-            tesseract-ocr \
-            tesseract-ocr-traineddata-eng \
-            qt6-base-devel \
-            zlib-devel
+            tesseract \
+            tesseract-langpack-eng \
+            zlib-ng-compat-devel
 
-      - name: Provide Python 3 command
+      - name: Verify build environment
         run: |
-          ln --symbolic --force /usr/bin/python3.14 /usr/local/bin/python3
-          test "$(command -v python3)" = /usr/local/bin/python3
-          test "$(readlink -f "$(command -v python3)")" = /usr/bin/python3.14
           python3 -c 'import sys; assert sys.version_info >= (3, 12)'
-
-      - name: Verify OCR language data
-        run: test -f /usr/share/tessdata/eng.traineddata
+          test -f /usr/share/tesseract/tessdata/eng.traineddata
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -83,44 +84,47 @@ jobs:
             -DUSE_SYSTEM_GUMBO=OFF \
             -DBUILD_TESTING=OFF \
             -DENABLE_MU_DEBUG=OFF \
-            -DTESSDATA_DIR=/usr/share/tessdata
+            -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
+            -DCPACK_RPM_PACKAGE_RELEASE_DIST=ON \
+            "-DCPACK_RPM_PACKAGE_REQUIRES=okular, tesseract, tesseract-langpack-eng"
 
-      - name: Build RPM package
+      - name: Build Fedora RPM package
         run: |
           cmake --build build -j$(nproc)
           cpack --config build/CPackConfig.cmake -B build/packages -G RPM
-          package=$(find build/packages -maxdepth 1 -name '*.rpm' -print -quit)
-          test -n "$package"
-          package_name=$(rpm --queryformat '%{NAME}' -qp "$package")
-          package_version=$(rpm --queryformat '%{VERSION}' -qp "$package")
-          package_release=$(rpm --queryformat '%{RELEASE}' -qp "$package")
-          package_architecture=$(rpm --queryformat '%{ARCH}' -qp "$package")
-          mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.opensuse-tumbleweed.${package_architecture}.rpm"
 
-      - name: Validate RPM package
+      - name: Validate Fedora RPM package
         run: |
           set -x
           expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/mupdfng.json"))["KPlugin"]["Version"])')
-          package="build/packages/okular-mupdf-ng-${expected_version}-1.opensuse-tumbleweed.x86_64.rpm"
+          package="build/packages/okular-mupdf-ng-${expected_version}-1.fc44.x86_64.rpm"
           test -f "$package"
           test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng
-          test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1"
+          test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1.fc44"
           test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = x86_64
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
-          printf '%s\n' "$requirements" | grep -Fx tesseract-ocr
-          printf '%s\n' "$requirements" | grep -Fx tesseract-ocr-traineddata-eng
+          printf '%s\n' "$requirements" | grep -Fx tesseract
+          printf '%s\n' "$requirements" | grep -Fx tesseract-langpack-eng
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfsettings\.kcfg$'
           rpm --list -qp "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
           rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
+          validation_root=$(mktemp -d)
+          rpm2cpio "$package" | (cd "$validation_root" && cpio --extract --make-directories --quiet)
+          plugin=$(find "$validation_root" -type f -name okularGenerator_mupdfng.so -print -quit)
+          worker=$(find "$validation_root" -type f -name okular-mupdf-worker -print -quit)
+          test -n "$plugin"
+          test -n "$worker"
+          file "$plugin" | grep -q 'x86-64'
+          file "$worker" | grep -q 'x86-64'
           rpm --checksig "$package"
           rpm --info -qp "$package"
 
-      - name: Upload openSUSE RPM package
+      - name: Upload Fedora 44 x86_64 RPM package
         uses: actions/upload-artifact@v4
         with:
-          name: opensuse-tumbleweed-rpm-package
+          name: fedora-44-x86_64-rpm-package
           path: build/packages/*.rpm
           if-no-files-found: error

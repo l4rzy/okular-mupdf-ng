@@ -96,7 +96,7 @@ jobs:
       - name: Validate Fedora RPM package
         run: |
           set -x
-          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/mupdfng.json"))["KPlugin"]["Version"])')
           package="build/packages/okular-mupdf-ng-${expected_version}-1.fc43.aarch64.rpm"
           test -f "$package"
           test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng

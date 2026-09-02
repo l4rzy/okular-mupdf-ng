@@ -86,7 +86,7 @@ jobs:
       - name: Validate Debian package
         run: |
           set -x
-          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/libokularGenerator_mupdfng.json"))["KPlugin"]["Version"])')
+          expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/mupdfng.json"))["KPlugin"]["Version"])')
           package="build/packages/okular-mupdf-ng_${expected_version}-1_amd64_ubuntu-26.04.deb"
           test -f "$package"
           test "$(dpkg-deb --field "$package" Package)" = okular-mupdf-ng
