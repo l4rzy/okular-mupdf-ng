@@ -5,6 +5,9 @@
       http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
   <kcfgfile name="okular-generator-mupdf-ngrc"/>
   <group name="General">
+    <entry key="PrintScaleMode" type="UInt">
+      <default>0</default>
+    </entry>
     <entry key="MemoryLimit" type="Enum">
       <default>Size64MiB</default>
       <choices>

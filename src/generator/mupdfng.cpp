@@ -60,6 +60,8 @@ Main::Main(QObject* parent, const QVariantList& args)
 {
     // Step 1: Advertise only the Okular services implemented by this adapter.
     setFeature(Threaded);
+    // Printing spools PDF through FilePrinter (lpr/CUPS), not QPainter.
+    setFeature(PrintPostscript);
     setFeature(TextExtraction);
     setFeature(ReadRawData);
     setFeature(FontInfo);
@@ -1117,18 +1119,39 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     const auto origRange = printer.printRange();
     printer.setPrintRange(QPrinter::AllPages);
 
+    // Scale mode: None keeps the original size; both fit modes rely on the
+    // printer's fit-to-page handling (poppler maps them identically).
+    const auto scaleMode =
+        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFSettings::self()->printScaleMode(), 0, 2));
+    const auto filePrinterScaleMode = scaleMode == PrintScaleMode::None
+        ? Okular::FilePrinter::ScaleMode::NoScaling
+        : Okular::FilePrinter::ScaleMode::FitToPrintArea;
+
     Okular::Document::PrintError err = Okular::FilePrinter::printFile(printer,
                                                                       fileName,
                                                                       orientation,
                                                                       Okular::FilePrinter::SystemDeletesFiles,
                                                                       Okular::FilePrinter::ApplicationSelectsPages,
                                                                       bookmarkedRange,
-                                                                      Okular::FilePrinter::FitToPrintArea);
+                                                                      filePrinterScaleMode);
     if (err != Okular::Document::NoPrintError)
         QFile::remove(fileName);
 
     printer.setPrintRange(origRange);
     return err;
+}
+
+// Okular Generator Func: builds the extra print options widget. Scale mode
+// changes are persisted immediately so print() can read the current value.
+QWidget* Main::printConfigurationWidget() const
+{
+    auto* page = new PrintOptionsPage(
+        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFSettings::self()->printScaleMode(), 0, 2)));
+    connect(page, &PrintOptionsPage::scaleModeChanged, this, [](PrintScaleMode mode) {
+        MuPDFSettings::self()->setPrintScaleMode(static_cast<quint32>(mode));
+        MuPDFSettings::self()->save();
+    });
+    return page;
 }
 
 // Okular Generator Func: signs the document using the supplied data.

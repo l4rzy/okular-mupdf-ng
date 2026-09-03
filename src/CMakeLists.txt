@@ -50,6 +50,7 @@ set(okularGenerator_mupdfng_SRCS
   plugin/crypto/certificate_info.cpp
   generator/config/settings.cpp
   generator/mupdfng.cpp
+  generator/printing.cpp
   generator/proxy/certificate_store.cpp
   generator/config/mupdfsettingswidget.cpp
   generator/config/csseditor/editor.cpp

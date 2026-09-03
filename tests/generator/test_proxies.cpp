@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QDateTime>
+#include <QSignalSpy>
 #include <QTest>
 #include <QTimeZone>
 
@@ -14,6 +15,7 @@ extern "C" {
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
 #include "generator/conversion/text.hpp"
+#include "generator/printing.hpp"
 #include "generator/proxy/embedded_file.hpp"
 #include "generator/proxy/form/checkbox.hpp"
 #include "generator/proxy/form/choice.hpp"
@@ -681,6 +683,37 @@ private slots:
         QVERIFY(!r1.state());
 
         ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
+    void testPrintOptionsPage()
+    {
+        using ::Mu::Generator::PrintOptionsPage;
+        using ::Mu::Generator::PrintScaleMode;
+
+        // The initial mode is applied; ignorePrintMargins tracks FitToPage.
+        PrintOptionsPage page(PrintScaleMode::FitToPrintableArea);
+        QCOMPARE(page.scaleMode(), PrintScaleMode::FitToPrintableArea);
+        QVERIFY(!page.ignorePrintMargins());
+
+        page.setScaleMode(PrintScaleMode::FitToPage);
+        QCOMPARE(page.scaleMode(), PrintScaleMode::FitToPage);
+        QVERIFY(page.ignorePrintMargins());
+
+        page.setScaleMode(PrintScaleMode::None);
+        QCOMPARE(page.scaleMode(), PrintScaleMode::None);
+        QVERIFY(!page.ignorePrintMargins());
+
+        // Programmatic changes emit the change signal the generator uses to
+        // persist the mode.
+        QSignalSpy spy(&page, &PrintOptionsPage::scaleModeChanged);
+        page.setScaleMode(PrintScaleMode::FitToPrintableArea);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().value<PrintScaleMode>(), PrintScaleMode::FitToPrintableArea);
+
+        // Unknown values are ignored, keeping the current mode.
+        page.setScaleMode(static_cast<PrintScaleMode>(42));
+        QCOMPARE(page.scaleMode(), PrintScaleMode::FitToPrintableArea);
+        QCOMPARE(spy.count(), 1);
     }
 };
 

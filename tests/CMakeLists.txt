@@ -160,11 +160,12 @@ add_layer_test(test_generator_proxies generator/test_proxies.cpp generator
     ../src/generator/conversion/certificate.cpp
     ../src/generator/conversion/document.cpp
     ../src/generator/conversion/text.cpp
+    ../src/generator/printing.cpp
     ../src/plugin/util/signature_image.cpp)
 target_include_directories(test_generator_proxies PRIVATE ../src)
 # Explicit MuPDF include path: annotation.cpp uses PDF_ANNOT_* constants and
 # must not silently fall back to system MuPDF headers.
-target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui Qt6::Xml MuPDF::Headers)
+target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui Qt6::Widgets Qt6::Xml KF6::I18n MuPDF::Headers)
 
 # Security policy checks execute in a child because sandbox activation is irreversible.
 add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp)

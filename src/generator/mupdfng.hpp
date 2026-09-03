@@ -13,6 +13,7 @@
 #include <okular/core/sourcereference.h>
 #include <okular/core/version.h>
 #include <okular/interfaces/configinterface.h>
+#include <okular/interfaces/printinterface.h>
 #include <okular/interfaces/saveinterface.h>
 
 #include <QByteArray>
@@ -20,6 +21,7 @@
 
 #include "generator/config/settings.hpp"
 #include "generator/placeholder.hpp"
+#include "generator/printing.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/certificate_store.hpp"
 #include "generator/proxy/form/coordinator.hpp"
@@ -36,11 +38,15 @@ namespace Mu::Generator {
 /// 2. Forward rendering, text, form, save, print, and signing requests to the worker.
 /// 3. Keep the source and UI state needed to recover after a worker restart.
 /// 4. Cancel asynchronous OCR work before document teardown or worker recovery.
-class Main : public Okular::Generator, public Okular::SaveInterface, public Okular::ConfigInterface {
+class Main : public Okular::Generator,
+             public Okular::SaveInterface,
+             public Okular::ConfigInterface,
+             public Okular::PrintInterface {
     Q_OBJECT
     Q_INTERFACES(Okular::Generator)
     Q_INTERFACES(Okular::SaveInterface)
     Q_INTERFACES(Okular::ConfigInterface)
+    Q_INTERFACES(Okular::PrintInterface)
 
 public:
     // Okular Generator Func: creates the generator and initializes worker services.
@@ -99,6 +105,8 @@ protected:
     Okular::TextPage* textPage(Okular::TextRequest* request) override;
     // Okular Generator Func: prints through a temporary worker output file.
     Okular::Document::PrintError print(QPrinter& printer) override;
+    // Okular Generator Func: builds the extra print options widget.
+    QWidget* printConfigurationWidget() const override;
 
     // Okular Generator Func: reloads settings and reports rendering changes.
     bool reparseConfig() override;
