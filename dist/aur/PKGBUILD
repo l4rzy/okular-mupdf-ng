@@ -8,7 +8,7 @@ pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation) - git"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('GPL-3.0-or-later')
-depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp' 'libmupdf>=1.28.0' 'zlib')
+depends=('gcc-libs' 'glibc' 'kcoreaddons' 'ki18n' 'okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp' 'libmupdf>=1.28.0' 'zlib')
 makedepends=('cmake' 'extra-cmake-modules' 'git' 'jq' 'pkgconf' 'qt6-tools')
 provides=('okular-mupdf-ng')
 conflicts=('okular-mupdf-ng')
