@@ -33,8 +33,9 @@ bool isValidRenderTile(int imageWidth, int imageHeight, int tileX, int tileY, in
 bool isValidDpi(double dpiX, double dpiY) noexcept
 {
     // isfinite also excludes NaN and infinities, which would otherwise bypass
-    // ordinary range comparisons.
-    return std::isfinite(dpiX) && std::isfinite(dpiY) && dpiX > 0.0 && dpiY > 0.0;
+    // ordinary range comparisons. Cap at 600 DPI (same as OCR) to prevent
+    // widthPoints*dpi/72 overflow and huge stride allocations.
+    return std::isfinite(dpiX) && std::isfinite(dpiY) && dpiX > 0.0 && dpiY > 0.0 && dpiX <= 600.0 && dpiY <= 600.0;
 }
 
 bool isValidOcrDpi(float dpi) noexcept
@@ -205,6 +206,8 @@ bool isValidFormField(const FormField& field, std::string_view* reason)
         return fail("form field handle is empty");
     if (field.handle.size() > Limit::MaxFormFieldHandleBytes)
         return fail("form field handle exceeds limit");
+    if (!isValidUtf8(field.handle) || !hasNoEmbeddedNul(field.handle))
+        return fail("form field handle contains invalid UTF-8 or embedded NUL");
     if (!isValidNormalizedRect(field.rectangle))
         return fail("form field rectangle is invalid");
 
@@ -304,6 +307,8 @@ bool isValidFormUpdateRequest(const FormUpdateRequest& request, std::string_view
 
     if (request.handle.empty() || request.handle.size() > Limit::MaxFormFieldHandleBytes)
         return fail("invalid form update handle length");
+    if (!isValidUtf8(request.handle) || !hasNoEmbeddedNul(request.handle))
+        return fail("invalid form update handle encoding");
     return isValidFormValue(request.value, reason);
 }
 
@@ -313,6 +318,11 @@ bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* 
     if (request.handle.empty() || request.handle.size() > Limit::MaxFormFieldHandleBytes) {
         if (reason)
             *reason = "invalid form reset handle length";
+        return false;
+    }
+    if (!isValidUtf8(request.handle) || !hasNoEmbeddedNul(request.handle)) {
+        if (reason)
+            *reason = "invalid form reset handle encoding";
         return false;
     }
     return true;

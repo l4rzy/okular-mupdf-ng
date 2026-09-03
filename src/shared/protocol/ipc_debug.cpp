@@ -276,7 +276,7 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 out << "open";
                 field(out, "transfer", value.file.transferId);
                 field(out, "displayName", value.displayName);
-                field(out, "password", value.password);
+                field(out, "password", std::string("[redacted]"));
             } else if constexpr (std::is_same_v<T, Model::CloseRequest>)
                 out << "close";
             else if constexpr (std::is_same_v<T, Model::RenderRequest>) {

@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 
 namespace Mu::Limit {
 
@@ -21,14 +20,15 @@ inline constexpr std::uint64_t MaxString = 1U * 1024U * 1024U;
 inline constexpr std::size_t MaxDepth = 32;
 // zpp applies this limit to each decoded container allocation, not to the
 // aggregate allocation of a complete message.
-inline constexpr std::size_t MaxContainerAllocationBytes = 128U * 1024U * 1024U;
+inline constexpr std::size_t MaxContainerAllocationBytes = 64U * 1024U * 1024U;
 
 // --- Rendering & Geometry Limits ---
 inline constexpr int MaxRenderDimension = 16'384;
-// Tiled renders allocate only the requested tile. Keep the virtual canvas
-// within the signed coordinate range and leave room for MuPDF's one-pixel
+// Tiled renders allocate only the requested tile. Capped at 64K (4x the
+// single-page limit) to bound validation and height*stride arithmetic while
+// still allowing large virtual canvases; reserve 2px for MuPDF's one-pixel
 // tile bleed when calculating the bounding box.
-inline constexpr int MaxTiledRenderDimension = std::numeric_limits<std::int32_t>::max() - 2;
+inline constexpr int MaxTiledRenderDimension = 65'534;
 
 // --- EPUB / Content Limits ---
 inline constexpr std::size_t MaxEpubCustomCssCharacters = 1000;

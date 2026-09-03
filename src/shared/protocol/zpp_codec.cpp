@@ -147,7 +147,7 @@ template <typename T> bool decodeImpl(std::span<const std::byte> bytes, T* value
     auto input = zpp::bits::in(bytes,
                                zpp::bits::size4b { },
                                zpp::bits::endian::little { },
-                               zpp::bits::alloc_limit<Limit::MaxContainerAllocationBytes> { },
+                               zpp::bits::alloc_limit<Limit::MaxControlMessageBytes> { },
                                zpp::bits::nesting_limit<Limit::MaxDepth> { });
     std::uint32_t magic = 0;
     std::uint32_t version = 0;
