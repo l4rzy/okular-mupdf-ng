@@ -50,7 +50,7 @@ private Q_SLOTS:
         status.reason = "landlock unavailable";
         const QString message = Gate::guidanceMessage(status);
         QVERIFY(!message.isEmpty());
-        QVERIFY(message.contains(QStringLiteral("(landlock unavailable)")));
+        QVERIFY(message.contains(QStringLiteral("[landlock unavailable]")));
 
         // An empty reason must not leave dangling parentheses.
         status.reason.clear();

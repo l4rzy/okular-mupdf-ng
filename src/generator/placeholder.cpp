@@ -114,9 +114,10 @@ namespace SandboxGate {
 QString guidanceMessage(const Model::SandboxStatus& status)
 {
     const QString reason = QString::fromStdString(status.reason);
-    return i18n("The worker sandbox is not fully hardened%1 and enforcement is Strict.\n"
-                "Switch Sandbox Enforcement to Relaxed in the MuPDF-NG settings to open this document.",
-                reason.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(reason));
+    return i18n("⚠️ The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
+                "To open this document, switch Sandbox Enforcement to Relaxed. This will reduce security "
+                "protections.\nError: %1",
+                reason.isEmpty() ? QString() : QStringLiteral("[%1]").arg(reason));
 }
 
 Okular::Page* withheldPage(double dpiWidth, double dpiHeight)

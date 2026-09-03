@@ -496,7 +496,7 @@ QString Main::generatorExtraDescription() const
     } else if (runtimeVersion.toStdString() == Mu::MUPDF_VERSION) {
         result = i18n("Using MuPDF %1", runtimeVersion);
     } else {
-        result = i18n("Using MuPDF %1\n\nBuilt against MuPDF %2",
+        result = i18n("Using MuPDF %1\nBuilt against MuPDF %2",
                       runtimeVersion,
                       QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
     }

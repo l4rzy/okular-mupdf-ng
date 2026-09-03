@@ -38,8 +38,11 @@ CssEditor::CssEditor(QWidget* parent)
         enforceCharacterLimit();
         Q_EMIT encodedTextChanged();
     });
-    setPlaceholderText(
-        QStringLiteral("Enter your custom CSS...\n\nbody {\n\tline-height: 2;\n\ttext-align: justify;\n}"));
+    setPlaceholderText(QStringLiteral("Enter your custom CSS...\n\n"
+                                      "body {\n"
+                                      "\tline-height: 2;\n"
+                                      "\ttext-align: justify;\n"
+                                      "}"));
 }
 
 QString CssEditor::encodedText() const
