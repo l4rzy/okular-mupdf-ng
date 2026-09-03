@@ -25,7 +25,7 @@
 # Targeted test execution
 ctest --test-dir build -R <test_pattern> --output-on-failure   # Run specific test by name
 ctest --test-dir build -L <label> --output-on-failure          # Run by label (security, worker, generator, etc.)
-ctest --test-dir build -LE slow --output-on-failure            # Run fast tests excluding corpus
+ctest --test-dir build -LE slow --output-on-failure            # Run all tests excluding the (unused) slow label
 ```
 
 # Architecture Map

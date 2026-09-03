@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-find_package(Okular6 REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Network Test Xml)
 
 add_library(mupdf_test_plugin_ocr STATIC
@@ -9,7 +8,7 @@ add_library(mupdf_test_plugin_ocr STATIC
     ../src/plugin/caching/ocr_cache.cpp
     ../src/shared/logging.cpp)
 target_include_directories(mupdf_test_plugin_ocr PUBLIC
-    ../src ../src/shared)
+    ../src)
 target_link_libraries(mupdf_test_plugin_ocr PUBLIC Qt6::Core ZLIB::ZLIB)
 
 function(add_layer_test target source label)
@@ -52,7 +51,6 @@ target_include_directories(test_mupdf PRIVATE
     support
     ../src
     ../src/worker
-    ../src/shared
     ${MUPDF_GENERATED_INCLUDE_DIR}
     ${NSS_INCLUDE_DIRS})
 target_include_directories(test_mupdf SYSTEM PRIVATE ../thirdparty)
@@ -61,7 +59,6 @@ target_link_libraries(test_mupdf PRIVATE
     Qt6::Test
     Qt6::Gui
     Qt6::Network
-    Qt6::Xml
     Okular::Core
     mupdf_worker_core
     MuPDF::Engine
@@ -72,9 +69,7 @@ target_compile_definitions(test_mupdf PRIVATE
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
     TESSDATA_DIR="${TESSDATA_DIR}")
-if(MUPDF_HAS_OCR)
-    target_compile_definitions(test_mupdf PRIVATE MUPDF_HAS_OCR)
-endif()
+target_compile_definitions(test_mupdf PRIVATE MUPDF_HAS_OCR)
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_mupdf PRIVATE MU_DEBUG_ENABLED)
 endif()
@@ -107,7 +102,7 @@ add_executable(test_nss_runtime
     ../src/plugin/crypto/certificate_info.cpp
     ../src/plugin/crypto/certificate_database.cpp
     ../src/shared/logging.cpp)
-target_include_directories(test_nss_runtime PRIVATE ../src ../src/shared ${NSS_INCLUDE_DIRS})
+target_include_directories(test_nss_runtime PRIVATE ../src ${NSS_INCLUDE_DIRS})
 target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test ${NSS_LIBRARIES})
 foreach(runtime_test IN ITEMS
         defaultPathSelection
@@ -145,7 +140,7 @@ add_layer_test(test_plugin_ocrcontroller plugin/test_ocrcontroller.cpp plugin
     ../src/plugin/crypto/certificate_database.cpp
     ../src/plugin/caching/epub_cache.cpp)
 target_include_directories(test_plugin_ocrcontroller PRIVATE
-    ../src ../src/shared ${MUPDF_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
+    ../src ${MUPDF_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
 target_include_directories(test_plugin_ocrcontroller SYSTEM PRIVATE ../thirdparty)
 target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_test_plugin_ocr mupdf_transport ${NSS_LIBRARIES} Qt6::Gui Qt6::Network Qt6::Concurrent)
 
@@ -173,11 +168,11 @@ add_layer_test(test_generator_proxies generator/test_proxies.cpp generator
     ../src/generator/conversion/text.cpp
     ../src/plugin/util/signature_image.cpp)
 target_include_directories(test_generator_proxies PRIVATE ../src)
-target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui)
+target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui Qt6::Xml)
 
 # Security policy checks execute in a child because sandbox activation is irreversible.
 add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp)
-target_include_directories(test_security_sandbox PRIVATE ../src ../src/shared ../src/worker ${SECCOMP_INCLUDE_DIRS})
+target_include_directories(test_security_sandbox PRIVATE ../src ../src/worker ${SECCOMP_INCLUDE_DIRS})
 target_link_libraries(test_security_sandbox PRIVATE ${SECCOMP_LIBRARIES})
 if(SECCOMP_FOUND)
     target_compile_definitions(test_security_sandbox PRIVATE MUPDF_HAVE_LIBSECCOMP)
@@ -191,7 +186,7 @@ add_layer_test(test_security_transport security/transport.cpp security
     ../src/shared/protocol/zpp_codec.cpp
     ../src/shared/logging.cpp)
 target_include_directories(test_security_transport PRIVATE
-    ../src ../src/shared ${MUPDF_GENERATED_INCLUDE_DIR})
+    ../src ${MUPDF_GENERATED_INCLUDE_DIR})
 target_include_directories(test_security_transport SYSTEM PRIVATE ../thirdparty)
 target_link_libraries(test_security_transport PRIVATE mupdf_transport)
 if(MU_DEBUG_BUILD)
@@ -215,6 +210,6 @@ set_tests_properties(test_plugin_boundary PROPERTIES LABELS "plugin" TIMEOUT 15)
 # The normal developer test command runs the MuPDF suites together and keeps
 # the remaining lightweight tests as separate executables.
 add_custom_target(check
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -LE slow
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     USES_TERMINAL)

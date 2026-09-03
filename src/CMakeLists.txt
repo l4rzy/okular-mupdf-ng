@@ -52,50 +52,11 @@ set(okularGenerator_mupdfng_SRCS
   plugin/caching/epub_cache.cpp
   plugin/caching/ocr_cache.cpp
   generator/placeholder.cpp
+  plugin/ocr/controller.cpp
   plugin/util/signature_image.cpp
   shared/logging.cpp
   shared/model/validation.cpp
   shared/protocol/zpp_codec.cpp
-  shared/model/validation.hpp
-  generator/placeholder.hpp
-  plugin/util/signature_image.hpp
-  shared/protocol/zpp_codec.hpp
-  generator/proxy/annotation.hpp
-  generator/conversion/annotation.hpp
-  generator/conversion/certificate.hpp
-  generator/conversion/document.hpp
-  generator/conversion/text.hpp
-  plugin/worker_client.hpp
-  plugin/worker_transport.hpp
-  plugin/caching/cache_file.hpp
-  plugin/caching/epub_cache.hpp
-  plugin/caching/ocr_cache.hpp
-  plugin/caching/ocr_constants.hpp
-  plugin/crypto/nss.hpp
-  plugin/crypto/certificate_info_internal.hpp
-  plugin/crypto/certificate_database.hpp
-  plugin/crypto/nss_handles.hpp
-  plugin/crypto/nss_internal.hpp
-  plugin/crypto/nss_error_internal.hpp
-  generator/proxy/form/signature.hpp
-  plugin/ocr/constants.hpp
-  plugin/ocr/config.hpp
-  plugin/ocr/controller.hpp
-  plugin/ocr/controller.cpp
-  plugin/ocr/scheduler.hpp
-  plugin/ocr/ocr.hpp
-  plugin/util/temp_dir.hpp
-  shared/protocol/ipc_debug.hpp
-  generator/mupdfng.hpp
-  generator/config/settings.hpp
-  generator/proxy/certificate_store.hpp
-  generator/proxy/embedded_file.hpp
-  generator/config/mupdfsettingswidget.hpp
-  generator/config/csseditor/editor.hpp
-  generator/config/csseditor/highlighter.hpp
-  generator/config/certmanager/dialog_utils.hpp
-  generator/config/certmanager/manager_dialog.hpp
-  generator/config/certmanager/self_signed_dialog.hpp
 )
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
@@ -122,7 +83,6 @@ endif()
 
 target_include_directories(okularGenerator_mupdfng PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/shared
     ${MUPDF_GENERATED_INCLUDE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${NSS_INCLUDE_DIRS}
@@ -132,9 +92,7 @@ target_include_directories(okularGenerator_mupdfng SYSTEM PRIVATE
 )
 
 target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
-if(MUPDF_HAS_OCR)
-    target_compile_definitions(okularGenerator_mupdfng PRIVATE MUPDF_HAS_OCR)
-endif()
+target_compile_definitions(okularGenerator_mupdfng PRIVATE MUPDF_HAS_OCR)
 
 target_link_libraries(okularGenerator_mupdfng
     mupdf_transport
@@ -146,6 +104,7 @@ target_link_libraries(okularGenerator_mupdfng
     Qt6::PrintSupport
     Qt6::Concurrent
     Qt6::Network
+    Qt6::Xml
     ZLIB::ZLIB
     MuPDF::Engine
     ${NSS_LIBRARIES}
@@ -154,3 +113,10 @@ target_compile_definitions(okularGenerator_mupdfng PRIVATE
     TRANSLATION_DOMAIN="okular_mupdfng"
     HAVE_NEW_SIGNATURE_API=1
     MUPDF_FORMFIELD_REMOTE_SIGNING)
+
+# Embed worker binary paths so the plugin can locate it without install.
+# WORKER_BUILD_PATH is exported by src/worker (CACHE INTERNAL).
+target_compile_definitions(okularGenerator_mupdfng PRIVATE
+    "$<$<NOT:$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>>:WORKER_BUILD_PATH=\"$<TARGET_FILE:okular-mupdf-worker>\">"
+    WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
+)

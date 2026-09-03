@@ -44,7 +44,7 @@ find_package(KF6 REQUIRED COMPONENTS
     ConfigWidgets
     KIO
     )
-find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network)
+find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network Xml)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     set(DEFAULT_IPC_DEBUG OFF)
@@ -73,6 +73,7 @@ configure_file(
     "${MUPDF_GENERATED_INCLUDE_DIR}/shared/compat.hpp"
     @ONLY)
 
+set(MUPDF_WORKER_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/okular-mupdf-ng")
 set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/okular-mupdf-worker"
     CACHE PATH "Installed path of the okular-mupdf-worker binary")
 add_subdirectory(src)
@@ -83,20 +84,13 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME copyright)
 
-# Embed worker binary paths so the plugin can locate it without install
-target_compile_definitions(okularGenerator_mupdfng PRIVATE
-    "$<$<NOT:$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>>:WORKER_BUILD_PATH=\"$<TARGET_FILE:okular-mupdf-worker>\">"
-    WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
-)
-
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
-message(STATUS "OCR support: ${MUPDF_HAS_OCR}")
 message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
+# BUILD_TESTING is defined by ECM's KDECMakeSettings (default ON).
 if(BUILD_TESTING)
-    include(CTest)
     add_subdirectory(tests)
 endif()
 

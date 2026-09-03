@@ -158,5 +158,3 @@ else()
         INTERFACE_LINK_LIBRARIES "${MUPDF_ENGINE_LINK_LIBRARIES}")
     add_dependencies(MuPDF::Engine mupdf_static_build)
 endif()
-
-set(MUPDF_HAS_OCR ON)

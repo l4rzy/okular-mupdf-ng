@@ -8,36 +8,27 @@
 # KF6 library. It is the isolated MuPDF capability process.
 # ---------------------------------------------------------------------------
 
-# Document engine is split by concern; the list is shared with the test targets.
-set(MUPDF_WORKER_DOCUMENT_SOURCES
-    document_base.cpp
-    pdf/document.cpp
-    pdf/page.cpp
-    pdf/render.cpp
-    pdf/annotations.cpp
-    pdf/forms.cpp
-    pdf/signature.cpp
-    pdf/save.cpp
-    pdf/outline.cpp
-    pdf/metadata.cpp
-    pdf/fonts.cpp
-    pdf/embedded.cpp
-    epub/document.cpp
-    epub/page.cpp
-    epub/render.cpp
-    epub/outline.cpp
-    epub/metadata.cpp
-    epub/fonts.cpp
-    epub/save.cpp
-    CACHE INTERNAL "MuPDF worker document engine source files")
-set(mupdf_worker_document_sources "")
-foreach(source IN LISTS MUPDF_WORKER_DOCUMENT_SOURCES)
-    list(APPEND mupdf_worker_document_sources engine/${source})
-endforeach()
-
 set(mupdf_worker_core_SRCS
     runtime/command_service.cpp
-    ${mupdf_worker_document_sources}
+    engine/document_base.cpp
+    engine/pdf/document.cpp
+    engine/pdf/page.cpp
+    engine/pdf/render.cpp
+    engine/pdf/annotations.cpp
+    engine/pdf/forms.cpp
+    engine/pdf/signature.cpp
+    engine/pdf/save.cpp
+    engine/pdf/outline.cpp
+    engine/pdf/metadata.cpp
+    engine/pdf/fonts.cpp
+    engine/pdf/embedded.cpp
+    engine/epub/document.cpp
+    engine/epub/page.cpp
+    engine/epub/render.cpp
+    engine/epub/outline.cpp
+    engine/epub/metadata.cpp
+    engine/epub/fonts.cpp
+    engine/epub/save.cpp
     engine/ocr/ocr.cpp
     engine/ocr/jobs.cpp
     engine/signer.cpp
@@ -66,12 +57,11 @@ target_link_libraries(mupdf_worker_core PUBLIC
     mupdf_transport
 )
 
-if(MUPDF_HAS_OCR)
-    target_compile_definitions(mupdf_worker_core PRIVATE
-        MUPDF_HAS_OCR
-        TESSDATA_DIR="${TESSDATA_DIR}"
-    )
-endif()
+# The bundled MuPDF is built with tesseract enabled, so OCR is always available.
+target_compile_definitions(mupdf_worker_core PRIVATE
+    MUPDF_HAS_OCR
+    TESSDATA_DIR="${TESSDATA_DIR}"
+)
 
 add_executable(okular-mupdf-worker
     main.cpp
@@ -102,22 +92,16 @@ target_include_directories(okular-mupdf-worker SYSTEM PRIVATE
 
 target_link_libraries(okular-mupdf-worker PRIVATE
     ${SECCOMP_LIBRARIES}
-    Threads::Threads
 )
 
 if(SECCOMP_FOUND)
     target_compile_definitions(okular-mupdf-worker PRIVATE MUPDF_HAVE_LIBSECCOMP)
 endif()
 
-if(MUPDF_HAS_OCR)
-    target_compile_definitions(okular-mupdf-worker PRIVATE
-        MUPDF_HAS_OCR
-    )
-endif()
-target_compile_definitions(okular-mupdf-worker PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
+target_compile_definitions(okular-mupdf-worker PRIVATE MUPDF_HAS_OCR TESSDATA_DIR="${TESSDATA_DIR}")
 
 install(TARGETS okular-mupdf-worker
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/okular-mupdf-ng"
+    DESTINATION "${MUPDF_WORKER_INSTALL_DIR}"
 )
 
 # Expose the build-time path so the plugin can find the binary without install
