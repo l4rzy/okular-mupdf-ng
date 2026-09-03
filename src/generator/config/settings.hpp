@@ -68,7 +68,8 @@ inline Model::DocumentType documentTypeForMime(const QString& mime)
     return Model::documentTypeFromMime(mime.toStdString());
 }
 
-inline Model::DocumentSettings documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub)
+inline Model::DocumentSettings
+documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub, std::uint32_t paperColorRgb)
 {
     // Clamp UI values at the IPC boundary; generated settings can outlive the
     // enum range accepted by the worker.
@@ -78,6 +79,7 @@ inline Model::DocumentSettings documentSettingsFor(const RenderingSettings& rend
     settings.imageQuality = rendering.imageQuality;
     settings.interpolateImages = rendering.interpolateImages;
     settings.memoryCacheBytes = rendering.memoryCacheBytes;
+    settings.paperColorRgb = paperColorRgb;
     settings.epub.fontSize = std::clamp(epub.fontSize, 10, 20);
     settings.epub.pageSize = static_cast<Model::EpubPageSize>(std::clamp(epub.pageSize, 0, 3));
     settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(std::clamp(epub.fontFamily, 0, 3));
@@ -101,9 +103,11 @@ struct WorkerSettings {
     EpubSettings startupEpub;
 
     /// Builds the worker-facing payload (clamped at the IPC boundary).
-    [[nodiscard]] Model::DocumentSettings documentSettings() const
+    /// The paper color is Okular session state, not a config value, so it is
+    /// supplied by the caller.
+    [[nodiscard]] Model::DocumentSettings documentSettings(std::uint32_t paperColorRgb) const
     {
-        return documentSettingsFor(rendering, startupEpub);
+        return documentSettingsFor(rendering, startupEpub, paperColorRgb);
     }
 
     bool operator==(const WorkerSettings&) const = default;

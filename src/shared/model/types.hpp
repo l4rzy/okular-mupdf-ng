@@ -289,6 +289,8 @@ struct DocumentSettings {
     bool interpolateImages = true;
     /// Maximum document-engine cache size in bytes.
     std::int64_t memoryCacheBytes = 64ULL * 1024ULL * 1024ULL;
+    /// Opaque page background as 0xRRGGBB (Okular paper-color setting).
+    std::uint32_t paperColorRgb = 0xFFFFFF;
     EpubLayoutSettings epub;
 };
 

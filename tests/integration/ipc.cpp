@@ -70,6 +70,24 @@ private slots:
     }
 
     // End-to-end: a document MuPDF had to repair is reported across IPC.
+    // End-to-end: the Okular paper color reaches the worker renderer.
+    void paperColorFlowsThroughIpc()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), ::Mu::Model::OpenStatus::Success);
+
+        ::Mu::Model::DocumentSettings settings;
+        settings.paperColorRgb = 0x112233;
+        QVERIFY(m_client.setSettings(settings));
+
+        const QImage page = m_client.render(0, 100, 100);
+        QVERIFY(!page.isNull());
+        const QColor corner = page.pixelColor(99, 99);
+        QCOMPARE(corner.red(), 0x11);
+        QCOMPARE(corner.green(), 0x22);
+        QCOMPARE(corner.blue(), 0x33);
+    }
+
     void repairedDocumentStateFlowsThroughIpc()
     {
         QTemporaryDir dir;

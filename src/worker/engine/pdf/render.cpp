@@ -95,8 +95,11 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             pixmap = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
         }
 
-        // Initialize background with solid opaque white (0xFF)
-        fz_clear_pixmap_with_value(m_context, pixmap, 0xff);
+        // Initialize background with the opaque Okular paper color.
+        float paper[3] = { ((m_settings.paperColorRgb >> 16) & 0xFF) / 255.0f,
+                           ((m_settings.paperColorRgb >> 8) & 0xFF) / 255.0f,
+                           (m_settings.paperColorRgb & 0xFF) / 255.0f };
+        fz_fill_pixmap_with_color(m_context, pixmap, fz_device_rgb(m_context), paper, fz_default_color_params);
         device = fz_new_draw_device(m_context, tiled ? transform : fz_identity, pixmap);
 
         if (!m_settings.interpolateImages)

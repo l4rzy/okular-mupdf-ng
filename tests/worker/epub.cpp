@@ -85,6 +85,35 @@ private slots:
         QCOMPARE(acceleratedPixels, coldPixels);
     }
 
+    void testRenderHonorsPaperColor()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "sample.epub", &error), error.c_str());
+
+        // Default settings keep the white background.
+        std::vector<std::uint8_t> pixels(400U * 300U * 4U);
+        const ::Mu::Worker::Engine::DocumentBase::RenderRequest request { 0, 400, 300, std::nullopt };
+        QVERIFY2(document.renderToBuffer(request, pixels.data(), 400U * 4U, &error), error.c_str());
+        QCOMPARE(pixels[0], 0xFF);
+        QCOMPARE(pixels[3], 0xFF);
+
+        // The Okular paper color replaces the background (last pixel = bottom
+        // right corner, away from reflowed content).
+        ::Mu::Model::DocumentSettings settings;
+        settings.paperColorRgb = 0x112233;
+        document.setSettings(settings);
+        QVERIFY2(document.renderToBuffer(request, pixels.data(), 400U * 4U, &error), error.c_str());
+        constexpr std::size_t lastPixel = (400U * 300U - 1U) * 4U;
+        QCOMPARE(pixels[lastPixel], 0x11);
+        QCOMPARE(pixels[lastPixel + 1], 0x22);
+        QCOMPARE(pixels[lastPixel + 2], 0x33);
+        QCOMPARE(pixels[lastPixel + 3], 0xFF);
+    }
+
     void testInvalidAcceleratorFallsBackToColdOpen()
     {
         QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));

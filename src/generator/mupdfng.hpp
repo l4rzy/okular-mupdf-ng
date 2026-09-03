@@ -124,6 +124,9 @@ private:
     // Reports xref-repair state to the user, mirroring the poppler generator's
     // xrefReconstructionHandler.
     void warnIfRepairedDocument(const Model::DocumentMetadata& info);
+    // Reads the paper color Okular's accessibility settings request (white
+    // when the Paper render mode is off) and records it for the next push.
+    void refreshPaperColor();
     // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
     // mirroring the poppler generator's GeneratorExtraDescription.
     QString generatorExtraDescription() const;
@@ -193,6 +196,8 @@ private:
     // worker startup (changes require restarting Okular rather than being
     // sent to the already-sandboxed worker).
     Config::WorkerSettings m_settings;
+    // Opaque page background requested by Okular (paper-color setting).
+    std::uint32_t m_paperColorRgb = 0xFFFFFF;
 
     // Restart decision state: whether pending settings need an Okular
     // restart, and whether the one-shot dialog notice was already shown.

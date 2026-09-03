@@ -1111,6 +1111,42 @@ private slots:
         QCOMPARE(value->text, std::string("Default"));
     }
 
+    void renderUsesPaperColor()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("paper.pdf"));
+        fz_context* ctx = fz_new_context(nullptr, nullptr, FZ_STORE_UNLIMITED);
+        createTextPDF(ctx, path);
+        fz_drop_context(ctx);
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "paper.pdf", &error), error.c_str());
+
+        const ::Mu::Worker::Engine::DocumentBase::RenderRequest request { 0, 300, 300, std::nullopt };
+        std::vector<std::uint8_t> pixels(300U * 300U * 4U);
+
+        // Default settings keep the white background.
+        QVERIFY2(doc.renderToBuffer(request, pixels.data(), 300U * 4U, &error), error.c_str());
+        QCOMPARE(pixels[0], 0xFF);
+        QCOMPARE(pixels[3], 0xFF);
+
+        // The Okular paper color replaces the background (last pixel = bottom
+        // right corner, away from the text content).
+        ::Mu::Model::DocumentSettings settings;
+        settings.paperColorRgb = 0x112233;
+        doc.setSettings(settings);
+        QVERIFY2(doc.renderToBuffer(request, pixels.data(), 300U * 4U, &error), error.c_str());
+        constexpr std::size_t lastPixel = (300U * 300U - 1U) * 4U;
+        QCOMPARE(pixels[lastPixel], 0x11);
+        QCOMPARE(pixels[lastPixel + 1], 0x22);
+        QCOMPARE(pixels[lastPixel + 2], 0x33);
+        QCOMPARE(pixels[lastPixel + 3], 0xFF);
+    }
+
     void metadataReportsXrefRepairState()
     {
         QTemporaryDir dir;

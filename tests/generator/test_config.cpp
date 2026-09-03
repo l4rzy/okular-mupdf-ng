@@ -16,12 +16,13 @@ private slots:
         ::Mu::Generator::Config::RenderingSettings rendering { 4, 6, 2, false, 256LL * 1024 * 1024 };
         ::Mu::Generator::Config::EpubSettings epub { 99, -1, 99, QStringLiteral("Ym9keXt9") };
 
-        const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub);
+        const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0x112233);
         QCOMPARE(settings.graphicsAntialiasing, 4);
         QCOMPARE(settings.textAntialiasing, 6);
         QCOMPARE(settings.imageQuality, 2);
         QVERIFY(!settings.interpolateImages);
         QCOMPARE(settings.memoryCacheBytes, 256LL * 1024 * 1024);
+        QCOMPARE(settings.paperColorRgb, 0x112233u);
         QCOMPARE(settings.epub.fontSize, 20);
         QCOMPARE(static_cast<int>(settings.epub.fontFamily), 0);
         QCOMPARE(static_cast<int>(settings.epub.pageSize), 3);

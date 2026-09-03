@@ -193,18 +193,32 @@ Main::~Main()
     m_worker.stop();
 }
 
+// Okular Generator Func: reads the paper color Okular's accessibility settings
+// request through documentMetaData (white when the Paper render mode is off)
+// and records it for the next settings push.
+void Main::refreshPaperColor()
+{
+    const QColor color = documentMetaData(Okular::Generator::PaperColorMetaData, true).value<QColor>();
+    m_paperColorRgb =
+        color.isValid() ? static_cast<std::uint32_t>(qRgb(color.red(), color.green(), color.blue())) : 0xFFFFFFu;
+}
+
 // Okular Generator Func: reloads settings and sends rendering changes to the worker.
 bool Main::reparseConfig()
 {
     Config::reloadSettings();
     const Config::WorkerSettings settings = Config::readWorkerSettings();
     updateRestartRequiredSettings();
-    const bool changed = Config::renderingOutputChanged(m_settings.rendering, settings.rendering);
-    const bool settingsChanged = settings.rendering != m_settings.rendering;
+    const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
+    refreshPaperColor();
+    const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
+    const bool changed = Config::renderingOutputChanged(m_settings.rendering, settings.rendering) || paperColorChanged;
+    const bool settingsChanged = settings.rendering != m_settings.rendering || paperColorChanged;
     m_settings.rendering = settings.rendering;
 
     // Propagate changed settings to the worker process.
-    if (settingsChanged && m_worker.isConnected() && !m_worker.setSettings(m_settings.documentSettings()))
+    if (settingsChanged && m_worker.isConnected()
+        && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
 
     // Re-evaluate sandbox enforcement for the active document. Blocking
@@ -402,8 +416,9 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
     const auto docType = Config::documentTypeForFile(fileName);
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
+    refreshPaperColor();
     QList<Plugin::WorkerClient::PageInfo> workerPages;
-    if (!m_worker.setSettings(m_settings.documentSettings()))
+    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         return Okular::Document::OpenError;
     const auto openStatus = m_worker.open(fileName, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
@@ -433,7 +448,8 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     const auto docType = Config::documentTypeForData(fileData);
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
-    if (!m_worker.setSettings(m_settings.documentSettings()))
+    refreshPaperColor();
+    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         return Okular::Document::OpenError;
     const auto openStatus = m_worker.openData(fileData, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
@@ -623,7 +639,8 @@ bool Main::reopenWorkerDocument()
         return false;
 
     QList<Plugin::WorkerClient::PageInfo> pages;
-    if (!m_worker.setSettings(m_settings.documentSettings())) {
+    refreshPaperColor();
+    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after worker restart");
         return false;
     }
