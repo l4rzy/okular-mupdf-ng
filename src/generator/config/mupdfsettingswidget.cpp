@@ -14,18 +14,11 @@
 
 namespace Mu::Generator {
 
-MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent, const Model::SandboxStatus& sandboxStatus)
+MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     : QWidget(parent)
     , m_mupdfsw(new Ui_MuPDFSettingsWidgetBase)
 {
     m_mupdfsw->setupUi(this);
-    m_mupdfsw->securityDetailsWidget->setVisible(false);
-    m_mupdfsw->securityDetailsButton->setArrowType(Qt::RightArrow);
-    connect(m_mupdfsw->securityDetailsButton, &QToolButton::toggled, this, [this](bool checked) {
-        m_mupdfsw->securityDetailsWidget->setVisible(checked);
-        m_mupdfsw->securityDetailsButton->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
-    });
-    setSandboxStatus(sandboxStatus);
 
     auto* gfxAA = m_mupdfsw->kcfg_GraphicsAntialiasingBits;
     gfxAA->clear();
@@ -149,31 +142,6 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent, const Model::SandboxSt
         CertificateManagerDialog dialog(databasePath, this);
         dialog.exec();
     });
-}
-
-void MuPDFSettingsWidget::setSandboxStatus(const Model::SandboxStatus& status)
-{
-    const bool active = status.linuxNamespace || status.seccomp || status.landlock;
-    if (active) {
-        m_mupdfsw->labelOverallSecurityStatus->setText(
-            QStringLiteral("<font color=\"#27ae60\"><b>%1</b></font>").arg(i18n("Active")));
-    } else {
-        m_mupdfsw->labelOverallSecurityStatus->setText(
-            QStringLiteral("<font color=\"#e74c3c\"><b>%1</b></font>").arg(i18n("Inactive")));
-    }
-
-    auto formatComponent = [](bool isComponentActive, const QString& activeText = { }) {
-        if (isComponentActive) {
-            const QString label = activeText.isEmpty() ? i18n("Active") : activeText;
-            return QStringLiteral("<font color=\"#27ae60\">%1</font>").arg(label);
-        }
-        return QStringLiteral("<font color=\"#e74c3c\">%1</font>").arg(i18n("Inactive"));
-    };
-
-    m_mupdfsw->labelNamespaceStatus->setText(formatComponent(status.linuxNamespace));
-    m_mupdfsw->labelSeccompStatus->setText(formatComponent(status.seccomp));
-    const QString landlockText = status.landlockAbi > 0 ? i18n("Active (ABI v%1)", status.landlockAbi) : i18n("Active");
-    m_mupdfsw->labelLandlockStatus->setText(formatComponent(status.landlock, landlockText));
 }
 
 void MuPDFSettingsWidget::updateCustomCssButtonText()

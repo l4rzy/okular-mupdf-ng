@@ -252,7 +252,7 @@ bool Main::reparseConfig()
 // Okular Generator Func: adds the generator settings page to Okular.
 void Main::addPages(KConfigDialog* dialog)
 {
-    MuPDFSettingsWidget* w = new MuPDFSettingsWidget(dialog, m_worker.sandboxStatus());
+    MuPDFSettingsWidget* w = new MuPDFSettingsWidget(dialog);
     dialog->addPage(
         w, MuPDFSettings::self(), i18n("MuPDF-NG"), QStringLiteral("okular-mupdf-ng"), i18n("MuPDF-NG Configuration"));
     w->updateCustomCssButtonText();
@@ -492,13 +492,28 @@ QString Main::generatorExtraDescription() const
         if (it != info.values.end())
             runtimeVersion = QString::fromStdString(it->second);
     }
-    if (runtimeVersion.isEmpty())
-        return i18n("Using MuPDF %1", QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
-    if (runtimeVersion.toStdString() == Mu::MUPDF_VERSION)
-        return i18n("Using MuPDF %1", runtimeVersion);
-    return i18n("Using MuPDF %1\n\nBuilt against MuPDF %2",
-                runtimeVersion,
-                QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
+
+    QString result;
+    if (runtimeVersion.isEmpty()) {
+        result = i18n("Using MuPDF %1", QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
+    } else if (runtimeVersion.toStdString() == Mu::MUPDF_VERSION) {
+        result = i18n("Using MuPDF %1", runtimeVersion);
+    } else {
+        result = i18n("Using MuPDF %1\n\nBuilt against MuPDF %2",
+                      runtimeVersion,
+                      QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
+    }
+
+    const Model::SandboxStatus status = m_worker.sandboxStatus();
+    if (status.isFullyHardened()) {
+        result += QStringLiteral("\n") + i18n("Worker is fully hardened 🟢");
+    } else if (status.isPartiallyActive()) {
+        result += QStringLiteral("\n") + i18n("Worker is partially hardened 🟡");
+    } else {
+        result += QStringLiteral("\n") + i18n("Worker is unconfined 🔴");
+    }
+
+    return result;
 }
 
 // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.

@@ -3,8 +3,6 @@
 
 #include <QWidget>
 
-#include "shared/model/types.hpp"
-
 class Ui_MuPDFSettingsWidgetBase;
 
 namespace Mu::Generator {
@@ -13,10 +11,9 @@ class MuPDFSettingsWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MuPDFSettingsWidget(QWidget* parent = nullptr, const Model::SandboxStatus& sandboxStatus = { });
+    explicit MuPDFSettingsWidget(QWidget* parent = nullptr);
     ~MuPDFSettingsWidget() override;
 
-    void setSandboxStatus(const Model::SandboxStatus& status);
     void updateCustomCssButtonText();
 
 private:
