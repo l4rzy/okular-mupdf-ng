@@ -17,6 +17,7 @@
 #include <QFile>
 #include <QImage>
 #include <QLocale>
+#include <QMessageBox>
 #include <QMutexLocker>
 #include <QPageLayout>
 #include <QPainter>
@@ -210,7 +211,7 @@ bool Main::reparseConfig()
 {
     Config::reloadSettings();
     const Config::WorkerSettings settings = Config::readWorkerSettings();
-    updateRestartRequiredSettings();
+    updateSettingRestartState();
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
     const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
@@ -256,24 +257,20 @@ void Main::addPages(KConfigDialog* dialog)
     dialog->addPage(
         w, MuPDFSettings::self(), i18n("MuPDF-NG"), QStringLiteral("okular-mupdf-ng"), i18n("MuPDF-NG Configuration"));
     w->updateCustomCssButtonText();
-    connect(dialog, &KConfigDialog::settingsChanged, this, [this, dialog] {
-        updateRestartRequiredSettings();
-        if (!m_restartState.required || m_restartState.noticeShown)
+    connect(dialog, &KConfigDialog::settingsChanged, this, [this, w] {
+        updateSettingRestartState();
+        if (!m_restartState.required)
             return;
-        m_restartState.noticeShown = true;
-        KMessageBox::information(
-            dialog, i18n("This setting will take effect after restarting Okular."), i18n("Restart Required"));
+        QMessageBox::information(w, i18n("Restart needed"), i18n("You need to restart Okular after this change."));
     });
 }
 
-void Main::updateRestartRequiredSettings()
+void Main::updateSettingRestartState()
 {
     // Worker process lifetime settings must not be applied to a running worker.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
     m_restartState.required =
         Config::readEpubSettings() != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
-    if (!m_restartState.required)
-        m_restartState.noticeShown = false;
 }
 
 // Converts worker page information into Okular pages and page metadata.

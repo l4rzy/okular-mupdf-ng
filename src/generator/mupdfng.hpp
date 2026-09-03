@@ -128,7 +128,7 @@ private:
     // against the frozen startup set; the NSS database is the runtime-checked
     // half — initialization is one-way per process, so a changed database
     // path only applies after an Okular restart.
-    void updateRestartRequiredSettings();
+    void updateSettingRestartState();
     // Reports xref-repair state to the user, mirroring the poppler generator's
     // xrefReconstructionHandler.
     void warnIfRepairedDocument(const Model::DocumentMetadata& info);
