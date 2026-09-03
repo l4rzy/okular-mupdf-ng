@@ -21,17 +21,13 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-deb-ubuntu.yml
 
-  package-deb-debian:
-    if: startsWith(github.ref, 'refs/tags/')
-    uses: ./.github/workflows/build-deb-trixie.yml
-
   package-rpm-tumbleweed:
     if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-rpm-tumbleweed.yml
 
   package-rpm-fedora-arm:
     if: startsWith(github.ref, 'refs/tags/')
-    uses: ./.github/workflows/build-rpm-fedora-asahi.yml
+    uses: ./.github/workflows/build-rpm-fedora-arm.yml
 
   package-rpm-fedora:
     if: startsWith(github.ref, 'refs/tags/')
@@ -40,7 +36,7 @@ jobs:
   release:
     name: Publish Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [package-arch, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
+    needs: [package-arch, package-deb-ubuntu, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
     runs-on: ubuntu-latest
 
     steps:

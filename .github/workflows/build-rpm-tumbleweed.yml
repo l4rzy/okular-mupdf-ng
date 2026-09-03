@@ -95,13 +95,13 @@ jobs:
           package_version=$(rpm --queryformat '%{VERSION}' -qp "$package")
           package_release=$(rpm --queryformat '%{RELEASE}' -qp "$package")
           package_architecture=$(rpm --queryformat '%{ARCH}' -qp "$package")
-          mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.opensuse-tumbleweed.${package_architecture}.rpm"
+          mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.tumbleweed.${package_architecture}.rpm"
 
       - name: Validate RPM package
         run: |
           set -x
           expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/mupdfng.json"))["KPlugin"]["Version"])')
-          package="build/packages/okular-mupdf-ng-${expected_version}-1.opensuse-tumbleweed.x86_64.rpm"
+          package="build/packages/okular-mupdf-ng-${expected_version}-1.tumbleweed.x86_64.rpm"
           test -f "$package"
           test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng
           test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1"
@@ -121,6 +121,6 @@ jobs:
       - name: Upload openSUSE RPM package
         uses: actions/upload-artifact@v4
         with:
-          name: opensuse-tumbleweed-rpm-package
+          name: tumbleweed-rpm-package
           path: build/packages/*.rpm
           if-no-files-found: error

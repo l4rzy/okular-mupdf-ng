@@ -6,7 +6,7 @@ on:
 jobs:
   package-rpm-fedora-arm:
     name: Build Fedora 43 aarch64 RPM (Clang)
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     container:
       image: fedora:43
 
