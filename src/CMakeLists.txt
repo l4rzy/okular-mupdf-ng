@@ -3,20 +3,31 @@
 
 add_subdirectory(generator/config)
 
-add_library(mupdf_transport STATIC
+# Qt-free code shared by the plugin and the sandboxed worker: transport
+# channels, logging, model validation, and the zpp serialization codec.
+add_library(mupdf_shared STATIC
   shared/transport/ctrl_channel.cpp
   shared/transport/fd_channel.cpp
   shared/transport/poll.cpp
+  shared/logging.cpp
+  shared/model/validation.cpp
+  shared/protocol/zpp_codec.cpp
 )
-set_target_properties(mupdf_transport PROPERTIES
+set_target_properties(mupdf_shared PROPERTIES
     AUTOMOC OFF
     AUTORCC OFF
     AUTOUIC OFF
     POSITION_INDEPENDENT_CODE ON
 )
-target_include_directories(mupdf_transport PUBLIC
+target_include_directories(mupdf_shared PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_include_directories(mupdf_shared SYSTEM PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty # zpp_bits.h for the codec
+)
+if(MU_DEBUG_BUILD)
+    target_compile_definitions(mupdf_shared PRIVATE MU_DEBUG_ENABLED)
+endif()
 
 add_subdirectory(worker)
 
@@ -54,9 +65,6 @@ set(okularGenerator_mupdfng_SRCS
   generator/placeholder.cpp
   plugin/ocr/controller.cpp
   plugin/util/signature_image.cpp
-  shared/logging.cpp
-  shared/model/validation.cpp
-  shared/protocol/zpp_codec.cpp
 )
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
@@ -83,19 +91,16 @@ endif()
 
 target_include_directories(okularGenerator_mupdfng PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${MUPDF_GENERATED_INCLUDE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${NSS_INCLUDE_DIRS}
-)
-target_include_directories(okularGenerator_mupdfng SYSTEM PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty
 )
 
 target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
 target_compile_definitions(okularGenerator_mupdfng PRIVATE MUPDF_HAS_OCR)
 
 target_link_libraries(okularGenerator_mupdfng
-    mupdf_transport
+    mupdf_shared
     Okular::Core
     KF6::I18n
     KF6::ConfigCore
@@ -106,7 +111,7 @@ target_link_libraries(okularGenerator_mupdfng
     Qt6::Network
     Qt6::Xml
     ZLIB::ZLIB
-    MuPDF::Engine
+    MuPDF::Headers
     ${NSS_LIBRARIES}
 )
 target_compile_definitions(okularGenerator_mupdfng PRIVATE

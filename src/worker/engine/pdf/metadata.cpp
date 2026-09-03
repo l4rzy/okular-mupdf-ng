@@ -191,7 +191,8 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
         // Date fields are normalized to ISO 8601 UTC so the generator can
         // parse them with QDateTime::fromString(..., Qt::ISODate). The hash
         // above still covers the raw Info bytes as document identity.
-        if (name == "creationDate" || name == "modificationDate") {
+        const std::string_view nameView = name;
+        if (nameView == "creationDate" || nameView == "modificationDate") {
             std::string iso = toIsoTimestamp(m_context, value);
             if (!iso.empty())
                 result.values.emplace(name, std::move(iso));

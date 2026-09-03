@@ -23,6 +23,7 @@ if(USE_SYSTEM_MUPDF)
     add_library(MuPDF::Engine INTERFACE IMPORTED GLOBAL)
     set_target_properties(MuPDF::Engine PROPERTIES
         INTERFACE_LINK_LIBRARIES PkgConfig::MUPDF_SYSTEM)
+    set(MUPDF_INCLUDE_DIR "${MUPDF_SYSTEM_INCLUDE_DIRS}")
 else()
     set(MUPDF_SOURCE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/mupdf" CACHE PATH
         "Path to the pinned MuPDF source tree")
@@ -157,4 +158,11 @@ else()
         INTERFACE_LINK_OPTIONS "-Wl,--gc-sections"
         INTERFACE_LINK_LIBRARIES "${MUPDF_ENGINE_LINK_LIBRARIES}")
     add_dependencies(MuPDF::Engine mupdf_static_build)
+    set(MUPDF_INCLUDE_DIR "${MUPDF_SOURCE_DIR}/include")
 endif()
+
+# Include-only usage (annotation encoding constants): consumers that never
+# reference MuPDF symbols must not depend on (or wait for) the static build.
+add_library(MuPDF::Headers INTERFACE IMPORTED GLOBAL)
+set_target_properties(MuPDF::Headers PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${MUPDF_INCLUDE_DIR}")

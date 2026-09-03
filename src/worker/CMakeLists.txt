@@ -33,9 +33,6 @@ set(mupdf_worker_core_SRCS
     engine/ocr/jobs.cpp
     engine/signer.cpp
     sys/sys.cpp
-    ../shared/logging.cpp
-    ../shared/model/validation.cpp
-    ../shared/protocol/zpp_codec.cpp
 )
 
 add_library(mupdf_worker_core OBJECT ${mupdf_worker_core_SRCS})
@@ -43,10 +40,7 @@ add_library(mupdf_worker_core OBJECT ${mupdf_worker_core_SRCS})
 target_include_directories(mupdf_worker_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..       # src/ root for shared/ contract headers
-    ${MUPDF_GENERATED_INCLUDE_DIR}
-)
-target_include_directories(mupdf_worker_core SYSTEM PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty # vendored thirdparty/ headers
+    ${MU_GENERATED_INCLUDE_DIR}
 )
 
 target_link_libraries(mupdf_worker_core PRIVATE
@@ -54,7 +48,7 @@ target_link_libraries(mupdf_worker_core PRIVATE
 )
 target_link_libraries(mupdf_worker_core PUBLIC
     Threads::Threads
-    mupdf_transport
+    mupdf_shared
 )
 
 # The bundled MuPDF is built with tesseract enabled, so OCR is always available.
@@ -83,11 +77,8 @@ endif()
 target_include_directories(okular-mupdf-worker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}          # worker/ headers
     ${CMAKE_CURRENT_SOURCE_DIR}/..       # src/ root for shared/ contract headers
-    ${MUPDF_GENERATED_INCLUDE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
     ${SECCOMP_INCLUDE_DIRS}
-)
-target_include_directories(okular-mupdf-worker SYSTEM PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty # vendored thirdparty/ headers
 )
 
 target_link_libraries(okular-mupdf-worker PRIVATE

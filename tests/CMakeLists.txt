@@ -5,15 +5,14 @@ find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Network Test Xml)
 
 add_library(mupdf_test_plugin_ocr STATIC
     ../src/plugin/caching/cache_file.cpp
-    ../src/plugin/caching/ocr_cache.cpp
-    ../src/shared/logging.cpp)
+    ../src/plugin/caching/ocr_cache.cpp)
 target_include_directories(mupdf_test_plugin_ocr PUBLIC
     ../src)
-target_link_libraries(mupdf_test_plugin_ocr PUBLIC Qt6::Core ZLIB::ZLIB)
+target_link_libraries(mupdf_test_plugin_ocr PUBLIC Qt6::Core mupdf_shared ZLIB::ZLIB)
 
 function(add_layer_test target source label)
     add_executable(${target} ${source} ${ARGN})
-    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Test)
+    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Test mupdf_shared)
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES
         LABELS "${label}"
@@ -51,15 +50,15 @@ target_include_directories(test_mupdf PRIVATE
     support
     ../src
     ../src/worker
-    ${MUPDF_GENERATED_INCLUDE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
     ${NSS_INCLUDE_DIRS})
-target_include_directories(test_mupdf SYSTEM PRIVATE ../thirdparty)
 target_link_libraries(test_mupdf PRIVATE
     Qt6::Core
     Qt6::Test
     Qt6::Gui
     Qt6::Network
     Okular::Core
+    mupdf_shared
     mupdf_worker_core
     MuPDF::Engine
     ${NSS_LIBRARIES}
@@ -100,10 +99,9 @@ add_executable(test_nss_runtime
     ../src/plugin/crypto/nss_state.cpp
     ../src/plugin/crypto/nss_signing.cpp
     ../src/plugin/crypto/certificate_info.cpp
-    ../src/plugin/crypto/certificate_database.cpp
-    ../src/shared/logging.cpp)
+    ../src/plugin/crypto/certificate_database.cpp)
 target_include_directories(test_nss_runtime PRIVATE ../src ${NSS_INCLUDE_DIRS})
-target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test ${NSS_LIBRARIES})
+target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test mupdf_shared ${NSS_LIBRARIES})
 foreach(runtime_test IN ITEMS
         defaultPathSelection
         defaultFallbackMode
@@ -121,8 +119,7 @@ foreach(runtime_test IN ITEMS
 endforeach()
 
 add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generator
-    ../src/generator/placeholder.cpp
-    ../src/shared/logging.cpp)
+    ../src/generator/placeholder.cpp)
 target_include_directories(test_generator_placeholder PRIVATE ../src)
 target_link_libraries(test_generator_placeholder PRIVATE Okular::Core Qt6::Gui KF6::I18n)
 
@@ -130,8 +127,6 @@ add_layer_test(test_plugin_ocrcontroller plugin/test_ocrcontroller.cpp plugin
     ../src/plugin/ocr/controller.cpp
     ../src/plugin/worker_client.cpp
     ../src/plugin/worker_transport.cpp
-    ../src/shared/model/validation.cpp
-    ../src/shared/protocol/zpp_codec.cpp
     ../src/plugin/caching/cache_file.cpp
     ../src/plugin/crypto/nss.cpp
     ../src/plugin/crypto/nss_state.cpp
@@ -140,9 +135,8 @@ add_layer_test(test_plugin_ocrcontroller plugin/test_ocrcontroller.cpp plugin
     ../src/plugin/crypto/certificate_database.cpp
     ../src/plugin/caching/epub_cache.cpp)
 target_include_directories(test_plugin_ocrcontroller PRIVATE
-    ../src ${MUPDF_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
-target_include_directories(test_plugin_ocrcontroller SYSTEM PRIVATE ../thirdparty)
-target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_test_plugin_ocr mupdf_transport ${NSS_LIBRARIES} Qt6::Gui Qt6::Network Qt6::Concurrent)
+    ../src ${MU_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
+target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_test_plugin_ocr mupdf_shared ${NSS_LIBRARIES} Qt6::Gui Qt6::Network Qt6::Concurrent)
 
 set(MUPDF_SETTINGS_SOURCE ${CMAKE_BINARY_DIR}/src/mupdfsettings.cpp)
 set_source_files_properties(${MUPDF_SETTINGS_SOURCE} PROPERTIES GENERATED TRUE)
@@ -168,7 +162,9 @@ add_layer_test(test_generator_proxies generator/test_proxies.cpp generator
     ../src/generator/conversion/text.cpp
     ../src/plugin/util/signature_image.cpp)
 target_include_directories(test_generator_proxies PRIVATE ../src)
-target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui Qt6::Xml)
+# Explicit MuPDF include path: annotation.cpp uses PDF_ANNOT_* constants and
+# must not silently fall back to system MuPDF headers.
+target_link_libraries(test_generator_proxies PRIVATE Okular::Core Qt6::Gui Qt6::Xml MuPDF::Headers)
 
 # Security policy checks execute in a child because sandbox activation is irreversible.
 add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp)
@@ -181,14 +177,9 @@ if(MU_DEBUG_BUILD)
     target_compile_definitions(test_security_sandbox PRIVATE MU_DEBUG_ENABLED)
 endif()
 
-add_layer_test(test_security_transport security/transport.cpp security
-    ../src/shared/model/validation.cpp
-    ../src/shared/protocol/zpp_codec.cpp
-    ../src/shared/logging.cpp)
+add_layer_test(test_security_transport security/transport.cpp security)
 target_include_directories(test_security_transport PRIVATE
-    ../src ${MUPDF_GENERATED_INCLUDE_DIR})
-target_include_directories(test_security_transport SYSTEM PRIVATE ../thirdparty)
-target_link_libraries(test_security_transport PRIVATE mupdf_transport)
+    ../src ${MU_GENERATED_INCLUDE_DIR})
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_security_transport PRIVATE MU_DEBUG_ENABLED)
     target_sources(test_security_transport PRIVATE ../src/shared/protocol/ipc_debug.cpp)
