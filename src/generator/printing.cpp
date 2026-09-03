@@ -59,5 +59,3 @@ void PrintOptionsPage::setScaleMode(PrintScaleMode mode)
 }
 
 } // namespace Mu::Generator
-
-#include "printing.moc"
