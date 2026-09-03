@@ -11,6 +11,7 @@
 #include <cert.h>
 #include <certdb.h>
 #include <cms.h>
+#include <ocsp.h>
 #include <pk11pub.h>
 #include <prerror.h>
 #include <prtime.h>
@@ -229,7 +230,33 @@ HashAlgorithm Internal::hashAlgorithmForDigest(SECOidTag digestAlgorithm)
     }
 }
 
-void validateDetachedPdfSignature(SignatureField& field, QIODevice& source)
+// Applies the caller's OCSP preference to the process-global certificate
+// database for the duration of one validation. Soft-fail semantics apply: an
+// unreachable responder keeps the chain-derived status. The OCSP response
+// cache persists across scopes, so repeated validations stay cheap.
+class OcspScope {
+public:
+    OcspScope(CERTCertDBHandle* certdb, bool enabled)
+    {
+        if (!certdb || !enabled)
+            return;
+        m_restore = CERT_EnableOCSPChecking(certdb) == SECSuccess;
+    }
+
+    ~OcspScope()
+    {
+        if (m_restore)
+            CERT_DisableOCSPChecking(CERT_GetDefaultCertDB());
+    }
+
+    OcspScope(const OcspScope&) = delete;
+    OcspScope& operator=(const OcspScope&) = delete;
+
+private:
+    bool m_restore = false;
+};
+
+void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool checkOcsp)
 {
     // Validation proceeds in phases: validate the signed range, parse CMS,
     // hash the covered bytes, verify the signature, then classify the signer.
@@ -268,6 +295,7 @@ void validateDetachedPdfSignature(SignatureField& field, QIODevice& source)
         return;
     }
     CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
+    const OcspScope ocsp(certdb, checkOcsp);
     const NssCertificate certificate = loadCmsSignerCertificate(cms.signedData, cms.signerInfo, certdb);
     if (!certificate) {
         field.signatureStatus = SignatureStatus::DecodingError;

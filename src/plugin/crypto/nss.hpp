@@ -58,8 +58,11 @@ enum class NssRuntimeMode {
                                                     const std::array<std::uint8_t, 32>& digest);
 
 /// Validates untrusted detached PDF signature material and restores the source
-/// position when it was readable.
-void validateDetachedPdfSignature(Model::SignatureField& field, QIODevice& source);
+/// position when it was readable. When `checkOcsp` is set, OCSP revocation
+/// checking is enabled on the certificate database for the duration of the
+/// validation (soft-fail: an unreachable responder keeps the chain-derived
+/// status).
+void validateDetachedPdfSignature(Model::SignatureField& field, QIODevice& source, bool checkOcsp = false);
 
 } // namespace Mu::Plugin::Crypto
 

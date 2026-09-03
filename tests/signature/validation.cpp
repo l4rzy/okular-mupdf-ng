@@ -449,6 +449,13 @@ private slots:
         QCOMPARE(trustedField.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
         QCOMPARE(trustedField.certificateStatus, ::Mu::Model::CertificateStatus::Trusted);
 
+        // OCSP checking (no responder in the test environment) must not change
+        // chain-derived statuses: soft-fail keeps the trust decision intact.
+        auto ocspField = field;
+        ::Mu::Plugin::Crypto::validateDetachedPdfSignature(ocspField, source, true);
+        QCOMPARE(ocspField.signatureStatus, trustedField.signatureStatus);
+        QCOMPARE(ocspField.certificateStatus, trustedField.certificateStatus);
+
         const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         const auto managedCertificate = findManagedCertificate(certificates, nickname.toStdString());

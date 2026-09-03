@@ -326,7 +326,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
         for (Model::SignatureField& sfd : pageInfo.signatureFields) {
             if (canValidateSignatures)
-                Plugin::Crypto::validateDetachedPdfSignature(sfd, *signatureSource);
+                Plugin::Crypto::validateDetachedPdfSignature(sfd, *signatureSource, MuPDFSettings::self()->useOcsp());
             auto* sig = new Proxy::Form::Signature(sfd.objectNumber, std::move(sfd), &m_worker);
             formFields.append(sig);
         }

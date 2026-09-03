@@ -127,4 +127,9 @@
       <default code="true">QStringList()</default>
     </entry>
   </group>
+  <group name="Signatures">
+    <entry key="UseOcsp" type="Bool">
+      <default>false</default>
+    </entry>
+  </group>
 </kcfg>
