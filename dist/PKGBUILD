@@ -2,7 +2,7 @@
 pkgbase=okular-mupdf-ng
 pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
-pkgver=0.1.6.r32.g171809b
+pkgver=0.1.10
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
 arch=('x86_64')
@@ -20,16 +20,16 @@ makedepends=('brotli' 'clang' 'cmake' 'extra-cmake-modules' 'freetype2'
 # (USE_SYSTEM_LIBS=yes), so they remain direct runtime dependencies of the
 # static package. Global depends serves the pre-build dependency check; each
 # package function overrides depends for its own link variant.
-_common_depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'openssl' 'libseccomp')
+_common_depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp')
 depends=("${_common_depends[@]}"
          'brotli' 'freetype2' 'harfbuzz' 'jbig2dec' 'leptonica'
          'libjpeg-turbo' 'openjpeg2' 'zlib')
-provides=(okular-backend-mupdf)
-conflicts=(okular-backend-mupdf okular-mupdf-ng-dynamic)
+conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 # Replace with source=("git+$url.git") when the PKGBUILD is standalone.
 source=("$_pkgname::git+file://$startdir/..")
 sha256sums=('SKIP')
 _PREFIX="${PREFIX:-/usr}"
+_mupdf_min_ver="1.28.0"
 
 pkgver() {
   local json_file="$srcdir/$_pkgname/src/generator/mupdfng.json"
@@ -37,17 +37,7 @@ pkgver() {
   if [ -f "$json_file" ]; then
     base_ver=$(jq -r '.KPlugin.Version' "$json_file" 2>/dev/null)
   fi
-
-  if [ -d "$srcdir/$_pkgname/.git" ]; then
-    cd "$srcdir/$_pkgname"
-    if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
-      printf "%s" "$base_ver"
-      return
-    fi
-    printf "%s.r%s.g%s" "$base_ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-  else
-    printf "%s" "$base_ver"
-  fi
+  printf "%s" "$base_ver"
 }
 
 prepare() {
@@ -65,7 +55,7 @@ build() {
   for _variant in static dynamic; do
     if [ "$_variant" = dynamic ]; then
       _mupdf_mode=ON
-      _mupdf_flags=(-DMUPDF_SYSTEM_MIN_VERSION=1.28.0)
+      _mupdf_flags=(-DMUPDF_SYSTEM_MIN_VERSION=$_mupdf_min_ver)
     else
       _mupdf_mode=OFF
       _mupdf_flags=()
@@ -86,16 +76,15 @@ build() {
 
 package_okular-mupdf-ng() {
   pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, statically linked MuPDF)"
-  provides=(okular-backend-mupdf)
-  conflicts=(okular-backend-mupdf okular-mupdf-ng-dynamic)
+  conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
   DESTDIR="$pkgdir" cmake --install build-static
 }
 
 package_okular-mupdf-ng-dynamic() {
   pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, dynamically linked against system MuPDF)"
   # The system MuPDF pulls its third-party libraries in transitively.
-  depends=("${_common_depends[@]}" 'mupdf')
-  provides=(okular-backend-mupdf)
-  conflicts=(okular-backend-mupdf okular-mupdf-ng)
+  depends=("${_common_depends[@]}" "libmupdf>=${_mupdf_min_ver}")
+  provides=(okular-mupdf-ng)
+  conflicts=(okular-mupdf-ng okular-mupdf-ng-git)
   DESTDIR="$pkgdir" cmake --install build-dynamic
 }

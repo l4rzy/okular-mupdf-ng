@@ -1,0 +1,38 @@
+# Maintainer: rzy <me@23ro.org>
+pkgbase=okular-mupdf-ng-git
+pkgname=okular-mupdf-ng-git
+_pkgname=okular-mupdf-ng
+pkgver=0.1.10.r63.gb7f6b42
+pkgrel=1
+pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation) - git"
+arch=('x86_64')
+url="https://github.com/l4rzy/okular-mupdf-ng"
+license=('GPL-3.0-or-later')
+depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp' 'libmupdf>=1.28.0' 'zlib')
+makedepends=('cmake' 'extra-cmake-modules' 'git' 'jq' 'pkgconf' 'qt6-tools')
+provides=('okular-mupdf-ng')
+conflicts=('okular-mupdf-ng')
+source=("$_pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  local ver
+  ver=$(jq -r '.KPlugin.Version' "$srcdir/$_pkgname/src/generator/mupdfng.json" 2>/dev/null)
+  printf "%s.r%s.g%s" "$ver" "$(git -C "$srcdir/$_pkgname" rev-list --count HEAD)" \
+    "$(git -C "$srcdir/$_pkgname" rev-parse --short=7 HEAD)"
+}
+
+build() {
+  cmake -B "$srcdir/build" -S "$srcdir/$_pkgname" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+    -DUSE_SYSTEM_MUPDF=ON \
+    -DMUPDF_SYSTEM_MIN_VERSION=1.28.0 \
+    -DBUILD_TESTING=OFF
+  cmake --build "$srcdir/build"
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}
