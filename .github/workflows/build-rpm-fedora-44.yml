@@ -48,8 +48,10 @@ jobs:
             mold \
             ninja-build \
             nss-devel \
+            nss-tools \
             okular-devel \
             openjpeg2-devel \
+            openssl \
             pkgconf-pkg-config \
             python3 \
             qt6-qtbase-devel \
@@ -82,7 +84,7 @@ jobs:
             -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DUSE_SYSTEM_GUMBO=OFF \
-            -DBUILD_TESTING=OFF \
+            -DBUILD_TESTING=ON \
             -DENABLE_MU_DEBUG=OFF \
             -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
             -DCPACK_RPM_PACKAGE_RELEASE_DIST=ON \
@@ -92,6 +94,9 @@ jobs:
         run: |
           cmake --build build -j$(nproc)
           cpack --config build/CPackConfig.cmake -B build/packages -G RPM
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
 
       - name: Validate Fedora RPM package
         run: |

@@ -60,8 +60,12 @@ build() {
       _mupdf_mode=OFF
       _mupdf_flags=()
     fi
+    local _testing=OFF
+    if [ "$_variant" = static ]; then
+      _testing=ON
+    fi
     cmake -B "build-$_variant" -S "$srcdir/$_pkgname" -G Ninja \
-      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_BUILD_TYPE=None \
       -DCMAKE_C_COMPILER=clang \
       -DCMAKE_CXX_COMPILER=clang++ \
       -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
@@ -69,9 +73,13 @@ build() {
       -DCMAKE_LINKER_TYPE=MOLD \
       -DUSE_SYSTEM_MUPDF=$_mupdf_mode \
       "${_mupdf_flags[@]}" \
-      -DBUILD_TESTING=OFF
+      -DBUILD_TESTING=$_testing
     cmake --build "build-$_variant"
   done
+}
+
+check() {
+  ctest --test-dir build-static --output-on-failure
 }
 
 package_okular-mupdf-ng() {

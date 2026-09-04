@@ -34,9 +34,11 @@ jobs:
             libjpeg-dev \
             libleptonica-dev \
             libnss3-dev \
+            libnss3-tools \
             libopenjp2-7-dev \
             libseccomp-dev \
             mold \
+            openssl \
             libkf6config-dev \
             libkf6configwidgets-dev \
             libkf6coreaddons-dev \
@@ -68,7 +70,7 @@ jobs:
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
             -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
-            -DBUILD_TESTING=OFF \
+            -DBUILD_TESTING=ON \
             -DENABLE_MU_DEBUG=OFF \
             -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
 
@@ -82,6 +84,9 @@ jobs:
           package_version=$(dpkg-deb --field "$package" Version)
           package_architecture=$(dpkg-deb --field "$package" Architecture)
           mv "$package" "build/packages/${package_name}_${package_version}_${package_architecture}_ubuntu-26.04.deb"
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
 
       - name: Validate Debian package
         run: |

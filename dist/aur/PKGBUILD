@@ -2,7 +2,7 @@
 pkgbase=okular-mupdf-ng-git
 pkgname=okular-mupdf-ng-git
 _pkgname=okular-mupdf-ng
-pkgver=0.1.10.r6.gb46f30e
+pkgver=0.1.10.r10.g75799b0
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation) - git"
 arch=('x86_64')

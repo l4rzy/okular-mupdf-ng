@@ -42,8 +42,10 @@ jobs:
             mold \
             ninja \
             mozilla-nss-devel \
+            mozilla-nss-tools \
             okular-devel \
             openjpeg2-devel \
+            openssl \
             pkgconf-pkg-config \
             python314-base \
             rpm-build \
@@ -81,7 +83,7 @@ jobs:
             -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DUSE_SYSTEM_GUMBO=OFF \
-            -DBUILD_TESTING=OFF \
+            -DBUILD_TESTING=ON \
             -DENABLE_MU_DEBUG=OFF \
             -DTESSDATA_DIR=/usr/share/tessdata
 
@@ -96,6 +98,9 @@ jobs:
           package_release=$(rpm --queryformat '%{RELEASE}' -qp "$package")
           package_architecture=$(rpm --queryformat '%{ARCH}' -qp "$package")
           mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.tumbleweed.${package_architecture}.rpm"
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
 
       - name: Validate RPM package
         run: |
