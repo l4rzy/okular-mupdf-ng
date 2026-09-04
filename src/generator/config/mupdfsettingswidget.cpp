@@ -100,11 +100,8 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
             ocrLang->addItem(file, file);
         }
     } else {
-        // Fallback default list if directory is missing or empty
-        const QStringList defaults = { QStringLiteral("eng.traineddata") };
-        for (const QString& defItem : defaults) {
-            ocrLang->addItem(defItem, defItem);
-        }
+        // No models installed: show an honest placeholder instead of a phantom default.
+        ocrLang->addItem(QStringLiteral("-"), QStringLiteral("-"));
     }
 
     auto* ocrQuality = m_mupdfsw->kcfg_OcrQuality;

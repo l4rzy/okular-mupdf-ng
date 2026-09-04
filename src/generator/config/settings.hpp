@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string_view>
 
 #include "plugin/ocr/config.hpp"
 #include "shared/model/types.hpp"
@@ -36,6 +37,9 @@ struct EpubSettings {
 
     bool operator==(const EpubSettings& other) const = default;
 };
+
+/// Sentinel shown in the OCR language dropdown when no traineddata models exist.
+inline constexpr std::string_view NoOcrModel = "-";
 
 /// OCR policy read from the generator settings page.
 struct OcrSettings {

@@ -70,6 +70,22 @@ private slots:
         QVERIFY(!settings.autoTrigger);
     }
 
+    void disablesOcrTriggersWhenNoModelInstalled()
+    {
+        const QString originalLanguage = MuPDFSettings::ocrLanguage();
+        const int originalTriggerMode = MuPDFSettings::ocrTriggerMode();
+        MuPDFSettings::setOcrLanguage(QStringLiteral("-"));
+        MuPDFSettings::setOcrTriggerMode(MuPDFSettings::EnumOcrTriggerMode::Always);
+
+        const auto settings = ::Mu::Generator::Config::readOcrSettings();
+        MuPDFSettings::setOcrLanguage(originalLanguage);
+        MuPDFSettings::setOcrTriggerMode(originalTriggerMode);
+
+        QCOMPARE(settings.language, QStringLiteral("-"));
+        QVERIFY(!settings.force);
+        QVERIFY(!settings.autoTrigger);
+    }
+
     void normalizesTessdataDirectories()
     {
         const QStringList input {

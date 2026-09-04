@@ -60,7 +60,7 @@
   </group>
   <group name="OCR">
     <entry key="OcrLanguage" type="String">
-      <default>eng.traineddata</default>
+      <default>-</default>
     </entry>
     <entry key="OcrTriggerMode" type="Enum">
       <default>Five</default>
