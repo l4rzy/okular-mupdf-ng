@@ -26,7 +26,7 @@
 #include <QTextStream>
 #include <unordered_map>
 
-#include "generator/config/mupdfsettingswidget.hpp"
+#include "generator/config/settingswidget.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
@@ -39,7 +39,7 @@
 #include "generator/proxy/form/radio_button.hpp"
 #include "generator/proxy/form/radio_grouping.hpp"
 #include "generator/proxy/form/text.hpp"
-#include "mupdfsettings.h"
+#include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/util/signature_image.hpp"

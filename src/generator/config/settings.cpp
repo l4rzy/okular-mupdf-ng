@@ -6,7 +6,7 @@
 #include <QDir>
 #include <QMimeDatabase>
 
-#include "mupdfsettings.h"
+#include "mupdfngsettings.h"
 #include "plugin/caching/ocr_cache.hpp"
 
 namespace Mu::Generator::Config {

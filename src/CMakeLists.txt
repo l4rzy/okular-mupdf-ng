@@ -52,7 +52,7 @@ set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
   generator/printing.cpp
   generator/proxy/certificate_store.cpp
-  generator/config/mupdfsettingswidget.cpp
+  generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp
   generator/config/csseditor/highlighter.cpp
   plugin/crypto/certificate_database.cpp
@@ -69,15 +69,15 @@ set(okularGenerator_mupdfng_SRCS
 )
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
-   generator/config/mupdfsettingswidget.ui
+   generator/config/settingswidget.ui
 )
 
 kconfig_add_kcfg_files(okularGenerator_mupdfng_SRCS
-   GENERATE_MOC generator/config/mupdfsettings.kcfgc
+   GENERATE_MOC generator/config/mupdfngsettings.kcfgc
 )
 
 add_custom_target(mupdf_generator_settings_codegen
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mupdfsettings.cpp
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mupdfngsettings.cpp
 )
 
 kcoreaddons_add_plugin(okularGenerator_mupdfng

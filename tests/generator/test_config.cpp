@@ -4,7 +4,7 @@
 #include <QTest>
 
 #include "generator/config/settings.hpp"
-#include "mupdfsettings.h"
+#include "mupdfngsettings.h"
 
 class TestGeneratorConfig : public QObject {
     Q_OBJECT

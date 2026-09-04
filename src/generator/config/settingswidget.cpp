@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/config/mupdfsettingswidget.hpp"
+#include "generator/config/settingswidget.hpp"
 
 #include <KLocalizedString>
 #include <QDir>
 
 #include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/certmanager/manager_dialog.hpp"
-#include "mupdfsettings.h"
+#include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
-#include "ui_mupdfsettingswidget.h"
+#include "ui_settingswidget.h"
 
 namespace Mu::Generator {
 

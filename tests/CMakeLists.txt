@@ -137,7 +137,7 @@ target_include_directories(test_plugin_ocrcontroller PRIVATE
     ../src ${MU_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
 target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_test_plugin_ocr mupdf_shared ${NSS_LIBRARIES} Qt6::Gui Qt6::Network Qt6::Concurrent)
 
-set(MUPDF_SETTINGS_SOURCE ${CMAKE_BINARY_DIR}/src/mupdfsettings.cpp)
+set(MUPDF_SETTINGS_SOURCE ${CMAKE_BINARY_DIR}/src/mupdfngsettings.cpp)
 set_source_files_properties(${MUPDF_SETTINGS_SOURCE} PROPERTIES GENERATED TRUE)
 add_layer_test(test_generator_config generator/test_config.cpp generator
     ../src/generator/config/settings.cpp

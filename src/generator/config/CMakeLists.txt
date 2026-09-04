@@ -1,1 +1,1 @@
-install(FILES mupdfsettings.kcfg DESTINATION ${KDE_INSTALL_KCFGDIR})
+install(FILES mupdfngsettings.kcfg DESTINATION ${KDE_INSTALL_KCFGDIR})
