@@ -49,8 +49,6 @@ jobs:
             pkgconf-pkg-config \
             python314-base \
             rpm-build \
-            tesseract-ocr \
-            tesseract-ocr-traineddata-eng \
             qt6-base-devel \
             zlib-devel
 
@@ -60,9 +58,6 @@ jobs:
           test "$(command -v python3)" = /usr/local/bin/python3
           test "$(readlink -f "$(command -v python3)")" = /usr/bin/python3.14
           python3 -c 'import sys; assert sys.version_info >= (3, 12)'
-
-      - name: Verify OCR language data
-        run: test -f /usr/share/tessdata/eng.traineddata
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -113,8 +108,6 @@ jobs:
           test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = x86_64
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
-          printf '%s\n' "$requirements" | grep -Fx tesseract-ocr
-          printf '%s\n' "$requirements" | grep -Fx tesseract-ocr-traineddata-eng
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfsettings\.kcfg$'

@@ -27,23 +27,17 @@ jobs:
             extra-cmake-modules \
             clang \
             qt6-base \
-            qt6-5compat \
-            qt6-declarative \
             kcoreaddons \
             ki18n \
             kconfig \
             kconfigwidgets \
             kio \
-            kiconthemes \
             okular \
             mupdf \
-            mujs \
             openssl \
             nss \
             libseccomp \
             zlib \
-            tesseract \
-            tesseract-data-eng \
             jq \
             sudo
 

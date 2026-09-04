@@ -56,14 +56,11 @@ jobs:
             python3 \
             qt6-qtbase-devel \
             rpm-build \
-            tesseract \
-            tesseract-langpack-eng \
             zlib-ng-compat-devel
 
       - name: Verify build environment
         run: |
           python3 -c 'import sys; assert sys.version_info >= (3, 12)'
-          test -f /usr/share/tesseract/tessdata/eng.traineddata
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -88,7 +85,7 @@ jobs:
             -DENABLE_MU_DEBUG=OFF \
             -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
             -DCPACK_RPM_PACKAGE_RELEASE_DIST=ON \
-            "-DCPACK_RPM_PACKAGE_REQUIRES=okular, tesseract, tesseract-langpack-eng"
+            "-DCPACK_RPM_PACKAGE_REQUIRES=okular"
 
       - name: Build Fedora RPM package
         run: |
@@ -109,8 +106,6 @@ jobs:
           test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = x86_64
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
-          printf '%s\n' "$requirements" | grep -Fx tesseract
-          printf '%s\n' "$requirements" | grep -Fx tesseract-langpack-eng
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfsettings\.kcfg$'

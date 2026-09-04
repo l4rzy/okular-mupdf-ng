@@ -49,7 +49,6 @@ jobs:
             pkg-config \
             python3 \
             qt6-base-dev \
-            tesseract-ocr \
             zlib1g-dev
 
       - name: Checkout Repository
@@ -99,7 +98,6 @@ jobs:
           test "$(dpkg-deb --field "$package" Architecture)" = amd64
           dependencies=$(dpkg-deb --field "$package" Depends)
           printf '%s\n' "$dependencies" | grep -Eq '(^|, )okular([ (]|,|$)'
-          printf '%s\n' "$dependencies" | grep -Eq '(^|, )tesseract-ocr([ (]|,|$)'
           dpkg-deb --contents "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           dpkg-deb --contents "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
           dpkg-deb --contents "$package" | grep -q '/mupdfsettings\.kcfg$'
