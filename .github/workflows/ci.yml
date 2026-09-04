@@ -40,6 +40,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build tag-to-tag changelog
+        id: changelog
+        run: |
+          set -eu
+          new_tag="${GITHUB_REF_NAME}"
+          # Newest-first version sort; the line after the current tag is the previous release.
+          prev_tag=$(git tag --sort=-v:refname | awk -v current="$new_tag" '$0 == current { getline; print; exit }')
+          if [ -n "$prev_tag" ]; then
+            range="${prev_tag}..${new_tag}"
+            header="Changes ${prev_tag} → ${new_tag}"
+          else
+            range="$new_tag"
+            header="Changes in ${new_tag} (first release)"
+          fi
+          {
+            echo "## ${header}"
+            echo
+            git log --no-merges --pretty='- %h %s (%an)' "$range"
+          } > changelog.md
+          cat changelog.md
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -54,6 +81,7 @@ jobs:
             release-assets/*.pkg.tar.zst
             release-assets/*.deb
             release-assets/*.rpm
-          generate_release_notes: true
+          body_path: changelog.md
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
