@@ -1,5 +1,9 @@
 # okular-mupdf-ng
 
+[![GitHub license](https://img.shields.io/github/license/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING)
+[![GitHub commit activity (branch)](https://img.shields.io/github/commit-activity/m/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/commits)
+[![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml)](https://github.com/l4rzy/okular-mupdf-ng/actions)
+
 A secure and fast PDF and EPUB generator for Okular.
 > Beta: Real-world testers are welcome. Please report any issue via Github Issues.
 
@@ -46,18 +50,6 @@ and the source-tree layout.
 - Build dependencies required by MuPDF, including FreeType, HarfBuzz, JPEG,
   JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
-
-The default build statically links the pinned MuPDF source. The build
-script downloads it to `thirdparty/mupdf-{version}-source/` automatically when
-absent and verifies its SHA-256. The bundled build uses MuPDF's bundled Gumbo
-source by default; pass `-DUSE_SYSTEM_GUMBO=ON` to use a system Gumbo package
-instead.
-A compatible system MuPDF package (>=1.28.0) can instead be selected with
-`-DUSE_SYSTEM_MUPDF=ON`.
-
-OCR uses the build-time `TESSDATA_DIR` setting, which defaults to
-`/usr/share/tessdata`. Additional tessdata directories can be configured in
-the hidden `Advanced/TessDataDirectories` configuration entry.
 
 ## Building and testing
 
