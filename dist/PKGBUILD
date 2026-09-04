@@ -12,8 +12,8 @@ license=('GPL-3.0-or-later')
 # provides the headers and pkg-config file for the dynamic variant; mold links
 # the two large static archives much faster than lld and is a hard requirement
 # so packaging stays deterministic.
-makedepends=('brotli' 'clang' 'cmake' 'extra-cmake-modules' 'freetype2'
-             'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
+makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
+             'gcc' 'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
              'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'openjpeg2' 'pkgconf'
              'python' 'qt6-tools')
 # The bundled-MuPDF build links MuPDF's third-party libraries from the system
@@ -60,26 +60,23 @@ build() {
       _mupdf_mode=OFF
       _mupdf_flags=()
     fi
-    local _testing=OFF
-    if [ "$_variant" = static ]; then
-      _testing=ON
-    fi
     cmake -B "build-$_variant" -S "$srcdir/$_pkgname" -G Ninja \
       -DCMAKE_BUILD_TYPE=None \
-      -DCMAKE_C_COMPILER=clang \
-      -DCMAKE_CXX_COMPILER=clang++ \
+      -DCMAKE_C_COMPILER=gcc \
+      -DCMAKE_CXX_COMPILER=g++ \
       -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
       -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
       -DCMAKE_LINKER_TYPE=MOLD \
       -DUSE_SYSTEM_MUPDF=$_mupdf_mode \
       "${_mupdf_flags[@]}" \
-      -DBUILD_TESTING=$_testing
+      -DBUILD_TESTING=ON
     cmake --build "build-$_variant"
   done
 }
 
 check() {
   ctest --test-dir build-static --output-on-failure
+  ctest --test-dir build-dynamic --output-on-failure
 }
 
 package_okular-mupdf-ng() {

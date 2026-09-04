@@ -12,8 +12,8 @@ jobs:
       options: --privileged
 
     env:
-      CC: clang
-      CXX: clang++
+      CC: gcc
+      CXX: g++
 
     steps:
       - name: Update System & Install Dependencies
@@ -58,7 +58,7 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
           cd dist
-          sudo -u builder CC=clang CXX=clang++ makepkg -sf --noconfirm
+          sudo -u builder CC=gcc CXX=g++ makepkg -sf --noconfirm
 
       - name: Upload Arch Linux package
         uses: actions/upload-artifact@v4
