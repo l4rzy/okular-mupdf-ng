@@ -134,24 +134,16 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
                     for (int index = 0; index < raw.byteRangeCount; ++index)
                         raw.byteRange[index] = pdf_to_int64(context, pdf_array_get(context, byteRange, index));
                 }
-                // Resolve /V ourselves and refuse anything but a live
-                // dictionary: a dangling vnum makes pdf_load_unencrypted_object
-                // return garbage that pdf_signature_contents dereferences.
-                // The null-safe resolver (unlike the loader) yields NULL for
-                // uncommitted numbers, and direct dictionaries keep working.
-                pdf_obj* vRef = pdf_dict_get_inheritable(context, field, PDF_NAME(V));
-                pdf_obj* vObj = vRef ? pdf_resolve_indirect(context, vRef) : nullptr;
-                if (vObj && pdf_is_dict(context, vObj)) {
-                    // Avoid asking MuPDF to allocate an oversized /Contents string.
-                    pdf_obj* contents = pdf_dict_get(context, signature, PDF_NAME(Contents));
-                    const std::size_t remainingCmsBytes = totalCmsBytes < Constant::MaxPageSignatureCmsBytes
-                        ? Constant::MaxPageSignatureCmsBytes - totalCmsBytes
-                        : 0;
-                    const std::size_t maxContentsBytes = std::min(Constant::MaxSignatureCmsBytes, remainingCmsBytes);
-                    if (contents && pdf_is_string(context, contents)
-                        && pdf_to_str_len(context, contents) <= maxContentsBytes) {
-                        raw.contentsSize = pdf_signature_contents(context, pdfDocument, field, &raw.contents);
-                    }
+
+                // Avoid asking MuPDF to allocate an oversized /Contents string.
+                pdf_obj* contents = pdf_dict_get(context, signature, PDF_NAME(Contents));
+                const std::size_t remainingCmsBytes = totalCmsBytes < Constant::MaxPageSignatureCmsBytes
+                    ? Constant::MaxPageSignatureCmsBytes - totalCmsBytes
+                    : 0;
+                const std::size_t maxContentsBytes = std::min(Constant::MaxSignatureCmsBytes, remainingCmsBytes);
+                if (contents && pdf_is_string(context, contents)
+                    && pdf_to_str_len(context, contents) <= maxContentsBytes) {
+                    raw.contentsSize = pdf_signature_contents(context, pdfDocument, field, &raw.contents);
                 }
             }
             accepted = true;
@@ -298,8 +290,6 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     }
 
     std::array<unsigned char, 65536> copyBuffer { };
-    bool hadValue = false;
-    int savedFlags = 0;
     fz_var(nativePage);
     fz_var(widget);
     fz_var(graphic);
@@ -309,8 +299,6 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     fz_var(saved);
     fz_var(createdWidget);
     fz_var(widgetMutationComplete);
-    fz_var(hadValue);
-    fz_var(savedFlags);
 
     fz_try(m_context)
     {
@@ -408,25 +396,6 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
             }
         }
 
-        // Snapshot the field's pre-sign state; pdf_sign_signature() installs
-        // /V (a new, uncommitted object) before invoking the CMS callback,
-        // so a callback failure needs an explicit, verifiable undo. The
-        // snapshot lives in function scope so the catch block below can
-        // verify the rollback against it.
-        fz_try(m_context)
-        {
-            if (pdf_obj* target = pdf_annot_obj(m_context, widget)) {
-                hadValue = pdf_dict_get_inheritable(m_context, target, PDF_NAME(V)) != nullptr;
-                savedFlags = pdf_field_flags(m_context, target);
-            }
-        }
-        fz_catch(m_context)
-        {
-            // Fail closed before mutating: rethrow so the outer catch
-            // releases the output file and the tail drops run.
-            fz_rethrow(m_context);
-        }
-
         // Step 3: Register signer with MuPDF and compute incremental write
         pdf_sign_signature(m_context,
                            widget,
@@ -479,65 +448,25 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
             sourceCopy = nullptr;
         }
         // MuPDF mutates the widget before invoking the CMS callback. Roll back
-        // that in-memory mutation when serialization or the callback fails,
-        // and verify the postcondition: a dangling /V here segfaults the
-        // next pageDetails inside pdf_signature_contents.
+        // that in-memory mutation when serialization or the callback fails.
         if (widget && nativePage && !widgetMutationComplete) {
-            bool restored = false;
-            fz_var(restored);
             fz_try(m_context)
             {
-                clearSignatureMutation(m_context, nativePage, widget, createdWidget);
-                if (pdf_obj* target = pdf_annot_obj(m_context, widget)) {
-                    pdf_obj* current = pdf_dict_get_inheritable(m_context, target, PDF_NAME(V));
-                    auto* pdf = pdf_specifics(m_context, m_document);
-                    restored = createdWidget ? (target == nullptr)
-                                             : (hadValue ? current != nullptr : current == nullptr)
-                            && (!pdf || !pdf_signature_is_signed(m_context, pdf, target));
-                } else {
-                    restored = createdWidget; // deleted annot is gone: correct
-                }
+                if (createdWidget)
+                    clearSignatureMutation(m_context, nativePage, widget, true);
+                else
+                    clearSignatureMutation(m_context, nativePage, widget, false);
             }
             fz_catch(m_context)
             {
-                restored = false;
-            }
-            if (!restored) {
-                // Explicit surgical restore from the snapshot, then re-verify.
-                bool repaired = false;
-                fz_var(repaired);
-                fz_try(m_context)
-                {
-                    if (pdf_obj* target = pdf_annot_obj(m_context, widget)) {
-                        if (!hadValue && !createdWidget)
-                            pdf_dict_del(m_context, target, PDF_NAME(V));
-                        pdf_dict_put_int(m_context, target, PDF_NAME(Ff), savedFlags);
-                        pdf_dirty_obj(m_context, target);
-                        auto* pdf = pdf_specifics(m_context, m_document);
-                        repaired = !pdf || !pdf_signature_is_signed(m_context, pdf, target);
-                    } else {
-                        repaired = createdWidget;
-                    }
-                }
-                fz_catch(m_context)
-                {
-                    repaired = false;
-                }
-                if (!repaired) {
-                    MU_LOG(critical, "Mu::Worker", "signature rollback failed; document state is tainted");
-                    fail(error, "signature rollback failed after signing error");
-                }
             }
         }
 
-        // A tainted rollback above already set a specific error; keep it.
-        if (!error || error->empty()) {
-            MU_LOG(warning, "Mu::Worker", std::string("signing failed: ") + fz_caught_message(m_context));
-            const CmsResult cms = signerResult(signer);
-            if (signingResult && cms.result != SigningResult::Success)
-                *signingResult = cms.result;
-            fail(error, cms.details.empty() ? fz_caught_message(m_context) : cms.details.c_str());
-        }
+        MU_LOG(warning, "Mu::Worker", std::string("signing failed: ") + fz_caught_message(m_context));
+        const CmsResult cms = signerResult(signer);
+        if (signingResult && cms.result != SigningResult::Success)
+            *signingResult = cms.result;
+        fail(error, cms.details.empty() ? fz_caught_message(m_context) : cms.details.c_str());
     }
 
     if (graphic)
