@@ -19,6 +19,56 @@ namespace Mu::Worker::Engine {
 
 using namespace ::Mu::Model;
 
+namespace {
+
+// Reads one metadata value through a C-owned buffer: allocation and lookup
+// stay inside the exception boundary, the std::string copy happens after.
+bool lookupMetadataValue(
+    fz_context* context, fz_document* document, const char* key, std::string& value, bool& found, std::string* error)
+{
+    char* buffer = nullptr;
+    int required = 0;
+    found = false;
+    fz_var(buffer);
+    fz_var(required);
+    fz_var(found);
+
+    fz_try(context)
+    {
+        required = fz_lookup_metadata(context, document, key, nullptr, 0);
+        if (required > 1 && required <= 1024 * 1024) {
+            buffer = static_cast<char*>(fz_malloc(context, static_cast<std::size_t>(required)));
+            if (fz_lookup_metadata(context, document, key, buffer, static_cast<std::size_t>(required)) >= required)
+                found = true;
+        }
+    }
+    fz_always(context)
+    {
+        if (!found && buffer)
+            fz_free(context, buffer);
+    }
+    fz_catch(context)
+    {
+        if (error)
+            *error = fz_caught_message(context);
+        return false;
+    }
+
+    if (!found)
+        return true;
+
+    try {
+        value.assign(buffer, static_cast<std::size_t>(required - 1));
+    } catch (...) {
+        fz_free(context, buffer);
+        throw;
+    }
+    fz_free(context, buffer);
+    return true;
+}
+
+} // namespace
+
 // =============================================================================
 // Document Metadata Extraction
 // =============================================================================
@@ -69,47 +119,35 @@ DocumentMetadata EpubDocument::metadata(const std::vector<std::string>& keys, st
         fz_sha256_update(&hash, &separator, 1);
     }
 
-    std::vector<char> buffer;
-
-    fz_try(m_context)
-    {
-        for (const auto& [name, mupdfKey] : knownKeys) {
-            // First probe required length, then allocate exact buffer size
-            const int required = fz_lookup_metadata(m_context, m_document, mupdfKey, nullptr, 0);
-            if (required <= 1 || required > 1024 * 1024)
-                continue;
-            buffer.resize(static_cast<std::size_t>(required));
-            if (fz_lookup_metadata(m_context, m_document, mupdfKey, buffer.data(), buffer.size()) >= required) {
-                const std::string_view value(buffer.data(), static_cast<std::size_t>(required - 1));
-                if (wantHash) {
-                    const std::string field = std::string(name) + ":";
-                    fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(field.data()), field.size());
-                    fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(value.data()), value.size());
-                    fz_sha256_update(&hash, &separator, 1);
-                }
-                if (wanted(name))
-                    result.values.emplace(name, std::string(value));
-            }
-        }
-
-        // Finalize hexadecimal digest
+    for (const auto& [name, mupdfKey] : knownKeys) {
+        std::string value;
+        bool found = false;
+        if (!lookupMetadataValue(m_context, m_document, mupdfKey, value, found, error))
+            return { };
+        if (!found)
+            continue;
         if (wantHash) {
-            std::array<unsigned char, 32> digest { };
-            fz_sha256_final(&hash, digest.data());
-            constexpr char hex[] = "0123456789abcdef";
-            std::string digestValue;
-            digestValue.reserve(digest.size() * 2);
-            for (const unsigned char byte : digest) {
-                digestValue.push_back(hex[byte >> 4]);
-                digestValue.push_back(hex[byte & 0x0f]);
-            }
-            result.values.emplace("hash", std::move(digestValue));
+            const std::string field = std::string(name) + ":";
+            fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(field.data()), field.size());
+            fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(value.data()), value.size());
+            fz_sha256_update(&hash, &separator, 1);
         }
+        if (wanted(name))
+            result.values.emplace(name, std::move(value));
     }
-    fz_catch(m_context)
-    {
-        fail(error, fz_caught_message(m_context));
-        return { };
+
+    // Finalize hexadecimal digest
+    if (wantHash) {
+        std::array<unsigned char, 32> digest { };
+        fz_sha256_final(&hash, digest.data());
+        constexpr char hex[] = "0123456789abcdef";
+        std::string digestValue;
+        digestValue.reserve(digest.size() * 2);
+        for (const unsigned char byte : digest) {
+            digestValue.push_back(hex[byte >> 4]);
+            digestValue.push_back(hex[byte & 0x0f]);
+        }
+        result.values.emplace("hash", std::move(digestValue));
     }
     return result;
 }

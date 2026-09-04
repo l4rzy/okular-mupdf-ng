@@ -60,6 +60,92 @@ private slots:
         QVERIFY(details.links.empty());
     }
 
+    void testResolveLinkTable_data()
+    {
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<bool>("expectValid");
+        QTest::addColumn<bool>("expectExternal");
+        QTest::newRow("https") << QStringLiteral("https://example.com/x") << true << true;
+        QTest::newRow("mailto") << QStringLiteral("mailto:a@b.c") << true << true;
+        QTest::newRow("empty") << QStringLiteral("") << false << false;
+        QTest::newRow("missing-fragment") << QStringLiteral("#missing-anchor") << false << false;
+        QTest::newRow("missing-file") << QStringLiteral("nonexistent.html") << false << false;
+    }
+
+    void testResolveLinkTable()
+    {
+        QFETCH(QString, uri);
+        QFETCH(bool, expectValid);
+        QFETCH(bool, expectExternal);
+
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "sample.epub", &error), error.c_str());
+
+        // A null error mirrors the production call sites (outline extraction
+        // and page-link iteration), which only need the validity outcome.
+        const auto link = document.resolveLink(uri.toStdString(), nullptr);
+        QCOMPARE(link.valid, expectValid);
+        QCOMPARE(link.external, expectExternal);
+        if (expectExternal)
+            QCOMPARE(QString::fromStdString(link.uri), uri);
+    }
+
+    void testExtractLinksEmptyDocument()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "sample.epub", &error), error.c_str());
+
+        const auto links = document.extractLinks(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QVERIFY(links.empty());
+    }
+
+    void testPageDetailsWithLinksMatchesGeometry()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "sample.epub", &error), error.c_str());
+
+        const auto details = document.pageDetails(0, &error, true);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto geometry = document.pageGeometry(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(details.geometry.widthPoints, geometry.widthPoints);
+        QCOMPARE(details.geometry.heightPoints, geometry.heightPoints);
+        // The link-including path reports MuPDF's page label ("ch. 1, p. 1")
+        // rather than the index-based label from pageGeometry ("1").
+        QVERIFY(!details.geometry.label.empty());
+        QVERIFY(details.links.empty());
+    }
+
+    void testMetadataUnknownKeyIgnored()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "sample.epub", &error), error.c_str());
+
+        const auto unknown = document.metadata({ "no-such-key" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QVERIFY(unknown.values.empty());
+
+        const auto first = document.metadata({ }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto second = document.metadata({ }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QVERIFY(first.values.find("hash") != first.values.end());
+        QCOMPARE(second.values.at("hash"), first.values.at("hash"));
+    }
+
     void testDocumentAcceleratorRoundTrip()
     {
         QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));

@@ -76,33 +76,44 @@ std::vector<Font> EpubDocument::fonts(const std::vector<int>&, std::string*) con
     if (!m_context || !m_stream)
         return *m_fonts;
 
+    // Open the EPUB ZIP container and snapshot the entry count with PODs
+    // only; every std::string/vector operation happens outside the boundary.
+    int entryCount = 0;
+    fz_var(entryCount);
     fz_try(m_context)
     {
-        // Open EPUB ZIP container as a Fitz archive
         if (!m_archive)
             m_archive = fz_try_open_archive_with_stream(m_context, m_stream);
-        if (m_archive) {
-            const int entryCount = fz_count_archive_entries(m_context, m_archive);
-            for (int index = 0; index < entryCount; ++index) {
-                const char* entryName = fz_list_archive_entry(m_context, m_archive, index);
-                if (!entryName)
-                    continue;
-
-                const std::string_view entry(entryName);
-                const std::string extension = fontExtension(entry);
-                if (extension.empty())
-                    continue;
-
-                m_fonts->push_back({ fontNameFromEntry(entry),
-                                     std::string(entry),
-                                     fontType(extension),
-                                     FontEmbedType::FullyEmbedded });
-            }
-        }
+        if (m_archive)
+            entryCount = fz_count_archive_entries(m_context, m_archive);
     }
     fz_catch(m_context)
     {
         m_fonts->clear();
+        return *m_fonts;
+    }
+
+    for (int index = 0; index < entryCount; ++index) {
+        const char* entryName = nullptr;
+        fz_var(entryName);
+        fz_try(m_context)
+        {
+            entryName = fz_list_archive_entry(m_context, m_archive, index);
+        }
+        fz_catch(m_context)
+        {
+            entryName = nullptr;
+        }
+        if (!entryName)
+            continue;
+
+        const std::string_view entry(entryName);
+        const std::string extension = fontExtension(entry);
+        if (extension.empty())
+            continue;
+
+        m_fonts->push_back(
+            { fontNameFromEntry(entry), std::string(entry), fontType(extension), FontEmbedType::FullyEmbedded });
     }
 
     return *m_fonts;
