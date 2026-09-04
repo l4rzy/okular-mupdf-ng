@@ -24,6 +24,9 @@
         <choice name="Strict" />
       </choices>
     </entry>
+    <entry key="NotifyDegradedSandbox" type="Bool">
+      <default>true</default>
+    </entry>
   </group>
   <group name="Rendering">
     <entry key="GraphicsAntialiasingBits" type="Enum">
@@ -93,6 +96,9 @@
     <entry key="dBCertificatePath" type="Path">
       <default>/etc/pki/nssdb</default>
     </entry>
+    <entry key="UseOcsp" type="Bool">
+      <default>false</default>
+    </entry>
   </group>
   <group name="EPUB">
     <entry key="EpubFontSize" type="Int">
@@ -125,11 +131,6 @@
   <group name="Advanced">
     <entry key="TessDataDirectories" type="StringList" hidden="true">
       <default code="true">QStringList()</default>
-    </entry>
-  </group>
-  <group name="Signatures">
-    <entry key="UseOcsp" type="Bool">
-      <default>false</default>
     </entry>
   </group>
 </kcfg>

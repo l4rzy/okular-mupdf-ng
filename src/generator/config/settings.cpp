@@ -87,6 +87,11 @@ SandboxEnforcement readSandboxEnforcement()
     }
 }
 
+bool readDegradedSandboxNotificationEnabled()
+{
+    return MuPDFSettings::notifyDegradedSandbox();
+}
+
 EpubSettings readEpubSettings()
 {
     // Keep custom CSS encoded exactly as stored; CssEditor owns the UI form.

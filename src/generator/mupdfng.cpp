@@ -26,8 +26,8 @@
 #include <QTextStream>
 #include <unordered_map>
 
-#include "generator/config/settingswidget.hpp"
 #include "generator/config/settings.hpp"
+#include "generator/config/settingswidget.hpp"
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
 #include "generator/conversion/text.hpp"
@@ -288,6 +288,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired") });
     m_document.type = Model::documentTypeFromMime(info.mimeType);
     warnIfRepairedDocument(info);
+    notifyDegradedSandbox();
 
     // Signature validation reads the original PDF bytes, which may come from a
     // file or from the in-memory source retained for worker recovery.
@@ -476,6 +477,26 @@ void Main::warnIfRepairedDocument(const Model::DocumentMetadata& info)
         i18n("Some errors were found in the document, Okular might not be able to show the content correctly"), 5000);
 }
 
+// Reports a degraded worker sandbox once per opened document. The banner is
+// sticky (duration 0) because the degraded state persists for the session;
+// Okular offers no banner retraction when the preference flips off mid-session.
+void Main::notifyDegradedSandbox()
+{
+    auto sandboxStatus = m_worker.sandboxStatus();
+    const QString reason = QString::fromStdString(sandboxStatus.reason);
+
+    auto warningMessage = [sandboxStatus]() {
+        if (sandboxStatus.isPartiallyActive())
+            return i18n("🟡 The MuPDF worker is partially hardened: Okular's protection is limited.");
+        return i18n(
+            "🔴 The MuPDF worker is unconfined: Okular will not be able to protect you from malicious documents.");
+    };
+
+    if (Config::readDegradedSandboxNotificationEnabled() && !sandboxStatus.isFullyHardened())
+        Q_EMIT warning(warningMessage(), 10000);
+    return;
+}
+
 // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
 // mirroring the poppler generator's GeneratorExtraDescription. The runtime
 // version of the worker binary is authoritative; when it diverges from the
@@ -579,7 +600,8 @@ void Main::reopenWithheldDocumentInternal()
     const auto result =
         SandboxGate::reopenLocalDocument(const_cast<Okular::Document*>(document()), m_document.password);
     if (result == SandboxGate::ReopenResult::NotLocal)
-        Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), 0);
+        Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), -1);
+    notifyDegradedSandbox();
 }
 
 // Okular Generator Func: replaces the backing file while preserving page state.

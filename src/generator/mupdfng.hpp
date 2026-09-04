@@ -132,6 +132,9 @@ private:
     // Reports xref-repair state to the user, mirroring the poppler generator's
     // xrefReconstructionHandler.
     void warnIfRepairedDocument(const Model::DocumentMetadata& info);
+    // Reports a degraded (not fully hardened) worker sandbox as a sticky
+    // warning banner, gated by the notification preference.
+    void notifyDegradedSandbox();
     // Reads the paper color Okular's accessibility settings request (white
     // when the Paper render mode is off) and records it for the next push.
     void refreshPaperColor();

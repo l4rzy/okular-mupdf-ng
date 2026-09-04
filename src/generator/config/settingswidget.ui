@@ -263,6 +263,13 @@
             </item>
            </layout>
           </item>
+          <item>
+           <widget class="QCheckBox" name="kcfg_NotifyDegradedSandbox">
+            <property name="text">
+             <string>Show notification when sandbox is degraded</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

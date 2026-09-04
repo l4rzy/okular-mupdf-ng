@@ -137,6 +137,7 @@ EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();
 SandboxEnforcement readSandboxEnforcement();
+bool readDegradedSandboxNotificationEnabled();
 QStringList readTessDataDirectories();
 QStringList normalizeTessDataDirectories(const QStringList& directories);
 QString readCertificateDatabasePath(const QString& defaultPath);
