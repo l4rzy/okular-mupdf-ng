@@ -183,7 +183,7 @@ private slots:
         };
         std::jthread delayedWriter([&] {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            ::write(writer.fd(), encoded.data(), encoded.size());
+            (void)::write(writer.fd(), encoded.data(), encoded.size());
         });
         std::vector<std::byte> frame;
         QVERIFY(::Mu::IPC::readFrame(reader, &frame, -1, &error));
