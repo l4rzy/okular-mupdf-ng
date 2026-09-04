@@ -183,13 +183,15 @@ private slots:
         const std::array<std::byte, 5> encoded {
             std::byte(0), std::byte(0), std::byte(0), std::byte(1), std::byte(0x7f)
         };
+        std::atomic<ssize_t> written { -1 };
         std::jthread delayedWriter([&] {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            (void)::write(writer.fd(), encoded.data(), encoded.size());
+            written.store(::write(writer.fd(), encoded.data(), encoded.size()));
         });
         std::vector<std::byte> frame;
         QVERIFY(::Mu::IPC::readFrame(reader, &frame, -1, &error));
         delayedWriter.join();
+        QCOMPARE(written.load(), ssize_t(encoded.size()));
         QCOMPARE(frame, std::vector<std::byte> { std::byte(0x7f) });
 
         QVERIFY(!::Mu::IPC::readFrame(reader, nullptr, 0, &error));

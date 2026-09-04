@@ -167,7 +167,8 @@ bool runSandboxProbe(const ProbeContext& context, ProbeResult* result)
         }
 
         const char marker = 'x';
-        (void)::write(STDOUT_FILENO, &marker, 1);
+        const ssize_t markerBytes = ::write(STDOUT_FILENO, &marker, 1);
+        (void)markerBytes;
         const bool reported = writeProbeResult(pipeFds[1], probe);
         ::close(pipeFds[1]);
         _exit(reported ? 0 : 1);
