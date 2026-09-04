@@ -27,17 +27,17 @@ and the source-tree layout.
 | Feature Category | Capabilities | okular-mupdf-ng | Poppler (official) |
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
-| **Formats** | PDF, EPUB reflow | ✓ (PDF + EPUB) | ✓ (PDF only) |
+| **Formats** | PDF, EPUB | ✓ (PDF + EPUB) | ✓ (Epub supported in another plugin) |
 | **Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ |
 | **Cert Manager** | NSS Certificate Manager | ✓ | ✗ |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
-| **Printing** | Print export (PDF / PostScript) | Partial (PDF export only) | ✓ (PDF & PostScript) |
+| **Printing & Exporting** | Print & Export | ✓ | ✓ |
 | **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
 
 
-## Requirements
+## Requirements to build
 
 - A C++23 compiler (Clang preferred), CMake 3.20 or newer, Ninja, mold, `pkg-config`, and the usual
   build tools.
@@ -52,7 +52,7 @@ script downloads it to `thirdparty/mupdf-{version}-source/` automatically when
 absent and verifies its SHA-256. The bundled build uses MuPDF's bundled Gumbo
 source by default; pass `-DUSE_SYSTEM_GUMBO=ON` to use a system Gumbo package
 instead.
-A compatible system MuPDF package can instead be selected with
+A compatible system MuPDF package (>=1.28.0) can instead be selected with
 `-DUSE_SYSTEM_MUPDF=ON`.
 
 OCR uses the build-time `TESSDATA_DIR` setting, which defaults to
