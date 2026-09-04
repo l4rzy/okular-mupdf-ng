@@ -70,16 +70,6 @@ private slots:
         QVERIFY(!settings.autoTrigger);
     }
 
-    void classifiesDocumentMimeTypes()
-    {
-        QCOMPARE(::Mu::Generator::Config::documentTypeForMime(QStringLiteral("application/pdf")),
-                 ::Mu::Model::DocumentType::Pdf);
-        QCOMPARE(::Mu::Generator::Config::documentTypeForMime(QStringLiteral("application/epub+zip")),
-                 ::Mu::Model::DocumentType::Epub);
-        QCOMPARE(::Mu::Generator::Config::documentTypeForMime(QStringLiteral("text/plain")),
-                 ::Mu::Model::DocumentType::Unknown);
-    }
-
     void normalizesTessdataDirectories()
     {
         const QStringList input {

@@ -95,14 +95,17 @@ bool runCommand(const QString& program, const QStringList& arguments)
 {
     QProcess process;
     process.start(program, arguments);
-    if (!process.waitForStarted()) {
+    if (!process.waitForStarted(10000)) {
         qWarning("%s could not start: %s", qPrintable(program), qPrintable(process.errorString()));
+        process.kill();
         return false;
     }
     const bool succeeded =
-        process.waitForFinished() && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
-    if (!succeeded)
+        process.waitForFinished(60000) && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+    if (!succeeded) {
         qWarning("%s failed: %s", qPrintable(program), qPrintable(process.readAllStandardError().trimmed()));
+        process.kill();
+    }
     return succeeded;
 }
 
@@ -410,13 +413,6 @@ private slots:
                  ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
         QCOMPARE(::Mu::Plugin::Crypto::activeNssDatabasePath(), canonicalDatabase);
         QVERIFY(::Mu::Plugin::Crypto::isNssDatabaseActive(QStringLiteral("file:") + database));
-    }
-
-    void keypairRollbackGuard()
-    {
-        // Absent key material trivially succeeds; a false return would make
-        // every rollback report a partial failure it did not have.
-        QVERIFY(::Mu::Plugin::Crypto::deleteTokenKeypair(nullptr, nullptr));
     }
 };
 

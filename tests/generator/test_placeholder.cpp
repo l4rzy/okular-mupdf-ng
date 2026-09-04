@@ -164,7 +164,9 @@ private Q_SLOTS:
             }
         });
         reader->start();
-        while (!readerReady.load()) { }
+        for (int spin = 0; spin < 10000 && !readerReady.load(); ++spin)
+            QThread::yieldCurrentThread();
+        QVERIFY(readerReady.load());
 
         // Pace the toggles so the reader reliably samples both states.
         for (int i = 0; i < 100; ++i) {
@@ -177,7 +179,7 @@ private Q_SLOTS:
         for (int i = 0; i < 1000 && (observations.load() == 0 || !sawInactive.load()); ++i)
             QThread::msleep(1);
         stop.store(true);
-        reader->wait();
+        QVERIFY(reader->wait(30000));
         delete reader;
 
         QVERIFY(sawInactive.load());

@@ -378,8 +378,9 @@ private slots:
         QVERIFY(!afterFailure.front().signedField);
     }
 
-    void deferredQueueRejectsOverflow()
+    void deferredQueueBounds()
     {
+        // Frame-count bound + recovery
         ::Mu::Worker::Runtime::CommandService service({ });
         std::vector<std::byte> payload(1024, std::byte { 0x42 });
 
@@ -395,26 +396,25 @@ private slots:
         QVERIFY(taken.has_value());
         QCOMPARE(taken->size(), payload.size());
         QVERIFY(service.deferIncoming(payload));
-    }
 
-    void deferredQueueIsFifoAndByteBounded()
-    {
-        ::Mu::Worker::Runtime::CommandService service({ });
+        // FIFO order on an independent service
+        ::Mu::Worker::Runtime::CommandService fifo({ });
         const std::vector<std::byte> first(3, std::byte { 0x01 });
         const std::vector<std::byte> second(5, std::byte { 0x02 });
-        QVERIFY(service.deferIncoming(first));
-        QVERIFY(service.deferIncoming(second));
+        QVERIFY(fifo.deferIncoming(first));
+        QVERIFY(fifo.deferIncoming(second));
 
-        const auto firstTaken = service.takeDeferredIncoming();
+        const auto firstTaken = fifo.takeDeferredIncoming();
         QVERIFY(firstTaken.has_value());
         QCOMPARE(*firstTaken, first);
-        const auto secondTaken = service.takeDeferredIncoming();
+        const auto secondTaken = fifo.takeDeferredIncoming();
         QVERIFY(secondTaken.has_value());
         QCOMPARE(*secondTaken, second);
-        QVERIFY(!service.takeDeferredIncoming().has_value());
+        QVERIFY(!fifo.takeDeferredIncoming().has_value());
 
+        // Byte bound
         std::vector<std::byte> oversized(::Mu::Worker::Runtime::MaxDeferredBytes + 1, std::byte { 0x03 });
-        QVERIFY(!service.deferIncoming(std::move(oversized)));
+        QVERIFY(!fifo.deferIncoming(std::move(oversized)));
     }
 
     void extractFormFieldsHandlesCrossPageRadioGroupAndSelection()

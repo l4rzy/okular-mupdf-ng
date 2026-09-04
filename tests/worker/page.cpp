@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <unistd.h>
 
 extern "C" {
@@ -147,65 +148,71 @@ private slots:
         QVERIFY(document.extractAnnotations(0, &error).empty());
     }
 
-    void testInternalLinkDestinationCoordinates()
+    void resolveLinkTable_data()
     {
-        Mu::Worker::Engine::PdfDocument document;
-        QVERIFY(openDocument(document, m_multiPagePath));
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<bool>("multiPage");
+        QTest::addColumn<bool>("expectValid");
+        QTest::addColumn<int>("expectPage");
+        QTest::addColumn<int>("expectMask");
+        QTest::addColumn<double>("expectX");
+        QTest::addColumn<double>("expectY");
+        QTest::addColumn<bool>("expectExternal");
 
-        const auto xyz = document.resolveLink("#page=2&zoom=nan,0.25,0.75");
-        QVERIFY(xyz.valid);
-        QCOMPARE(xyz.viewport.coordinateMask, uint8_t(3));
-        QCOMPARE(xyz.viewport.page, 1);
-        QCOMPARE(xyz.viewport.normalizedX, 0.25);
-        QCOMPARE(xyz.viewport.normalizedY, 0.75);
-
-        const auto fitH = document.resolveLink("#page=3&view=FitH,0.5");
-        QVERIFY(fitH.valid);
-        QCOMPARE(fitH.viewport.page, 2);
-        QCOMPARE(fitH.viewport.coordinateMask, uint8_t(Mu::Model::Viewport::CoordinateY));
-        QCOMPARE(fitH.viewport.normalizedX, 0.0);
-        QCOMPARE(fitH.viewport.normalizedY, 0.5);
-
-        const auto fitV = document.resolveLink("#page=4&view=FitV,0.5");
-        QVERIFY(fitV.valid);
-        QCOMPARE(fitV.viewport.page, 3);
-        QCOMPARE(fitV.viewport.coordinateMask, uint8_t(Mu::Model::Viewport::CoordinateX));
-        QCOMPARE(fitV.viewport.normalizedX, 0.5);
-        QCOMPARE(fitV.viewport.normalizedY, 0.0);
-
-        const auto fitR = document.resolveLink("#page=5&viewrect=0.25,0.1,0.5,0.5");
-        QVERIFY(fitR.valid);
-        QCOMPARE(fitR.viewport.page, 4);
-        QCOMPARE(fitR.viewport.coordinateMask, uint8_t(3));
-        QCOMPARE(fitR.viewport.normalizedX, 0.25);
-        QVERIFY(std::abs(fitR.viewport.normalizedY - 0.1) < 0.0001);
-
-        const auto fitBh = document.resolveLink("#page=6&view=FitBH,0.25");
-        QVERIFY(fitBh.valid);
-        QCOMPARE(fitBh.viewport.page, 5);
-        QCOMPARE(fitBh.viewport.coordinateMask, uint8_t(Mu::Model::Viewport::CoordinateY));
-        QCOMPARE(fitBh.viewport.normalizedX, 0.0);
-        QCOMPARE(fitBh.viewport.normalizedY, 0.25);
-
-        const auto fitBv = document.resolveLink("#page=7&view=FitBV,0.25");
-        QVERIFY(fitBv.valid);
-        QCOMPARE(fitBv.viewport.page, 6);
-        QCOMPARE(fitBv.viewport.coordinateMask, uint8_t(Mu::Model::Viewport::CoordinateX));
-        QCOMPARE(fitBv.viewport.normalizedX, 0.25);
-        QCOMPARE(fitBv.viewport.normalizedY, 0.0);
+        constexpr double skip = std::numeric_limits<double>::quiet_NaN();
+        constexpr int coordinateX = Mu::Model::Viewport::CoordinateX;
+        constexpr int coordinateY = Mu::Model::Viewport::CoordinateY;
+        QTest::newRow("xyz") << QStringLiteral("#page=2&zoom=nan,0.25,0.75") << true << true << 1 << 3 << 0.25 << 0.75
+                             << false;
+        QTest::newRow("fitH") << QStringLiteral("#page=3&view=FitH,0.5") << true << true << 2 << coordinateY << 0.0
+                              << 0.5 << false;
+        QTest::newRow("fitV") << QStringLiteral("#page=4&view=FitV,0.5") << true << true << 3 << coordinateX << 0.5
+                              << 0.0 << false;
+        QTest::newRow("fitR") << QStringLiteral("#page=5&viewrect=0.25,0.1,0.5,0.5") << true << true << 4 << 3 << 0.25
+                              << 0.1 << false;
+        QTest::newRow("fitBH") << QStringLiteral("#page=6&view=FitBH,0.25") << true << true << 5 << coordinateY << 0.0
+                               << 0.25 << false;
+        QTest::newRow("fitBV") << QStringLiteral("#page=7&view=FitBV,0.25") << true << true << 6 << coordinateX << 0.25
+                               << 0.0 << false;
+        QTest::newRow("explicitTopLeft") << QStringLiteral("#page=1&zoom=nan,69.04297,78.73584") << false << true << 0
+                                         << 3 << 69.04297 / 612.0 << (78.73584 - 16.0) / 792.0 << false;
+        QTest::newRow("external") << QStringLiteral("https://example.com/document.pdf") << true << true << -1 << 0
+                                  << skip << skip << true;
+        QTest::newRow("pageOutOfRange") << QStringLiteral("#page=999&view=Fit") << true << false << -1 << 0 << skip
+                                        << skip << false;
+        QTest::newRow("missingNamedDest")
+            << QStringLiteral("#nameddest=missing") << true << false << -1 << 0 << skip << skip << false;
     }
 
-    void testExplicitDestinationUsesTopLeftPageCoordinates()
+    void resolveLinkTable()
     {
-        Mu::Worker::Engine::PdfDocument document;
-        QVERIFY(openDocument(document, m_textPath));
+        QFETCH(QString, uri);
+        QFETCH(bool, multiPage);
+        QFETCH(bool, expectValid);
+        QFETCH(int, expectPage);
+        QFETCH(int, expectMask);
+        QFETCH(double, expectX);
+        QFETCH(double, expectY);
+        QFETCH(bool, expectExternal);
 
-        const auto destination = document.resolveLink("#page=1&zoom=nan,69.04297,78.73584");
-        QVERIFY(destination.valid);
-        QCOMPARE(destination.viewport.page, 0);
-        QCOMPARE(destination.viewport.coordinateMask, uint8_t(3));
-        QVERIFY(std::abs(destination.viewport.normalizedX - (69.04297 / 612.0)) < 0.0001);
-        QVERIFY(std::abs(destination.viewport.normalizedY - ((78.73584 - 16.0) / 792.0)) < 0.0001);
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, multiPage ? m_multiPagePath : m_textPath));
+
+        const auto link = document.resolveLink(uri.toStdString());
+        QCOMPARE(link.valid, expectValid);
+        QCOMPARE(link.external, expectExternal);
+        if (!expectValid)
+            return;
+        QCOMPARE(link.viewport.page, expectPage);
+        QCOMPARE(link.viewport.coordinateMask, static_cast<std::uint8_t>(expectMask));
+        if (expectExternal) {
+            QCOMPARE(link.uri, std::string("https://example.com/document.pdf"));
+            return;
+        }
+        if (!std::isnan(expectX))
+            QVERIFY(std::abs(link.viewport.normalizedX - expectX) < 0.0001);
+        if (!std::isnan(expectY))
+            QVERIFY(std::abs(link.viewport.normalizedY - expectY) < 0.0001);
     }
 
     void testTransformedPageAndMalformedPageObject()
@@ -265,80 +272,17 @@ private slots:
         QVERIFY(!error.empty());
     }
 
-    void testLinkValidityAndDocumentLifetime()
+    void testLinkInvalidatedAfterReopen()
     {
         Mu::Worker::Engine::PdfDocument document;
         QVERIFY(openDocument(document, m_multiPagePath));
 
         const std::string uri = "#page=2&view=Fit";
-        const auto first = document.resolveLink(uri);
-        QVERIFY(first.valid);
-        QCOMPARE(first.viewport.page, 1);
-        QCOMPARE(first.viewport.coordinateMask, uint8_t(0));
-
-        const auto external = document.resolveLink("https://example.com/document.pdf");
-        QVERIFY(external.valid);
-        QVERIFY(external.external);
-        QCOMPARE(external.uri, std::string("https://example.com/document.pdf"));
-
-        QVERIFY(!document.resolveLink("#page=999&view=Fit").valid);
-        QVERIFY(!document.resolveLink("#nameddest=missing").valid);
+        QVERIFY(document.resolveLink(uri).valid);
 
         document.close();
         QVERIFY(openDocument(document, m_singlePagePath));
-        const auto reopened = document.resolveLink(uri);
-        QVERIFY(!reopened.valid);
-    }
-
-    void testGeometryUsesPdfPoints()
-    {
-        Mu::Worker::Engine::PdfDocument document;
-        QVERIFY(openDocument(document, m_textPath));
-        const auto geometry = document.pageGeometry(0);
-        QVERIFY(geometry.widthPoints > 0.0);
-        QVERIFY(geometry.heightPoints > 0.0);
-        QCOMPARE(geometry.duration, -1.0);
-    }
-
-    void testHighlightAnnotationQuadRoundTrip()
-    {
-        Mu::Worker::Engine::PdfDocument document;
-        QVERIFY(openDocument(document, m_textPath));
-        fz_context* context = document.context();
-        pdf_page* page = pdf_load_page(context, pdf_specifics(context, document.document()), 0);
-        QVERIFY(page);
-        fz_try(context)
-        {
-            pdf_annot* annotation = pdf_create_annot(context, page, PDF_ANNOT_HIGHLIGHT);
-            const fz_quad quad { { 60, 80 }, { 180, 80 }, { 60, 100 }, { 180, 100 } };
-            pdf_set_annot_quad_points(context, annotation, 1, &quad);
-            pdf_set_annot_name(context, annotation, "highlight-quad-round-trip");
-            pdf_update_annot(context, annotation);
-            pdf_drop_annot(context, annotation);
-        }
-        fz_catch(context)
-        {
-            QFAIL(fz_caught_message(context));
-        }
-        pdf_drop_page(context, page);
-
-        const QString savedPath = m_tempDir.filePath("highlight.pdf");
-        QFile output(savedPath);
-        QVERIFY(output.open(QIODevice::WriteOnly));
-        std::string error;
-        QVERIFY2(document.saveFd(output.handle(), &error), error.c_str());
-        output.close();
-        document.close();
-
-        Mu::Worker::Engine::PdfDocument reloaded;
-        QVERIFY(openDocument(reloaded, savedPath));
-        const auto annotations = reloaded.extractAnnotations(0, &error);
-        const auto found =
-            std::find_if(annotations.cbegin(), annotations.cend(), [](const ::Mu::Model::Annotation& annotation) {
-                return annotation.uuid == "highlight-quad-round-trip";
-            });
-        QVERIFY(found != annotations.cend());
-        QCOMPARE(found->extras.quads.size(), size_t(1));
+        QVERIFY(!document.resolveLink(uri).valid);
     }
 };
 

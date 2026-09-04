@@ -86,6 +86,11 @@ private slots:
         QCOMPARE(corner.red(), 0x11);
         QCOMPARE(corner.green(), 0x22);
         QCOMPARE(corner.blue(), 0x33);
+
+        // Restore defaults and close: later slots must not inherit the
+        // custom paper color or an open document from this test.
+        QVERIFY(m_client.setSettings(::Mu::Model::DocumentSettings { }));
+        QVERIFY(m_client.close());
     }
 
     void repairedDocumentStateFlowsThroughIpc()
@@ -113,6 +118,7 @@ private slots:
         QCOMPARE(m_client.open(broken, { }, pages), ::Mu::Model::OpenStatus::Success);
         const auto metadata = m_client.getDocumentInfo({ QStringLiteral("repaired") });
         QCOMPARE(metadata.values.at("repaired"), std::string("true"));
+        QVERIFY(m_client.close());
     }
 
     void pdfTransportPreservesMappedFramesAndTransfersOutput()
@@ -185,7 +191,9 @@ private slots:
                 return arguments.at(0).toULongLong() == *job && arguments.at(1).toInt() == 0;
             });
         };
-        for (int attempt = 0; attempt < 20 && !hasJob(); ++attempt)
+        // OCR latency is engine- and load-dependent; the assertion is
+        // arrival, not speed, so the budget stays generous for loaded CI.
+        for (int attempt = 0; attempt < 50 && !hasJob(); ++attempt)
             spy.wait(100);
         QVERIFY2(hasJob(), "Timed out waiting for idle OCR completion signal");
 

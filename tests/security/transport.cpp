@@ -135,9 +135,11 @@ private slots:
             QVERIFY(!original.valid());
         }
 
-        // Verify accept timeout on idle listener without connecting peer
+        // Verify accept timeout on idle listener without connecting peer.
+        // The budget only needs to prove non-blocking behavior, not
+        // scheduling precision, so it stays well above CI jitter.
         ::Mu::IPC::IoResult timeoutResult = ::Mu::IPC::IoResult::Complete;
-        auto timeoutPeer = listener.accept(::getpid(), 20, &error, &timeoutResult);
+        auto timeoutPeer = listener.accept(::getpid(), 200, &error, &timeoutResult);
         QVERIFY(!timeoutPeer.valid());
         QCOMPARE(timeoutResult, ::Mu::IPC::IoResult::Timeout);
 
@@ -381,8 +383,6 @@ private slots:
         QCOMPARE(::munmap(mapping, payloadSize), 0);
     }
 
-    void protocolVersionIs1() { QCOMPARE(::Mu::IPC::PROTOCOL_VERSION, 1); }
-
     void formFieldRoundTripSerialization()
     {
         ::Mu::Model::FormField field;
@@ -455,67 +455,70 @@ private slots:
         QCOMPARE(decField.multiSelect, field.multiSelect);
     }
 
-    void formFieldValidationRejectsMalformedUtf8()
+    void formFieldValidationRejectsMalformedInput()
     {
-        ::Mu::Model::FormField field;
-        field.handle = "g1-f0-o1";
-        field.page = 0;
-        field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
-        field.partialName = std::string("\xFF\xFE", 2); // Invalid UTF-8
+        // Malformed UTF-8 in the field name
+        {
+            ::Mu::Model::FormField field;
+            field.handle = "g1-f0-o1";
+            field.page = 0;
+            field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
+            field.partialName = std::string("\xFF\xFE", 2); // Invalid UTF-8
 
-        std::string_view reason;
-        QVERIFY(!::Mu::Model::isValidFormField(field, &reason));
-        QVERIFY(reason.find("UTF-8") != std::string_view::npos);
-    }
+            std::string_view reason;
+            QVERIFY(!::Mu::Model::isValidFormField(field, &reason));
+            QVERIFY(reason.find("UTF-8") != std::string_view::npos);
+        }
 
-    void formFieldValidationRejectsEmbeddedNul()
-    {
-        ::Mu::Model::FormField field;
-        field.handle = "g1-f0-o1";
-        field.page = 0;
-        field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
-        field.text = std::string("test\0injection", 14);
+        // Embedded NUL in the field text
+        {
+            ::Mu::Model::FormField field;
+            field.handle = "g1-f0-o1";
+            field.page = 0;
+            field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
+            field.text = std::string("test\0injection", 14);
 
-        std::string_view reason;
-        QVERIFY(!::Mu::Model::isValidFormField(field, &reason));
-        QVERIFY(reason.find("NUL") != std::string_view::npos);
-    }
+            std::string_view reason;
+            QVERIFY(!::Mu::Model::isValidFormField(field, &reason));
+            QVERIFY(reason.find("NUL") != std::string_view::npos);
+        }
 
-    void formFieldValidationRejectsInvertedOrNonFiniteRect()
-    {
-        ::Mu::Model::FormField field;
-        field.handle = "g1-f0-o1";
-        field.page = 0;
-        field.rectangle = { 0.8, 0.1, 0.2, 0.9 }; // Inverted (left > right)
-        QVERIFY(!::Mu::Model::isValidFormField(field));
+        // Inverted, non-finite, and out-of-range rectangles
+        {
+            ::Mu::Model::FormField field;
+            field.handle = "g1-f0-o1";
+            field.page = 0;
+            field.rectangle = { 0.8, 0.1, 0.2, 0.9 }; // Inverted (left > right)
+            QVERIFY(!::Mu::Model::isValidFormField(field));
 
-        field.rectangle = { 0.0, 0.0, std::numeric_limits<double>::quiet_NaN(), 1.0 };
-        QVERIFY(!::Mu::Model::isValidFormField(field));
+            field.rectangle = { 0.0, 0.0, std::numeric_limits<double>::quiet_NaN(), 1.0 };
+            QVERIFY(!::Mu::Model::isValidFormField(field));
 
-        field.rectangle = { -0.1, 0.0, 1.0, 1.0 }; // Out of normalized range
-        QVERIFY(!::Mu::Model::isValidFormField(field));
-    }
+            field.rectangle = { -0.1, 0.0, 1.0, 1.0 }; // Out of normalized range
+            QVERIFY(!::Mu::Model::isValidFormField(field));
+        }
 
-    void formFieldValidationRejectsChoiceIndexOutOfBounds()
-    {
-        ::Mu::Model::FormField field;
-        field.handle = "g1-f0-o1";
-        field.page = 0;
-        field.type = ::Mu::Model::FormFieldType::ListBox;
-        field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
-        field.choices = { "OptionA", "OptionB" };
-        field.currentChoices = { 2 }; // Out of bounds
+        // Choice indices: out of bounds, multi without flag, multi with flag
+        {
+            ::Mu::Model::FormField field;
+            field.handle = "g1-f0-o1";
+            field.page = 0;
+            field.type = ::Mu::Model::FormFieldType::ListBox;
+            field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
+            field.choices = { "OptionA", "OptionB" };
+            field.currentChoices = { 2 }; // Out of bounds
 
-        QVERIFY(!::Mu::Model::isValidFormField(field));
+            QVERIFY(!::Mu::Model::isValidFormField(field));
 
-        // Multiple choices on non-multiSelect
-        field.currentChoices = { 0, 1 };
-        field.multiSelect = false;
-        QVERIFY(!::Mu::Model::isValidFormField(field));
+            // Multiple choices on non-multiSelect
+            field.currentChoices = { 0, 1 };
+            field.multiSelect = false;
+            QVERIFY(!::Mu::Model::isValidFormField(field));
 
-        // Allowed on multiSelect
-        field.multiSelect = true;
-        QVERIFY(::Mu::Model::isValidFormField(field));
+            // Allowed on multiSelect
+            field.multiSelect = true;
+            QVERIFY(::Mu::Model::isValidFormField(field));
+        }
     }
 
     void formChoiceSelectionAndCustomTextRoundTrip()

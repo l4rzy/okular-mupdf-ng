@@ -14,29 +14,19 @@ class TestPluginOcrController : public QObject {
 
 private Q_SLOTS:
 
-    void takeReadyIsEmptyWithoutResults()
-    {
-        Mu::Plugin::WorkerClient backend;
-        Controller controller(&backend);
-        QVERIFY(!controller.takeReady(0).has_value());
-        QVERIFY(!controller.takeReady(7).has_value());
-        QVERIFY(!controller.takeReady(-1).has_value());
-    }
-
-    void resetIsIdempotentAndKeepsTakeReadyEmpty()
-    {
-        Mu::Plugin::WorkerClient backend;
-        Controller controller(&backend);
-        controller.reset();
-        QVERIFY(!controller.takeReady(0).has_value());
-        controller.reset();
-        QVERIFY(!controller.takeReady(0).has_value());
-    }
-
     void observeVisiblePagesWithoutDominantPageIsNoop()
     {
         Mu::Plugin::WorkerClient backend;
         Controller controller(&backend);
+
+        // Fresh and reset controllers hold no results for any job id.
+        QVERIFY(!controller.takeReady(0).has_value());
+        QVERIFY(!controller.takeReady(7).has_value());
+        QVERIFY(!controller.takeReady(-1).has_value());
+        controller.reset();
+        QVERIFY(!controller.takeReady(0).has_value());
+        controller.reset();
+        QVERIFY(!controller.takeReady(0).has_value());
 
         // No visible pages and invalid entries must not schedule anything;
         // the controller stays idle and no result appears.

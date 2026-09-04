@@ -61,6 +61,14 @@ class TestGeneratorProxies : public QObject {
 
 private slots:
 
+    // Mocks are per-test state: QtTest still calls cleanup() after an
+    // aborted slot, so a leaked lambda can never poison a later test.
+    void cleanup()
+    {
+        ::Mu::Plugin::s_mockUpdateForm = nullptr;
+        ::Mu::Plugin::s_mockResetForm = nullptr;
+    }
+
     void signatureFieldReconstructsBoundaryData()
     {
         ::Mu::Model::SignatureField source;
@@ -191,7 +199,7 @@ private slots:
         QCOMPARE(page->text(), QStringLiteral("HelloWorld"));
     }
 
-    void plainTextAssemblesLinesFromEndOfLineBoxes()
+    void plainTextAssembly()
     {
         const std::vector<::Mu::Model::TextBox> boxes = {
             { "Hello ", 10.0, 20.0, 50.0, 40.0, false },
@@ -199,18 +207,15 @@ private slots:
             { "Second", 10.0, 50.0, 60.0, 70.0, true },
         };
         QCOMPARE(::Mu::Generator::Conversion::plainText(boxes), QStringLiteral("Hello World\nSecond\n"));
-    }
 
-    void plainTextSkipsEmptyTextAndHandlesEmptyInput()
-    {
         QVERIFY(::Mu::Generator::Conversion::plainText({ }).isEmpty());
 
         // An empty box terminated by endOfLine still yields its line break.
-        const std::vector<::Mu::Model::TextBox> boxes = {
+        const std::vector<::Mu::Model::TextBox> sparse = {
             { "", 10.0, 20.0, 50.0, 40.0, true },
             { "Kept", 10.0, 50.0, 60.0, 70.0, true },
         };
-        QCOMPARE(::Mu::Generator::Conversion::plainText(boxes), QStringLiteral("\nKept\n"));
+        QCOMPARE(::Mu::Generator::Conversion::plainText(sparse), QStringLiteral("\nKept\n"));
     }
 
     void annotationConversionPreservesOpacityAndCaretSymbol()

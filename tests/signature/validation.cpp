@@ -25,6 +25,7 @@
 #include <pk11pub.h>
 #pragma pop_macro("slots")
 #include <cstring>
+#include <fcntl.h>
 #include <secoid.h>
 #include <unistd.h>
 
@@ -69,8 +70,9 @@ class TestSignatureValidation : public QObject {
     {
         QProcess process;
         process.start(QStringLiteral("certutil"), arguments);
-        if (!process.waitForStarted()) {
+        if (!process.waitForStarted(10000)) {
             qWarning("certutil could not start: %s", qPrintable(process.errorString()));
+            process.kill();
             return false;
         }
         if (!input.isEmpty()) {
@@ -78,9 +80,11 @@ class TestSignatureValidation : public QObject {
             process.closeWriteChannel();
         }
         const bool success =
-            process.waitForFinished() && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
-        if (!success)
+            process.waitForFinished(60000) && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+        if (!success) {
             qWarning("certutil failed: %s", qPrintable(process.readAllStandardError().trimmed()));
+            process.kill();
+        }
         return success;
     }
 
@@ -88,14 +92,17 @@ class TestSignatureValidation : public QObject {
     {
         QProcess process;
         process.start(QStringLiteral("pk12util"), arguments);
-        if (!process.waitForStarted()) {
+        if (!process.waitForStarted(10000)) {
             qWarning("pk12util could not start: %s", qPrintable(process.errorString()));
+            process.kill();
             return false;
         }
         const bool success =
-            process.waitForFinished() && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
-        if (!success)
+            process.waitForFinished(60000) && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+        if (!success) {
             qWarning("pk12util failed: %s", qPrintable(process.readAllStandardError().trimmed()));
+            process.kill();
+        }
         return success;
     }
 
@@ -103,14 +110,17 @@ class TestSignatureValidation : public QObject {
     {
         QProcess process;
         process.start(QStringLiteral("openssl"), arguments);
-        if (!process.waitForStarted()) {
+        if (!process.waitForStarted(10000)) {
             qWarning("openssl could not start: %s", qPrintable(process.errorString()));
+            process.kill();
             return false;
         }
         const bool success =
-            process.waitForFinished() && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
-        if (!success)
+            process.waitForFinished(60000) && process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+        if (!success) {
             qWarning("openssl failed: %s", qPrintable(process.readAllStandardError().trimmed()));
+            process.kill();
+        }
         return success;
     }
 
@@ -189,6 +199,10 @@ private slots:
     void initTestCase()
     {
         QVERIFY2(m_nssDb.isValid(), "could not create temporary NSS database");
+        if (QStandardPaths::findExecutable(QStringLiteral("certutil")).isEmpty())
+            QSKIP("certutil is required for the signature validation tests");
+        if (QStandardPaths::findExecutable(QStringLiteral("pk12util")).isEmpty())
+            QSKIP("pk12util is required for the signature validation tests");
         QFile noise(m_nssDb.filePath(QStringLiteral("noise")));
         QVERIFY(noise.open(QIODevice::WriteOnly));
         QVERIFY(noise.write(QByteArray(4096, '\x5a')) == 4096);
@@ -465,62 +479,130 @@ private slots:
                  qPrintable(error));
     }
 
-    void importsPkcs12WithCorrectPassword()
+    void importsPkcs12Bundles()
     {
-        const QString database = QStringLiteral("sql:") + m_nssDb.path();
-        const QString sourceNickname = QStringLiteral("okular-mupdf-pkcs12-source");
-        ::Mu::Plugin::Crypto::CertificateDatabase::SelfSignedCertificateOptions options;
-        options.nickname = sourceNickname;
-        options.commonName = QStringLiteral("PKCS#12 Import Test");
-        options.validFrom = QDateTime::currentDateTime().addSecs(-60);
-        options.validUntil = options.validFrom.addYears(1);
-        QString error;
-        QVERIFY2(
-            ::Mu::Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(m_nssDb.path(), options, &error),
-            qPrintable(error));
+        // Legacy NSS bundle with a unicode password (pk12util round trip)
+        {
+            const QString database = QStringLiteral("sql:") + m_nssDb.path();
+            const QString sourceNickname = QStringLiteral("okular-mupdf-pkcs12-source");
+            ::Mu::Plugin::Crypto::CertificateDatabase::SelfSignedCertificateOptions options;
+            options.nickname = sourceNickname;
+            options.commonName = QStringLiteral("PKCS#12 Import Test");
+            options.validFrom = QDateTime::currentDateTime().addSecs(-60);
+            options.validUntil = options.validFrom.addYears(1);
+            QString error;
+            QVERIFY2(
+                ::Mu::Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(m_nssDb.path(), options, &error),
+                qPrintable(error));
 
-        QTemporaryFile bundle;
-        QVERIFY(bundle.open());
-        const QString bundlePath = bundle.fileName();
-        bundle.close();
-        QVERIFY(QFile::remove(bundlePath));
+            QTemporaryFile bundle;
+            QVERIFY(bundle.open());
+            const QString bundlePath = bundle.fileName();
+            bundle.close();
+            QVERIFY(QFile::remove(bundlePath));
 
-        QVERIFY2(runPk12util({ QStringLiteral("-o"),
-                               bundlePath,
-                               QStringLiteral("-n"),
-                               sourceNickname,
-                               QStringLiteral("-d"),
-                               database,
-                               QStringLiteral("-K"),
-                               QString(),
-                               QStringLiteral("-W"),
-                               QStringLiteral("päss-密码") }),
-                 "pk12util could not export the test bundle");
-        QFile bundleFile(bundlePath);
-        QVERIFY(bundleFile.open(QIODevice::ReadOnly));
-        const QByteArray data = bundleFile.readAll();
-        bundleFile.close();
-        QVERIFY(!data.isEmpty());
+            QVERIFY2(runPk12util({ QStringLiteral("-o"),
+                                   bundlePath,
+                                   QStringLiteral("-n"),
+                                   sourceNickname,
+                                   QStringLiteral("-d"),
+                                   database,
+                                   QStringLiteral("-K"),
+                                   QString(),
+                                   QStringLiteral("-W"),
+                                   QStringLiteral("päss-密码") }),
+                     "pk12util could not export the test bundle");
+            QFile bundleFile(bundlePath);
+            QVERIFY(bundleFile.open(QIODevice::ReadOnly));
+            const QByteArray data = bundleFile.readAll();
+            bundleFile.close();
+            QVERIFY(!data.isEmpty());
 
-        QVERIFY2(
-            runCertutil({ QStringLiteral("-D"), QStringLiteral("-n"), sourceNickname, QStringLiteral("-d"), database }),
-            "certutil could not remove the source certificate");
+            QVERIFY2(
+                runCertutil(
+                    { QStringLiteral("-D"), QStringLiteral("-n"), sourceNickname, QStringLiteral("-d"), database }),
+                "certutil could not remove the source certificate");
 
-        QVERIFY2(!::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
-                     m_nssDb.path(), data, QStringLiteral("wrong-password"), &error),
-                 "an incorrect PKCS#12 password was accepted");
-        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
-                     m_nssDb.path(), data, QStringLiteral("päss-密码"), &error),
-                 qPrintable(error));
+            QVERIFY2(!::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
+                         m_nssDb.path(), data, QStringLiteral("wrong-password"), &error),
+                     "an incorrect PKCS#12 password was accepted");
+            QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
+                         m_nssDb.path(), data, QStringLiteral("päss-密码"), &error),
+                     qPrintable(error));
 
-        const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
-        QVERIFY2(error.isEmpty(), qPrintable(error));
-        const auto certificate = findManagedCertificate(certificates, "okular-mupdf-pkcs12-source");
-        QVERIFY(certificate != certificates.cend());
+            const auto certificates =
+                ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const auto certificate = findManagedCertificate(certificates, "okular-mupdf-pkcs12-source");
+            QVERIFY(certificate != certificates.cend());
 
-        QVERIFY2(
-            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
-            qPrintable(error));
+            QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(
+                         m_nssDb.path(), certificate->identity, &error),
+                     qPrintable(error));
+        }
+
+        // Modern OpenSSL bundle (AES-256-CBC, SHA256 MAC). Returns early
+        // without openssl so the legacy coverage above still runs there.
+        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
+            return;
+        {
+            QTemporaryDir source;
+            QVERIFY(source.isValid());
+            const QString keyPath = source.filePath(QStringLiteral("key.pem"));
+            const QString certificatePath = source.filePath(QStringLiteral("certificate.pem"));
+            const QString bundlePath = source.filePath(QStringLiteral("certificate.p12"));
+            QVERIFY2(runOpenSsl({ QStringLiteral("req"),
+                                  QStringLiteral("-x509"),
+                                  QStringLiteral("-newkey"),
+                                  QStringLiteral("rsa:2048"),
+                                  QStringLiteral("-nodes"),
+                                  QStringLiteral("-keyout"),
+                                  keyPath,
+                                  QStringLiteral("-out"),
+                                  certificatePath,
+                                  QStringLiteral("-subj"),
+                                  QStringLiteral("/CN=Modern PKCS12 Test"),
+                                  QStringLiteral("-days"),
+                                  QStringLiteral("1") }),
+                     "openssl could not create a test certificate");
+            QVERIFY2(runOpenSsl({ QStringLiteral("pkcs12"),
+                                  QStringLiteral("-export"),
+                                  QStringLiteral("-inkey"),
+                                  keyPath,
+                                  QStringLiteral("-in"),
+                                  certificatePath,
+                                  QStringLiteral("-out"),
+                                  bundlePath,
+                                  QStringLiteral("-name"),
+                                  QStringLiteral("modern-pkcs12-test"),
+                                  QStringLiteral("-keypbe"),
+                                  QStringLiteral("AES-256-CBC"),
+                                  QStringLiteral("-certpbe"),
+                                  QStringLiteral("AES-256-CBC"),
+                                  QStringLiteral("-macalg"),
+                                  QStringLiteral("SHA256"),
+                                  QStringLiteral("-passout"),
+                                  QStringLiteral("pass:pass") }),
+                     "openssl could not create a modern PKCS#12 bundle");
+
+            QFile bundle(bundlePath);
+            QVERIFY(bundle.open(QIODevice::ReadOnly));
+            const QByteArray data = bundle.readAll();
+            QVERIFY(!data.isEmpty());
+
+            QString error;
+            QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
+                         m_nssDb.path(), data, QStringLiteral("pass"), &error),
+                     qPrintable(error));
+            const auto certificates =
+                ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const auto certificate = findManagedCertificate(certificates, "modern-pkcs12-test");
+            QVERIFY(certificate != certificates.cend());
+            QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(
+                         m_nssDb.path(), certificate->identity, &error),
+                     qPrintable(error));
+        }
     }
 
     void rejectsInactiveCertificateDatabase()
@@ -532,67 +614,6 @@ private slots:
         QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
             otherDatabase.path(), QByteArrayLiteral("not a PKCS#12 bundle"), { }, &error));
         QVERIFY2(error.contains(QStringLiteral("not active")), qPrintable(error));
-    }
-
-    void importsModernOpenSslPkcs12()
-    {
-        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
-            QSKIP("openssl is required for the modern PKCS#12 interoperability test");
-        QTemporaryDir source;
-        QVERIFY(source.isValid());
-        const QString keyPath = source.filePath(QStringLiteral("key.pem"));
-        const QString certificatePath = source.filePath(QStringLiteral("certificate.pem"));
-        const QString bundlePath = source.filePath(QStringLiteral("certificate.p12"));
-        QVERIFY2(runOpenSsl({ QStringLiteral("req"),
-                              QStringLiteral("-x509"),
-                              QStringLiteral("-newkey"),
-                              QStringLiteral("rsa:2048"),
-                              QStringLiteral("-nodes"),
-                              QStringLiteral("-keyout"),
-                              keyPath,
-                              QStringLiteral("-out"),
-                              certificatePath,
-                              QStringLiteral("-subj"),
-                              QStringLiteral("/CN=Modern PKCS12 Test"),
-                              QStringLiteral("-days"),
-                              QStringLiteral("1") }),
-                 "openssl could not create a test certificate");
-        QVERIFY2(runOpenSsl({ QStringLiteral("pkcs12"),
-                              QStringLiteral("-export"),
-                              QStringLiteral("-inkey"),
-                              keyPath,
-                              QStringLiteral("-in"),
-                              certificatePath,
-                              QStringLiteral("-out"),
-                              bundlePath,
-                              QStringLiteral("-name"),
-                              QStringLiteral("modern-pkcs12-test"),
-                              QStringLiteral("-keypbe"),
-                              QStringLiteral("AES-256-CBC"),
-                              QStringLiteral("-certpbe"),
-                              QStringLiteral("AES-256-CBC"),
-                              QStringLiteral("-macalg"),
-                              QStringLiteral("SHA256"),
-                              QStringLiteral("-passout"),
-                              QStringLiteral("pass:pass") }),
-                 "openssl could not create a modern PKCS#12 bundle");
-
-        QFile bundle(bundlePath);
-        QVERIFY(bundle.open(QIODevice::ReadOnly));
-        const QByteArray data = bundle.readAll();
-        QVERIFY(!data.isEmpty());
-
-        QString error;
-        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
-                     m_nssDb.path(), data, QStringLiteral("pass"), &error),
-                 qPrintable(error));
-        const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
-        QVERIFY2(error.isEmpty(), qPrintable(error));
-        const auto certificate = findManagedCertificate(certificates, "modern-pkcs12-test");
-        QVERIFY(certificate != certificates.cend());
-        QVERIFY2(
-            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
-            qPrintable(error));
     }
 
     void publicOnlyCertificateImportRollback()
@@ -937,14 +958,51 @@ private slots:
         QCOMPARE(signedMetadata.values.at("signatureCount"), std::string("1"));
     }
 
-    void signsDocumentWithBackgroundImage()
+    void signsDocumentWithBackgroundImageVariants()
     {
-        const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR) + QStringLiteral("/pdfreference1.0.pdf");
-        QFile source(sourcePath);
-        Mu::Worker::Engine::PdfDocument document;
-        QVERIFY2(openDocument(document, source, sourcePath), qPrintable(sourcePath));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
 
-        // Generate sample background PNG image (red circle stamp on transparent canvas)
+        // Signs pdfreference1.0.pdf with the given background into the temp
+        // dir; signFd owns outputFd on every path, so ::open needs no cleanup.
+        const auto signWithBackground = [&](const std::vector<std::uint8_t>& backgroundImage,
+                                            const char* reason,
+                                            const QString& name,
+                                            QString* errorMessage) {
+            const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR) + QStringLiteral("/pdfreference1.0.pdf");
+            QFile source(sourcePath);
+            Mu::Worker::Engine::PdfDocument document;
+            if (!openDocument(document, source, sourcePath))
+                return QString { };
+
+            const QString outputPath = directory.filePath(name);
+            const int outputFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+            if (outputFd < 0)
+                return QString { };
+            std::string error;
+            ::Mu::Model::SigningResult signingResult;
+            const bool signedPdf = document.signFd(
+                ::Mu::Model::SignRequest {
+                    .file = { },
+                    .page = 0,
+                    .rectangle = { .1, .1, .5, .3 },
+                    .certificateNickname = "okular-mupdf-test",
+                    .certificateSubjectCommonName = "Okular MuPDF Test Signer",
+                    .reason = reason,
+                    .location = "Test location",
+                    .existingFieldObjectNumber = -1,
+                    .backgroundImage = backgroundImage,
+                },
+                createCms,
+                outputFd,
+                &signingResult,
+                &error);
+            if (!signedPdf && errorMessage)
+                *errorMessage = QString::fromStdString(error);
+            return signedPdf ? outputPath : QString { };
+        };
+
+        // Valid PNG background (red circle stamp on transparent canvas)
         QImage stamp(100, 100, QImage::Format_ARGB32);
         stamp.fill(Qt::transparent);
         QPainter painter(&stamp);
@@ -961,85 +1019,44 @@ private slots:
                                                 reinterpret_cast<const std::uint8_t*>(pngBytes.constData())
                                                     + pngBytes.size());
 
-        QTemporaryFile output;
-        QVERIFY(output.open());
-        const int outputFd = ::dup(output.handle());
-        QVERIFY(outputFd >= 0);
+        QString stampedError;
+        const QString stampedPath = signWithBackground(bgImage, "Visual background test", "stamped.pdf", &stampedError);
+        QVERIFY2(!stampedPath.isEmpty(), qPrintable(stampedError));
+
         std::string error;
-        ::Mu::Model::SigningResult signingResult;
-        const bool signedPdf = document.signFd(
-            ::Mu::Model::SignRequest {
-                .file = { },
-                .page = 0,
-                .rectangle = { .1, .1, .5, .3 },
-                .certificateNickname = "okular-mupdf-test",
-                .certificateSubjectCommonName = "Okular MuPDF Test Signer",
-                .reason = "Visual background test",
-                .location = "Test location",
-                .existingFieldObjectNumber = -1,
-                .backgroundImage = bgImage,
-            },
-            createCms,
-            outputFd,
-            &signingResult,
-            &error);
-        QVERIFY2(signedPdf, error.c_str());
-        QVERIFY(output.flush());
-
-        QFile signedSource(output.fileName());
-        Mu::Worker::Engine::PdfDocument signedDocument;
-        QVERIFY2(openDocument(signedDocument, signedSource, output.fileName()), qPrintable(output.fileName()));
-        const auto details = signedDocument.pageDetails(0, &error);
+        QFile stampedSource(stampedPath);
+        Mu::Worker::Engine::PdfDocument stampedDocument;
+        QVERIFY2(openDocument(stampedDocument, stampedSource, stampedPath), qPrintable(stampedPath));
+        const auto stampedDetails = stampedDocument.pageDetails(0, &error);
         QVERIFY2(error.empty(), error.c_str());
-        QCOMPARE(details.signatures.size(), size_t(1));
-        QVERIFY(details.signatures.front().signedField);
-        QVERIFY(details.signatures.front().partialName.starts_with("OkularMuPDFSignature"));
-        QVERIFY(!details.signatures.front().cmsSignature.empty());
-        QVERIFY(details.signatures.front().signsTotalDocument);
-    }
-
-    void signsDocumentWithCorruptBackgroundImage()
-    {
-        const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR) + QStringLiteral("/pdfreference1.0.pdf");
-        QFile source(sourcePath);
-        Mu::Worker::Engine::PdfDocument document;
-        QVERIFY2(openDocument(document, source, sourcePath), qPrintable(sourcePath));
+        QCOMPARE(stampedDetails.signatures.size(), size_t(1));
+        QVERIFY(stampedDetails.signatures.front().signedField);
+        QVERIFY(stampedDetails.signatures.front().partialName.starts_with("OkularMuPDFSignature"));
+        QVERIFY(!stampedDetails.signatures.front().cmsSignature.empty());
+        QVERIFY(stampedDetails.signatures.front().signsTotalDocument);
 
         // Malformed image payload: should gracefully fall back to standard appearance
         const std::vector<std::uint8_t> corruptImage { 0xFF, 0xD8, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF };
+        QString fallbackError;
+        const QString fallbackPath =
+            signWithBackground(corruptImage, "Corrupt background fallback test", "fallback.pdf", &fallbackError);
+        QVERIFY2(!fallbackPath.isEmpty(), qPrintable(fallbackError));
 
-        QTemporaryFile output;
-        QVERIFY(output.open());
-        const int outputFd = ::dup(output.handle());
-        QVERIFY(outputFd >= 0);
-        std::string error;
-        ::Mu::Model::SigningResult signingResult;
-        const bool signedPdf = document.signFd(
-            ::Mu::Model::SignRequest {
-                .file = { },
-                .page = 0,
-                .rectangle = { .1, .1, .5, .3 },
-                .certificateNickname = "okular-mupdf-test",
-                .certificateSubjectCommonName = "Okular MuPDF Test Signer",
-                .reason = "Corrupt background fallback test",
-                .location = "Test location",
-                .existingFieldObjectNumber = -1,
-                .backgroundImage = corruptImage,
-            },
-            createCms,
-            outputFd,
-            &signingResult,
-            &error);
-        QVERIFY2(signedPdf, error.c_str());
-        QVERIFY(output.flush());
-
-        QFile signedSource(output.fileName());
-        Mu::Worker::Engine::PdfDocument signedDocument;
-        QVERIFY2(openDocument(signedDocument, signedSource, output.fileName()), qPrintable(output.fileName()));
-        const auto details = signedDocument.pageDetails(0, &error);
+        QFile fallbackSource(fallbackPath);
+        Mu::Worker::Engine::PdfDocument fallbackDocument;
+        QVERIFY2(openDocument(fallbackDocument, fallbackSource, fallbackPath), qPrintable(fallbackPath));
+        const auto fallbackDetails = fallbackDocument.pageDetails(0, &error);
         QVERIFY2(error.empty(), error.c_str());
-        QCOMPARE(details.signatures.size(), size_t(1));
-        QVERIFY(details.signatures.front().signedField);
+        QCOMPARE(fallbackDetails.signatures.size(), size_t(1));
+        QVERIFY(fallbackDetails.signatures.front().signedField);
+
+        // The stamped and fallback appearances must actually differ: both
+        // variants executed their distinct rendering paths.
+        QFile stampedBytes(stampedPath);
+        QVERIFY(stampedBytes.open(QIODevice::ReadOnly));
+        QFile fallbackBytes(fallbackPath);
+        QVERIFY(fallbackBytes.open(QIODevice::ReadOnly));
+        QVERIFY(stampedBytes.readAll() != fallbackBytes.readAll());
     }
 };
 

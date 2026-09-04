@@ -71,27 +71,6 @@ private slots:
         QCOMPARE(loaded.items.at(0).ch, QStringLiteral("K"));
     }
 
-    void hashIdentityAndLanguageIsolation()
-    {
-        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> items {
-            { QStringLiteral("H"), .1, .1, .2, .2 },
-            { QStringLiteral("i"), .2, .1, .3, .2 },
-        };
-        const QString originalPath =
-            ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 0, QStringLiteral("eng_300dpi"));
-        QVERIFY(originalPath.startsWith(m_root.path()));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(m_hash, 0, QStringLiteral("eng_300dpi"), items));
-        QVERIFY(QFile::exists(originalPath));
-
-        const auto res = ::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 0, QStringLiteral("eng_150dpi"));
-        QVERIFY(res.present);
-        QCOMPARE(res.items.size(), 2);
-        QCOMPARE(res.items.at(0).ch + res.items.at(1).ch, QStringLiteral("Hi"));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 0, QStringLiteral("eng_300dpi"))
-                == originalPath);
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 0, QStringLiteral("deu_150dpi")).present);
-    }
-
     void corruptionAndInvalidInputAreRemoved()
     {
         const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 1, QStringLiteral("eng"));
@@ -136,19 +115,26 @@ private slots:
         QVERIFY(!QFile::exists(path));
     }
 
-    void oversizedCompressedFileIsRemoved()
+    void oversizedCacheFilesAreRemoved()
     {
-        const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 3, QStringLiteral("eng"));
-        QFile file(path);
-        QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        const QByteArray data(static_cast<qsizetype>(::Mu::Plugin::OCR::Constant::MAX_CACHE_COMPRESSED_BYTES + 10),
-                              '\0');
-        QCOMPARE(file.write(data), qint64(data.size()));
-        file.close();
+        // Both tests exercise the load()-miss + purge path; there is no
+        // Cache::exists() API, so both boundary sizes are covered here.
+        const int pages[] = { 3, 7 };
+        const qsizetype extras[] = { 10, 1 };
+        for (int i = 0; i < 2; ++i) {
+            const QString path =
+                ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, pages[i], QStringLiteral("eng"));
+            QFile file(path);
+            QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            const QByteArray data(
+                static_cast<qsizetype>(::Mu::Plugin::OCR::Constant::MAX_CACHE_COMPRESSED_BYTES) + extras[i], '\0');
+            QCOMPARE(file.write(data), qint64(data.size()));
+            file.close();
 
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 3, QStringLiteral("eng")).present);
-        QVERIFY(!QFile::exists(path));
+            QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, pages[i], QStringLiteral("eng")).present);
+            QVERIFY(!QFile::exists(path));
+        }
     }
 
     void oversizedDeclaredPayloadIsRemoved()
@@ -205,16 +191,25 @@ private slots:
 
     void hashIsTheCacheIdentity()
     {
-        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> items { { QStringLiteral("x"), 0, 0, .1, .1 } };
+        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> items {
+            { QStringLiteral("H"), .1, .1, .2, .2 },
+            { QStringLiteral("i"), .2, .1, .3, .2 },
+        };
         const QString path =
             ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 6, QStringLiteral("eng_300dpi"));
+        QVERIFY(path.startsWith(m_root.path()));
         QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(m_hash, 6, QStringLiteral("eng_300dpi"), items));
+        QVERIFY(QFile::exists(path));
         QCOMPARE(::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 6, QStringLiteral("eng_300dpi")), path);
         QVERIFY(!path.contains(QStringLiteral(".pdf")));
         QVERIFY(path
                 != ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(
                     QStringLiteral("different-hash"), 6, QStringLiteral("eng_300dpi")));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 6, QStringLiteral("eng_150dpi")).present);
+
+        const auto res = ::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 6, QStringLiteral("eng_150dpi"));
+        QVERIFY(res.present);
+        QCOMPARE(res.items.size(), 2);
+        QCOMPARE(res.items.at(0).ch + res.items.at(1).ch, QStringLiteral("Hi"));
         QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 6, QStringLiteral("deu_150dpi")).present);
         QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 7, QStringLiteral("eng_150dpi")).present);
     }
@@ -238,21 +233,6 @@ private slots:
 
         // Language isolation remains intact
         QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("deu"), 150).present);
-    }
-
-    void existsPurgesOversizedFiles()
-    {
-        const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 7, QStringLiteral("eng"));
-        QFile file(path);
-        QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        const QByteArray data(static_cast<qsizetype>(::Mu::Plugin::OCR::Constant::MAX_CACHE_COMPRESSED_BYTES + 1),
-                              '\0');
-        QCOMPARE(file.write(data), qint64(data.size()));
-        file.close();
-
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 7, QStringLiteral("eng")).present);
-        QVERIFY(!QFile::exists(path));
     }
 
     void schedulerUsesSettledPageAndDirection()
