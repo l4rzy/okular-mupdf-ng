@@ -243,7 +243,7 @@ class TestSandbox : public QObject {
 private slots:
     void testFilesystemAndNetworkRestrictions();
     void testMissingOptionalDirectoryDoesNotDisableLandlock();
-    void testMissingDefaultDirectoryDisablesLandlock();
+    void testMissingDefaultDirectoryKeepsLandlock();
 };
 
 void TestSandbox::testFilesystemAndNetworkRestrictions()
@@ -343,7 +343,7 @@ void TestSandbox::testMissingOptionalDirectoryDoesNotDisableLandlock()
 #endif
 }
 
-void TestSandbox::testMissingDefaultDirectoryDisablesLandlock()
+void TestSandbox::testMissingDefaultDirectoryKeepsLandlock()
 {
 #ifndef __linux__
     QSKIP("Landlock is Linux-only");
@@ -363,7 +363,7 @@ void TestSandbox::testMissingDefaultDirectoryDisablesLandlock()
                                  optionalDir.path().toStdString() };
     ProbeResult result;
     QVERIFY(runSandboxProbe(context, &result));
-    QVERIFY(!result.landlockActive);
+    QVERIFY(result.landlockActive);
 #endif
 }
 

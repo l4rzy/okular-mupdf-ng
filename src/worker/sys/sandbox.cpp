@@ -115,24 +115,17 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
         return recordErrno(status, "Landlock ruleset creation failed");
     }
 
-    // Helper lambda to grant read-only access to a specific directory tree
-    const auto addPathRule = [&](const std::string& directory, __u64 allowedAccess, bool required) {
-        if (directory.empty())
-            return !required;
-
+    // Helper lambda to grant read-only access to a specific directory tree.
+    // All directories are optional; missing entries are skipped silently.
+    const auto addPathRule = [&](const std::string& directory, __u64 allowedAccess) {
         // Open directory with O_PATH to get a lightweight descriptor for Landlock rule creation
         const int parentFd = ::open(directory.c_str(), O_PATH | O_CLOEXEC);
-        if (parentFd < 0) {
-            if (required)
-                return recordErrno(status, "Landlock default tessdata directory unavailable");
+        if (parentFd < 0)
             return false;
-        }
         landlock_path_beneath_attr rule { };
         rule.allowed_access = allowedAccess;
         rule.parent_fd = parentFd;
         if (static_cast<int>(::syscall(SYS_landlock_add_rule, rulesetFd, LANDLOCK_RULE_PATH_BENEATH, &rule, 0)) < 0) {
-            if (required)
-                recordErrno(status, "Landlock rule creation failed");
             ::close(parentFd);
             return false;
         }
@@ -140,20 +133,18 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
         return true;
     };
 
-    // The first directory is the build-time default and is required. Additional
-    // configured directories are optional and must not disable Landlock.
-    if (readOnlyDirectories.empty()
-        || !addPathRule(
-            readOnlyDirectories.front(), LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR, true)) {
-        if (readOnlyDirectories.empty())
-            recordIssue(status, "Landlock default tessdata directory unavailable");
-        ::close(rulesetFd);
-        status.landlock = false;
-        return false;
+    // All configured directories are optional read-only exceptions. Missing
+    // entries are skipped so a host without tessdata still gets Landlock
+    // enforced with zero path exceptions (strictest posture).
+    std::size_t addedRules = 0;
+    for (const auto& directory : readOnlyDirectories) {
+        if (directory.empty())
+            continue;
+        if (addPathRule(directory, LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR))
+            ++addedRules;
     }
-    for (std::size_t index = 1; index < readOnlyDirectories.size(); ++index) {
-        addPathRule(readOnlyDirectories[index], LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR, false);
-    }
+    if (addedRules == 0)
+        recordIssue(status, "no tessdata directories available; Landlock enforced without read exceptions");
 
     // Enforce the ruleset only after every permitted tessdata directory has been added.
     bool success = true;
