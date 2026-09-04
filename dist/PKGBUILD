@@ -32,7 +32,7 @@ _PREFIX="${PREFIX:-/usr}"
 _mupdf_min_ver="1.28.0"
 
 pkgver() {
-  local json_file="$srcdir/$_pkgname/src/generator/mupdfng.json"
+  local json_file="$srcdir/$_pkgname/src/generator/manifest.json"
   local base_ver
   if [ -f "$json_file" ]; then
     base_ver=$(jq -r '.KPlugin.Version' "$json_file" 2>/dev/null)
