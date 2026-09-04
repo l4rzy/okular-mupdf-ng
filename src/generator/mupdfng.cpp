@@ -48,7 +48,7 @@
 #include "shared/logging.hpp"
 #include "shared/transport/common.hpp"
 
-K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "mupdfng.json")
+K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "manifest.json")
 
 namespace Mu::Generator {
 
