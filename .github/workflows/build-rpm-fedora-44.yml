@@ -56,11 +56,13 @@ jobs:
             python3 \
             qt6-qtbase-devel \
             rpm-build \
+            tesseract-langpack-eng \
             zlib-ng-compat-devel
 
       - name: Verify build environment
         run: |
           python3 -c 'import sys; assert sys.version_info >= (3, 12)'
+          test -f /usr/share/tesseract/tessdata/eng.traineddata
 
       - name: Checkout Repository
         uses: actions/checkout@v4

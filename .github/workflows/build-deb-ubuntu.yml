@@ -49,6 +49,7 @@ jobs:
             pkg-config \
             python3 \
             qt6-base-dev \
+            tesseract-ocr-eng \
             zlib1g-dev
 
       - name: Checkout Repository

@@ -38,6 +38,7 @@ jobs:
             nss \
             libseccomp \
             zlib \
+            tesseract-data-eng \
             jq \
             sudo
 
