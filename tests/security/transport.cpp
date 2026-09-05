@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -66,6 +67,20 @@ private slots:
         // reading the header fields beyond the mapped region.
         QVERIFY(!::Mu::IPC::validateFrameHeader(
             &header, 2, 3, 8, 1, 7, uint64_t(sizeof(::Mu::IPC::FrameBufferHeader)) - 1));
+    }
+
+    void tempDirectoryIsPerUser()
+    {
+        const QString path = ::Mu::Plugin::Util::tempDirectory();
+        QVERIFY2(!path.isEmpty(), qPrintable(path));
+        QCOMPARE(path, QDir::tempPath() + QStringLiteral("/okular-mupdf-ng-%1").arg(::getuid()));
+        const QFileInfo info(path);
+        QVERIFY(info.isDir());
+        QVERIFY(info.permissions() & (QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QCOMPARE(info.permissions()
+                     & (QFile::ReadGroup | QFile::WriteGroup | QFile::ExeGroup | QFile::ReadOther | QFile::WriteOther
+                        | QFile::ExeOther),
+                 QFile::Permissions { });
     }
 
     void framedZppRoundTripAndMalformedLengths()
