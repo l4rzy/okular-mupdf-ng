@@ -119,8 +119,9 @@ bool WorkerTransport::start(const QString& binaryPath,
                             const QStringList& tessDataDirectories,
                             Model::SandboxStatus* sandboxStatus)
 {
-    // Start is also the recovery path. Remove every artifact from a partial
-    // previous session before allocating new authenticated endpoints.
+    // Phase 1: reset the previous session. Start doubles as the recovery path:
+    // a connected transport is stopped and a partial one is cleaned so both
+    // converge on the same baseline before anything new is allocated.
     if (isConnected())
         stop();
     else
@@ -130,10 +131,19 @@ bool WorkerTransport::start(const QString& binaryPath,
         cleanupSession();
         return false;
     };
+
+    // Phase 2: sweep orphaned socket files and resolve the worker binary. A
+    // fresh endpoint UUID makes any leftover files pure hygiene; the binary is
+    // validated before any endpoint or process is created.
     Util::cleanupStaleTempFiles();
     const QString resolvedBinaryPath = findBinary(binaryPath);
     if (resolvedBinaryPath.isEmpty())
         return failStart();
+
+    // Phase 3: allocate unique private socket endpoints in the per-user temp
+    // directory. The worker learns both paths exclusively through argv, and the
+    // FD socket file must already exist before the worker is spawned because it
+    // connects over it before binding the control socket.
     const QString baseUuid = QUuid::createUuid().toString(QUuid::Id128);
     const QString tmpDir = Util::tempDirectory();
     if (tmpDir.isEmpty()) {
@@ -147,6 +157,10 @@ bool WorkerTransport::start(const QString& binaryPath,
     std::string e;
     if (!m_fd.listen(m_fdSocketPath.toStdString(), &e))
         return failStart();
+
+    // Phase 4: spawn the worker with the endpoint arguments. Tesseract data
+    // directories are optional and the process output is forwarded for
+    // diagnosis.
     m_process.setProcessChannelMode(QProcess::ForwardedChannels);
     QStringList arguments { QStringLiteral("--socket"), m_socketPath, QStringLiteral("--fd-socket"), m_fdSocketPath };
     for (const QString& directory : tessDataDirectories) {
@@ -157,6 +171,12 @@ bool WorkerTransport::start(const QString& binaryPath,
     if (!m_process.waitForStarted(5000)) {
         return failStart();
     }
+
+    // Phase 5: establish the authenticated channels. The worker connects the FD
+    // channel before binding the control socket (worker main steps 2-3), so the
+    // plugin accepts the FD side first, then polls for the control connection.
+    // Each connect attempt is bounded by the handshake deadline; refusals only
+    // occur while the control socket file has not yet appeared.
     if (!m_fd.accept(&e, m_process.processId())) {
         return failStart();
     }
@@ -168,6 +188,11 @@ bool WorkerTransport::start(const QString& binaryPath,
     if (!m_ctrl.valid()) {
         return failStart();
     }
+
+    // Phase 6: handshake and enable the working session. Ping reports protocol
+    // compatibility and the sandbox status; the notifier is enabled only while
+    // no synchronous RPC is in flight, because call() drains notifications as
+    // part of its response loop.
     auto pong = call(PingRequest { std::string(IPC::COMPAT) });
     if (!pong || pong->error) {
         return failStart();
@@ -178,8 +203,6 @@ bool WorkerTransport::start(const QString& binaryPath,
     }
     if (sandboxStatus)
         *sandboxStatus = p->sandbox;
-    // The notifier is enabled only while no synchronous RPC is in flight;
-    // call() drains notifications as part of its response loop.
     m_notifier = std::make_unique<QSocketNotifier>(m_ctrl.fd(), QSocketNotifier::Type::Read, this);
     connect(m_notifier.get(), &QSocketNotifier::activated, this, &WorkerTransport::processIncomingNotifications);
     return true;
@@ -355,9 +378,14 @@ bool WorkerTransport::close()
 
 QImage WorkerTransport::render(int page, int width, int height, const QRect& rect)
 {
+    // Phase 1: build the render request, folding the tile geometry into the
+    // projection when the caller asks for a partial viewport.
     RenderRequest request { page, width, height, std::nullopt };
     if (!rect.isEmpty())
         request.tile = RenderTile { rect.x(), rect.y(), rect.width(), rect.height() };
+
+    // Phase 2: synchronous RPC round trip. A lost or rejected request returns
+    // an empty image, and the payload must come back as a RenderResponse.
     const auto id = m_nextId;
     auto response = call(request);
     if (!response || response->error)
@@ -366,6 +394,9 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
     if (!render)
         return { };
 
+    // Phase 3: shared frame-construction lambdas, used by both delivery paths
+    // below. validFrame verifies the shared-memory header before pixels are
+    // exposed; createImage wraps the mapping as a QImage that owns its cleanup.
     const auto validFrame = [&](const void* mapping, std::size_t size) {
         return IPC::validateRenderFrame(static_cast<const IPC::FrameBufferHeader*>(mapping), render->frame, id, size);
     };
@@ -383,6 +414,11 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
         return image;
     };
 
+    // Phase 4: shared-frame-slot path. A known slot is reused without a new
+    // descriptor; an unknown slot arrives with a transferId that is received,
+    // validated, and mapped into the per-session cache. The lease keeps the
+    // mapping alive for the image while the cache entry persists for later
+    // renders, and every rejection releases the lease via a deferred RPC.
     if (render->frame.slotId) {
         if (!render->frame.leaseId)
             return { };
@@ -429,6 +465,9 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
         return createImage(slot->mapping, cleanupFrameLease, lease);
     }
 
+    // Phase 5: one-shot frame path. A non-slot render must carry a transferId; the
+    // descriptor is received, mapped, validated, then handed to the image whose
+    // cleanup unmaps it and closes the descriptor.
     if (!render->frame.transferId)
         return { };
     std::string error;
@@ -674,9 +713,9 @@ bool WorkerTransport::settings(const DocumentSettings& settings)
 
 std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
 {
-    // The protocol permits one synchronous request at a time. During that
-    // request, asynchronous notifications are decoded and handled inline so
-    // the response stream remains ordered.
+    // Phase 1: verify serialization preconditions. The protocol permits one
+    // synchronous request at a time, so a disconnected transport bails out and a
+    // reentrant or concurrent call aborts the session rather than interleaving.
     if (!isConnected())
         return { };
 
@@ -686,6 +725,10 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
         return { };
     }
 
+    // Phase 2: suspend idle dispatch and take in-flight ownership. Notifications
+    // stop being delivered out-of-band; the scope guard re-enables them and
+    // drains anything buffered once the exchange has fully restored the
+    // transport's serialized state, on every exit path.
     const auto abortWith = [&](const std::string& reason, bool critical = false) -> std::optional<ResponseMessage> {
         if (critical)
             MU_LOG(critical, "Mu::Plugin", reason + "; aborting transport");
@@ -715,6 +758,9 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
         }
     } guard { this };
 
+    // Phase 3: build and write the request. The id comes from the monotonic
+    // counter used to correlate the upcoming response; the write itself is
+    // bounded by the control-write timeout.
     const auto id = m_nextId++;
     RequestMessage request { id, std::move(payload) };
     MU_LOG(debug, "Plugin -> Worker", IPC::Debug::request(request, true));
@@ -722,6 +768,10 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
     if (!IPC::ZppCodec::writeMessage(m_ctrl, request, Timeout::ControlWriteMs, &e, "plugin"))
         return abortWith("request write failed: " + e);
 
+    // Phase 4: drain the stream until the matching response arrives. Every frame
+    // is checked against the response first; a wrong id is a desynchronization,
+    // otherwise the frame is an inline notification that is handled immediately
+    // so the response stream stays ordered.
     const auto started = std::chrono::steady_clock::now();
     const auto deadline = started + std::chrono::milliseconds(timeoutFor(request.payload));
     for (;;) {
