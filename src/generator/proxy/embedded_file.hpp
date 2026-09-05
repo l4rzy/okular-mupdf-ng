@@ -35,7 +35,7 @@ public:
 
     QByteArray data() const override { return m_data; }
 
-    int size() const override { return m_size <= 0 ? -1 : m_size; }
+    int size() const override { return m_size < 0 ? -1 : m_size; }
 
     QDateTime modificationDate() const override { return m_modDate; }
 

@@ -137,6 +137,25 @@ private slots:
         QCOMPARE(file.modificationDate(), modified);
     }
 
+    void embeddedFileSizeMapsUnknownOnlyForNegative()
+    {
+        // Okular uses -1 for unknown size; 0 is a valid empty-file size.
+        const std::pair<int, int> cases[] = { { -1, -1 }, { -5, -1 }, { 0, 0 }, { 1, 1 }, { 42, 42 } };
+        for (const auto& [stored, expected] : cases) {
+            const ::Mu::Generator::Proxy::EmbeddedFile file(
+                QStringLiteral("f"), QStringLiteral("d"), stored, QDateTime { }, QDateTime { }, QByteArray());
+            QCOMPARE(file.size(), expected);
+        }
+
+        ::Mu::Model::EmbeddedFile emptyModel;
+        emptyModel.size = 0;
+        QCOMPARE(::Mu::Generator::Conversion::embeddedFile(emptyModel)->size(), 0);
+
+        ::Mu::Model::EmbeddedFile unknownModel;
+        unknownModel.size = -1;
+        QCOMPARE(::Mu::Generator::Conversion::embeddedFile(unknownModel)->size(), -1);
+    }
+
     void documentSynopsisConstructsHierarchyAndAttributes()
     {
         // 1. Empty nodes should return nullptr
