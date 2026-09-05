@@ -6,6 +6,8 @@
 
 #include <okular/core/annotations.h>
 
+#include <functional>
+
 namespace Mu::Plugin {
 
 class WorkerClient;
@@ -16,7 +18,11 @@ namespace Mu::Generator::Proxy {
 
 class Annotation final : public Okular::AnnotationProxy {
 public:
-    explicit Annotation(Plugin::WorkerClient* backend = nullptr);
+    // Called when Okular has changed a native annotation and the worker state
+    // may no longer match the retained source document.
+    using MutationCallback = std::function<void()>;
+
+    explicit Annotation(Plugin::WorkerClient* backend = nullptr, MutationCallback mutationCallback = { });
     ~Annotation() override;
 
     bool supports(Capability capability) const override;
@@ -26,6 +32,7 @@ public:
 
 private:
     Plugin::WorkerClient* m_backend = nullptr;
+    MutationCallback m_mutationCallback;
 };
 
 } // namespace Mu::Generator::Proxy

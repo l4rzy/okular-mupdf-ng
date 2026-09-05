@@ -55,7 +55,7 @@ namespace Mu::Generator {
 // Okular Generator Func: creates the generator and initializes worker services.
 Main::Main(QObject* parent, const QVariantList& args)
     : Generator(parent, args)
-    , m_annotationProxy(&m_worker)
+    , m_annotationProxy(&m_worker, [this] { m_annotationsDirty = true; })
     , m_certStore(std::make_unique<Proxy::CertificateStore>())
     , m_settings(Config::readWorkerSettings())
 {
@@ -106,9 +106,17 @@ Main::Main(QObject* parent, const QVariantList& args)
         MU_LOG(
             warning, "Mu::Generator::Main", std::string("okular-mupdf-worker died with code ") + std::to_string(code));
         m_ocrController->reset();
-        if (m_formsDirty)
-            failClosed(i18n(
-                "The document renderer stopped while unsaved form changes were present. Those changes were lost."));
+        if (m_formsDirty || m_annotationsDirty) {
+            const QString message = m_formsDirty && m_annotationsDirty
+                ? i18n("The document renderer stopped while unsaved form and annotation changes were present. "
+                       "Those changes were lost.")
+                : m_formsDirty
+                ? i18n(
+                      "The document renderer stopped while unsaved form changes were present. Those changes were lost.")
+                : i18n("The document renderer stopped while unsaved annotation changes were present. Those changes "
+                       "were lost.");
+            failClosed(message);
+        }
     });
     connect(
         &m_worker,
@@ -238,6 +246,14 @@ bool Main::reparseConfig()
                "Mu::Generator::Main",
                std::string("sandbox enforcement changed: ") + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
         if (newBlocked) {
+            if (m_formsDirty || m_annotationsDirty) {
+                // Closing and reopening would discard UI mutations that have
+                // not been persisted in the retained source document.
+                failClosed(i18n(
+                    "Strict sandbox enforcement cannot be enabled while unsaved changes are present. Restart Okular "
+                    "after saving or discarding those changes."));
+                return changed;
+            }
             // Side effects run after activate() publishes the flag, so any
             // render triggered by them observes the active state.
             m_placeholder.activate(SandboxGate::guidanceMessage(m_worker.sandboxStatus()),
@@ -412,6 +428,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
     m_formsDirty = false;
+    m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
     return Okular::Document::OpenSuccess;
 }
@@ -602,6 +619,7 @@ void Main::clearPlaceholderDerivedState()
 {
     m_ocrController->reset();
     m_formsDirty = false;
+    m_annotationsDirty = false;
     {
         QMutexLocker locker(userMutex());
         clearWorkerDerivedState();
@@ -698,6 +716,11 @@ void Main::observeOcrFocus()
 
 bool Main::reopenWorkerDocument()
 {
+    if (m_formsDirty || m_annotationsDirty) {
+        failClosed(i18n("The document renderer restarted while unsaved changes were present. Those changes could not "
+                        "be recovered."));
+        return false;
+    }
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
 
@@ -740,6 +763,10 @@ void Main::failClosed(const QString& message)
         return;
 
     m_placeholder.activate(message, Placeholder::Reason::WorkerUnavailable);
+    // A terminal placeholder must not leave a connected worker able to mutate
+    // a document whose UI state is no longer recoverable.
+    if (m_worker.isConnected())
+        m_worker.close();
     clearPlaceholderDerivedState();
     Q_EMIT error(message, 0);
 
@@ -780,6 +807,7 @@ bool Main::doCloseDocument()
     // Step 2: Clear form proxies and cached UI objects while Okular's user
     // mutex protects their ownership.
     m_formsDirty = false;
+    m_annotationsDirty = false;
     QMutexLocker locker(userMutex());
     clearWorkerDerivedState();
     m_okularPages.clear();
