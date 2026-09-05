@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_PLUGIN_CRYPTO_CERTIFICATE_DATABASE_HPP
-#define MUPDF_PLUGIN_CRYPTO_CERTIFICATE_DATABASE_HPP
+#ifndef MU_PLUGIN_CRYPTO_CERTIFICATE_DATABASE_HPP
+#define MU_PLUGIN_CRYPTO_CERTIFICATE_DATABASE_HPP
 
 #include <QByteArray>
 #include <QDateTime>
@@ -69,4 +69,4 @@ bool deleteCertificate(const QString& databasePath, const CertificateIdentity& i
 
 } // namespace Mu::Plugin::Crypto::CertificateDatabase
 
-#endif // MUPDF_PLUGIN_CRYPTO_CERTIFICATE_DATABASE_HPP
+#endif // MU_PLUGIN_CRYPTO_CERTIFICATE_DATABASE_HPP

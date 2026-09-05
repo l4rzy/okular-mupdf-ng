@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_TRANSPORT_POLL_HPP
-#define MUPDF_SHARED_TRANSPORT_POLL_HPP
+#ifndef MU_SHARED_TRANSPORT_POLL_HPP
+#define MU_SHARED_TRANSPORT_POLL_HPP
 
 #include <chrono>
 #include <cstdint>
@@ -92,4 +92,4 @@ private:
 
 } // namespace Mu::IPC
 
-#endif // MUPDF_SHARED_TRANSPORT_POLL_HPP
+#endif // MU_SHARED_TRANSPORT_POLL_HPP

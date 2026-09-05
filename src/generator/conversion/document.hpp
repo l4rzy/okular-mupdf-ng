@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_CONVERSION_DOCUMENT_HPP
-#define MUPDF_GENERATOR_CONVERSION_DOCUMENT_HPP
+#ifndef MU_GENERATOR_CONVERSION_DOCUMENT_HPP
+#define MU_GENERATOR_CONVERSION_DOCUMENT_HPP
 
 #include <okular/core/action.h>
 #include <okular/core/document.h>
@@ -24,4 +24,4 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
 
 } // namespace Mu::Generator::Conversion
 
-#endif
+#endif // MU_GENERATOR_CONVERSION_DOCUMENT_HPP

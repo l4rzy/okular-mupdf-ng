@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_PLACEHOLDER_HPP
-#define MUPDF_GENERATOR_PLACEHOLDER_HPP
+#ifndef MU_GENERATOR_PLACEHOLDER_HPP
+#define MU_GENERATOR_PLACEHOLDER_HPP
 
 #include <QImage>
 #include <QString>
@@ -103,4 +103,4 @@ enum class ReopenResult {
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_PLACEHOLDER_HPP

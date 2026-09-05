@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef MUPDF_SHARED_LOGGING_HPP
-#define MUPDF_SHARED_LOGGING_HPP
+#ifndef MU_SHARED_LOGGING_HPP
+#define MU_SHARED_LOGGING_HPP
 
 #include <string_view>
 
@@ -29,4 +29,4 @@ void write(Level level, std::string_view component, std::string_view message);
     } while (false)
 #endif
 
-#endif // MUPDF_SHARED_LOGGING_HPP
+#endif // MU_SHARED_LOGGING_HPP

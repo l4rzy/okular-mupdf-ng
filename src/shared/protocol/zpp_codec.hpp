@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_PROTOCOL_ZPP_CODEC_HPP
-#define MUPDF_SHARED_PROTOCOL_ZPP_CODEC_HPP
+#ifndef MU_SHARED_PROTOCOL_ZPP_CODEC_HPP
+#define MU_SHARED_PROTOCOL_ZPP_CODEC_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -102,4 +102,4 @@ bool readMessage(CtrlChannel& channel,
 
 } // namespace Mu::IPC::ZppCodec
 
-#endif // MUPDF_SHARED_PROTOCOL_ZPP_CODEC_HPP
+#endif // MU_SHARED_PROTOCOL_ZPP_CODEC_HPP

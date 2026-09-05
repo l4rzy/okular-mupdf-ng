@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#pragma once
+#ifndef MU_PLUGIN_OCR_SCHEDULER_HPP
+#define MU_PLUGIN_OCR_SCHEDULER_HPP
 
 #include <QList>
 #include <algorithm>
@@ -90,3 +91,4 @@ inline int dominantPage(const QList<VisiblePage>& pages, int previousPage = -1)
 }
 
 } // namespace Mu::Plugin::OCR
+#endif // MU_PLUGIN_OCR_SCHEDULER_HPP

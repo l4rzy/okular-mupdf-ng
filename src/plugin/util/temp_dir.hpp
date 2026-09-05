@@ -69,4 +69,4 @@ inline void cleanupStaleTempFiles()
 
 } // namespace Mu::Plugin::Util
 
-#endif // MU_PLUGIN_UTILS_TEMP_DIR_HPP
+#endif // MU_PLUGIN_UTIL_TEMP_DIR_HPP

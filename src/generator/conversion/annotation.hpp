@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_CONVERSION_ANNOTATION_HPP
-#define MUPDF_GENERATOR_CONVERSION_ANNOTATION_HPP
+#ifndef MU_GENERATOR_CONVERSION_ANNOTATION_HPP
+#define MU_GENERATOR_CONVERSION_ANNOTATION_HPP
 
 #include <okular/core/annotations.h>
 
@@ -18,4 +18,4 @@ std::optional<Model::Annotation> toModel(const Okular::Annotation* annotation);
 
 } // namespace Mu::Generator::Conversion
 
-#endif
+#endif // MU_GENERATOR_CONVERSION_ANNOTATION_HPP

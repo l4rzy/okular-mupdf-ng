@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_CONVERSION_TEXT_HPP
-#define MUPDF_GENERATOR_CONVERSION_TEXT_HPP
+#ifndef MU_GENERATOR_CONVERSION_TEXT_HPP
+#define MU_GENERATOR_CONVERSION_TEXT_HPP
 
 #include <okular/core/textpage.h>
 
@@ -22,4 +22,4 @@ QString plainText(const std::vector<Model::TextBox>& boxes);
 
 } // namespace Mu::Generator::Conversion
 
-#endif
+#endif // MU_GENERATOR_CONVERSION_TEXT_HPP

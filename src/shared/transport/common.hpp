@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_TRANSPORT_COMMON_HPP
-#define MUPDF_SHARED_TRANSPORT_COMMON_HPP
+#ifndef MU_SHARED_TRANSPORT_COMMON_HPP
+#define MU_SHARED_TRANSPORT_COMMON_HPP
 
 /**
  * @file common.hpp
@@ -33,4 +33,4 @@ inline constexpr int FdChannelTimeoutMs = 5'000;
 
 } // namespace Mu::IPC
 
-#endif // MUPDF_SHARED_TRANSPORT_COMMON_HPP
+#endif // MU_SHARED_TRANSPORT_COMMON_HPP

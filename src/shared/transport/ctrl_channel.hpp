@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_TRANSPORT_CTRL_CHANNEL_HPP
-#define MUPDF_SHARED_TRANSPORT_CTRL_CHANNEL_HPP
+#ifndef MU_SHARED_TRANSPORT_CTRL_CHANNEL_HPP
+#define MU_SHARED_TRANSPORT_CTRL_CHANNEL_HPP
 
 /**
  * Linux-only Unix-domain control-plane transport.
@@ -86,4 +86,4 @@ ReadStatus tryReadFrame(CtrlChannel& socket, std::vector<std::byte>* payload, st
 
 } // namespace Mu::IPC
 
-#endif // MUPDF_SHARED_TRANSPORT_CTRL_CHANNEL_HPP
+#endif // MU_SHARED_TRANSPORT_CTRL_CHANNEL_HPP

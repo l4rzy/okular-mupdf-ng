@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_CERTIFICATE_DIALOG_UTILS_HPP
-#define MUPDF_CERTIFICATE_DIALOG_UTILS_HPP
+#ifndef MU_GENERATOR_CONFIG_CERTMANAGER_DIALOG_UTILS_HPP
+#define MU_GENERATOR_CONFIG_CERTMANAGER_DIALOG_UTILS_HPP
 
 #include <QString>
 
@@ -26,4 +26,4 @@ inline QString dialogTitle(const QString& title, const QString& databasePath)
 
 } // namespace Mu::Generator::CertificateManager
 
-#endif
+#endif // MU_GENERATOR_CONFIG_CERTMANAGER_DIALOG_UTILS_HPP

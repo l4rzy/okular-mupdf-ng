@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_PLUGIN_WORKER_TRANSPORT_HPP
-#define MUPDF_PLUGIN_WORKER_TRANSPORT_HPP
+#ifndef MU_PLUGIN_WORKER_TRANSPORT_HPP
+#define MU_PLUGIN_WORKER_TRANSPORT_HPP
 
 #include <QByteArray>
 #include <QFile>
@@ -166,4 +166,4 @@ private:
 
 } // namespace Mu::Plugin
 
-#endif
+#endif // MU_PLUGIN_WORKER_TRANSPORT_HPP

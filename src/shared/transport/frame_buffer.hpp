@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_TRANSPORT_FRAME_BUFFER_HPP
-#define MUPDF_SHARED_TRANSPORT_FRAME_BUFFER_HPP
+#ifndef MU_SHARED_TRANSPORT_FRAME_BUFFER_HPP
+#define MU_SHARED_TRANSPORT_FRAME_BUFFER_HPP
 
 #include <cstdint>
 
@@ -116,4 +116,4 @@ inline bool validateRenderFrame(const FrameBufferHeader* header,
 
 } // namespace Mu::IPC
 
-#endif // MUPDF_SHARED_TRANSPORT_FRAME_BUFFER_HPP
+#endif // MU_SHARED_TRANSPORT_FRAME_BUFFER_HPP

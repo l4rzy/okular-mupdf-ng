@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_COMMAND_SERVICE_HPP
-#define MUPDF_WORKER_COMMAND_SERVICE_HPP
+#ifndef MU_WORKER_RUNTIME_COMMAND_SERVICE_HPP
+#define MU_WORKER_RUNTIME_COMMAND_SERVICE_HPP
 
 #include <cstdint>
 #include <deque>
@@ -291,4 +291,4 @@ private:
 
 } // namespace Mu::Worker::Runtime
 
-#endif
+#endif // MU_WORKER_RUNTIME_COMMAND_SERVICE_HPP

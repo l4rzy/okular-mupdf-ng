@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_RUNTIME_RENDER_BUDGET_HPP
-#define MUPDF_WORKER_RUNTIME_RENDER_BUDGET_HPP
+#ifndef MU_WORKER_RUNTIME_RENDER_BUDGET_HPP
+#define MU_WORKER_RUNTIME_RENDER_BUDGET_HPP
 
 #include <cmath>
 #include <cstdint>
@@ -98,4 +98,4 @@ inline int scaledCoordinate(int coordinate, long double scale) noexcept
 
 } // namespace Mu::Worker::Runtime
 
-#endif // MUPDF_WORKER_RUNTIME_RENDER_BUDGET_HPP
+#endif // MU_WORKER_RUNTIME_RENDER_BUDGET_HPP

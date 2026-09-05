@@ -15,4 +15,4 @@ public:
 
 } // namespace Mu::Generator::Proxy
 
-#endif
+#endif // MU_GENERATOR_PROXY_CERTIFICATE_STORE_HPP

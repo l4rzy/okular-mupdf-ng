@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_PROTOCOL_IPC_DEBUG_HPP
-#define MUPDF_SHARED_PROTOCOL_IPC_DEBUG_HPP
+#ifndef MU_SHARED_PROTOCOL_IPC_DEBUG_HPP
+#define MU_SHARED_PROTOCOL_IPC_DEBUG_HPP
 
 #ifdef MU_DEBUG_ENABLED
 
@@ -27,4 +27,4 @@ std::string notification(const Model::NotificationMessage& message, bool coloriz
 
 #endif // MU_DEBUG_ENABLED
 
-#endif // MUPDF_SHARED_PROTOCOL_IPC_DEBUG_HPP
+#endif // MU_SHARED_PROTOCOL_IPC_DEBUG_HPP

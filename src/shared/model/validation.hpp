@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_MODEL_VALIDATION_HPP
-#define MUPDF_SHARED_MODEL_VALIDATION_HPP
+#ifndef MU_SHARED_MODEL_VALIDATION_HPP
+#define MU_SHARED_MODEL_VALIDATION_HPP
 
 #include <cstddef>
 #include <string_view>
@@ -68,4 +68,4 @@ bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* 
 
 } // namespace Mu::Model
 
-#endif // MUPDF_SHARED_MODEL_VALIDATION_HPP
+#endif // MU_SHARED_MODEL_VALIDATION_HPP

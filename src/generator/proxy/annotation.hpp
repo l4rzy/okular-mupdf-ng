@@ -30,4 +30,4 @@ private:
 
 } // namespace Mu::Generator::Proxy
 
-#endif
+#endif // MU_GENERATOR_PROXY_ANNOTATION_HPP

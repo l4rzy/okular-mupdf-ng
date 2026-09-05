@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_PRINTING_HPP
-#define MUPDF_GENERATOR_PRINTING_HPP
+#ifndef MU_GENERATOR_PRINTING_HPP
+#define MU_GENERATOR_PRINTING_HPP
 
 #include <okular/core/printoptionswidget.h>
 
@@ -43,4 +43,4 @@ private:
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_PRINTING_HPP

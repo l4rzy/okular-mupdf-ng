@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_ENGINE_OCR_HPP
-#define MUPDF_WORKER_ENGINE_OCR_HPP
+#ifndef MU_WORKER_ENGINE_OCR_OCR_HPP
+#define MU_WORKER_ENGINE_OCR_OCR_HPP
 
 #include <string>
 
@@ -42,4 +42,4 @@ std::string tessdataLanguage(std::string language);
 
 } // namespace Mu::Worker::Engine
 
-#endif
+#endif // MU_WORKER_ENGINE_OCR_OCR_HPP

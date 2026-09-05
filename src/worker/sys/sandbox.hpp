@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_SANDBOX_HPP
-#define MUPDF_WORKER_SANDBOX_HPP
+#ifndef MU_WORKER_SYS_SANDBOX_HPP
+#define MU_WORKER_SYS_SANDBOX_HPP
 
 #include "shared/model/types.hpp"
 
@@ -38,4 +38,4 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
 
 } // namespace Mu::Worker::Sandbox
 
-#endif
+#endif // MU_WORKER_SYS_SANDBOX_HPP

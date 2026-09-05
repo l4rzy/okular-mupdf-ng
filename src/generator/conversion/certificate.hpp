@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_CONVERSION_CERTIFICATE_HPP
-#define MUPDF_GENERATOR_CONVERSION_CERTIFICATE_HPP
+#ifndef MU_GENERATOR_CONVERSION_CERTIFICATE_HPP
+#define MU_GENERATOR_CONVERSION_CERTIFICATE_HPP
 
 #include <okular/core/signatureutils.h>
 
@@ -13,4 +13,4 @@ Okular::CertificateInfo toOkularCertificateInfo(const Model::Certificate& certif
 
 } // namespace Mu::Generator::Conversion
 
-#endif
+#endif // MU_GENERATOR_CONVERSION_CERTIFICATE_HPP
