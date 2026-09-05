@@ -141,6 +141,10 @@ bool readDegradedSandboxNotificationEnabled();
 QStringList readTessDataDirectories();
 QStringList normalizeTessDataDirectories(const QStringList& directories);
 QString readCertificateDatabasePath(const QString& defaultPath);
+// Whether the default certificate database selection is in effect. Unlike
+// readCertificateDatabasePath(), the defaulted selection hands NSS the empty
+// path so the missing database directory is created on first use.
+bool usesDefaultCertificateDatabase();
 Model::DocumentType documentTypeForFile(const QString& fileName);
 Model::DocumentType documentTypeForData(const QByteArray& data);
 

@@ -86,6 +86,16 @@ private slots:
         QVERIFY(!settings.autoTrigger);
     }
 
+    void usesDefaultCertificateDatabasePerPreference()
+    {
+        const bool original = MuPDFSettings::useDefaultCertDB();
+        MuPDFSettings::setUseDefaultCertDB(true);
+        QVERIFY(::Mu::Generator::Config::usesDefaultCertificateDatabase());
+        MuPDFSettings::setUseDefaultCertDB(false);
+        QVERIFY(!::Mu::Generator::Config::usesDefaultCertificateDatabase());
+        MuPDFSettings::setUseDefaultCertDB(original);
+    }
+
     void normalizesTessdataDirectories()
     {
         const QStringList input {

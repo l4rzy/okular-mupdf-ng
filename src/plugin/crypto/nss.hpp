@@ -35,6 +35,8 @@ enum class NssRuntimeMode {
 
 /// Initializes process-wide NSS using read/write, read-only, then NoDB mode.
 /// Once initialized, the process cannot switch to a different database.
+/// The empty path denotes the defaulted selection and may create the missing
+/// default database directory; an explicit path is never auto-created.
 /// Returns Unavailable for a conflicting explicit path without changing the
 /// runtime reported by activeNssMode().
 [[nodiscard]] NssRuntimeMode initializeNss(const QString& databasePath = { });

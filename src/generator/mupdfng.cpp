@@ -73,7 +73,9 @@ Main::Main(QObject* parent, const QVariantList& args)
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
-    (void)Plugin::Crypto::initializeNss(certDbPath);
+    // NSS init is one-way per process; the empty path makes the defaulted
+    // selection create and initialize the missing database on first launch.
+    (void)Plugin::Crypto::initializeNss(Config::usesDefaultCertificateDatabase() ? QString { } : certDbPath);
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
         &m_worker, [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages) {
@@ -269,6 +271,8 @@ void Main::updateSettingRestartState()
 {
     // Worker process lifetime settings must not be applied to a running worker.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
+    // The defaulted identity is fixed at generator construction, so a first
+    // launch needs no restart.
     m_restartState.required =
         Config::readEpubSettings() != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
 }
