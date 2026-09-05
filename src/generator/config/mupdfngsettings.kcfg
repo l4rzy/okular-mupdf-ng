@@ -103,8 +103,8 @@
   <group name="EPUB">
     <entry key="EpubFontSize" type="Int">
       <default>11</default>
-      <min>5</min>
-      <max>30</max>
+      <min>10</min>
+      <max>20</max>
     </entry>
     <entry key="EpubFontFamily" type="Enum">
       <default>Default</default>
