@@ -18,7 +18,7 @@
       </choices>
     </entry>
     <entry key="SandboxEnforcement" type="Enum">
-      <default>Relaxed</default>
+      <default>Strict</default>
       <choices>
         <choice name="Relaxed" />
         <choice name="Strict" />
