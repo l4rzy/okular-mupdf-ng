@@ -120,10 +120,12 @@ OcrSettings readOcrSettings()
 {
     // Normalize the configured traineddata name to the cache/worker language
     // token and translate the trigger enum into explicit policy flags.
-    // A "-" language means no models are installed: never fire OCR.
+    // A "-" language means no models are installed: never fire OCR. A value
+    // that is not a model filename is malformed (only hand-edited config can
+    // reach it) and must not silently flip OCR to English: degrade to off.
     OcrSettings settings;
     const QString language = MuPDFSettings::ocrLanguage();
-    if (language == QStringLiteral("-") || language.isEmpty()) {
+    if (language == QStringLiteral("-") || language.isEmpty() || !language.endsWith(QStringLiteral(".traineddata"))) {
         settings.language = QStringLiteral("-");
         settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
         settings.asynchronous = MuPDFSettings::ocrAsync();
@@ -132,10 +134,7 @@ OcrSettings readOcrSettings()
         settings.autoTrigger = false;
         return settings;
     }
-    QString normalized = language;
-    if (!normalized.endsWith(QStringLiteral(".traineddata")))
-        normalized = QStringLiteral("eng.traineddata");
-    settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(normalized);
+    settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(language);
     settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
     settings.asynchronous = MuPDFSettings::ocrAsync();
     settings.notify = MuPDFSettings::ocrNotify();

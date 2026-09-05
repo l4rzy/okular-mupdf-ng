@@ -93,6 +93,10 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     const QStringList files = dir.entryList({ QStringLiteral("*.traineddata") }, QDir::Files, QDir::Name);
 
     if (!files.isEmpty()) {
+        // Keep the "-" no-OCR sentinel selectable whenever models exist; the
+        // stored default is "-", so without this entry the combo would display
+        // the first model and persist it on dialog accept, silently enabling OCR.
+        ocrLang->addItem(QStringLiteral("-"), QStringLiteral("-"));
         for (const QString& file : files) {
             if (file == QStringLiteral("equ.traineddata") || file == QStringLiteral("osd.traineddata")) {
                 continue;
