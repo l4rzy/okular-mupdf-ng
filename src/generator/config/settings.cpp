@@ -188,6 +188,11 @@ QString readCertificateDatabasePath(const QString& defaultPath)
     return MuPDFSettings::useDefaultCertDB() ? defaultPath : MuPDFSettings::dBCertificatePath();
 }
 
+bool usesDefaultCertificateDatabase()
+{
+    return MuPDFSettings::useDefaultCertDB();
+}
+
 Model::DocumentType documentTypeForFile(const QString& fileName)
 {
     // MatchContent handles files whose extension is missing or misleading.
