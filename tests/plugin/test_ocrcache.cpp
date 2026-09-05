@@ -32,6 +32,21 @@ private slots:
 
     void cleanupTestCase() { ::Mu::Plugin::Caching::clearRootForTesting(); }
 
+    void readBoundedEnforcesLimit()
+    {
+        const QString path = m_root.filePath(QStringLiteral("bounded.bin"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write("12345"), qint64(5));
+        file.close();
+
+        const auto exact = ::Mu::Plugin::Caching::readBounded(path, 5);
+        QVERIFY(exact);
+        QCOMPARE(*exact, QByteArray("12345"));
+        QVERIFY(!::Mu::Plugin::Caching::readBounded(path, 4));
+        QVERIFY(!::Mu::Plugin::Caching::readBounded(path, -1));
+    }
+
     void cacheKeyNormalization()
     {
         // Null/empty inputs
