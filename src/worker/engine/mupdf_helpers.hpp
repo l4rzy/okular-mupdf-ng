@@ -54,6 +54,25 @@ inline void trimProcessMemory(fz_context* context) noexcept
 #endif
 }
 
+/// Shrinks the MuPDF store toward half its target, evicting eligible entries,
+/// and returns freed heap pages to the OS. Idle-only: never call on the render
+/// hot path.
+inline void shrinkIdleStore(fz_context* context) noexcept
+{
+    if (context) {
+        fz_try(context)
+        {
+            (void)fz_shrink_store(context, 50);
+        }
+        fz_catch(context)
+        {
+        }
+    }
+#if defined(__linux__) && defined(__GLIBC__)
+    malloc_trim(0);
+#endif
+}
+
 /// Applies configuration and rendering settings to a Fitz context.
 inline void applyFitzSettings(fz_context* context, const ::Mu::Model::DocumentSettings& settings) noexcept
 {

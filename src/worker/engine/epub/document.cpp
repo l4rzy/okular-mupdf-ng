@@ -315,6 +315,11 @@ void EpubDocument::close() noexcept
     trimProcessMemory(m_context);
 }
 
+void EpubDocument::shrinkMemoryForIdle() noexcept
+{
+    shrinkIdleStore(m_context);
+}
+
 bool EpubDocument::isOpen() const noexcept
 {
     return m_document != nullptr;

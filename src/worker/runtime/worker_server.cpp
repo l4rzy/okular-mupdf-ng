@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "runtime/worker_server.hpp"
+#include "runtime/memory_pressure.hpp"
 
 #include <cerrno>
-#ifdef MU_DEBUG_ENABLED
 #include <chrono>
-#endif
 #include <cstring>
 #include <poll.h>
 #include <unistd.h>
@@ -35,8 +34,9 @@ using ::Mu::Model::ResponseMessage;
 namespace {
 
 constexpr int AcceptTimeoutMs = 1000;
+constexpr int IdleTrimPollMs = static_cast<int>(MemoryPressure::IdleMinMs);
 
-}
+} // namespace
 
 // =============================================================================
 // Construction & Socket Listening
@@ -305,12 +305,20 @@ int WorkerServer::run(std::string* error)
             });
         }
 
-        // Step 4: Run single poll cycle with infinite deadline
+        // Step 4: Run single poll cycle. Idle polls time out so accumulated
+        // render pressure can shrink between user-visible bursts, never on
+        // the hot path.
+        const auto pollStart = std::chrono::steady_clock::now();
         auto deadline = m_commandService->hasPendingPageLinks() ? MonotonicDeadline::fromMilliseconds(0)
-                                                                : MonotonicDeadline::never();
+                                                                : MonotonicDeadline::fromMilliseconds(IdleTrimPollMs);
         const int ready = loop.runOnce(deadline, error);
         if (ready < 0) {
             return 1;
+        }
+        if (ready == 0 && !m_commandService->hasPendingPageLinks()) {
+            const auto idleDuration =
+                std::chrono::ceil<std::chrono::milliseconds>(std::chrono::steady_clock::now() - pollStart);
+            m_commandService->maybeTrimForIdle(idleDuration);
         }
 
         // Step 5: Handle session termination
