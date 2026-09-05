@@ -41,6 +41,9 @@ QString directory(const QString& name)
 
 std::optional<QByteArray> readBounded(const QString& path, qint64 maxBytes)
 {
+    if (maxBytes < 0)
+        return std::nullopt;
+
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         return std::nullopt;
@@ -49,8 +52,9 @@ std::optional<QByteArray> readBounded(const QString& path, qint64 maxBytes)
     if (initialSize < 0 || initialSize > maxBytes)
         return std::nullopt;
 
-    const QByteArray data = file.readAll();
-    return data.size() == initialSize ? std::optional<QByteArray>(data) : std::nullopt;
+    const qint64 readLimit = maxBytes == std::numeric_limits<qint64>::max() ? maxBytes : maxBytes + 1;
+    const QByteArray data = file.read(readLimit);
+    return data.size() == initialSize && data.size() <= maxBytes ? std::optional<QByteArray>(data) : std::nullopt;
 }
 
 bool writeAtomically(const QString& path, const QByteArray& data)
