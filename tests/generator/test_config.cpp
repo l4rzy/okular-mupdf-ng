@@ -86,6 +86,22 @@ private slots:
         QVERIFY(!settings.autoTrigger);
     }
 
+    void disablesOcrWhenLanguageIsNotAModelFilename()
+    {
+        const QString originalLanguage = MuPDFSettings::ocrLanguage();
+        const int originalTriggerMode = MuPDFSettings::ocrTriggerMode();
+        MuPDFSettings::setOcrLanguage(QStringLiteral("deu"));
+        MuPDFSettings::setOcrTriggerMode(MuPDFSettings::EnumOcrTriggerMode::Always);
+
+        const auto settings = ::Mu::Generator::Config::readOcrSettings();
+        MuPDFSettings::setOcrLanguage(originalLanguage);
+        MuPDFSettings::setOcrTriggerMode(originalTriggerMode);
+
+        QCOMPARE(settings.language, QStringLiteral("-"));
+        QVERIFY(!settings.force);
+        QVERIFY(!settings.autoTrigger);
+    }
+
     void usesDefaultCertificateDatabasePerPreference()
     {
         const bool original = MuPDFSettings::useDefaultCertDB();
