@@ -101,7 +101,7 @@ jobs:
           printf '%s\n' "$dependencies" | grep -Eq '(^|, )okular([ (]|,|$)'
           dpkg-deb --contents "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           dpkg-deb --contents "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
-          dpkg-deb --contents "$package" | grep -q '/mupdfsettings\.kcfg$'
+          dpkg-deb --contents "$package" | grep -q '/mupdfngsettings\.kcfg$'
           dpkg-deb --contents "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
           dpkg-deb --contents "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
           dpkg-deb --info "$package"
