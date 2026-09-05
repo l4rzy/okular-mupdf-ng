@@ -165,6 +165,11 @@ void PdfDocument::close() noexcept
     trimProcessMemory(m_context);
 }
 
+void PdfDocument::shrinkMemoryForIdle() noexcept
+{
+    shrinkIdleStore(m_context);
+}
+
 void PdfDocument::updateAcroFormPresence()
 {
     // Cache only the catalog-level presence check; page extraction still walks

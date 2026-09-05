@@ -4,6 +4,7 @@
 #ifndef MU_WORKER_RUNTIME_COMMAND_SERVICE_HPP
 #define MU_WORKER_RUNTIME_COMMAND_SERVICE_HPP
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -180,6 +181,10 @@ public:
     [[nodiscard]] ResponseMessage releaseFrameSlotResponse(const RequestMessage& request,
                                                            const ReleaseFrameSlotRequest& release);
 
+    /// Shrinks idle store/arena pressure when the event loop reports an idle
+    /// pause. Returns true when a shrink ran. Never called on the hot path.
+    bool maybeTrimForIdle(std::chrono::milliseconds idleDuration) noexcept;
+
     /// Closes the current document and clears document-scoped credentials,
     /// handles, page-link work, and OCR results before another document can open.
     void closeDocument() noexcept;
@@ -287,6 +292,12 @@ private:
     // Active document password
     std::string m_documentPassword;
     std::optional<PendingPageLinks> m_pendingPageLinks;
+
+    // Idle-shrink pressure: accumulated only by successful renders, consumed
+    // only by maybeTrimForIdle between dispatches.
+    std::uint64_t m_rendersSinceTrim = 0;
+    std::uint64_t m_bytesSinceTrim = 0;
+    std::chrono::steady_clock::time_point m_lastTrim = std::chrono::steady_clock::now();
 };
 
 } // namespace Mu::Worker::Runtime

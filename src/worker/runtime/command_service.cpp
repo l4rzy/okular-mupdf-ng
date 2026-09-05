@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "runtime/command_service.hpp"
+#include "runtime/memory_pressure.hpp"
 #include "runtime/render_budget.hpp"
 
 #include <algorithm>
@@ -344,6 +345,33 @@ void CommandService::closeDocument() noexcept
     m_formFieldHandles.clear();
     m_formObjectHandles.clear();
     m_ocrJobs.cancelAll();
+    m_rendersSinceTrim = 0;
+    m_bytesSinceTrim = 0;
+    m_lastTrim = std::chrono::steady_clock::now();
+}
+
+bool CommandService::maybeTrimForIdle(std::chrono::milliseconds idleDuration) noexcept
+{
+    using namespace std::chrono;
+    const auto now = steady_clock::now();
+    const auto sinceTrimMs = duration_cast<milliseconds>(now - m_lastTrim).count();
+    const auto idleMs = idleDuration.count();
+    if (!::Mu::Worker::Runtime::MemoryPressure::shouldTrimForIdle(
+            m_rendersSinceTrim, m_bytesSinceTrim, idleMs, sinceTrimMs))
+        return false;
+    if (!m_document)
+        return false;
+
+    MU_LOG(debug,
+           "Mu::Worker",
+           std::string("idle memory trim attempt: renders=") + std::to_string(m_rendersSinceTrim)
+               + " bytes=" + std::to_string(m_bytesSinceTrim) + " idle_ms=" + std::to_string(idleMs)
+               + " since_trim_ms=" + std::to_string(sinceTrimMs));
+    m_document->shrinkMemoryForIdle();
+    m_rendersSinceTrim = 0;
+    m_bytesSinceTrim = 0;
+    m_lastTrim = now;
+    return true;
 }
 
 const DocumentBase* CommandService::document() const noexcept
@@ -475,6 +503,11 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
         slotId = slot->id;
         leaseId = ++slot->leaseId;
     }
+
+    // Successful renders accumulate idle-shrink pressure only. Trimming
+    // happens between dispatches via maybeTrimForIdle, never here.
+    ++m_rendersSinceTrim;
+    m_bytesSinceTrim += dataSize;
 
     return success(request.id,
                    RenderResponse { { transferId,

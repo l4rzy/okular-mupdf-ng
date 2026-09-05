@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/ocr/jobs.hpp"
+#include "runtime/memory_pressure.hpp"
 #include "shared/transport/poll.hpp"
 #include "sys/sys.hpp"
 
@@ -144,6 +145,37 @@ int runTestWorkerNativeRuntime()
         for (auto& fd : dummyFds) {
             ::close(fd);
         }
+    }
+
+    // Idle-shrink decision is pure and table-driven: trim only after an idle
+    // pause with enough accumulated render pressure, never on the hot path.
+    struct PressureCase {
+        std::uint64_t renders;
+        std::uint64_t bytes;
+        long long idleMs;
+        long long sinceTrimMs;
+        bool expected;
+    };
+
+    constexpr std::uint64_t MiB = 1024ULL * 1024ULL;
+    constexpr long long MinIdleMs = ::Mu::Worker::Runtime::MemoryPressure::IdleMinMs;
+    constexpr long long MinSinceTrimMs = ::Mu::Worker::Runtime::MemoryPressure::SinceTrimMinMs;
+    const PressureCase pressureCases[] = {
+        { 0, 0, 5000, 5000, false }, // idle but no pressure
+        { 20, 0, MinIdleMs, MinSinceTrimMs, true }, // render-count threshold
+        { 19, 0, 5000, 5000, false }, // just below render threshold
+        { 1, 128 * MiB, MinIdleMs, MinSinceTrimMs, true }, // byte threshold
+        { 1, 128 * MiB - 1, MinIdleMs, MinSinceTrimMs, false }, // just below byte threshold
+        { 4, 32 * MiB, MinIdleMs, MinSinceTrimMs, true }, // large frames arm early
+        { 3, 32 * MiB, 5000, 5000, false }, // large bytes but too few renders
+        { 4, 32 * MiB - 1, 5000, 5000, false }, // enough renders but below large bytes
+        { 20, 0, 1999, 5000, false }, // not idle long enough
+        { 20, 0, 5000, 1999, false }, // trimmed too recently
+    };
+    for (const auto& testCase : pressureCases) {
+        assert(::Mu::Worker::Runtime::MemoryPressure::shouldTrimForIdle(
+                   testCase.renders, testCase.bytes, testCase.idleMs, testCase.sinceTrimMs)
+               == testCase.expected);
     }
     return 0;
 }
