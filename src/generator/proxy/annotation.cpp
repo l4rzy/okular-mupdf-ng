@@ -5,6 +5,8 @@
 
 #include <okular/core/document.h>
 
+#include <utility>
+
 #include "generator/conversion/annotation.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/signature_image.hpp"
@@ -36,8 +38,9 @@ std::pair<Okular::SigningResult, QString> signingResult(const Model::SignRespons
 
 } // namespace
 
-Annotation::Annotation(Plugin::WorkerClient* backend)
+Annotation::Annotation(Plugin::WorkerClient* backend, MutationCallback mutationCallback)
     : m_backend(backend)
+    , m_mutationCallback(std::move(mutationCallback))
 {
 }
 
@@ -85,6 +88,8 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
     const auto model = Conversion::toModel(annotation);
     if (!model)
         return;
+    if (m_mutationCallback)
+        m_mutationCallback();
     const auto result = m_backend->addAnnotation(page, *model);
     if (result) {
         const QString id = QString::fromStdString(result->value);
@@ -105,6 +110,8 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
     const QVariant id = annotation->nativeId();
     if (!id.isValid() || id.toString().isEmpty())
         return;
+    if (m_mutationCallback)
+        m_mutationCallback();
     m_backend->modifyAnnotation(page, id.toString(), *model, appearanceChanged);
 }
 
@@ -115,6 +122,8 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
     const QVariant id = annotation->nativeId();
     if (!id.isValid() || id.toString().isEmpty())
         return;
+    if (m_mutationCallback)
+        m_mutationCallback();
     if (m_backend->removeAnnotation(page, id.toString()))
         annotation->setNativeId(QVariant());
 }
