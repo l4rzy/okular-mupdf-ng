@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_PLUGIN_CACHING_OCR_CACHE_HPP
-#define MUPDF_PLUGIN_CACHING_OCR_CACHE_HPP
+#ifndef MU_PLUGIN_CACHING_OCR_CACHE_HPP
+#define MU_PLUGIN_CACHING_OCR_CACHE_HPP
 
 #include <optional>
 #include <vector>
@@ -87,4 +87,4 @@ public:
 
 } // namespace Mu::Plugin::Caching::OCR
 
-#endif // MUPDF_PLUGIN_CACHING_OCR_CACHE_HPP
+#endif // MU_PLUGIN_CACHING_OCR_CACHE_HPP

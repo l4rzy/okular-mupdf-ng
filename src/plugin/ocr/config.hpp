@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#pragma once
+#ifndef MU_PLUGIN_OCR_CONFIG_HPP
+#define MU_PLUGIN_OCR_CONFIG_HPP
 
 #include <QString>
 
@@ -29,3 +30,4 @@ struct Config {
 };
 
 } // namespace Mu::Plugin::OCR
+#endif // MU_PLUGIN_OCR_CONFIG_HPP

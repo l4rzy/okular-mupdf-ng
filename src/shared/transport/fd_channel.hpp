@@ -13,8 +13,8 @@
  * The listening endpoint authenticates peers using SO_PEERCRED and removes
  * its filesystem socket after a connection is accepted or closed.
  */
-#ifndef MUPDF_SHARED_TRANSPORT_FD_CHANNEL_HPP
-#define MUPDF_SHARED_TRANSPORT_FD_CHANNEL_HPP
+#ifndef MU_SHARED_TRANSPORT_FD_CHANNEL_HPP
+#define MU_SHARED_TRANSPORT_FD_CHANNEL_HPP
 
 #include <sys/socket.h>
 
@@ -93,4 +93,4 @@ public:
 };
 
 } // namespace Mu::IPC
-#endif // MUPDF_SHARED_TRANSPORT_FD_CHANNEL_HPP
+#endif // MU_SHARED_TRANSPORT_FD_CHANNEL_HPP

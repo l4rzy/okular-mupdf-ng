@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_PLUGIN_CRYPTO_NSS_HANDLES_HPP
-#define MUPDF_PLUGIN_CRYPTO_NSS_HANDLES_HPP
+#ifndef MU_PLUGIN_CRYPTO_NSS_HANDLES_HPP
+#define MU_PLUGIN_CRYPTO_NSS_HANDLES_HPP
 
 #pragma push_macro("slots")
 #undef slots
@@ -211,4 +211,4 @@ struct QIODevicePositionGuard {
 
 } // namespace Mu::Plugin::Crypto
 
-#endif // MUPDF_PLUGIN_CRYPTO_NSS_HANDLES_HPP
+#endif // MU_PLUGIN_CRYPTO_NSS_HANDLES_HPP

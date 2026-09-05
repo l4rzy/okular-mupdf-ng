@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef GENERATOR_MUPDF_H
-#define GENERATOR_MUPDF_H
+#ifndef MU_GENERATOR_MUPDFNG_HPP
+#define MU_GENERATOR_MUPDFNG_HPP
 
 #include <okular/core/action.h>
 #include <okular/core/area.h>
@@ -224,4 +224,4 @@ private:
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_MUPDFNG_HPP

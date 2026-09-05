@@ -52,4 +52,4 @@ private:
 
 } // namespace Mu::Generator::Proxy
 
-#endif
+#endif // MU_GENERATOR_PROXY_EMBEDDED_FILE_HPP

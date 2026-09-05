@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SELF_SIGNED_CERTIFICATE_DIALOG_HPP
-#define MUPDF_SELF_SIGNED_CERTIFICATE_DIALOG_HPP
+#ifndef MU_GENERATOR_CONFIG_CERTMANAGER_SELF_SIGNED_DIALOG_HPP
+#define MU_GENERATOR_CONFIG_CERTMANAGER_SELF_SIGNED_DIALOG_HPP
 
 #include <QDialog>
 
@@ -42,4 +42,4 @@ private:
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_CONFIG_CERTMANAGER_SELF_SIGNED_DIALOG_HPP

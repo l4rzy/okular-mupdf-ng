@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_ENGINE_MUPDF_HELPERS_HPP
-#define MUPDF_WORKER_ENGINE_MUPDF_HELPERS_HPP
+#ifndef MU_WORKER_ENGINE_MUPDF_HELPERS_HPP
+#define MU_WORKER_ENGINE_MUPDF_HELPERS_HPP
 
 #include <cstddef>
 
@@ -67,4 +67,4 @@ inline void applyFitzSettings(fz_context* context, const ::Mu::Model::DocumentSe
 
 } // namespace Mu::Worker::Engine
 
-#endif
+#endif // MU_WORKER_ENGINE_MUPDF_HELPERS_HPP

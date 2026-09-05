@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_GENERATOR_CONFIG_SETTINGS_HPP
-#define MUPDF_GENERATOR_CONFIG_SETTINGS_HPP
+#ifndef MU_GENERATOR_CONFIG_SETTINGS_HPP
+#define MU_GENERATOR_CONFIG_SETTINGS_HPP
 
 #include <QByteArray>
 #include <QString>
@@ -150,4 +150,4 @@ Model::DocumentType documentTypeForData(const QByteArray& data);
 
 } // namespace Mu::Generator::Config
 
-#endif
+#endif // MU_GENERATOR_CONFIG_SETTINGS_HPP

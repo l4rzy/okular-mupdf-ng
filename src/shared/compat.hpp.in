@@ -1,5 +1,5 @@
-#ifndef MUPDF_SHARED_COMPAT_HPP
-#define MUPDF_SHARED_COMPAT_HPP
+#ifndef MU_SHARED_COMPAT_HPP
+#define MU_SHARED_COMPAT_HPP
 
 #include <string_view>
 
@@ -19,4 +19,4 @@ inline constexpr std::string_view COMPAT = "@MU_COMPAT_VERSION@";
 
 } // namespace Mu::IPC
 
-#endif // MUPDF_SHARED_COMPAT_HPP
+#endif // MU_SHARED_COMPAT_HPP

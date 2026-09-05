@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_PROTOCOL_LIMITS_HPP
-#define MUPDF_SHARED_PROTOCOL_LIMITS_HPP
+#ifndef MU_SHARED_PROTOCOL_LIMITS_HPP
+#define MU_SHARED_PROTOCOL_LIMITS_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -57,4 +57,4 @@ inline constexpr std::size_t MaxFormNameBytes = 1024;
 
 } // namespace Mu::Limit
 
-#endif // MUPDF_SHARED_PROTOCOL_LIMITS_HPP
+#endif // MU_SHARED_PROTOCOL_LIMITS_HPP

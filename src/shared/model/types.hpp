@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_SHARED_MODEL_TYPES_HPP
-#define MUPDF_SHARED_MODEL_TYPES_HPP
+#ifndef MU_SHARED_MODEL_TYPES_HPP
+#define MU_SHARED_MODEL_TYPES_HPP
 
 /// Qt-free values owned by the worker. Qt adapters belong in the plugin.
 
@@ -931,4 +931,4 @@ struct NotificationMessage {
 
 } // namespace Mu::Model
 
-#endif // MUPDF_SHARED_MODEL_TYPES_HPP
+#endif // MU_SHARED_MODEL_TYPES_HPP

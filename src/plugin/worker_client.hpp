@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_PLUGIN_WORKER_CLIENT_HPP
-#define MUPDF_PLUGIN_WORKER_CLIENT_HPP
+#ifndef MU_PLUGIN_WORKER_CLIENT_HPP
+#define MU_PLUGIN_WORKER_CLIENT_HPP
 
 #include <QImage>
 #include <QObject>
@@ -104,4 +104,4 @@ private:
 
 } // namespace Mu::Plugin
 
-#endif
+#endif // MU_PLUGIN_WORKER_CLIENT_HPP

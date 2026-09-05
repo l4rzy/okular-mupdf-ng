@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_ENGINE_CONSTANTS_HPP
-#define MUPDF_WORKER_ENGINE_CONSTANTS_HPP
+#ifndef MU_WORKER_ENGINE_CONSTANTS_HPP
+#define MU_WORKER_ENGINE_CONSTANTS_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -52,4 +52,4 @@ inline constexpr std::size_t FileCopyChunkBytes = 65'536;
 
 } // namespace Mu::Worker::Engine::Constant
 
-#endif // MUPDF_WORKER_ENGINE_CONSTANTS_HPP
+#endif // MU_WORKER_ENGINE_CONSTANTS_HPP

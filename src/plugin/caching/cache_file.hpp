@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_PLUGIN_CACHING_CACHE_FILE_HPP
-#define MUPDF_PLUGIN_CACHING_CACHE_FILE_HPP
+#ifndef MU_PLUGIN_CACHING_CACHE_FILE_HPP
+#define MU_PLUGIN_CACHING_CACHE_FILE_HPP
 
 #include <optional>
 
@@ -20,4 +20,4 @@ void clearRootForTesting();
 
 } // namespace Mu::Plugin::Caching
 
-#endif // MUPDF_PLUGIN_CACHING_CACHE_FILE_HPP
+#endif // MU_PLUGIN_CACHING_CACHE_FILE_HPP

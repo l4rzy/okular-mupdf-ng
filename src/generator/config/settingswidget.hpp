@@ -1,5 +1,5 @@
-#ifndef MUPDFSETTINGSWIDGET_HPP
-#define MUPDFSETTINGSWIDGET_HPP
+#ifndef MU_GENERATOR_CONFIG_SETTINGSWIDGET_HPP
+#define MU_GENERATOR_CONFIG_SETTINGSWIDGET_HPP
 
 #include <QWidget>
 
@@ -24,4 +24,4 @@ private:
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_CONFIG_SETTINGSWIDGET_HPP

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_ENGINE_SIGNER_HPP
-#define MUPDF_WORKER_ENGINE_SIGNER_HPP
+#ifndef MU_WORKER_ENGINE_SIGNER_HPP
+#define MU_WORKER_ENGINE_SIGNER_HPP
 
 #include <array>
 #include <cstdint>
@@ -50,4 +50,4 @@ CmsResult signerResult(const pdf_pkcs7_signer* signer);
 
 } // namespace Mu::Worker::Engine
 
-#endif
+#endif // MU_WORKER_ENGINE_SIGNER_HPP

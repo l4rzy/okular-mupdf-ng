@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef MUPDF_WORKER_SYS_HPP
-#define MUPDF_WORKER_SYS_HPP
+#ifndef MU_WORKER_SYS_SYS_HPP
+#define MU_WORKER_SYS_SYS_HPP
 
 #include <cstddef>
 #include <optional>
@@ -81,4 +81,4 @@ std::optional<FileDescriptor> createEventFd(std::string* error = nullptr);
 std::optional<FileDescriptor> createMemfd(std::string_view name, std::size_t size, std::string* error = nullptr);
 
 } // namespace Mu::Worker::Sys
-#endif
+#endif // MU_WORKER_SYS_SYS_HPP

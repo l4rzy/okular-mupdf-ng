@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MUPDF_WORKER_ENGINE_DOCUMENT_BASE_HPP
-#define MUPDF_WORKER_ENGINE_DOCUMENT_BASE_HPP
+#ifndef MU_WORKER_ENGINE_DOCUMENT_BASE_HPP
+#define MU_WORKER_ENGINE_DOCUMENT_BASE_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -206,4 +206,4 @@ protected:
 
 } // namespace Mu::Worker::Engine
 
-#endif
+#endif // MU_WORKER_ENGINE_DOCUMENT_BASE_HPP
