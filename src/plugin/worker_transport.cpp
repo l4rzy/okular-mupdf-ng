@@ -136,6 +136,10 @@ bool WorkerTransport::start(const QString& binaryPath,
         return failStart();
     const QString baseUuid = QUuid::createUuid().toString(QUuid::Id128);
     const QString tmpDir = Util::tempDirectory();
+    if (tmpDir.isEmpty()) {
+        MU_LOG(critical, "Mu::Plugin", "unable to create the per-user temp directory");
+        return failStart();
+    }
     m_socketPath =
         tmpDir + QStringLiteral("/worker-%1-%2-ctrl.sock").arg(QCoreApplication::applicationPid()).arg(baseUuid);
     m_fdSocketPath =

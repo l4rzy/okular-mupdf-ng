@@ -4,27 +4,36 @@
 #ifndef MU_PLUGIN_UTIL_TEMP_DIR_HPP
 #define MU_PLUGIN_UTIL_TEMP_DIR_HPP
 
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QString>
 #include <cerrno>
 #include <csignal>
+#include <unistd.h>
 
 namespace Mu::Plugin::Util {
 
 /**
- * Returns the path to the centralized temporary directory for okular-mupdf-ng.
- * Guarantees that /tmp/okular-mupdf-ng/ exists with 0700 permissions.
+ * Returns the path to the per-user temporary directory for okular-mupdf-ng.
+ * Creates <temp>/okular-mupdf-ng-<uid> with 0700 permissions and returns an
+ * empty string when the directory cannot be created or locked down.
  */
 inline QString tempDirectory()
 {
-    // All plugin-created sockets and staging files share this private
-    // directory, so unrelated files in the system temporary directory are
-    // never considered for cleanup.
-    const QString path = QDir::tempPath() + QStringLiteral("/okular-mupdf-ng");
-    QDir().mkpath(path);
-    QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    // The per-user name means two accounts can never share a directory, so one
+    // user's 0700 directory cannot block another user's worker sockets or be
+    // reached by stale-file cleanup.
+    const QString path = QDir::tempPath() + QStringLiteral("/okular-mupdf-ng-%1").arg(::getuid());
+    if (!QDir().mkpath(path)) {
+        qWarning() << "okular-mupdf-ng: failed to create temp directory" << path;
+        return { };
+    }
+    if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
+        qWarning() << "okular-mupdf-ng: failed to lock down temp directory" << path;
+        return { };
+    }
     return path;
 }
 
@@ -37,6 +46,8 @@ inline void cleanupStaleTempFiles()
     // Only remove worker socket names whose encoded owner PID is definitely
     // gone; an active worker's files must survive a later plugin start.
     const QString path = tempDirectory();
+    if (path.isEmpty())
+        return;
     QDir dir(path);
     const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::System | QDir::Hidden, QDir::Unsorted);
 
