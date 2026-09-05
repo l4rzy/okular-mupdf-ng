@@ -159,8 +159,10 @@ private:
 
     // Converts worker page information into Okular-owned pages and wires their
     // annotations, links, and form proxies to the current worker session.
-    Okular::Document::OpenResult
-    initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::PageInfo>& pageInfos, const QString& password);
+    // The load path retained the source and password beforehand; identity
+    // members (type, hash, name) are derived here.
+    Okular::Document::OpenResult initPages(QVector<Okular::Page*>& pages,
+                                           QList<Plugin::WorkerClient::PageInfo>& pageInfos);
     // Must be called while userMutex() is held; releases cached embedded files.
     void clearEmbeddedFilesCache();
 

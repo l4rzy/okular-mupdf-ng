@@ -275,23 +275,38 @@ void Main::updateSettingRestartState()
 
 // Converts worker page information into Okular pages and page metadata.
 Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
-                                             QList<Plugin::WorkerClient::PageInfo>& pageInfos,
-                                             const QString& password)
+                                             QList<Plugin::WorkerClient::PageInfo>& pageInfos)
 {
-    // Step 1: Reset state that is scoped to the previous document generation.
-    m_document.password = password;
+    // Phase 1: reset state scoped to the previous document generation.
     m_placeholder.reset();
     m_ocrController->reset();
 
-    // Step 2: Obtain document identity before constructing Okular-owned pages.
+    // Phase 2: document identity from a single worker round trip. Every
+    // m_document identity member is written here; the load path retained only
+    // the source and the password.
     const auto info =
         m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired") });
     m_document.type = Model::documentTypeFromMime(info.mimeType);
+    m_document.hash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
+    const QString title =
+        QString::fromStdString(info.values.contains("title") ? info.values.at("title") : std::string());
+    if (!title.trimmed().isEmpty()) {
+        m_document.name = title;
+    } else if (!m_document.sourcePath.isEmpty()) {
+        m_document.name = QFileInfo(m_document.sourcePath).fileName();
+    } else {
+        m_document.name = m_document.type == Model::DocumentType::Epub ? QStringLiteral("document.epub")
+                                                                       : QStringLiteral("document.pdf");
+    }
+
+    // Phase 3: user-facing announcements, queued to Okular independently of
+    // the page construction that follows.
     warnIfRepairedDocument(info);
     notifyDegradedSandbox();
 
-    // Signature validation reads the original PDF bytes, which may come from a
-    // file or from the in-memory source retained for worker recovery.
+    // Phase 4: construct Okular-owned pages. Signature validation reads the
+    // original PDF bytes, which may come from the retained file or in-memory
+    // source.
     QFile signatureFile(m_document.sourcePath);
     QBuffer signatureBuffer(&m_document.sourceData);
     QIODevice* signatureSource = nullptr;
@@ -390,14 +405,10 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         }
     }
 
+    // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
     m_formsDirty = false;
     m_formCoordinator->setAvailable(true);
-    m_document.hash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
-    const QString title =
-        QString::fromStdString(info.values.contains("title") ? info.values.at("title") : std::string());
-    if (!title.trimmed().isEmpty())
-        m_document.name = title;
     return Okular::Document::OpenSuccess;
 }
 
@@ -407,30 +418,37 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
 {
     if (!m_worker.isConnected())
         return Okular::Document::OpenError;
-    if (sandboxGated()) {
-        // Retained so a Strict-gated document can still be reopened with it
-        // once enforcement relaxes.
-        m_document.password = password;
+
+    // Retained before the gate check so both the withheld placeholder path and
+    // a later Okular reopen cycle can restore the document without asking again.
+    m_document.password = password;
+    if (sandboxGated())
         return loadBlockedPlaceholderDocument(pages);
-    }
+
     const auto docType = Config::documentTypeForFile(fileName);
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
+
+    // Push render settings before the open round trip; the paper color is the
+    // only swapped value, refreshed immediately before the settings are built.
     refreshPaperColor();
     QList<Plugin::WorkerClient::PageInfo> workerPages;
     if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         return Okular::Document::OpenError;
+
+    // Metadata and page geometry return in the same open round trip.
     const auto openStatus = m_worker.open(fileName, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
         return Okular::Document::OpenNeedsPassword;
     if (openStatus != Model::OpenStatus::Success)
         return Okular::Document::OpenError;
+
     // Retain the source only after the worker accepted it; restart recovery
     // must never reopen a failed or partially initialized document.
-    m_document.name = QFileInfo(fileName).fileName();
     m_document.sourcePath = fileName;
     m_document.sourceData.clear();
-    return initPages(pages, workerPages, password);
+
+    return initPages(pages, workerPages);
 }
 
 // Okular Generator Func: opens memory data and creates its Okular pages.
@@ -440,28 +458,33 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
 {
     if (!m_worker.isConnected())
         return Okular::Document::OpenError;
-    if (sandboxGated()) {
-        m_document.password = password;
+
+    // Retained before the gate check so both the withheld placeholder path and
+    // a later Okular reopen cycle can restore the document without asking again.
+    m_document.password = password;
+    if (sandboxGated())
         return loadBlockedPlaceholderDocument(pages);
-    }
-    QList<Plugin::WorkerClient::PageInfo> workerPages;
+
     const auto docType = Config::documentTypeForData(fileData);
     if (docType == Model::DocumentType::Unknown)
         return Okular::Document::OpenError;
+
     refreshPaperColor();
+    QList<Plugin::WorkerClient::PageInfo> workerPages;
     if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         return Okular::Document::OpenError;
+
     const auto openStatus = m_worker.openData(fileData, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
         return Okular::Document::OpenNeedsPassword;
     if (openStatus != Model::OpenStatus::Success)
         return Okular::Document::OpenError;
+
     // Keep in-memory documents for the same restart path used by file sources.
-    m_document.name =
-        docType == Model::DocumentType::Epub ? QStringLiteral("document.epub") : QStringLiteral("document.pdf");
     m_document.sourcePath.clear();
     m_document.sourceData = fileData;
-    return initPages(pages, workerPages, password);
+
+    return initPages(pages, workerPages);
 }
 
 // Reports xref-repair state to the user, mirroring the poppler generator's
@@ -503,22 +526,22 @@ void Main::notifyDegradedSandbox()
 // MuPDF version pinned in cmake/mupdf.version, both are disclosed.
 QString Main::generatorExtraDescription() const
 {
-    QString runtimeVersion;
+    QString engineVersion;
     if (m_worker.isConnected()) {
         const auto info = m_worker.getDocumentInfo({ QStringLiteral("engineVersion") });
         const auto it = info.values.find("engineVersion");
         if (it != info.values.end())
-            runtimeVersion = QString::fromStdString(it->second);
+            engineVersion = QString::fromStdString(it->second);
     }
 
     QString result;
-    if (runtimeVersion.isEmpty()) {
+    if (engineVersion.isEmpty()) {
         result = i18n("Using MuPDF %1", QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
-    } else if (runtimeVersion.toStdString() == Mu::MUPDF_VERSION) {
-        result = i18n("Using MuPDF %1", runtimeVersion);
+    } else if (engineVersion.toStdString() == Mu::MUPDF_VERSION) {
+        result = i18n("Using MuPDF %1", engineVersion);
     } else {
         result = i18n("Using MuPDF %1\nBuilt against MuPDF %2",
-                      runtimeVersion,
+                      engineVersion,
                       QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
     }
 
