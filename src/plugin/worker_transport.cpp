@@ -910,8 +910,9 @@ QString WorkerTransport::findBinary(const QString& hint)
         return hint;
 #ifdef WORKER_BUILD_PATH
     const QString build = QStringLiteral(WORKER_BUILD_PATH);
-    if (QFileInfo::exists(build))
+    if (QFileInfo::exists(build)) {
         return build;
+    }
 #endif
 #ifdef WORKER_INSTALL_PATH
     const QString install = QStringLiteral(WORKER_INSTALL_PATH);

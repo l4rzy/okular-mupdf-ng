@@ -14,6 +14,7 @@
 #include <chrono>
 #include <deque>
 
+#include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"
 
 namespace Mu::Plugin {
@@ -28,7 +29,7 @@ class WorkerTransport;
  * blocking calls are deliberate: callers receive a complete result while
  * transport state remains confined to one thread.
  */
-class WorkerClient final : public QObject {
+class WorkerClient final : public QObject, public Model::FormBackend {
     Q_OBJECT
 
 public:
@@ -65,8 +66,8 @@ public:
     bool
     modifyAnnotation(int page, const QString& id, const Model::Annotation& annotation, bool appearanceChanged) const;
     bool removeAnnotation(int page, const QString& id) const;
-    std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const;
-    std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request) const;
+    std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const override;
+    std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request) const override;
     [[nodiscard]] Model::SandboxStatus sandboxStatus() const;
     [[nodiscard]] std::string engineVersion() const;
 signals:

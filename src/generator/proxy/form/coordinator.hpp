@@ -9,17 +9,12 @@
 #include <unordered_map>
 #include <vector>
 
+#include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"
 
 namespace Okular {
 
 class FormField;
-
-}
-
-namespace Mu::Plugin {
-
-class WorkerClient;
 
 }
 
@@ -42,7 +37,7 @@ class Coordinator {
 public:
     using PageRefreshCallback = std::function<void(const std::vector<Okular::FormField*>&, const std::vector<int>&)>;
 
-    explicit Coordinator(Plugin::WorkerClient* client, PageRefreshCallback refreshCallback = nullptr);
+    explicit Coordinator(Model::FormBackend* backend, PageRefreshCallback refreshCallback = nullptr);
     ~Coordinator() = default;
 
     // Handles are worker field identities; pointers are non-owning proxy views.
@@ -66,8 +61,8 @@ private:
     // Updates local proxy views before notifying the generator/UI layer.
     [[nodiscard]] bool applyResponse(const Model::FormUpdateResponse& response);
 
-    // WorkerClient and registered IField instances are owned elsewhere.
-    Plugin::WorkerClient* m_client = nullptr;
+    // The backend and registered IField instances are owned elsewhere.
+    Model::FormBackend* m_backend = nullptr;
     PageRefreshCallback m_refreshCallback;
     std::unordered_map<std::string, IField*> m_fields;
     bool m_available = true;

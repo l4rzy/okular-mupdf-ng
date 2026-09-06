@@ -29,56 +29,182 @@ if(MU_DEBUG_BUILD)
     target_compile_definitions(mupdf_shared PRIVATE MU_DEBUG_ENABLED)
 endif()
 
+if(MU_DEBUG_BUILD)
+    add_library(mupdf_ipc_debug STATIC shared/protocol/ipc_debug.cpp)
+    set_target_properties(mupdf_ipc_debug PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(mupdf_ipc_debug PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(mupdf_ipc_debug PUBLIC mupdf_shared)
+    target_compile_definitions(mupdf_ipc_debug PRIVATE MU_DEBUG_ENABLED)
+endif()
+
 add_subdirectory(worker)
 
-set(okularGenerator_mupdfng_SRCS
+add_library(mupdf_plugin_cache STATIC
+  plugin/caching/cache_file.cpp
+  plugin/caching/epub_cache.cpp
+  plugin/caching/ocr_cache.cpp
+)
+target_include_directories(mupdf_plugin_cache PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mupdf_plugin_cache PUBLIC Qt6::Core mupdf_shared ZLIB::ZLIB)
+
+add_library(mupdf_plugin_crypto STATIC
+  plugin/crypto/nss.cpp
+  plugin/crypto/nss_state.cpp
+  plugin/crypto/nss_signing.cpp
+  plugin/crypto/certificate_info.cpp
+  plugin/crypto/certificate_database.cpp
+)
+target_include_directories(mupdf_plugin_crypto PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${NSS_INCLUDE_DIRS}
+)
+target_link_libraries(mupdf_plugin_crypto PUBLIC Qt6::Core mupdf_shared ${NSS_LIBRARIES})
+
+add_library(mupdf_plugin_worker STATIC
+  plugin/worker_client.cpp
+  plugin/worker_transport.cpp
+)
+target_include_directories(mupdf_plugin_worker PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
+)
+target_link_libraries(mupdf_plugin_worker PUBLIC
+    Qt6::Core
+    Qt6::Gui
+    mupdf_plugin_cache
+    mupdf_plugin_crypto
+    mupdf_shared
+)
+if(MU_DEBUG_BUILD)
+    target_link_libraries(mupdf_plugin_worker PUBLIC mupdf_ipc_debug)
+endif()
+target_compile_definitions(mupdf_plugin_worker PRIVATE
+    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
+)
+
+add_library(mupdf_plugin_ocr STATIC plugin/ocr/controller.cpp)
+target_include_directories(mupdf_plugin_ocr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache mupdf_plugin_worker)
+
+add_library(mupdf_plugin_util STATIC plugin/util/signature_image.cpp)
+target_include_directories(mupdf_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mupdf_plugin_util PUBLIC Qt6::Gui)
+
+add_library(mupdf_generator_placeholder STATIC generator/placeholder.cpp)
+target_include_directories(mupdf_generator_placeholder PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mupdf_generator_placeholder PUBLIC Okular::Core Qt6::Core)
+
+add_library(mupdf_generator_adapters STATIC
   generator/conversion/annotation.cpp
   generator/conversion/certificate.cpp
   generator/conversion/document.cpp
   generator/conversion/text.cpp
   generator/proxy/annotation.cpp
-  generator/proxy/form/signature.cpp
   generator/proxy/form/text.cpp
   generator/proxy/form/checkbox.cpp
   generator/proxy/form/radio_button.cpp
   generator/proxy/form/push_button.cpp
   generator/proxy/form/choice.cpp
   generator/proxy/form/coordinator.cpp
-  plugin/crypto/nss.cpp
-  plugin/crypto/nss_state.cpp
-  plugin/crypto/nss_signing.cpp
-  plugin/crypto/certificate_info.cpp
-  generator/config/settings.cpp
-  generator/mupdfng.cpp
-  generator/printing.cpp
   generator/proxy/certificate_store.cpp
+  generator/printing.cpp
+)
+target_include_directories(mupdf_generator_adapters PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
+)
+target_link_libraries(mupdf_generator_adapters PUBLIC
+    Okular::Core
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Xml
+    KF6::I18n
+    MuPDF::Headers
+    mupdf_plugin_crypto
+    mupdf_plugin_util
+)
+target_compile_definitions(mupdf_generator_adapters PRIVATE
+    HAVE_NEW_SIGNATURE_API=1
+    MUPDF_FORMFIELD_REMOTE_SIGNING
+)
+
+add_library(mupdf_generator_signature STATIC generator/proxy/form/signature.cpp)
+target_include_directories(mupdf_generator_signature PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
+)
+target_link_libraries(mupdf_generator_signature PUBLIC
+    Okular::Core
+    Qt6::Core
+    Qt6::Gui
+    MuPDF::Headers
+    mupdf_plugin_crypto
+    mupdf_plugin_util
+    mupdf_plugin_worker
+    mupdf_generator_adapters
+)
+target_compile_definitions(mupdf_generator_signature PRIVATE
+    HAVE_NEW_SIGNATURE_API=1
+    MUPDF_FORMFIELD_REMOTE_SIGNING
+)
+set_target_properties(
+    mupdf_plugin_cache
+    mupdf_plugin_crypto
+    mupdf_plugin_worker
+    mupdf_plugin_ocr
+    mupdf_plugin_util
+    mupdf_generator_placeholder
+    mupdf_generator_adapters
+    mupdf_generator_signature
+    PROPERTIES POSITION_INDEPENDENT_CODE ON
+)
+
+if(MU_DEBUG_BUILD)
+    target_compile_definitions(mupdf_plugin_cache PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_plugin_crypto PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_plugin_worker PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_plugin_ocr PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_plugin_util PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_generator_placeholder PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_generator_adapters PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_generator_signature PRIVATE MU_DEBUG_ENABLED)
+endif()
+
+set(okularGenerator_mupdfng_SRCS
+  generator/mupdfng.cpp
   generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp
   generator/config/csseditor/highlighter.cpp
-  plugin/crypto/certificate_database.cpp
   generator/config/certmanager/manager_dialog.cpp
   generator/config/certmanager/self_signed_dialog.cpp
-  plugin/worker_client.cpp
-  plugin/worker_transport.cpp
-  plugin/caching/cache_file.cpp
-  plugin/caching/epub_cache.cpp
-  plugin/caching/ocr_cache.cpp
-  generator/placeholder.cpp
-  plugin/ocr/controller.cpp
-  plugin/util/signature_image.cpp
 )
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
    generator/config/settingswidget.ui
 )
 
-kconfig_add_kcfg_files(okularGenerator_mupdfng_SRCS
+set(mupdf_generator_settings_SRCS generator/config/settings.cpp)
+kconfig_add_kcfg_files(mupdf_generator_settings_SRCS
    GENERATE_MOC generator/config/mupdfngsettings.kcfgc
 )
+
+add_library(mupdf_generator_settings STATIC ${mupdf_generator_settings_SRCS})
+set_target_properties(mupdf_generator_settings PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MU_DEBUG_BUILD)
+    target_compile_definitions(mupdf_generator_settings PRIVATE MU_DEBUG_ENABLED)
+endif()
+target_include_directories(mupdf_generator_settings PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(mupdf_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets mupdf_plugin_cache)
 
 add_custom_target(mupdf_generator_settings_codegen
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mupdfngsettings.cpp
 )
+add_dependencies(mupdf_generator_settings mupdf_generator_settings_codegen)
 
 kcoreaddons_add_plugin(okularGenerator_mupdfng
     INSTALL_NAMESPACE "okular_generators"
@@ -87,7 +213,6 @@ kcoreaddons_add_plugin(okularGenerator_mupdfng
 
 if(MU_DEBUG_BUILD)
     target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_DEBUG_ENABLED)
-    target_sources(okularGenerator_mupdfng PRIVATE shared/protocol/ipc_debug.cpp)
 endif()
 
 target_include_directories(okularGenerator_mupdfng PRIVATE
@@ -101,6 +226,15 @@ target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSD
 target_compile_definitions(okularGenerator_mupdfng PRIVATE MUPDF_HAS_OCR)
 
 target_link_libraries(okularGenerator_mupdfng
+    mupdf_generator_adapters
+    mupdf_generator_signature
+    mupdf_generator_settings
+    mupdf_generator_placeholder
+    mupdf_plugin_cache
+    mupdf_plugin_crypto
+    mupdf_plugin_ocr
+    mupdf_plugin_util
+    mupdf_plugin_worker
     mupdf_shared
     Okular::Core
     KF6::I18n
@@ -119,10 +253,3 @@ target_compile_definitions(okularGenerator_mupdfng PRIVATE
     TRANSLATION_DOMAIN="okular_mupdfng"
     HAVE_NEW_SIGNATURE_API=1
     MUPDF_FORMFIELD_REMOTE_SIGNING)
-
-# Embed worker binary paths so the plugin can locate it without install.
-# WORKER_BUILD_PATH is exported by src/worker (CACHE INTERNAL).
-target_compile_definitions(okularGenerator_mupdfng PRIVATE
-    "$<$<NOT:$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>>:WORKER_BUILD_PATH=\"$<TARGET_FILE:okular-mupdf-worker>\">"
-    WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
-)

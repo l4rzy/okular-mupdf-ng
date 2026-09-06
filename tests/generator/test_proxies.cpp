@@ -27,6 +27,7 @@ extern "C" {
 #include "generator/proxy/form/signature.hpp"
 #include "generator/proxy/form/text.hpp"
 #include "plugin/worker_client.hpp"
+#include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"
 #include <okular/core/page.h>
 
@@ -42,19 +43,24 @@ static std::optional<Model::FormUpdateResponse> echoFormUpdate(const Model::Form
     return response;
 }
 
-std::optional<Model::FormUpdateResponse> WorkerClient::updateForm(const Model::FormUpdateRequest& req) const
-{
-    if (s_mockUpdateForm)
-        return s_mockUpdateForm(req);
-    return std::nullopt;
-}
+class FormBackendFake final : public Model::FormBackend {
+public:
+    std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const override
+    {
+        if (s_mockUpdateForm)
+            return s_mockUpdateForm(request);
+        return std::nullopt;
+    }
 
-std::optional<Model::FormUpdateResponse> WorkerClient::resetForm(const Model::FormResetRequest& req) const
-{
-    if (s_mockResetForm)
-        return s_mockResetForm(req);
-    return std::nullopt;
-}
+    std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request) const override
+    {
+        if (s_mockResetForm)
+            return s_mockResetForm(request);
+        return std::nullopt;
+    }
+};
+
+static FormBackendFake s_formBackend;
 
 } // namespace Mu::Plugin
 
@@ -305,8 +311,7 @@ private slots:
 
     void formFieldTextProxyExposesProperties()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
         ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
         ::Mu::Model::FormField field;
         field.handle = "g1-f0-o42";
@@ -349,8 +354,7 @@ private slots:
 
     void pushButtonActions()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
         ::Mu::Model::FormField field;
         field.handle = "g1-f0-o44";
         field.pdfObjectNumber = 44;
@@ -387,8 +391,7 @@ private slots:
 
     void formFieldCheckBoxProxyExposesProperties()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
         ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
         ::Mu::Model::FormField field;
         field.handle = "g1-f0-o43";
@@ -432,8 +435,7 @@ private slots:
 
     void formFieldRadioButtonProxyExposesProperties()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
         ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
         ::Mu::Model::FormField field;
         field.handle = "g1-f0-o44";
@@ -469,8 +471,7 @@ private slots:
 
     void formFieldChoiceProxyExposesProperties()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
         ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
         ::Mu::Model::FormField comboField;
         comboField.handle = "g1-f0-o45";
@@ -526,11 +527,11 @@ private slots:
 
     void coordinatorAppliesCanonicalValuesToAffectedProxies()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
         std::vector<Okular::FormField*> refreshedFields;
         std::vector<int> refreshedPages;
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyClient, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
                 refreshedFields = fields;
                 refreshedPages = pages;
             });
@@ -579,11 +580,11 @@ private slots:
 
     void coordinatorResetsFieldsAfterReopen()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
         std::vector<Okular::FormField*> refreshedFields;
         std::vector<int> refreshedPages;
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyClient, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
                 refreshedFields = fields;
                 refreshedPages = pages;
             });
@@ -647,10 +648,10 @@ private slots:
 
     void coordinatorIgnoresIncompatibleCanonicalValues()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
         std::vector<Okular::FormField*> refreshedFields;
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyClient,
+            dummyBackend,
             [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&) { refreshedFields = fields; });
 
         ::Mu::Model::FormField field;
@@ -676,8 +677,7 @@ private slots:
 
     void coordinatorRejectionPreservesPriorState()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
 
         ::Mu::Model::FormField field;
         field.handle = "h-text-1";
@@ -728,8 +728,7 @@ private slots:
 
     void radioNoToggleToOffSuppressesDirectUncheckIpc()
     {
-        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyClient);
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
 
         // Radio A (initially checked, has noToggleToOff = true)
         ::Mu::Model::FormField f1;

@@ -6,8 +6,6 @@
 #include <algorithm>
 #include <optional>
 
-#include "plugin/worker_client.hpp"
-
 namespace {
 
 std::optional<Mu::Model::FormValue> formValue(const Mu::Model::FormField& field)
@@ -36,8 +34,8 @@ std::optional<Mu::Model::FormValue> formValue(const Mu::Model::FormField& field)
 
 namespace Mu::Generator::Proxy::Form {
 
-Coordinator::Coordinator(Plugin::WorkerClient* client, PageRefreshCallback refreshCallback)
-    : m_client(client)
+Coordinator::Coordinator(Model::FormBackend* backend, PageRefreshCallback refreshCallback)
+    : m_backend(backend)
     , m_refreshCallback(std::move(refreshCallback))
 {
 }
@@ -63,10 +61,10 @@ bool Coordinator::updateField(const std::string& handle, const Model::FormValue&
     if (!m_available || handle.empty())
         return false;
 
-    if (!m_client)
+    if (!m_backend)
         return false;
 
-    const auto response = m_client->updateForm({ handle, value });
+    const auto response = m_backend->updateForm({ handle, value });
     if (!response)
         return false;
 
@@ -75,10 +73,10 @@ bool Coordinator::updateField(const std::string& handle, const Model::FormValue&
 
 bool Coordinator::resetForm(const std::string& handle)
 {
-    if (!m_available || handle.empty() || !m_client)
+    if (!m_available || handle.empty() || !m_backend)
         return false;
 
-    const auto response = m_client->resetForm({ handle });
+    const auto response = m_backend->resetForm({ handle });
     return response && applyResponse(*response);
 }
 

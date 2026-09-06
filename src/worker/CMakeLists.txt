@@ -66,12 +66,14 @@ target_link_libraries(okular-mupdf-worker PRIVATE
     mupdf_worker_core
     MuPDF::Engine
 )
+if(MU_DEBUG_BUILD)
+    target_link_libraries(okular-mupdf-worker PRIVATE mupdf_ipc_debug)
+endif()
 set_target_properties(okular-mupdf-worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 
 if(MU_DEBUG_BUILD)
     target_compile_definitions(mupdf_worker_core PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(okular-mupdf-worker PRIVATE MU_DEBUG_ENABLED)
-    target_sources(mupdf_worker_core PRIVATE ../shared/protocol/ipc_debug.cpp)
 endif()
 
 target_include_directories(okular-mupdf-worker PRIVATE
