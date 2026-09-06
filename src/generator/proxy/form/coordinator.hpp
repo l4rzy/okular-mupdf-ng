@@ -53,6 +53,8 @@ public:
     // Disabled coordinators fail closed while the worker has no active document.
     void setAvailable(bool available) noexcept { m_available = available; }
 
+    [[nodiscard]] bool isAvailable() const noexcept { return m_available; }
+
     // Sends a user edit and applies all fields canonicalized by the worker.
     [[nodiscard]] bool updateField(const std::string& handle, const Model::FormValue& value);
     // Requests a worker-side reset and applies its affected-field response.

@@ -82,7 +82,10 @@ Main::Main(QObject* parent, const QVariantList& args)
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
         &m_worker, [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages) {
-            m_formsDirty = true;
+            // Recovery applies clean values while the coordinator is
+            // unavailable; those must not re-dirty the document.
+            if (m_formCoordinator && m_formCoordinator->isAvailable())
+                m_formsDirty = true;
             // Form mutations happen in the worker. Ask Okular to refresh the
             // affected widgets and page pixmaps after the proxy state changes.
             const Okular::Document* currentDocument = document();
@@ -751,6 +754,8 @@ bool Main::reopenWorkerDocument()
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
 
+    // Phase 1: restore the worker session. No Okular objects are touched yet,
+    // so any failure here leaves the UI and availability state unchanged.
     QList<Plugin::WorkerClient::PageInfo> pages;
     refreshPaperColor();
     if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
@@ -778,15 +783,21 @@ bool Main::reopenWorkerDocument()
         return false;
     }
 
+    // Phase 3: reconcile UI from the clean source while both proxies stay
+    // unavailable, so no user edit can re-dirty mid-rebuild with stale handles.
+    // The form callback skips dirty-marking while unavailable; annotation
+    // notify* paths early-return under the same gate.
     std::vector<Model::FormField> formFields;
     for (const auto& page : pages)
         formFields.insert(formFields.end(), page.formFields.begin(), page.formFields.end());
     m_formCoordinator->resetFields(formFields);
     {
+        // Mirrors clearWorkerDerivedState: live pages require userMutex().
         QMutexLocker locker(userMutex());
         for (int i = 0; i < m_okularPages.size(); ++i)
             Conversion::rebuildPageAnnotations(m_okularPages.at(i), pages.at(i).annotations);
     }
+    // Phase 4: publish the clean state before accepting edits again.
     m_formsDirty = false;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
