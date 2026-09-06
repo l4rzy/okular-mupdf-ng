@@ -3,16 +3,9 @@
 
 #include "generator/placeholder.hpp"
 
-#include <KLocalizedString>
-#include <QMimeDatabase>
-#include <QMimeType>
-#include <QUrl>
-
 #include <QFont>
 #include <QPainter>
 #include <QtGlobal>
-
-#include "shared/logging.hpp"
 
 namespace Mu::Generator {
 
@@ -108,51 +101,5 @@ QImage Placeholder::image(int width, int height) const
 {
     return drawErrorCard(width, height, message());
 }
-
-namespace SandboxGate {
-
-QString guidanceMessage(const Model::SandboxStatus& status)
-{
-    const QString reason = QString::fromStdString(status.reason);
-    return i18n("⚠️ The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
-                "To open this document, switch Sandbox Enforcement to Relaxed. This will reduce security "
-                "protections.\nError: %1",
-                reason.isEmpty() ? QString() : QStringLiteral("[%1]").arg(reason));
-}
-
-Okular::Page* withheldPage(double dpiWidth, double dpiHeight)
-{
-    constexpr double kPlaceholderWidthPt = 595.0;
-    constexpr double kPlaceholderHeightPt = 842.0;
-    return new Okular::Page(
-        0, kPlaceholderWidthPt * dpiWidth / 72.0, kPlaceholderHeightPt * dpiHeight / 72.0, Okular::Rotation0);
-}
-
-ReopenResult reopenLocalDocument(Okular::Document* doc, const QString& password)
-{
-    // Capture everything before closeDocument(): it nulls the generator's
-    // document back-pointer (Document::closeDocument), and doCloseDocument()
-    // clears the password. The Document object itself is Part-owned and
-    // survives the close, so the passed pointer stays valid for openDocument.
-    if (!doc || !doc->isOpened())
-        return ReopenResult::Failed;
-    const QUrl url = doc->currentDocument();
-    if (!url.isLocalFile()) {
-        MU_LOG(warning, "Mu::Generator::Main", "cannot auto-reopen a document without a local file");
-        return ReopenResult::NotLocal;
-    }
-    const QString docFile = url.toLocalFile();
-    const QMimeType mime = QMimeDatabase().mimeTypeForFile(docFile);
-    MU_LOG(debug, "Mu::Generator::Main", "sandbox gate relaxed; reopening withheld document");
-    doc->closeDocument();
-    // On failure the generator signals are disconnected, so this is log-only.
-    if (doc->openDocument(docFile, url, mime, password) != Okular::Document::OpenSuccess) {
-        MU_LOG(warning, "Mu::Generator::Main", "document reopen failed after enforcement change");
-        return ReopenResult::Failed;
-    }
-    return ReopenResult::Reopened;
-}
-
-} // namespace SandboxGate
 
 } // namespace Mu::Generator

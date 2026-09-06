@@ -147,6 +147,12 @@ private:
     // Loads a single synthetic placeholder page while Strict enforcement
     // withholds the real document from the worker.
     Okular::Document::OpenResult loadBlockedPlaceholderDocument(QVector<Okular::Page*>& pages);
+    // Localized Strict-gate guidance shown on the placeholder card and in
+    // refusals. Reads the worker sandbox status directly.
+    [[nodiscard]] QString sandboxGateMessage() const;
+    // Single A4 display page standing in for the withheld document. Ownership
+    // transfers to the caller's Okular page vector.
+    [[nodiscard]] Okular::Page* makeWithheldPage() const;
     // Drops worker-derived UI state while the placeholder withholds the document.
     void clearPlaceholderDerivedState();
     // Must be called while userMutex() is held; drops cached UI objects

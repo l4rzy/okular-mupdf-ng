@@ -18,12 +18,15 @@
 #include <QImage>
 #include <QLocale>
 #include <QMessageBox>
+#include <QMimeDatabase>
+#include <QMimeType>
 #include <QMutexLocker>
 #include <QPageLayout>
 #include <QPainter>
 #include <QPrinter>
 #include <QTemporaryFile>
 #include <QTextStream>
+#include <QUrl>
 #include <unordered_map>
 
 #include "generator/config/settings.hpp"
@@ -256,8 +259,7 @@ bool Main::reparseConfig()
             }
             // Side effects run after activate() publishes the flag, so any
             // render triggered by them observes the active state.
-            m_placeholder.activate(SandboxGate::guidanceMessage(m_worker.sandboxStatus()),
-                                   Placeholder::Reason::SandboxGate);
+            m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
             m_worker.close();
             clearPlaceholderDerivedState();
         } else if (m_placeholder.deactivate()) {
@@ -583,6 +585,25 @@ bool Main::sandboxGated() const
         && !m_worker.sandboxStatus().isFullyHardened();
 }
 
+// Localized Strict-gate guidance shown on the placeholder card and in
+// refusals. The gating policy itself lives in Main::sandboxGated().
+QString Main::sandboxGateMessage() const
+{
+    const QString reason = QString::fromStdString(m_worker.sandboxStatus().reason);
+    return i18n("⚠️ The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
+                "To open this document, switch Sandbox Enforcement to Relaxed. This will reduce security "
+                "protections.\nError: %1",
+                reason.isEmpty() ? QString() : QStringLiteral("[%1]").arg(reason));
+}
+
+Okular::Page* Main::makeWithheldPage() const
+{
+    constexpr double kPlaceholderWidthPt = 595.0;
+    constexpr double kPlaceholderHeightPt = 842.0;
+    return new Okular::Page(
+        0, kPlaceholderWidthPt * dpi().width() / 72.0, kPlaceholderHeightPt * dpi().height() / 72.0, Okular::Rotation0);
+}
+
 // Loads a single synthetic placeholder page while Strict enforcement withholds
 // the real document from the worker. The page is only a display canvas for the
 // guidance message; switching enforcement to Relaxed reloads the real document
@@ -591,10 +612,10 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
 {
     // Side effects run after activate() publishes the flag; at load time the
     // worker has no document and no derived state, so both are best-effort.
-    m_placeholder.activate(SandboxGate::guidanceMessage(m_worker.sandboxStatus()), Placeholder::Reason::SandboxGate);
+    m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
     m_worker.close();
     clearPlaceholderDerivedState();
-    pages.append(SandboxGate::withheldPage(dpi().width(), dpi().height()));
+    pages.append(makeWithheldPage());
     m_okularPages = pages;
     return Okular::Document::OpenSuccess;
 }
@@ -637,13 +658,33 @@ void Main::reopenWithheldDocument()
     QMetaObject::invokeMethod(this, [this] { reopenWithheldDocumentInternal(); }, Qt::QueuedConnection);
 }
 
-// Executes the queued close/open cycle on a clean stack.
+// Executes the queued close/open cycle on a clean stack. UI-free: maps the
+// outcome to signals; the caller reports it to the user.
 void Main::reopenWithheldDocumentInternal()
 {
-    const auto result =
-        SandboxGate::reopenLocalDocument(const_cast<Okular::Document*>(document()), m_document.password);
-    if (result == SandboxGate::ReopenResult::NotLocal)
+    // Capture everything before closeDocument(): it nulls the generator's
+    // document back-pointer (Document::closeDocument), and doCloseDocument()
+    // clears the password. The Document object itself is Part-owned and
+    // survives the close, so the pointer stays valid for openDocument.
+    Okular::Document* doc = const_cast<Okular::Document*>(document());
+    if (!doc || !doc->isOpened()) {
+        notifyDegradedSandbox();
+        return;
+    }
+    const QUrl url = doc->currentDocument();
+    if (!url.isLocalFile()) {
+        MU_LOG(warning, "Mu::Generator::Main", "cannot auto-reopen a document without a local file");
         Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), -1);
+        notifyDegradedSandbox();
+        return;
+    }
+    const QString docFile = url.toLocalFile();
+    const QMimeType mime = QMimeDatabase().mimeTypeForFile(docFile);
+    MU_LOG(debug, "Mu::Generator::Main", "sandbox gate relaxed; reopening withheld document");
+    doc->closeDocument();
+    // On failure the generator signals are disconnected, so this is log-only.
+    if (doc->openDocument(docFile, url, mime, m_document.password) != Okular::Document::OpenSuccess)
+        MU_LOG(warning, "Mu::Generator::Main", "document reopen failed after enforcement change");
     notifyDegradedSandbox();
 }
 

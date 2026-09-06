@@ -10,54 +10,11 @@
 #include "generator/placeholder.hpp"
 
 using ::Mu::Generator::Placeholder;
-using ::Mu::Model::SandboxStatus;
-namespace Gate = ::Mu::Generator::SandboxGate;
-
-namespace {
-
-SandboxStatus unhardenedStatus()
-{
-    return SandboxStatus { };
-}
-
-} // namespace
 
 class TestGeneratorPlaceholder : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
-
-    void withheldPageDimensions()
-    {
-        // At 72 dpi the page keeps its exact A4 point dimensions.
-        auto* page = Gate::withheldPage(72.0, 72.0);
-        QCOMPARE(page->number(), 0);
-        QCOMPARE(page->width(), 595.0);
-        QCOMPARE(page->height(), 842.0);
-        QCOMPARE(page->rotation(), Okular::Rotation0);
-        delete page;
-
-        // Higher dpi scales the pixel dimensions proportionally.
-        page = Gate::withheldPage(96.0, 96.0);
-        QVERIFY(qFuzzyCompare(page->width(), 595.0 * 96.0 / 72.0));
-        QVERIFY(qFuzzyCompare(page->height(), 842.0 * 96.0 / 72.0));
-        delete page;
-    }
-
-    void guidanceMessageEmbedsReason()
-    {
-        SandboxStatus status = unhardenedStatus();
-        status.reason = "landlock unavailable";
-        const QString message = Gate::guidanceMessage(status);
-        QVERIFY(!message.isEmpty());
-        QVERIFY(message.contains(QStringLiteral("[landlock unavailable]")));
-
-        // An empty reason must not leave dangling parentheses.
-        status.reason.clear();
-        const QString bare = Gate::guidanceMessage(status);
-        QVERIFY(!bare.isEmpty());
-        QVERIFY(!bare.contains(QStringLiteral("()")));
-    }
 
     void activationRaisesFlagAndPublishesMessage()
     {

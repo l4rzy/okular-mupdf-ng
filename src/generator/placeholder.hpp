@@ -7,13 +7,8 @@
 #include <QImage>
 #include <QString>
 
-#include <okular/core/document.h>
-#include <okular/core/page.h>
-
 #include <atomic>
 #include <memory>
-
-#include "generator/config/settings.hpp"
 
 namespace Mu::Generator {
 
@@ -75,31 +70,6 @@ private:
     Reason m_reason = Reason::SandboxGate;
     bool m_reloadQueued = false;
 };
-
-/// Okular adapters for the sandbox gate: the guidance card message and the
-/// display page / close-open cycle for a withheld document. The gating policy
-/// itself lives in Main::sandboxGated().
-namespace SandboxGate {
-
-/// Outcome of the queued close/open cycle for a withheld document.
-enum class ReopenResult {
-    Reopened,
-    NotLocal,
-    Failed,
-};
-
-/// Localized guidance shown on the placeholder card and in refusals.
-[[nodiscard]] QString guidanceMessage(const Model::SandboxStatus& status);
-
-/// Single A4 display page standing in for the withheld document. Ownership
-/// transfers to the caller's Okular page vector.
-[[nodiscard]] Okular::Page* withheldPage(double dpiWidth, double dpiHeight);
-
-/// Runs the Okular close/open cycle for the retained local file. UI-free:
-/// reports the outcome; the caller maps it to signals.
-[[nodiscard]] ReopenResult reopenLocalDocument(Okular::Document* doc, const QString& password);
-
-} // namespace SandboxGate
 
 } // namespace Mu::Generator
 
