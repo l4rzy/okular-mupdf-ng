@@ -111,18 +111,15 @@ Main::Main(QObject* parent, const QVariantList& args)
         m_ocrController->reset();
         m_annotationProxy.setAvailable(false);
         m_formCoordinator->setAvailable(false);
-        if (m_annotationsDirty) {
-            const QString message = m_formsDirty
+        if (m_formsDirty || m_annotationsDirty) {
+            const QString message = m_formsDirty && m_annotationsDirty
                 ? i18n("The document renderer stopped while unsaved form and annotation changes were present. "
-                       "Those changes could not be recovered. Restart Okular to try again.")
-                : i18n("The document renderer stopped while unsaved annotation changes were present. "
-                       "Those changes could not be recovered. Restart Okular to try again.");
-            failClosed(message);
-            return;
-        }
-        if (m_formsDirty) {
-            const QString message =
-                i18n("The document renderer stopped while unsaved form changes were present. Those changes were lost.");
+                       "Those changes were lost.")
+                : m_formsDirty
+                ? i18n(
+                      "The document renderer stopped while unsaved form changes were present. Those changes were lost.")
+                : i18n("The document renderer stopped while unsaved annotation changes were present. Those changes "
+                       "were lost.");
             Q_EMIT warning(message, 10000);
             m_formsDirty = false;
             m_annotationsDirty = false;
@@ -153,20 +150,7 @@ Main::Main(QObject* parent, const QVariantList& args)
             return;
         // Defer recovery to avoid reopening the document from inside a worker
         // lifecycle signal; the queued call runs on the generator's Qt thread.
-        QMetaObject::invokeMethod(
-            this,
-            [this] {
-                if (!reopenWorkerDocument())
-                    return;
-
-                const Okular::Document* currentDocument = document();
-                if (!currentDocument)
-                    return;
-                const int page = static_cast<int>(currentDocument->currentPage());
-                if (page >= 0 && page < m_okularPages.size())
-                    const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(page);
-            },
-            Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this] { reopenWorkerDocument(); }, Qt::QueuedConnection);
     });
     connect(
         &m_worker,
@@ -798,10 +782,21 @@ bool Main::reopenWorkerDocument()
     for (const auto& page : pages)
         formFields.insert(formFields.end(), page.formFields.begin(), page.formFields.end());
     m_formCoordinator->resetFields(formFields);
+    {
+        QMutexLocker locker(userMutex());
+        for (int i = 0; i < m_okularPages.size(); ++i)
+            Conversion::rebuildPageAnnotations(m_okularPages.at(i), pages.at(i).annotations);
+    }
     m_formsDirty = false;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
     m_annotationProxy.setAvailable(true);
+    if (const Okular::Document* currentDocument = document()) {
+        for (int i = 0; i < m_okularPages.size(); ++i) {
+            clearPageDisplayState(i);
+            const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(i);
+        }
+    }
     m_ocrController->reset();
     MU_LOG(warning, "Mu::Generator::Main", "reopened document after worker restart");
     return true;

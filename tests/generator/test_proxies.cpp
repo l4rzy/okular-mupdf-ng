@@ -14,6 +14,7 @@ extern "C" {
 
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
+
 #include "generator/conversion/text.hpp"
 #include "generator/printing.hpp"
 #include "generator/proxy/embedded_file.hpp"
@@ -27,6 +28,7 @@ extern "C" {
 #include "generator/proxy/form/text.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/model/types.hpp"
+#include <okular/core/page.h>
 
 namespace Mu::Plugin {
 
@@ -607,6 +609,40 @@ private slots:
         QCOMPARE(textProxy.text(), QStringLiteral("Saved"));
         QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy }));
         QCOMPARE(refreshedPages, (std::vector<int> { 2 }));
+    }
+
+    void rebuildPageAnnotationsDiscardsDirtyState()
+    {
+        Okular::Page page(0, 100, 100, Okular::Rotation0);
+        auto* dirty = new Okular::TextAnnotation();
+        dirty->setUniqueName(QStringLiteral("dirty"));
+        dirty->setContents(QStringLiteral("Dirty"));
+        page.addAnnotation(dirty);
+        QCOMPARE(page.annotations().size(), 1);
+
+        ::Mu::Model::Annotation clean;
+        clean.subtype = PDF_ANNOT_TEXT;
+        clean.uuid = "clean-uuid";
+        clean.handle = "clean-handle";
+        clean.contents = "Saved";
+        clean.x0 = 0.1;
+        clean.y0 = 0.1;
+        clean.x1 = 0.5;
+        clean.y1 = 0.5;
+        ::Mu::Generator::Conversion::rebuildPageAnnotations(&page, { clean });
+
+        const auto annotations = page.annotations();
+        QCOMPARE(annotations.size(), 1);
+        QCOMPARE(annotations.front()->uniqueName(), QStringLiteral("clean-uuid"));
+        QCOMPARE(annotations.front()->contents(), QStringLiteral("Saved"));
+        QCOMPARE(annotations.front()->nativeId().toString(), QStringLiteral("clean-handle"));
+
+        ::Mu::Model::Annotation unsupported;
+        unsupported.subtype = -1;
+        ::Mu::Generator::Conversion::rebuildPageAnnotations(&page, { unsupported });
+        QVERIFY(page.annotations().isEmpty());
+
+        ::Mu::Generator::Conversion::rebuildPageAnnotations(nullptr, { clean });
     }
 
     void coordinatorIgnoresIncompatibleCanonicalValues()

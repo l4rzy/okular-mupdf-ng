@@ -8,6 +8,8 @@
 #include <QFont>
 #include <QTimeZone>
 
+#include <okular/core/page.h>
+
 extern "C" {
 #include <mupdf/pdf.h>
 }
@@ -394,6 +396,17 @@ std::unique_ptr<Okular::Annotation> fromModel(const Model::Annotation& ad)
     ann->setFlags(okularFlagsFor(ad.flags) | Okular::Annotation::ExternallyDrawn);
     ann->setNativeId(QString::fromStdString(ad.handle));
     return std::unique_ptr<Okular::Annotation>(ann);
+}
+
+void rebuildPageAnnotations(Okular::Page* page, const std::vector<Model::Annotation>& clean)
+{
+    if (!page)
+        return;
+    page->deleteAnnotations();
+    for (const Model::Annotation& ad : clean) {
+        if (auto ann = fromModel(ad))
+            page->addAnnotation(ann.release());
+    }
 }
 
 } // namespace Mu::Generator::Conversion

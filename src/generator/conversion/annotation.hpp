@@ -15,6 +15,9 @@ namespace Mu::Generator::Conversion {
 
 std::unique_ptr<Okular::Annotation> fromModel(const Model::Annotation& annotation);
 std::optional<Model::Annotation> toModel(const Okular::Annotation* annotation);
+// Discards all annotations on the page and rebuilds them from clean worker
+// state, mirroring initial document load. Unsupported subtypes are skipped.
+void rebuildPageAnnotations(Okular::Page* page, const std::vector<Model::Annotation>& clean);
 
 } // namespace Mu::Generator::Conversion
 
