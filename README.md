@@ -8,12 +8,19 @@ A secure and fast PDF and EPUB generator for Okular.
 > Beta: Real-world testers are welcome. Please report any issue via Github Issues.
 
 ![Screenshot](screenshot.png)
-
 ---
 
 ## How to install
 Prebuilt packages for common KDE distros are available for download [here](https://github.com/l4rzy/okular-mupdf-ng/releases).
-Alternatively, you can [build it yourself](#building-and-testing).
+Alternatively, you can [build it yourself](#building-and-testing). Installing this plugin will override the default backend for PDF and ePUB. You can select the backend of your choice every time you open a document by enabling "Show backend selection dialog" option in Okular.
+
+---
+
+## Motivation
+Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's PDF and Epub backends, with the hope of making it more complete:
+ - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined.
+ - PDF backend with Poppler is rich in features, but sluggish on big PDFs. This is a known weakness of Poppler.
+ - Rendering quality of the default Epub backend is terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
 
 ---
 
@@ -28,12 +35,13 @@ and the source-tree layout.
 
 ## Feature Comparison
 
-| Feature Category | Capabilities | okular-mupdf-ng | Poppler (official) |
+| Feature Category | Capabilities | okular-mupdf-ng | Okular official PDF & ePUB backends |
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
-| **Formats** | PDF, EPUB | ✓ (PDF + EPUB) | ✓ (Epub supported in another plugin) |
-| **Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ |
-| **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ |
+| **Formats** | PDF, ePUB | ✓ | ✓ |
+| **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
+| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ (plus basic XFA & Js support) |
+| **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
 | **Cert Manager** | NSS Certificate Manager | ✓ | ✗ |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |

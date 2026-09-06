@@ -535,7 +535,7 @@
      </widget>
      <widget class="QWidget" name="epubTab">
       <attribute name="title">
-       <string>ePub</string>
+       <string>ePUB</string>
       </attribute>
       <layout class="QVBoxLayout" name="epubTabLayout">
        <item>

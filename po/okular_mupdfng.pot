@@ -434,7 +434,7 @@ msgid "Check certificate revocation via OCSP (requires network)"
 msgstr ""
 
 #: rc.cpp:28
-msgid "ePub"
+msgid "ePUB"
 msgstr ""
 
 #: rc.cpp:29
