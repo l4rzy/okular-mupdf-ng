@@ -31,7 +31,9 @@ bool Controller::shouldTrigger(bool force, bool autoTrigger, unsigned threshold,
     return autoTrigger && existingTextBoxCount < threshold;
 }
 
-void Controller::observeVisiblePages(const QList<VisiblePage>& visiblePages, const Config& config)
+void Controller::observeVisiblePages(const QList<VisiblePage>& visiblePages,
+                                     const Config& config,
+                                     std::optional<NativeTextObservation> nativeText)
 {
     // Focus hysteresis keeps OCR anchored while the user scrolls: the page
     // that dominates the viewport wins, with a bias toward the previous focus.
@@ -39,10 +41,10 @@ void Controller::observeVisiblePages(const QList<VisiblePage>& visiblePages, con
     if (focusPage < 0)
         return;
     m_lastFocusPage = focusPage;
-    observe(focusPage, config);
+    observe(focusPage, config, std::move(nativeText));
 }
 
-void Controller::observe(int page, Config config)
+void Controller::observe(int page, Config config, std::optional<NativeTextObservation> nativeText)
 {
     // Observation may originate from generator callbacks; queue it so all
     // scheduler state changes happen on the controller's QObject thread. A
@@ -51,7 +53,7 @@ void Controller::observe(int page, Config config)
     const std::uint64_t generation = m_generation;
     QMetaObject::invokeMethod(
         this,
-        [this, page, config = std::move(config), generation] {
+        [this, page, config = std::move(config), nativeText = std::move(nativeText), generation] {
             if (generation != m_generation)
                 return;
             const bool configChanged = (m_config != config);
@@ -68,6 +70,8 @@ void Controller::observe(int page, Config config)
                 }
                 m_nativeTextBoxCounts.clear();
             }
+            if (nativeText && nativeText->page >= 0 && nativeText->page < config.pageCount)
+                m_nativeTextBoxCounts.insert(nativeText->page, nativeText->boxCount);
             if (m_scheduler.observe(page, config.pageCount) || configChanged)
                 m_debounce.start();
         },

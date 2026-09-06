@@ -59,6 +59,28 @@ private Q_SLOTS:
         for (const auto& testCase : cases)
             QCOMPARE(Mu::Plugin::OCR::dominantPage(testCase.pages, testCase.previousPage), testCase.expected);
     }
+
+    void shouldTriggerTable()
+    {
+        const struct {
+            bool force;
+            bool autoTrigger;
+            unsigned threshold;
+            std::size_t existingTextBoxCount;
+            bool expected;
+        } cases[] = {
+            { false, false, 20, 0, false },
+            { false, true, 20, 19, true },
+            { false, true, 20, 20, false },
+            { true, false, 20, 100, true },
+        };
+
+        for (const auto& testCase : cases) {
+            QCOMPARE(Controller::shouldTrigger(
+                         testCase.force, testCase.autoTrigger, testCase.threshold, testCase.existingTextBoxCount),
+                     testCase.expected);
+        }
+    }
 };
 
 QTEST_MAIN(TestPluginOcrController)

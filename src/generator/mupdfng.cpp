@@ -723,7 +723,7 @@ Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& ne
 }
 
 // Updates OCR scheduling from the pages currently visible in Okular.
-void Main::observeOcrFocus()
+void Main::observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount)
 {
     if (m_placeholder.isActive())
         return;
@@ -746,7 +746,8 @@ void Main::observeOcrFocus()
     m_ocrController->observeVisiblePages(
         visiblePages,
         Config::ocrConfigFor(
-            target, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings));
+            target, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings),
+        Plugin::OCR::NativeTextObservation { observedPage, nativeTextBoxCount });
 }
 
 bool Main::reopenWorkerDocument()
@@ -1075,8 +1076,16 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             ocrTarget, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings);
         const bool useOcr = Plugin::OCR::Controller::shouldTrigger(
             ocrConfig.force, ocrConfig.autoTrigger, ocrConfig.triggerThreshold, workerBoxes.size());
-        if (ocrSettings.asynchronous)
-            QMetaObject::invokeMethod(this, [this] { observeOcrFocus(); }, Qt::QueuedConnection);
+        if (ocrSettings.asynchronous) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, pageNum, nativeTextBoxCount = workerBoxes.size()] {
+                    observeOcrFocus(pageNum, nativeTextBoxCount);
+                },
+                Qt::QueuedConnection);
+            if (useOcr)
+                return nullptr;
+        }
         if (useOcr) {
             const auto key =
                 Plugin::Caching::OCR::Cache::normalizeKey(ocrTarget.documentHash, ocrTarget.language, ocrTarget.dpi);
@@ -1085,9 +1094,6 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             const auto cached = Plugin::Caching::OCR::Cache::load(*key, pageNum);
             if (cached.present)
                 return Conversion::ocrTextPage(cached.items);
-            if (ocrSettings.asynchronous) {
-                return nullptr;
-            }
             const Model::OcrResult ocrResult = m_worker.ocrPage(pageNum, key->language, key->dpi, false);
             if (ocrResult.status != Model::OcrStatus::Success)
                 return nullptr;

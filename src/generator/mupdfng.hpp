@@ -117,7 +117,7 @@ protected:
 
 private:
     // Updates OCR scheduling from the pages currently visible in Okular.
-    void observeOcrFocus();
+    void observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount);
     // Reopens the retained source after a worker restart and verifies that it
     // still represents the active Okular document.
     bool reopenWorkerDocument();

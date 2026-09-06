@@ -21,6 +21,11 @@
 
 namespace Mu::Plugin::OCR {
 
+struct NativeTextObservation {
+    int page = -1;
+    std::size_t boxCount = 0;
+};
+
 class Controller final : public QObject {
     Q_OBJECT
 
@@ -32,8 +37,10 @@ public:
     explicit Controller(WorkerClient* backend, QObject* parent = nullptr);
     // Computes the dominant visible page with focus hysteresis and schedules
     // it for OCR; no-op when no page dominates.
-    void observeVisiblePages(const QList<VisiblePage>& visiblePages, const Config& config);
-    void observe(int page, Config config);
+    void observeVisiblePages(const QList<VisiblePage>& visiblePages,
+                             const Config& config,
+                             std::optional<NativeTextObservation> nativeText = std::nullopt);
+    void observe(int page, Config config, std::optional<NativeTextObservation> nativeText = std::nullopt);
     // Takes the retained result for @p page, if any. Called from Okular render
     // threads, so it is the only cross-thread surface of this class.
     [[nodiscard]] std::optional<QVector<Caching::OCR::CacheItem>> takeReady(int page);
