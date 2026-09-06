@@ -393,9 +393,14 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     if (!hasOpenDocument())
         return failure(request.id, ErrorCode::NotOpen, "render", "no document is open");
 
-    if (render.page < 0 || render.page >= m_document->pageCount()
-        || !isValidRenderDimensions(render.width, render.height, render.tile.has_value()))
+    if (render.page < 0 || render.page >= m_document->pageCount() || render.width <= 0 || render.height <= 0)
         return failure(request.id, ErrorCode::InvalidRequest, "render", "invalid page or dimensions");
+
+    // Reject extreme dimensions immediately; over-budget requests below this
+    // hard cap fall through to fitRenderRequestToFrameBudget below.
+    const int hardMax = render.tile ? Limit::MaxTiledRenderDimension : Limit::MaxRenderDimension;
+    if (render.width > hardMax || render.height > hardMax)
+        return failure(request.id, ErrorCode::ResourceLimit, "render", "render dimensions exceed hard cap");
 
     if (!m_session.fdChannel)
         return failure(request.id, ErrorCode::Unavailable, "render", "FD channel unavailable");
@@ -409,6 +414,8 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     // Fit oversized requests before allocation. The frame remains valid while
     // Okular scales the returned lower-resolution image into its original bounds.
     const auto fitted = fitRenderRequestToFrameBudget(render);
+    if (!isValidRenderDimensions(fitted.request.width, fitted.request.height, fitted.request.tile.has_value()))
+        return failure(request.id, ErrorCode::ResourceLimit, "render", "fitted render dimensions are invalid");
     std::optional<DocumentBase::RenderTile> tile;
     if (fitted.request.tile) {
         const auto& t = *fitted.request.tile;
