@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "engine/constants.hpp"
+#include "runtime/memory_pressure.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/validation.hpp"
 
@@ -315,9 +316,11 @@ void EpubDocument::close() noexcept
     trimProcessMemory(m_context);
 }
 
-void EpubDocument::shrinkMemoryForIdle() noexcept
+void EpubDocument::trimMemoryForIdle() noexcept
 {
-    shrinkIdleStore(m_context);
+    namespace MemoryPressure = ::Mu::Worker::Runtime::MemoryPressure;
+    trimIdleStore(m_context,
+                  MemoryPressure::idleTrimThresholdsForLevel(m_settings.idleTrimAggressiveness).storePercent);
 }
 
 bool EpubDocument::isOpen() const noexcept
@@ -436,6 +439,8 @@ void EpubDocument::setSettings(const DocumentSettings& settings) noexcept
         m_settings.epub.pageSize = EpubPageSize::B5;
     if (static_cast<std::uint8_t>(m_settings.epub.fontFamily) > static_cast<std::uint8_t>(EpubFontFamily::Monospace))
         m_settings.epub.fontFamily = EpubFontFamily::Default;
+    m_settings.idleTrimAggressiveness =
+        ::Mu::Worker::Runtime::MemoryPressure::normalizeIdleTrim(m_settings.idleTrimAggressiveness);
     applyFitzSettings(m_context, m_settings);
 }
 

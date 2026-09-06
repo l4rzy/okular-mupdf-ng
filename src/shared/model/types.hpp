@@ -277,6 +277,15 @@ struct EpubLayoutSettings {
     std::string customCssBase64;
 };
 
+/// Idle-trim aggressiveness levels for the worker's memory trim on idle.
+/// Higher levels trim sooner and evict more of the MuPDF store.
+struct IdleTrimLevel {
+    static constexpr std::int32_t Off = 0;
+    static constexpr std::int32_t Conservative = 1;
+    static constexpr std::int32_t Balanced = 2;
+    static constexpr std::int32_t Aggressive = 3;
+};
+
 /// Rendering and layout settings shared by document engines.
 struct DocumentSettings {
     /// MuPDF graphics antialiasing level.
@@ -289,6 +298,8 @@ struct DocumentSettings {
     bool interpolateImages = true;
     /// Maximum document-engine cache size in bytes.
     std::int64_t memoryCacheBytes = 64ULL * 1024ULL * 1024ULL;
+    /// Idle-trim aggressiveness, one of IdleTrimLevel::*.
+    std::int32_t idleTrimAggressiveness = IdleTrimLevel::Balanced;
     /// Opaque page background as 0xRRGGBB (Okular paper-color setting).
     std::uint32_t paperColorRgb = 0xFFFFFF;
     EpubLayoutSettings epub;

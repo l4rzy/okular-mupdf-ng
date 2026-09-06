@@ -49,6 +49,13 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     memLimit->addItem(i18n("128 MiB"), MuPDFSettings::EnumMemoryLimit::Size128MiB);
     memLimit->addItem(i18n("256 MiB"), MuPDFSettings::EnumMemoryLimit::Size256MiB);
 
+    auto* idleTrim = m_mupdfsw->kcfg_IdleTrimLevel;
+    idleTrim->clear();
+    idleTrim->addItem(i18n("Off"), MuPDFSettings::EnumIdleTrimLevel::Off);
+    idleTrim->addItem(i18n("Conservative"), MuPDFSettings::EnumIdleTrimLevel::Conservative);
+    idleTrim->addItem(i18n("Balanced"), MuPDFSettings::EnumIdleTrimLevel::Balanced);
+    idleTrim->addItem(i18n("Aggressive"), MuPDFSettings::EnumIdleTrimLevel::Aggressive);
+
     auto* sandboxEnforcement = m_mupdfsw->kcfg_SandboxEnforcement;
     sandboxEnforcement->clear();
     sandboxEnforcement->addItem(i18n("Relaxed"), MuPDFSettings::EnumSandboxEnforcement::Relaxed);

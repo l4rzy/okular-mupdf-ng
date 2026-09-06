@@ -17,6 +17,15 @@
         <choice name="Size256MiB" />
       </choices>
     </entry>
+    <entry key="IdleTrimLevel" type="Enum">
+      <default>Balanced</default>
+      <choices>
+        <choice name="Off" />
+        <choice name="Conservative" />
+        <choice name="Balanced" />
+        <choice name="Aggressive" />
+      </choices>
+    </entry>
     <entry key="SandboxEnforcement" type="Enum">
       <default>Strict</default>
       <choices>

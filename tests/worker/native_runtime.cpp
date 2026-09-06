@@ -147,9 +147,11 @@ int runTestWorkerNativeRuntime()
         }
     }
 
-    // Idle-shrink decision is pure and table-driven: trim only after an idle
+    // Idle-trim decision is pure and table-driven: trim only after an idle
     // pause with enough accumulated render pressure, never on the hot path.
+    // Thresholds scale with the configured aggressiveness preset.
     struct PressureCase {
+        std::int32_t idleTrim;
         std::uint64_t renders;
         std::uint64_t bytes;
         long long idleMs;
@@ -158,24 +160,56 @@ int runTestWorkerNativeRuntime()
     };
 
     constexpr std::uint64_t MiB = 1024ULL * 1024ULL;
-    constexpr long long MinIdleMs = ::Mu::Worker::Runtime::MemoryPressure::IdleMinMs;
-    constexpr long long MinSinceTrimMs = ::Mu::Worker::Runtime::MemoryPressure::SinceTrimMinMs;
+    namespace MemoryPressure = ::Mu::Worker::Runtime::MemoryPressure;
+    using IdleTrim = ::Mu::Model::IdleTrimLevel;
+    const auto balanced = MemoryPressure::idleTrimThresholdsForLevel(IdleTrim::Balanced);
+    const long long idleGate = balanced.idleMinMs;
+    const long long trimGate = balanced.sinceTrimMinMs;
     const PressureCase pressureCases[] = {
-        { 0, 0, 5000, 5000, false }, // idle but no pressure
-        { 20, 0, MinIdleMs, MinSinceTrimMs, true }, // render-count threshold
-        { 19, 0, 5000, 5000, false }, // just below render threshold
-        { 1, 128 * MiB, MinIdleMs, MinSinceTrimMs, true }, // byte threshold
-        { 1, 128 * MiB - 1, MinIdleMs, MinSinceTrimMs, false }, // just below byte threshold
-        { 4, 32 * MiB, MinIdleMs, MinSinceTrimMs, true }, // large frames arm early
-        { 3, 32 * MiB, 5000, 5000, false }, // large bytes but too few renders
-        { 4, 32 * MiB - 1, 5000, 5000, false }, // enough renders but below large bytes
-        { 20, 0, 1999, 5000, false }, // not idle long enough
-        { 20, 0, 5000, 1999, false }, // trimmed too recently
+        // Balanced preserves the historical behavior.
+        { IdleTrim::Balanced, 0, 0, 5000, 5000, false }, // idle but no pressure
+        { IdleTrim::Balanced, 20, 0, idleGate, trimGate, true }, // render-count threshold
+        { IdleTrim::Balanced, 19, 0, 5000, 5000, false }, // just below render threshold
+        { IdleTrim::Balanced, 1, 128 * MiB, idleGate, trimGate, true }, // byte threshold
+        { IdleTrim::Balanced, 1, 128 * MiB - 1, idleGate, trimGate, false }, // just below byte threshold
+        { IdleTrim::Balanced, 4, 32 * MiB, idleGate, trimGate, true }, // large frames arm early
+        { IdleTrim::Balanced, 3, 32 * MiB, 5000, 5000, false }, // large bytes but too few renders
+        { IdleTrim::Balanced, 4, 32 * MiB - 1, 5000, 5000, false }, // enough renders but below large bytes
+        { IdleTrim::Balanced, 20, 0, idleGate - 1, 5000, false }, // not idle long enough
+        { IdleTrim::Balanced, 20, 0, 5000, trimGate - 1, false }, // trimmed too recently
+        // Conservative needs roughly twice the pressure and idle time.
+        { IdleTrim::Conservative, 20, 0, 5000, 5000, false },
+        { IdleTrim::Conservative, 40, 0, 5000, 5000, true },
+        { IdleTrim::Conservative, 20, 0, idleGate, 5000, false },
+        // Aggressive arms at roughly half the pressure and idle time.
+        { IdleTrim::Aggressive, 10, 0, 1000, 1000, true },
+        { IdleTrim::Aggressive, 9, 0, 5000, 5000, false },
+        { IdleTrim::Aggressive, 1, 64 * MiB, 1000, 1000, true },
+        { IdleTrim::Aggressive, 20, 0, idleGate - 1, 5000, true },
+        // Unknown levels degrade to Balanced.
+        { 99, 20, 0, idleGate, trimGate, true },
+        { 99, 19, 0, 5000, 5000, false },
     };
     for (const auto& testCase : pressureCases) {
-        assert(::Mu::Worker::Runtime::MemoryPressure::shouldTrimForIdle(
-                   testCase.renders, testCase.bytes, testCase.idleMs, testCase.sinceTrimMs)
+        const auto idleTrim = MemoryPressure::normalizeIdleTrim(testCase.idleTrim);
+        if (testCase.idleTrim == 99)
+            assert(idleTrim == IdleTrim::Balanced);
+        assert(MemoryPressure::shouldIdleTrim(testCase.renders,
+                                              testCase.bytes,
+                                              testCase.idleMs,
+                                              testCase.sinceTrimMs,
+                                              MemoryPressure::idleTrimThresholdsForLevel(idleTrim))
                == testCase.expected);
     }
+
+    // Off disables trimming; the poll quantum stays a plain keepalive.
+    assert(MemoryPressure::normalizeIdleTrim(IdleTrim::Off) == IdleTrim::Off);
+    assert(MemoryPressure::idleTrimPollMsForLevel(IdleTrim::Off) == 2000);
+    assert(MemoryPressure::idleTrimPollMsForLevel(IdleTrim::Balanced) == idleGate);
+    assert(MemoryPressure::idleTrimPollMsForLevel(99) == idleGate);
+    // Trim depth: lower store-percentage target evicts more.
+    assert(MemoryPressure::idleTrimThresholdsForLevel(IdleTrim::Conservative).storePercent == 75);
+    assert(MemoryPressure::idleTrimThresholdsForLevel(IdleTrim::Balanced).storePercent == 50);
+    assert(MemoryPressure::idleTrimThresholdsForLevel(IdleTrim::Aggressive).storePercent == 25);
     return 0;
 }

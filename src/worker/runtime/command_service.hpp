@@ -181,9 +181,13 @@ public:
     [[nodiscard]] ResponseMessage releaseFrameSlotResponse(const RequestMessage& request,
                                                            const ReleaseFrameSlotRequest& release);
 
-    /// Shrinks idle store/arena pressure when the event loop reports an idle
-    /// pause. Returns true when a shrink ran. Never called on the hot path.
-    bool maybeTrimForIdle(std::chrono::milliseconds idleDuration) noexcept;
+    /// Trims idle store/arena pressure when the event loop reports an idle
+    /// pause. Returns true when a trim ran. Never called on the hot path.
+    bool maybeIdleTrim(std::chrono::milliseconds idleDuration) noexcept;
+
+    /// Poll quantum for the event loop's idle wait, derived from the
+    /// configured idle trim so an armed trim is observed promptly.
+    [[nodiscard]] int idleTrimPollMs() const noexcept;
 
     /// Closes the current document and clears document-scoped credentials,
     /// handles, page-link work, and OCR results before another document can open.
@@ -293,8 +297,8 @@ private:
     std::string m_documentPassword;
     std::optional<PendingPageLinks> m_pendingPageLinks;
 
-    // Idle-shrink pressure: accumulated only by successful renders, consumed
-    // only by maybeTrimForIdle between dispatches.
+    // Idle-trim pressure: accumulated only by successful renders, consumed
+    // only by maybeIdleTrim between dispatches.
     std::uint64_t m_rendersSinceTrim = 0;
     std::uint64_t m_bytesSinceTrim = 0;
     std::chrono::steady_clock::time_point m_lastTrim = std::chrono::steady_clock::now();

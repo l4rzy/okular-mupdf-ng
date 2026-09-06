@@ -14,6 +14,7 @@ extern "C" {
 }
 
 #include "engine/constants.hpp"
+#include "runtime/memory_pressure.hpp"
 #include "shared/model/types.hpp"
 
 namespace Mu::Worker::Engine {
@@ -165,9 +166,11 @@ void PdfDocument::close() noexcept
     trimProcessMemory(m_context);
 }
 
-void PdfDocument::shrinkMemoryForIdle() noexcept
+void PdfDocument::trimMemoryForIdle() noexcept
 {
-    shrinkIdleStore(m_context);
+    namespace MemoryPressure = ::Mu::Worker::Runtime::MemoryPressure;
+    trimIdleStore(m_context,
+                  MemoryPressure::idleTrimThresholdsForLevel(m_settings.idleTrimAggressiveness).storePercent);
 }
 
 void PdfDocument::updateAcroFormPresence()
@@ -211,6 +214,8 @@ DocumentSettings PdfDocument::settings() const noexcept
 void PdfDocument::setSettings(const DocumentSettings& settings) noexcept
 {
     m_settings = settings;
+    m_settings.idleTrimAggressiveness =
+        ::Mu::Worker::Runtime::MemoryPressure::normalizeIdleTrim(m_settings.idleTrimAggressiveness);
     applyFitzSettings(m_context, m_settings);
 }
 

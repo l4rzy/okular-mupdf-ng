@@ -54,15 +54,15 @@ inline void trimProcessMemory(fz_context* context) noexcept
 #endif
 }
 
-/// Shrinks the MuPDF store toward half its target, evicting eligible entries,
-/// and returns freed heap pages to the OS. Idle-only: never call on the render
-/// hot path.
-inline void shrinkIdleStore(fz_context* context) noexcept
+/// Trims the MuPDF store toward storePercent of its current size, evicting
+/// eligible entries, and returns freed heap pages to the OS. Idle-only:
+/// never call on the render hot path.
+inline void trimIdleStore(fz_context* context, unsigned int storePercent) noexcept
 {
     if (context) {
         fz_try(context)
         {
-            (void)fz_shrink_store(context, 50);
+            (void)fz_shrink_store(context, storePercent);
         }
         fz_catch(context)
         {

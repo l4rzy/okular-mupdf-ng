@@ -345,6 +345,7 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "textAA", value.settings.textAntialiasing);
                 field(out, "imageQuality", value.settings.imageQuality);
                 field(out, "interpolate", value.settings.interpolateImages);
+                field(out, "idleTrim", value.settings.idleTrimAggressiveness);
                 field(out, "epubFontSize", value.settings.epub.fontSize);
                 field(out, "epubPageSize", static_cast<std::uint8_t>(value.settings.epub.pageSize));
                 field(out, "epubFontFamily", static_cast<std::uint8_t>(value.settings.epub.fontFamily));

@@ -87,6 +87,7 @@ private slots:
             settings.imageQuality = 2;
             settings.interpolateImages = false;
             settings.memoryCacheBytes = 128ULL * 1024ULL * 1024ULL;
+            settings.idleTrimAggressiveness = Model::IdleTrimLevel::Aggressive;
             settings.epub.fontSize = 17;
             settings.epub.pageSize = pageSize;
             settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(static_cast<std::uint8_t>(pageSize));
@@ -100,6 +101,7 @@ private slots:
             const auto& output = std::get<Model::SettingsRequest>(decoded.payload).settings;
             QCOMPARE(output.graphicsAntialiasing, 4);
             QCOMPARE(output.memoryCacheBytes, 128ULL * 1024ULL * 1024ULL);
+            QCOMPARE(output.idleTrimAggressiveness, Model::IdleTrimLevel::Aggressive);
             QCOMPARE(output.epub.fontSize, 17);
             QCOMPARE(output.epub.pageSize, pageSize);
             QCOMPARE(output.epub.fontFamily, settings.epub.fontFamily);

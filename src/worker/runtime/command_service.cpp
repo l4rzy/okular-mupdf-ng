@@ -351,28 +351,39 @@ void CommandService::closeDocument() noexcept
     m_lastTrim = std::chrono::steady_clock::now();
 }
 
-bool CommandService::maybeTrimForIdle(std::chrono::milliseconds idleDuration) noexcept
+bool CommandService::maybeIdleTrim(std::chrono::milliseconds idleDuration) noexcept
 {
     using namespace std::chrono;
+    namespace MemoryPressure = ::Mu::Worker::Runtime::MemoryPressure;
+    const auto idleTrim = MemoryPressure::normalizeIdleTrim(m_settings.idleTrimAggressiveness);
+    if (idleTrim == ::Mu::Model::IdleTrimLevel::Off)
+        return false;
+    const auto thresholds = MemoryPressure::idleTrimThresholdsForLevel(idleTrim);
     const auto now = steady_clock::now();
     const auto sinceTrimMs = duration_cast<milliseconds>(now - m_lastTrim).count();
     const auto idleMs = idleDuration.count();
-    if (!::Mu::Worker::Runtime::MemoryPressure::shouldTrimForIdle(
-            m_rendersSinceTrim, m_bytesSinceTrim, idleMs, sinceTrimMs))
+    if (!MemoryPressure::shouldIdleTrim(m_rendersSinceTrim, m_bytesSinceTrim, idleMs, sinceTrimMs, thresholds))
         return false;
     if (!m_document)
         return false;
 
     MU_LOG(debug,
            "Mu::Worker",
-           std::string("idle memory trim attempt: renders=") + std::to_string(m_rendersSinceTrim)
-               + " bytes=" + std::to_string(m_bytesSinceTrim) + " idle_ms=" + std::to_string(idleMs)
-               + " since_trim_ms=" + std::to_string(sinceTrimMs));
-    m_document->shrinkMemoryForIdle();
+           std::string("idle memory trim attempt: idleTrim=") + std::to_string(idleTrim)
+               + " renders=" + std::to_string(m_rendersSinceTrim) + " bytes=" + std::to_string(m_bytesSinceTrim)
+               + " idle_ms=" + std::to_string(idleMs) + " since_trim_ms=" + std::to_string(sinceTrimMs));
+    m_document->trimMemoryForIdle();
     m_rendersSinceTrim = 0;
     m_bytesSinceTrim = 0;
     m_lastTrim = now;
     return true;
+}
+
+int CommandService::idleTrimPollMs() const noexcept
+{
+    namespace MemoryPressure = ::Mu::Worker::Runtime::MemoryPressure;
+    return static_cast<int>(
+        MemoryPressure::idleTrimPollMsForLevel(MemoryPressure::normalizeIdleTrim(m_settings.idleTrimAggressiveness)));
 }
 
 const DocumentBase* CommandService::document() const noexcept
@@ -510,8 +521,8 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
         leaseId = ++slot->leaseId;
     }
 
-    // Successful renders accumulate idle-shrink pressure only. Trimming
-    // happens between dispatches via maybeTrimForIdle, never here.
+    // Successful renders accumulate idle-trim pressure only. Trimming
+    // happens between dispatches via maybeIdleTrim, never here.
     ++m_rendersSinceTrim;
     m_bytesSinceTrim += dataSize;
 

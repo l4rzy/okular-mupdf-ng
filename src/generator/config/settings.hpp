@@ -24,6 +24,7 @@ struct RenderingSettings {
     int imageQuality = 0;
     bool interpolateImages = true;
     std::int64_t memoryCacheBytes = 64LL * 1024 * 1024;
+    std::int32_t idleTrimAggressiveness = Model::IdleTrimLevel::Balanced;
 
     bool operator==(const RenderingSettings& other) const = default;
 };
@@ -83,6 +84,12 @@ documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub
     settings.imageQuality = rendering.imageQuality;
     settings.interpolateImages = rendering.interpolateImages;
     settings.memoryCacheBytes = rendering.memoryCacheBytes;
+    // Clamp the trim level at the IPC boundary like the EPUB enums; the
+    // worker normalizes again, but stable values keep change detection exact.
+    settings.idleTrimAggressiveness = (rendering.idleTrimAggressiveness >= Model::IdleTrimLevel::Off
+                                       && rendering.idleTrimAggressiveness <= Model::IdleTrimLevel::Aggressive)
+        ? rendering.idleTrimAggressiveness
+        : Model::IdleTrimLevel::Balanced;
     settings.paperColorRgb = paperColorRgb;
     settings.epub.fontSize = std::clamp(epub.fontSize, 10, 20);
     settings.epub.pageSize = static_cast<Model::EpubPageSize>(std::clamp(epub.pageSize, 0, 3));

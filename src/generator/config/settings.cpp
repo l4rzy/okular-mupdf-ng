@@ -66,6 +66,23 @@ std::int64_t memoryCacheBytesForConfig(int value) noexcept
     }
 }
 
+std::int32_t idleTrimAggressivenessForConfig(int value) noexcept
+{
+    // Generated enums are ints; map through the generated constants so a
+    // renamed or reordered choice cannot silently flip the trim policy.
+    switch (value) {
+    case MuPDFSettings::EnumIdleTrimLevel::Off:
+        return Model::IdleTrimLevel::Off;
+    case MuPDFSettings::EnumIdleTrimLevel::Conservative:
+        return Model::IdleTrimLevel::Conservative;
+    case MuPDFSettings::EnumIdleTrimLevel::Aggressive:
+        return Model::IdleTrimLevel::Aggressive;
+    case MuPDFSettings::EnumIdleTrimLevel::Balanced:
+    default:
+        return Model::IdleTrimLevel::Balanced;
+    }
+}
+
 } // namespace
 
 void reloadSettings()
@@ -111,7 +128,8 @@ WorkerSettings readWorkerSettings()
           textAntialiasingBitsForConfig(MuPDFSettings::textAntialiasingBits()),
           static_cast<int>(MuPDFSettings::imageRenderingQuality()),
           MuPDFSettings::imageInterpolation(),
-          memoryCacheBytesForConfig(MuPDFSettings::memoryLimit()) },
+          memoryCacheBytesForConfig(MuPDFSettings::memoryLimit()),
+          idleTrimAggressivenessForConfig(MuPDFSettings::idleTrimLevel()) },
         readEpubSettings(),
     };
 }

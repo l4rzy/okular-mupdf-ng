@@ -54,7 +54,7 @@ public:
     [[nodiscard]] std::vector<std::uint8_t> exportAccelerator(std::string* error = nullptr) const;
     [[nodiscard]] bool unlock(const std::string& password, std::string* error = nullptr) override;
     void close() noexcept override;
-    void shrinkMemoryForIdle() noexcept override;
+    void trimMemoryForIdle() noexcept override;
     [[nodiscard]] bool isOpen() const noexcept override;
     [[nodiscard]] bool isLocked() const noexcept override;
     [[nodiscard]] int pageCount() const noexcept override;

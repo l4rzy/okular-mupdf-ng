@@ -87,9 +87,9 @@ public:
     /// Closes the active document and releases associated context resources.
     virtual void close() noexcept = 0;
 
-    /// Shrinks eligible idle store entries and allocator pressure.
+    /// Trims eligible idle store entries and allocator pressure.
     /// Default is a no-op; engines override with their MuPDF context.
-    virtual void shrinkMemoryForIdle() noexcept { }
+    virtual void trimMemoryForIdle() noexcept { }
 
     /// Returns true if a document file is currently loaded and valid.
     [[nodiscard]] virtual bool isOpen() const noexcept = 0;

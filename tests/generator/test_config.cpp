@@ -13,7 +13,9 @@ private slots:
 
     void buildsDocumentSettings()
     {
-        ::Mu::Generator::Config::RenderingSettings rendering { 4, 6, 2, false, 256LL * 1024 * 1024 };
+        ::Mu::Generator::Config::RenderingSettings rendering {
+            4, 6, 2, false, 256LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Aggressive
+        };
         ::Mu::Generator::Config::EpubSettings epub { 99, -1, 99, QStringLiteral("Ym9keXt9") };
 
         const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0x112233);
@@ -22,6 +24,7 @@ private slots:
         QCOMPARE(settings.imageQuality, 2);
         QVERIFY(!settings.interpolateImages);
         QCOMPARE(settings.memoryCacheBytes, 256LL * 1024 * 1024);
+        QCOMPARE(settings.idleTrimAggressiveness, ::Mu::Model::IdleTrimLevel::Aggressive);
         QCOMPARE(settings.paperColorRgb, 0x112233u);
         QCOMPARE(settings.epub.fontSize, 20);
         QCOMPARE(static_cast<int>(settings.epub.fontFamily), 0);
@@ -31,14 +34,31 @@ private slots:
 
     void distinguishesRenderingOutputChanges()
     {
-        const ::Mu::Generator::Config::RenderingSettings original { 4, 6, 1, true, 64LL * 1024 * 1024 };
+        const ::Mu::Generator::Config::RenderingSettings original {
+            4, 6, 1, true, 64LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Balanced
+        };
         auto memoryOnly = original;
         memoryOnly.memoryCacheBytes = 128LL * 1024 * 1024;
         QVERIFY(!::Mu::Generator::Config::renderingOutputChanged(original, memoryOnly));
 
+        // Idle-trim changes affect resource usage, not pixels: no re-render,
+        // but the worker still receives the new level live via setSettings.
+        auto trimOnly = original;
+        trimOnly.idleTrimAggressiveness = ::Mu::Model::IdleTrimLevel::Aggressive;
+        QVERIFY(!::Mu::Generator::Config::renderingOutputChanged(original, trimOnly));
+        QVERIFY(trimOnly != original);
+
         auto antialiasing = original;
         antialiasing.graphicsAntialiasing = 8;
         QVERIFY(::Mu::Generator::Config::renderingOutputChanged(original, antialiasing));
+    }
+
+    void clampsUnknownIdleTrimLevel()
+    {
+        ::Mu::Generator::Config::RenderingSettings rendering { 4, 6, 2, false, 64LL * 1024 * 1024, 99 };
+        const auto settings = ::Mu::Generator::Config::documentSettingsFor(
+            rendering, ::Mu::Generator::Config::EpubSettings { }, 0xFFFFFF);
+        QCOMPARE(settings.idleTrimAggressiveness, ::Mu::Model::IdleTrimLevel::Balanced);
     }
 
     void buildsOcrConfiguration()
