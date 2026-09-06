@@ -36,8 +36,10 @@ namespace Mu::Generator {
 /// Lifecycle overview:
 /// 1. Open a document through WorkerClient and translate its models into Okular pages.
 /// 2. Forward rendering, text, form, save, print, and signing requests to the worker.
-/// 3. Keep the source and clean UI state needed to recover after a worker restart.
-///    Unsaved form or annotation changes fail closed instead of being discarded.
+/// 3. Keep the source and UI state needed to recover after a worker restart.
+///    Unsaved form changes are discarded after a warning; dirty annotations
+///    fail closed because Okular-owned annotation objects cannot be rebuilt
+///    safely in place.
 /// 4. Cancel asynchronous OCR work before document teardown or worker recovery.
 class Main : public Okular::Generator,
              public Okular::SaveInterface,
@@ -205,8 +207,8 @@ private:
     QVector<Okular::Page*> m_okularPages;
     std::unique_ptr<Proxy::CertificateStore> m_certStore;
     std::unique_ptr<Proxy::Form::Coordinator> m_formCoordinator;
-    // Automatic worker recovery is unsafe while UI mutations have not been
-    // persisted in the retained source document.
+    // Form values can be restored from a reopened source; annotation objects
+    // are Okular-owned and therefore make automatic recovery unsafe when dirty.
     bool m_formsDirty = false;
     bool m_annotationsDirty = false;
 

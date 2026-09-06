@@ -575,6 +575,40 @@ private slots:
         ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
+    void coordinatorResetsFieldsAfterReopen()
+    {
+        auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);
+        std::vector<Okular::FormField*> refreshedFields;
+        std::vector<int> refreshedPages;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(
+            dummyClient, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
+                refreshedFields = fields;
+                refreshedPages = pages;
+            });
+
+        ::Mu::Model::FormField field;
+        field.handle = "h-text-reset";
+        field.page = 2;
+        field.type = ::Mu::Model::FormFieldType::Text;
+        field.text = "Saved";
+        ::Mu::Generator::Proxy::Form::Text textProxy(203, field, &coordinator);
+        coordinator.registerField(field.handle, &textProxy);
+
+        ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
+        textProxy.setText(QStringLiteral("Dirty"));
+        QCOMPARE(textProxy.text(), QStringLiteral("Dirty"));
+        refreshedFields.clear();
+        refreshedPages.clear();
+
+        ::Mu::Model::FormField reopened = field;
+        reopened.text = "Saved";
+        coordinator.resetFields({ reopened });
+
+        QCOMPARE(textProxy.text(), QStringLiteral("Saved"));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy }));
+        QCOMPARE(refreshedPages, (std::vector<int> { 2 }));
+    }
+
     void coordinatorIgnoresIncompatibleCanonicalValues()
     {
         auto* dummyClient = reinterpret_cast<::Mu::Plugin::WorkerClient*>(0x1000);

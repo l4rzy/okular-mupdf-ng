@@ -57,6 +57,8 @@ public:
     [[nodiscard]] bool updateField(const std::string& handle, const Model::FormValue& value);
     // Requests a worker-side reset and applies its affected-field response.
     [[nodiscard]] bool resetForm(const std::string& handle);
+    // Restores existing proxies from the clean values returned by a reopened worker document.
+    void resetFields(const std::vector<Model::FormField>& fields);
 
 private:
     // Updates local proxy views before notifying the generator/UI layer.

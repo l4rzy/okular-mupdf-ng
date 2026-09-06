@@ -3,7 +3,36 @@
 
 #include "generator/proxy/form/coordinator.hpp"
 
+#include <algorithm>
+#include <optional>
+
 #include "plugin/worker_client.hpp"
+
+namespace {
+
+std::optional<Mu::Model::FormValue> formValue(const Mu::Model::FormField& field)
+{
+    using namespace Mu::Model;
+    switch (field.type) {
+    case FormFieldType::Text:
+        return FormTextValue { field.text };
+    case FormFieldType::CheckBox:
+    case FormFieldType::RadioButton:
+        return FormCheckValue { field.checked };
+    case FormFieldType::ComboBox:
+    case FormFieldType::ListBox:
+        if (!field.currentChoices.empty())
+            return FormChoiceSelection { field.currentChoices };
+        if (field.type == FormFieldType::ListBox || !field.editableCombo)
+            return FormChoiceSelection { };
+        return FormChoiceCustomText { field.text };
+    case FormFieldType::PushButton:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+} // namespace
 
 namespace Mu::Generator::Proxy::Form {
 
@@ -51,6 +80,25 @@ bool Coordinator::resetForm(const std::string& handle)
 
     const auto response = m_client->resetForm({ handle });
     return response && applyResponse(*response);
+}
+
+void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
+{
+    std::vector<Okular::FormField*> changedFields;
+    std::vector<int> affectedPages;
+    for (const auto& field : fields) {
+        const auto value = formValue(field);
+        const auto it = m_fields.find(field.handle);
+        if (!value || it == m_fields.end() || !it->second || !it->second->applyCanonicalValue(*value))
+            continue;
+
+        changedFields.push_back(it->second->formField());
+        if (std::find(affectedPages.begin(), affectedPages.end(), field.page) == affectedPages.end())
+            affectedPages.push_back(field.page);
+    }
+
+    if (m_refreshCallback)
+        m_refreshCallback(changedFields, affectedPages);
 }
 
 bool Coordinator::applyResponse(const Model::FormUpdateResponse& response)

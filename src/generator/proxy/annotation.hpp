@@ -25,6 +25,9 @@ public:
     explicit Annotation(Plugin::WorkerClient* backend = nullptr, MutationCallback mutationCallback = { });
     ~Annotation() override;
 
+    // Disabled while the worker has no document or its native handles are stale.
+    void setAvailable(bool available) noexcept { m_available = available; }
+
     bool supports(Capability capability) const override;
     void notifyAddition(Okular::Annotation* annotation, int page) override;
     void notifyModification(const Okular::Annotation* annotation, int page, bool appearanceChanged) override;
@@ -33,6 +36,7 @@ public:
 private:
     Plugin::WorkerClient* m_backend = nullptr;
     MutationCallback m_mutationCallback;
+    bool m_available = false;
 };
 
 } // namespace Mu::Generator::Proxy

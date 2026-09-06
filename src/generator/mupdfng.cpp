@@ -109,16 +109,23 @@ Main::Main(QObject* parent, const QVariantList& args)
         MU_LOG(
             warning, "Mu::Generator::Main", std::string("okular-mupdf-worker died with code ") + std::to_string(code));
         m_ocrController->reset();
-        if (m_formsDirty || m_annotationsDirty) {
-            const QString message = m_formsDirty && m_annotationsDirty
+        m_annotationProxy.setAvailable(false);
+        m_formCoordinator->setAvailable(false);
+        if (m_annotationsDirty) {
+            const QString message = m_formsDirty
                 ? i18n("The document renderer stopped while unsaved form and annotation changes were present. "
-                       "Those changes were lost.")
-                : m_formsDirty
-                ? i18n(
-                      "The document renderer stopped while unsaved form changes were present. Those changes were lost.")
-                : i18n("The document renderer stopped while unsaved annotation changes were present. Those changes "
-                       "were lost.");
+                       "Those changes could not be recovered. Restart Okular to try again.")
+                : i18n("The document renderer stopped while unsaved annotation changes were present. "
+                       "Those changes could not be recovered. Restart Okular to try again.");
             failClosed(message);
+            return;
+        }
+        if (m_formsDirty) {
+            const QString message =
+                i18n("The document renderer stopped while unsaved form changes were present. Those changes were lost.");
+            Q_EMIT warning(message, 10000);
+            m_formsDirty = false;
+            m_annotationsDirty = false;
         }
     });
     connect(
@@ -432,6 +439,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     m_formsDirty = false;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
+    m_annotationProxy.setAvailable(true);
     return Okular::Document::OpenSuccess;
 }
 
@@ -630,6 +638,7 @@ void Main::clearWorkerDerivedState()
         m_formCoordinator->clear();
         m_formCoordinator->setAvailable(false);
     }
+    m_annotationProxy.setAvailable(false);
 }
 
 // Drops worker-derived UI state while the placeholder withholds the document,
@@ -755,11 +764,6 @@ void Main::observeOcrFocus()
 
 bool Main::reopenWorkerDocument()
 {
-    if (m_formsDirty || m_annotationsDirty) {
-        failClosed(i18n("The document renderer restarted while unsaved changes were present. Those changes could not "
-                        "be recovered."));
-        return false;
-    }
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
 
@@ -790,6 +794,14 @@ bool Main::reopenWorkerDocument()
         return false;
     }
 
+    std::vector<Model::FormField> formFields;
+    for (const auto& page : pages)
+        formFields.insert(formFields.end(), page.formFields.begin(), page.formFields.end());
+    m_formCoordinator->resetFields(formFields);
+    m_formsDirty = false;
+    m_annotationsDirty = false;
+    m_formCoordinator->setAvailable(true);
+    m_annotationProxy.setAvailable(true);
     m_ocrController->reset();
     MU_LOG(warning, "Mu::Generator::Main", "reopened document after worker restart");
     return true;

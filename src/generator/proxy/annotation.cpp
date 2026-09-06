@@ -48,13 +48,13 @@ Annotation::~Annotation() = default;
 
 bool Annotation::supports(Capability capability) const
 {
-    return m_backend && m_backend->isConnected()
+    return m_available && m_backend && m_backend->isConnected()
         && (capability == Addition || capability == Modification || capability == Removal);
 }
 
 void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 {
-    if (!m_backend || !m_backend->isConnected() || !annotation)
+    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation)
         return;
     if (auto* signature = dynamic_cast<Okular::SignatureAnnotation*>(annotation)) {
         signature->setPage(page);
@@ -102,7 +102,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 
 void Annotation::notifyModification(const Okular::Annotation* annotation, int page, bool appearanceChanged)
 {
-    if (!m_backend || !m_backend->isConnected() || !annotation)
+    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation)
         return;
     const auto model = Conversion::toModel(annotation);
     if (!model)
@@ -117,7 +117,7 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
 
 void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
 {
-    if (!m_backend || !m_backend->isConnected() || !annotation)
+    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation)
         return;
     const QVariant id = annotation->nativeId();
     if (!id.isValid() || id.toString().isEmpty())
