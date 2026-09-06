@@ -415,8 +415,6 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     // Fit oversized requests before allocation. The frame remains valid while
     // Okular scales the returned lower-resolution image into its original bounds.
     const auto fitted = fitRenderRequestToFrameBudget(render);
-    if (!isValidRenderDimensions(fitted.request.width, fitted.request.height, fitted.request.tile.has_value()))
-        return failure(request.id, ErrorCode::ResourceLimit, "render", "fitted render dimensions are invalid");
     std::optional<DocumentBase::RenderTile> tile;
     if (fitted.request.tile) {
         const auto& t = *fitted.request.tile;
