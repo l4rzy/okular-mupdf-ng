@@ -2,7 +2,7 @@
 pkgbase=okular-mupdf-ng
 pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
-pkgver=0.1.10
+pkgver=0.1.16
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
 arch=('x86_64')
@@ -46,43 +46,53 @@ prepare() {
 }
 
 build() {
-  # USE_SYSTEM_MUPDF is resolved at configure time, so each link variant needs
-  # its own build directory. Bundled MuPDF is compiled only for the static one.
-  # The dynamic variant accepts the MuPDF version actually shipped by Arch,
-  # which lags the bundled pin; verified to link against 1.28.0.
-  local _variant _mupdf_mode
-  local -a _mupdf_flags
-  for _variant in static dynamic; do
-    if [ "$_variant" = dynamic ]; then
-      _mupdf_mode=ON
-      _mupdf_flags=(-DMUPDF_SYSTEM_MIN_VERSION=$_mupdf_min_ver)
-    else
-      _mupdf_mode=OFF
-      _mupdf_flags=()
-    fi
-    cmake -B "build-$_variant" -S "$srcdir/$_pkgname" -G Ninja \
-      -DCMAKE_BUILD_TYPE=None \
-      -DCMAKE_C_COMPILER=gcc \
-      -DCMAKE_CXX_COMPILER=g++ \
-      -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
-      -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
-      -DCMAKE_LINKER_TYPE=MOLD \
-      -DUSE_SYSTEM_MUPDF=$_mupdf_mode \
-      "${_mupdf_flags[@]}" \
-      -DBUILD_TESTING=ON
-    cmake --build "build-$_variant"
-  done
+  # Single build directory flipped between link variants: only
+  # MuPDF-dependent targets (worker core, generator adapters, tests) recompile
+  # when USE_SYSTEM_MUPDF changes, while MuPDF-agnostic objects are reused.
+  # Each variant is staged before the flip overwrites it. The dynamic variant
+  # accepts the MuPDF version actually shipped by Arch, which lags the bundled
+  # pin; verified to link against 1.28.0.
+  local _builddir="$srcdir/build-unified"
+  rm -rf "$srcdir/stage-static" "$srcdir/stage-dynamic"
+  cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_C_COMPILER=gcc \
+    -DCMAKE_CXX_COMPILER=g++ \
+    -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
+    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+    -DCMAKE_LINKER_TYPE=MOLD \
+    -DUSE_SYSTEM_MUPDF=OFF \
+    -DBUILD_TESTING=ON
+  cmake --build "$_builddir"
+  ctest --test-dir "$_builddir" --output-on-failure
+  DESTDIR="$srcdir/stage-static" cmake --install "$_builddir"
+  cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_C_COMPILER=gcc \
+    -DCMAKE_CXX_COMPILER=g++ \
+    -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
+    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+    -DCMAKE_LINKER_TYPE=MOLD \
+    -DUSE_SYSTEM_MUPDF=ON \
+    -DMUPDF_SYSTEM_MIN_VERSION=$_mupdf_min_ver \
+    -DBUILD_TESTING=ON
+  cmake --build "$_builddir"
+  ctest --test-dir "$_builddir" --output-on-failure
+  DESTDIR="$srcdir/stage-dynamic" cmake --install "$_builddir"
 }
 
 check() {
-  ctest --test-dir build-static --output-on-failure
-  ctest --test-dir build-dynamic --output-on-failure
+  # Tests already run per variant in build() before each staged install (the
+  # second build overwrites the first variant's binaries); just verify both
+  # stages were produced.
+  test -f "$srcdir/stage-static/${_PREFIX#/}/lib/okular-mupdf-ng/okular-mupdf-worker" \
+    && test -f "$srcdir/stage-dynamic/${_PREFIX#/}/lib/okular-mupdf-ng/okular-mupdf-worker"
 }
 
 package_okular-mupdf-ng() {
   pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, statically linked MuPDF)"
   conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
-  DESTDIR="$pkgdir" cmake --install build-static
+  cp -a "$srcdir/stage-static/." "$pkgdir"/
 }
 
 package_okular-mupdf-ng-dynamic() {
@@ -91,5 +101,5 @@ package_okular-mupdf-ng-dynamic() {
   depends=("${_common_depends[@]}" "libmupdf>=${_mupdf_min_ver}")
   provides=(okular-mupdf-ng)
   conflicts=(okular-mupdf-ng okular-mupdf-ng-git)
-  DESTDIR="$pkgdir" cmake --install build-dynamic
+  cp -a "$srcdir/stage-dynamic/." "$pkgdir"/
 }
