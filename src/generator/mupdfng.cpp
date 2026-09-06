@@ -45,6 +45,7 @@
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/ocr/ocr.hpp"
+#include "plugin/util/render_image.hpp"
 #include "plugin/util/signature_image.hpp"
 #include "plugin/util/temp_dir.hpp"
 #include "shared/compat.hpp"
@@ -1014,11 +1015,17 @@ QImage Main::image(Okular::PixmapRequest* request)
 
     // Rendering is isolated in the worker process.
     if (m_worker.isConnected()) {
+        // Okular validates the returned pixmap against its original geometry,
+        // whose right/bottom edges are inclusive, while the worker renders a
+        // half-open clamped rectangle. Keep both sizes so the generator can
+        // normalize the frame without blocking the transport thread.
+        QSize expectedSize(request->width(), request->height());
         QRect tile;
         if (request->isTile()) {
             // Use 64-bit intermediates before clamping: malformed or rounded
             // normalized rectangles must not overflow the pixel coordinates.
             const QRect requested = request->normalizedRect().geometry(request->width(), request->height());
+            expectedSize = requested.size();
             const qint64 rawLeft = requested.x();
             const qint64 rawTop = requested.y();
             const qint64 rawRight = rawLeft + requested.width();
@@ -1037,9 +1044,21 @@ QImage Main::image(Okular::PixmapRequest* request)
                          static_cast<int>(bottom - top));
         }
         QImage img = m_worker.render(pageNum, request->width(), request->height(), tile);
-        if (!img.isNull())
-            return img;
-        MU_LOG(warning, "Mu::Generator::Main", std::string("Worker render failed for page ") + std::to_string(pageNum));
+        if (img.isNull()) {
+            MU_LOG(warning,
+                   "Mu::Generator::Main",
+                   std::string("Worker render failed for page ") + std::to_string(pageNum));
+            return { };
+        }
+        const QSize sourceSize = img.size();
+        img = Plugin::Util::normalizeRenderImage(std::move(img), expectedSize);
+        if (img.size() != sourceSize)
+            MU_LOG(debug,
+                   "Mu::Generator::Main",
+                   "normalized render frame from " + std::to_string(sourceSize.width()) + "x"
+                       + std::to_string(sourceSize.height()) + " to " + std::to_string(img.width()) + "x"
+                       + std::to_string(img.height()));
+        return img;
     }
     return { };
 }

@@ -93,6 +93,21 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void renderFittedFrameStaysWithinBudget()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), ::Mu::Model::OpenStatus::Success);
+
+        // This exceeds the worker's 128 MiB frame budget, so the transport
+        // returns the fitted frame as-is; the generator normalizes it later.
+        const QImage image = m_client.render(0, 6000, 6000);
+        QVERIFY(!image.isNull());
+        QVERIFY(image.width() < 6000 && image.height() < 6000);
+        QVERIFY(image.sizeInBytes() <= 128 * 1024 * 1024);
+
+        QVERIFY(m_client.close());
+    }
+
     void repairedDocumentStateFlowsThroughIpc()
     {
         QTemporaryDir dir;

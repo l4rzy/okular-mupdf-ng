@@ -75,6 +75,10 @@ add_layer_test(test_plugin_epubcache plugin/test_epubcache.cpp plugin)
 target_include_directories(test_plugin_epubcache PRIVATE ../src)
 target_link_libraries(test_plugin_epubcache PRIVATE Qt6::Core mupdf_plugin_cache)
 
+add_layer_test(test_plugin_renderimage plugin/test_render_image.cpp plugin)
+target_include_directories(test_plugin_renderimage PRIVATE ../src)
+target_link_libraries(test_plugin_renderimage PRIVATE Qt6::Gui mupdf_plugin_util)
+
 # NSS initialization is process-global, so exercise each runtime mode in a
 # separate test process even though the modes share one test executable.
 add_executable(test_nss_runtime
