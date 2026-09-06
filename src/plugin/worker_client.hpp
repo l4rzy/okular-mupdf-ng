@@ -68,6 +68,7 @@ public:
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const;
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request) const;
     [[nodiscard]] Model::SandboxStatus sandboxStatus() const;
+    [[nodiscard]] std::string engineVersion() const;
 signals:
     void workerDied(int exitCode);
     /// A fresh worker is available. It deliberately has no document open.
@@ -96,10 +97,10 @@ private:
     quint64 m_restartSequence = 0;
     bool m_restartDisabled = false;
     bool m_stopping = false;
-    // Cached copy of the worker's sandbox status, refreshed only at
+    // Cached handshake facts about the worker, refreshed only at
     // synchronized points (start, stop, worker death) so generator-thread
     // reads need no cross-thread round trip.
-    Model::SandboxStatus m_sandboxStatus;
+    Model::PingResponse m_workerInfo;
 };
 
 } // namespace Mu::Plugin

@@ -543,25 +543,23 @@ void Main::notifyDegradedSandbox()
 
 // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
 // mirroring the poppler generator's GeneratorExtraDescription. The runtime
-// version of the worker binary is authoritative; when it diverges from the
-// MuPDF version pinned in cmake/mupdf.version, both are disclosed.
+// engine version cached from the worker ping is authoritative; when it
+// diverges from the MuPDF version pinned in cmake/mupdf.version, both are
+// disclosed. An empty version (disconnected or old worker) falls back to
+// describing the pinned version.
 QString Main::generatorExtraDescription() const
 {
     QString engineVersion;
-    if (m_worker.isConnected()) {
-        const auto info = m_worker.getDocumentInfo({ QStringLiteral("engineVersion") });
-        const auto it = info.values.find("engineVersion");
-        if (it != info.values.end())
-            engineVersion = QString::fromStdString(it->second);
-    }
+    if (m_worker.isConnected())
+        engineVersion = QString::fromStdString(m_worker.engineVersion());
 
     QString result;
     if (engineVersion.isEmpty()) {
-        result = i18n("Using MuPDF %1", QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
+        result = i18n("Pinned against MuPDF %1", QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
     } else if (engineVersion.toStdString() == Mu::MUPDF_VERSION) {
         result = i18n("Using MuPDF %1", engineVersion);
     } else {
-        result = i18n("Using MuPDF %1\nBuilt against MuPDF %2",
+        result = i18n("Using MuPDF %1\nPinned against MuPDF %2",
                       engineVersion,
                       QString::fromStdString(std::string(Mu::MUPDF_VERSION)));
     }

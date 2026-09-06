@@ -1194,7 +1194,7 @@ private slots:
         QCOMPARE(brokenMeta.values.at("repaired"), std::string("true"));
     }
 
-    void metadataReportsDatesAndEngineVersion()
+    void metadataReportsDates()
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
@@ -1240,19 +1240,18 @@ private slots:
         QVERIFY2(doc.openFd(::dup(infoFile.handle()), "info.pdf", &error), error.c_str());
 
         // Unfiltered query: date values are normalized to ISO 8601 UTC
-        // instants; engine-common values are present.
+        // instants; the engine version is reported via ping, not metadata.
         const auto all = doc.metadata({ }, &error);
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(all.values.at("creationDate"), std::string("2024-01-01T11:00:00Z"));
         QCOMPARE(all.values.at("modificationDate"), std::string("2024-02-03T04:05:06Z"));
-        QCOMPARE(all.values.at("engineVersion"), std::string(FZ_VERSION));
+        QCOMPARE(all.values.count("engineVersion"), size_t(0));
 
         // A non-empty key list filters common values like every other key.
         const auto filtered = doc.metadata({ "creationDate" }, &error);
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(filtered.values.size(), size_t(1));
         QCOMPARE(filtered.values.count("modificationDate"), size_t(0));
-        QCOMPARE(filtered.values.count("engineVersion"), size_t(0));
     }
 };
 

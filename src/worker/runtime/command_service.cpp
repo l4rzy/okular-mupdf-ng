@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <mupdf/fitz/version.h>
 #include <string_view>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -883,7 +884,7 @@ ResponseMessage CommandService::ocrResult(const RequestMessage& r, const OcrResu
 
 ResponseMessage CommandService::ping(std::uint64_t id) const
 {
-    return success(id, PingResponse { std::string(::Mu::IPC::COMPAT), ::getpid(), m_session.sandbox });
+    return success(id, PingResponse { std::string(::Mu::IPC::COMPAT), ::getpid(), m_session.sandbox, FZ_VERSION });
 }
 
 ResponseMessage CommandService::textBoxes(const RequestMessage& r, const TextBoxesRequest& b)

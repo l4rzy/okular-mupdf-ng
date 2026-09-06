@@ -33,8 +33,8 @@ WorkerClient::WorkerClient(QObject* parent)
         &WorkerTransport::workerDied,
         this,
         [this](int exitCode) {
-            // The worker is gone; its sandbox status no longer applies.
-            m_sandboxStatus = { };
+            // The worker is gone; its cached handshake facts no longer apply.
+            m_workerInfo = { };
             Q_EMIT workerDied(exitCode);
             scheduleRestart();
         },
@@ -78,15 +78,15 @@ bool WorkerClient::startWorker(const QString& binaryPath)
     // remains thread-confined.
     bool result = false;
     const QStringList tessDataDirectories = m_tessDataDirectories;
-    Model::SandboxStatus status;
+    Model::PingResponse workerInfo;
     QMetaObject::invokeMethod(
         m_transport,
-        [transport = m_transport, binaryPath, tessDataDirectories, &result, &status] {
-            result = transport->start(binaryPath, tessDataDirectories, &status);
+        [transport = m_transport, binaryPath, tessDataDirectories, &result, &workerInfo] {
+            result = transport->start(binaryPath, tessDataDirectories, &workerInfo);
         },
         Qt::BlockingQueuedConnection);
-    // The blocking call provides the happens-before edge for the status.
-    m_sandboxStatus = result ? status : Model::SandboxStatus { };
+    // The blocking call provides the happens-before edge for the cached info.
+    m_workerInfo = result ? workerInfo : Model::PingResponse { };
     return result;
 }
 
@@ -98,7 +98,7 @@ void WorkerClient::stop()
     m_restartTimer.stop();
     if (m_transport)
         QMetaObject::invokeMethod(m_transport, "stop", Qt::BlockingQueuedConnection);
-    m_sandboxStatus = { };
+    m_workerInfo = { };
 }
 
 bool WorkerClient::isConnected() const
@@ -291,7 +291,12 @@ bool WorkerClient::setSettings(const DocumentSettings& settings)
 
 SandboxStatus WorkerClient::sandboxStatus() const
 {
-    return m_sandboxStatus;
+    return m_workerInfo.sandbox;
+}
+
+std::string WorkerClient::engineVersion() const
+{
+    return m_workerInfo.engineVersion;
 }
 
 void WorkerClient::pruneRestartHistory()

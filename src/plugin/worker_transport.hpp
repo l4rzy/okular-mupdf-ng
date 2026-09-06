@@ -59,7 +59,7 @@ public:
     // channel, FD channel, and temporary paths must never be accessed by the
     // generator thread directly.
     Q_INVOKABLE bool
-    start(const QString& hint, const QStringList& tessDataDirectories, Model::SandboxStatus* sandboxStatus);
+    start(const QString& hint, const QStringList& tessDataDirectories, Model::PingResponse* workerInfo);
     Q_INVOKABLE void stop();
     Q_INVOKABLE void abort();
     Q_INVOKABLE bool isConnected() const;

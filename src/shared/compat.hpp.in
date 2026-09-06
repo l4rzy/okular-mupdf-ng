@@ -6,8 +6,7 @@
 namespace Mu {
 
 // MuPDF version this project builds against (cmake/mupdf.version). The
-// worker additionally reports its runtime MuPDF version as the
-// "engineVersion" metadata key.
+// worker additionally reports its runtime MuPDF version in the ping response.
 inline constexpr std::string_view MUPDF_VERSION = "@MUPDF_REQUIRED_VERSION@";
 
 } // namespace Mu

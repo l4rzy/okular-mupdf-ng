@@ -117,7 +117,7 @@ void WorkerTransport::releaseFrameSlot(quint64 session, quint64 slotId, quint64 
 
 bool WorkerTransport::start(const QString& binaryPath,
                             const QStringList& tessDataDirectories,
-                            Model::SandboxStatus* sandboxStatus)
+                            Model::PingResponse* workerInfo)
 {
     // Phase 1: reset the previous session. Start doubles as the recovery path:
     // a connected transport is stopped and a partial one is cleaned so both
@@ -190,9 +190,9 @@ bool WorkerTransport::start(const QString& binaryPath,
     }
 
     // Phase 6: handshake and enable the working session. Ping reports protocol
-    // compatibility and the sandbox status; the notifier is enabled only while
-    // no synchronous RPC is in flight, because call() drains notifications as
-    // part of its response loop.
+    // compatibility, sandbox status, and engine version; the notifier is
+    // enabled only while no synchronous RPC is in flight, because call()
+    // drains notifications as part of its response loop.
     auto pong = call(PingRequest { std::string(IPC::COMPAT) });
     if (!pong || pong->error) {
         return failStart();
@@ -201,8 +201,8 @@ bool WorkerTransport::start(const QString& binaryPath,
     if (!p || p->compat != IPC::COMPAT) {
         return failStart();
     }
-    if (sandboxStatus)
-        *sandboxStatus = p->sandbox;
+    if (workerInfo)
+        *workerInfo = *p;
     m_notifier = std::make_unique<QSocketNotifier>(m_ctrl.fd(), QSocketNotifier::Type::Read, this);
     connect(m_notifier.get(), &QSocketNotifier::activated, this, &WorkerTransport::processIncomingNotifications);
     return true;

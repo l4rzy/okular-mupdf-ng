@@ -103,7 +103,7 @@ private slots:
                 return;
             requestDecoded = ::Mu::IPC::ZppCodec::decode(frame, &request, &error);
             const ::Mu::Model::ResponseMessage response {
-                9, ::Mu::Model::PingResponse { std::string(::Mu::IPC::COMPAT), ::getpid(), { } }, std::nullopt
+                9, ::Mu::Model::PingResponse { std::string(::Mu::IPC::COMPAT), ::getpid(), { }, { } }, std::nullopt
             };
             const auto encoded = ::Mu::IPC::ZppCodec::encode(response, &error);
             if (encoded)

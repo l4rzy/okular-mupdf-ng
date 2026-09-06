@@ -12,7 +12,6 @@
 
 extern "C" {
 #include <mupdf/fitz.h>
-#include <mupdf/fitz/version.h>
 #include <mupdf/pdf.h>
 }
 
@@ -141,13 +140,10 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
         return keys.empty() || std::find(keys.begin(), keys.end(), name) != keys.end();
     };
 
-    // Engine-common values: the MuPDF version compiled into this worker binary
-    // is authoritative for the generator, and Info-dictionary date strings are
-    // normalized to ISO 8601 UTC so the generator can parse them with
-    // QDateTime::fromString(..., Qt::ISODate). Common values are excluded from
-    // the metadata hash, which covers document identity only.
-    if (wanted("engineVersion"))
-        result.values.emplace("engineVersion", FZ_VERSION);
+    // Info-dictionary date strings are normalized to ISO 8601 UTC so the
+    // generator can parse them with QDateTime::fromString(..., Qt::ISODate).
+    // The repair flag is excluded from the metadata hash, which covers
+    // document identity only.
     if (wanted("repaired")) {
         // MuPDF repairs broken xref tables silently; surface the repair state
         // so the generator can warn the user. Queried inline rather than

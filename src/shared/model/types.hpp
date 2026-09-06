@@ -877,11 +877,12 @@ struct AnnotationResponse {
     AnnotationHandle handle;
 };
 
-/// Compatibility and sandbox status returned by a ping.
+/// Compatibility, sandbox status, and engine version returned by a ping.
 struct PingResponse {
     std::string compat;
     std::int64_t pid = 0;
     SandboxStatus sandbox;
+    std::string engineVersion;
 };
 
 /// Signing status returned after the worker processes a sign request.

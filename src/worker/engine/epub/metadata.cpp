@@ -10,7 +10,6 @@
 
 extern "C" {
 #include <mupdf/fitz.h>
-#include <mupdf/fitz/version.h>
 }
 
 #include "shared/model/types.hpp"
@@ -95,13 +94,9 @@ DocumentMetadata EpubDocument::metadata(const std::vector<std::string>& keys, st
         return keys.empty() || std::find(keys.begin(), keys.end(), name) != keys.end();
     };
 
-    // Engine-common values: the MuPDF version compiled into this worker binary
-    // is authoritative for the generator, and the runtime records whether the
-    // open required a non-empty password (always false for EPUB). They are
-    // excluded from the metadata hash, which covers document identity only.
-    if (wanted("engineVersion"))
-        result.values.emplace("engineVersion", FZ_VERSION);
-    // EPUB documents carry no xref structure and are never repaired.
+    // EPUB documents carry no xref structure and are never repaired. The
+    // repair flag is excluded from the metadata hash, which covers document
+    // identity only.
     if (wanted("repaired"))
         result.values.emplace("repaired", "false");
 

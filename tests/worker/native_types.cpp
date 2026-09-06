@@ -7,6 +7,7 @@
 #include "shared/protocol/limits.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 #include <QTest>
+#include <mupdf/fitz/version.h>
 
 class TestNativeWorkerTypes : public QObject {
     Q_OBJECT
@@ -23,14 +24,15 @@ private slots:
         QVERIFY(::Mu::IPC::ZppCodec::decode(*requestBytes, &decodedRequest, &error));
         QCOMPARE(std::get<Model::PingRequest>(decodedRequest.payload).compat, std::string("0.2.3"));
 
-        const Model::ResponseMessage response { 5,
-                                                Model::PingResponse { std::string(::Mu::IPC::COMPAT), 123, { } },
-                                                std::nullopt };
+        const Model::ResponseMessage response {
+            5, Model::PingResponse { std::string(::Mu::IPC::COMPAT), 123, { }, "1.26.0" }, std::nullopt
+        };
         const auto responseBytes = ::Mu::IPC::ZppCodec::encode(response, &error);
         QVERIFY(responseBytes);
         Model::ResponseMessage decodedResponse;
         QVERIFY(::Mu::IPC::ZppCodec::decode(*responseBytes, &decodedResponse, &error));
         QCOMPARE(std::get<Model::PingResponse>(decodedResponse.payload).compat, std::string(::Mu::IPC::COMPAT));
+        QCOMPARE(std::get<Model::PingResponse>(decodedResponse.payload).engineVersion, std::string("1.26.0"));
     }
 
     void typedRequestRoundTrip()
@@ -292,7 +294,7 @@ private slots:
 
         const Model::ResponseMessage contradictory {
             10,
-            Model::PingResponse { "0.6.0", 1, { } },
+            Model::PingResponse { "0.6.0", 1, { }, { } },
             Model::Error { Model::ErrorCode::Internal, "test", "error" },
         };
         const auto contradictoryBytes = ::Mu::IPC::ZppCodec::encode(contradictory, &error);
@@ -348,6 +350,7 @@ private slots:
         QVERIFY(!response.error);
         QVERIFY(std::get_if<::Mu::Model::PingResponse>(&response.payload));
         QCOMPARE(std::get<::Mu::Model::PingResponse>(response.payload).compat, std::string(::Mu::IPC::COMPAT));
+        QCOMPARE(std::get<::Mu::Model::PingResponse>(response.payload).engineVersion, std::string(FZ_VERSION));
 
         const auto invalidRelease = service.dispatch({ 10, ::Mu::Model::ReleaseFrameSlotRequest { } });
         QVERIFY(invalidRelease.error);
