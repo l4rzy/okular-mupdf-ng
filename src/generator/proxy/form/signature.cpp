@@ -11,6 +11,7 @@
 
 #ifdef MUPDF_FORMFIELD_REMOTE_SIGNING
 #include "plugin/util/signature_image.hpp"
+#include "plugin/util/signing_timestamp.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/model/types.hpp"
 #endif
@@ -208,6 +209,7 @@ std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSigna
     }
     const auto bgImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
         data.backgroundImagePath(), rect().width(), rect().height());
+    const auto signingTimestamp = Plugin::Util::SigningTimestamp::current();
     const auto result = m_backend->sign({ { },
                                           m_data.page,
                                           { },
@@ -216,7 +218,9 @@ std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSigna
                                           data.reason().toStdString(),
                                           data.location().toStdString(),
                                           m_data.objectNumber,
-                                          bgImage },
+                                          bgImage,
+                                          signingTimestamp.epochSeconds,
+                                          signingTimestamp.displayDate.toStdString() },
                                         data.password(),
                                         newPath);
     switch (result.result) {

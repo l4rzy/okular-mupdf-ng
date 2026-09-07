@@ -791,6 +791,10 @@ struct SignRequest {
     /// Existing widget object number, or a negative value to create a widget.
     std::int32_t existingFieldObjectNumber = -1;
     std::vector<std::uint8_t> backgroundImage;
+    /// Signing timestamp (epoch seconds) shared by /M and the appearance; 0 = worker uses time(NULL).
+    std::int64_t signingEpochSeconds = 0;
+    /// Pre-formatted appearance date ("Sep 7, 2026 13:14 CDT"); empty = worker-side fallback format.
+    std::string signingDisplayDate;
 };
 
 /// All request body alternatives supported by the worker protocol.

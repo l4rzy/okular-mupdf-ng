@@ -10,6 +10,7 @@
 #include "generator/conversion/annotation.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/signature_image.hpp"
+#include "plugin/util/signing_timestamp.hpp"
 #include "plugin/worker_client.hpp"
 
 namespace Mu::Generator::Proxy {
@@ -71,6 +72,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                     !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
                 const auto bgImage =
                     Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
+                const auto signingTimestamp = Plugin::Util::SigningTimestamp::current();
                 return signingResult(backend->sign({ { },
                                                      page,
                                                      { bounds.left, bounds.top, bounds.right, bounds.bottom },
@@ -79,7 +81,9 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                                                      data.reason().toStdString(),
                                                      data.location().toStdString(),
                                                      -1,
-                                                     bgImage },
+                                                     bgImage,
+                                                     signingTimestamp.epochSeconds,
+                                                     signingTimestamp.displayDate.toStdString() },
                                                    data.password(),
                                                    fileName));
             });

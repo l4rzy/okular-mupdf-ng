@@ -1,8 +1,10 @@
 #include "engine/pdf/document.hpp"
+#include "engine/signature_date.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QScopeGuard>
 #include <QTest>
 
 #include <unistd.h>
@@ -89,6 +91,27 @@ private slots:
             }
         }
         QVERIFY2(foundSignedField, "worker found no signed signature field");
+    }
+
+    void formatsSignatureDate()
+    {
+        // Pin the timezone so expectations are deterministic.
+        const QByteArray previousTimeZone = qgetenv("TZ");
+        ::setenv("TZ", "America/Chicago", 1);
+        ::tzset();
+        const auto restoreTimeZone = qScopeGuard([&] {
+            if (previousTimeZone.isEmpty())
+                ::unsetenv("TZ");
+            else
+                ::setenv("TZ", previousTimeZone.constData(), 1);
+            ::tzset();
+        });
+
+        using Mu::Worker::Engine::formatSignatureDate;
+        // TZ=America/Chicago: 2026-09-07 13:14 CDT.
+        QCOMPARE(QString::fromStdString(formatSignatureDate(1'788'804'840)), QStringLiteral("Sep 7, 2026 13:14 CDT"));
+        // Epoch 0: two-digit day must not be stripped.
+        QCOMPARE(QString::fromStdString(formatSignatureDate(0)), QStringLiteral("Dec 31, 1969 18:00 CST"));
     }
 };
 

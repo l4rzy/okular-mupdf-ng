@@ -91,7 +91,7 @@ add_library(mupdf_plugin_ocr STATIC plugin/ocr/controller.cpp)
 target_include_directories(mupdf_plugin_ocr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache mupdf_plugin_worker)
 
-add_library(mupdf_plugin_util STATIC plugin/util/signature_image.cpp plugin/util/render_image.cpp)
+add_library(mupdf_plugin_util STATIC plugin/util/signature_image.cpp plugin/util/render_image.cpp plugin/util/signing_timestamp.cpp)
 target_include_directories(mupdf_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mupdf_plugin_util PUBLIC Qt6::Gui)
 

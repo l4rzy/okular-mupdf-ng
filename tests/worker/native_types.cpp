@@ -228,13 +228,23 @@ private slots:
     void typedDebugFormattingIncludesPayload()
     {
         using namespace Mu;
-        const Model::RequestMessage request {
-            12,
-            Model::SignRequest { { 9 }, 2, { 0.1, 0.2, 0.8, 0.9 }, "cert", "Subject", "reason", "location", -1, { } }
-        };
+        const Model::RequestMessage request { 12,
+                                              Model::SignRequest { { 9 },
+                                                                   2,
+                                                                   { 0.1, 0.2, 0.8, 0.9 },
+                                                                   "cert",
+                                                                   "Subject",
+                                                                   "reason",
+                                                                   "location",
+                                                                   -1,
+                                                                   { },
+                                                                   1'788'804'840,
+                                                                   "Sep 7, 2026 13:14 CDT" } };
         const auto requestText = ::Mu::IPC::Debug::request(request);
         QVERIFY(requestText.rfind("[sign] id=12", 0) == 0);
         QVERIFY(requestText.find("sign") != std::string::npos);
+        QVERIFY(requestText.find("signingEpoch=1788804840") != std::string::npos);
+        QVERIFY(requestText.find("displayDate=\"Sep 7, 2026 13:14 CDT\"") != std::string::npos);
         QVERIFY(requestText.find("password") == std::string::npos);
         const Model::NotificationMessage notification { Model::SignInput { 4, "nonce", "cert", { 0, 1, 255 } } };
         const auto notificationText = ::Mu::IPC::Debug::notification(notification);

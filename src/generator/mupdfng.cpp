@@ -47,6 +47,7 @@
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/util/render_image.hpp"
 #include "plugin/util/signature_image.hpp"
+#include "plugin/util/signing_timestamp.hpp"
 #include "plugin/util/temp_dir.hpp"
 #include "shared/compat.hpp"
 #include "shared/logging.hpp"
@@ -1340,6 +1341,7 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
             return { Okular::KeyMissing, QStringLiteral("Signing certificate was not found") };
         const auto bgImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
             data.backgroundImagePath(), rect.width(), rect.height());
+        const auto signingTimestamp = Plugin::Util::SigningTimestamp::current();
         const auto result = m_worker.sign({ { },
                                             data.page() >= 0 ? data.page() : 0,
                                             { rect.left, rect.top, rect.right, rect.bottom },
@@ -1348,7 +1350,9 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
                                             data.reason().toStdString(),
                                             data.location().toStdString(),
                                             -1,
-                                            bgImage },
+                                            bgImage,
+                                            signingTimestamp.epochSeconds,
+                                            signingTimestamp.displayDate.toStdString() },
                                           data.password(),
                                           rFilename);
         switch (result.result) {

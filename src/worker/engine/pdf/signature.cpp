@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <format>
 #include <optional>
 #include <sys/stat.h>
@@ -18,6 +19,7 @@ extern "C" {
 }
 
 #include "engine/constants.hpp"
+#include "engine/signature_date.hpp"
 #include "engine/signer.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
@@ -396,14 +398,71 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
             }
         }
 
-        // Step 3: Register signer with MuPDF and compute incremental write
-        pdf_sign_signature(m_context,
-                           widget,
-                           signer,
-                           PDF_SIGNATURE_DEFAULT_APPEARANCE,
-                           graphic,
-                           request.reason.empty() ? nullptr : request.reason.c_str(),
-                           request.location.empty() ? nullptr : request.location.c_str());
+        // Step 3: Register signer with MuPDF and compute incremental write.
+        // The appearance info text is composed explicitly instead of calling
+        // pdf_sign_signature so the date can use the plugin-provided friendly
+        // format; MuPDF's built-in text hardcodes an ISO-8601 timestamp.
+        const std::int64_t signingTime =
+            request.signingEpochSeconds > 0 ? request.signingEpochSeconds : static_cast<std::int64_t>(::time(nullptr));
+        const char* reason = request.reason.empty() ? nullptr : request.reason.c_str();
+        const char* location = request.location.empty() ? nullptr : request.location.c_str();
+        const char* signerCn =
+            request.certificateSubjectCommonName.empty() ? nullptr : request.certificateSubjectCommonName.c_str();
+        const std::string displayDate =
+            !request.signingDisplayDate.empty() ? request.signingDisplayDate : formatSignatureDate(signingTime);
+
+        fz_try(m_context)
+        {
+            char* info = nullptr;
+            fz_display_list* dlist = nullptr;
+            pdf_pkcs7_distinguished_name* dn = signer->get_signing_name(m_context, signer);
+            fz_var(info);
+            fz_var(dn);
+            fz_var(dlist);
+            fz_try(m_context)
+            {
+                // date -1 suppresses MuPDF's ISO date line; the friendly date is appended below.
+                info = pdf_signature_info(m_context, signerCn, dn, reason, location, -1, 1);
+                std::string text = info ? info : "";
+                if (!displayDate.empty()) {
+                    if (!text.empty())
+                        text += '\n';
+                    text += "Date: ";
+                    text += displayDate;
+                }
+
+                const fz_rect rect = pdf_annot_rect(m_context, widget);
+                const fz_text_language lang = pdf_annot_language(m_context, widget);
+                const int logo = PDF_SIGNATURE_DEFAULT_APPEARANCE & PDF_SIGNATURE_SHOW_LOGO;
+                const char* appearanceText = text.c_str(); // consumed within this scope
+                if (graphic)
+                    dlist =
+                        pdf_signature_appearance_signed(m_context, rect, lang, graphic, nullptr, appearanceText, logo);
+                else if (PDF_SIGNATURE_DEFAULT_APPEARANCE & PDF_SIGNATURE_SHOW_GRAPHIC_NAME)
+                    dlist =
+                        pdf_signature_appearance_signed(m_context, rect, lang, nullptr, signerCn, appearanceText, logo);
+                else
+                    dlist =
+                        pdf_signature_appearance_signed(m_context, rect, lang, nullptr, nullptr, appearanceText, logo);
+
+                // The same epoch drives /M, keeping the dictionary and the appearance consistent.
+                pdf_sign_signature_with_appearance(m_context, widget, signer, signingTime, dlist);
+            }
+            fz_always(m_context)
+            {
+                fz_free(m_context, info);
+                pdf_signature_drop_distinguished_name(m_context, dn);
+                fz_drop_display_list(m_context, dlist);
+            }
+            fz_catch(m_context)
+            {
+                fz_rethrow(m_context);
+            }
+        }
+        fz_catch(m_context)
+        {
+            fz_rethrow(m_context);
+        }
 
         pdf_update_open_pages(m_context, pdf);
         output = fz_new_output_with_file_ptr(m_context, file);
