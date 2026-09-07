@@ -68,6 +68,7 @@ private slots:
         settings.dpi = 300;
         settings.force = true;
         settings.notify = true;
+        settings.debounceMs = 100;
         const auto target = ::Mu::Generator::Config::ocrTargetFor(QStringLiteral("hash"), settings);
         const auto config = ::Mu::Generator::Config::ocrConfigFor(target, 12, 144, 144, settings);
 
@@ -76,6 +77,19 @@ private slots:
         QCOMPARE(config.pageCount, 12);
         QCOMPARE(config.dpi, 300);
         QVERIFY(config.force);
+        QCOMPARE(config.debounceMs, 100);
+    }
+
+    void clampsOcrDebounceDelay()
+    {
+        const int originalDebounce = MuPDFSettings::ocrDebounceMs();
+        MuPDFSettings::setOcrDebounceMs(5000);
+        QCOMPARE(::Mu::Generator::Config::readOcrSettings().debounceMs, 2000);
+        MuPDFSettings::setOcrDebounceMs(50);
+        QCOMPARE(::Mu::Generator::Config::readOcrSettings().debounceMs, 100);
+        MuPDFSettings::setOcrDebounceMs(100);
+        QCOMPARE(::Mu::Generator::Config::readOcrSettings().debounceMs, 100);
+        MuPDFSettings::setOcrDebounceMs(originalDebounce);
     }
 
     void disablesAutomaticOcrWhenNeverSelected()

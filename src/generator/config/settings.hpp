@@ -51,6 +51,8 @@ struct OcrSettings {
     unsigned triggerThreshold = 20;
     bool asynchronous = true;
     bool notify = false;
+    /// Scroll-settle delay in milliseconds before OCR fires (hidden setting).
+    int debounceMs = 250;
 };
 
 /// Stable inputs that identify an OCR cache namespace for one document.
@@ -135,8 +137,10 @@ inline Plugin::OCR::Config
 ocrConfigFor(const OcrTarget& target, int pageCount, double dpiX, double dpiY, const OcrSettings& settings)
 {
     // Combine cache identity with page/display geometry for OCR scheduling.
-    return { target.documentHash,  target.language,          pageCount, target.dpi, dpiX, dpiY, settings.force,
-             settings.autoTrigger, settings.triggerThreshold };
+    return {
+        target.documentHash,  target.language,           pageCount,          target.dpi, dpiX, dpiY, settings.force,
+        settings.autoTrigger, settings.triggerThreshold, settings.debounceMs
+    };
 }
 
 void reloadSettings();

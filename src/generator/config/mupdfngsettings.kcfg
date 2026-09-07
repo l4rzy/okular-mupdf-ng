@@ -141,5 +141,10 @@
     <entry key="TessDataDirectories" type="StringList" hidden="true">
       <default code="true">QStringList()</default>
     </entry>
+    <entry key="OcrDebounceMs" type="Int" hidden="true">
+      <default>250</default>
+      <min>100</min>
+      <max>2000</max>
+    </entry>
   </group>
 </kcfg>

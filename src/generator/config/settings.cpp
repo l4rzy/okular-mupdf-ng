@@ -83,6 +83,13 @@ std::int32_t idleTrimAggressivenessForConfig(int value) noexcept
     }
 }
 
+int ocrDebounceMsForConfig(int value) noexcept
+{
+    // Clamp the hidden scroll-settle delay; hand-edited configs can exceed
+    // the kcfg min/max, and a tiny value would OCR-storm while scrolling.
+    return std::clamp(value, 100, 2000);
+}
+
 } // namespace
 
 void reloadSettings()
@@ -150,12 +157,14 @@ OcrSettings readOcrSettings()
         settings.notify = MuPDFSettings::ocrNotify();
         settings.force = false;
         settings.autoTrigger = false;
+        settings.debounceMs = ocrDebounceMsForConfig(MuPDFSettings::ocrDebounceMs());
         return settings;
     }
     settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(language);
     settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
     settings.asynchronous = MuPDFSettings::ocrAsync();
     settings.notify = MuPDFSettings::ocrNotify();
+    settings.debounceMs = ocrDebounceMsForConfig(MuPDFSettings::ocrDebounceMs());
 
     switch (MuPDFSettings::ocrTriggerMode()) {
     case MuPDFSettings::EnumOcrTriggerMode::Five:

@@ -81,6 +81,19 @@ private Q_SLOTS:
                      testCase.expected);
         }
     }
+
+    void debounceDelayDoesNotInvalidateConfig()
+    {
+        // Retuning the settle delay must not discard queued work, so it is
+        // excluded from Config equality; scheduling inputs still compare.
+        Mu::Plugin::OCR::Config base;
+        auto retuned = base;
+        retuned.debounceMs = 100;
+        QVERIFY(base == retuned);
+        auto rescaled = base;
+        rescaled.dpi = 300;
+        QVERIFY(!(base == rescaled));
+    }
 };
 
 QTEST_MAIN(TestPluginOcrController)

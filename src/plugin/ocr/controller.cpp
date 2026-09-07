@@ -72,6 +72,11 @@ void Controller::observe(int page, Config config, std::optional<NativeTextObserv
             }
             if (nativeText && nativeText->page >= 0 && nativeText->page < config.pageCount)
                 m_nativeTextBoxCounts.insert(nativeText->page, nativeText->boxCount);
+            // Apply the configured settle delay before (re)arming, only when it
+            // changed: setInterval() restarts a running timer, and untouched
+            // observations must not extend an in-flight debounce.
+            if (m_debounce.interval() != config.debounceMs)
+                m_debounce.setInterval(config.debounceMs);
             if (m_scheduler.observe(page, config.pageCount) || configChanged)
                 m_debounce.start();
         },
