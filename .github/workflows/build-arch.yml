@@ -1,11 +1,11 @@
-name: Build Arch Linux Package (Clang)
+name: Build Arch Linux Package (GCC)
 
 on:
   workflow_call:
 
 jobs:
   package-arch:
-    name: Build Arch Linux Package (Clang)
+    name: Build Arch Linux Package (GCC)
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest

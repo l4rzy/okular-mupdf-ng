@@ -1,11 +1,11 @@
-name: Build Debian Package (Ubuntu 26.04)
+name: Build Ubuntu 26.04 Package (Clang)
 
 on:
   workflow_call:
 
 jobs:
   package-deb:
-    name: Build Debian Package (Ubuntu 26.04)
+    name: Build Ubuntu 26.04 Package (Clang)
     runs-on: ubuntu-latest
     container:
       image: ubuntu:26.04
