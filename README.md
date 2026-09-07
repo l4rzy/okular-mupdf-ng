@@ -5,8 +5,9 @@
 # okular-mupdf-ng
 
 [![GitHub license](https://img.shields.io/github/license/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING)
-[![GitHub commit activity (branch)](https://img.shields.io/github/commit-activity/m/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/commits)
-[![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml)](https://github.com/l4rzy/okular-mupdf-ng/actions)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/commits)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml)](https://github.com/l4rzy/okular-mupdf-ng/actions)
+[![Github Release](https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/releases)
 
 A secure and fast PDF and EPUB generator for Okular.
 <!-- Note -->
