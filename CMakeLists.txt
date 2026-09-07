@@ -110,6 +110,25 @@ endif()
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
+# Optional color-emoji font used to render emoji glyphs in the sandbox
+# enforcement status view. It is an optional dependency (RPM Recommends /
+# Debian Suggests) because Okular renders fine without it, and package names
+# differ per distribution, so they are resolved from /etc/os-release to keep a
+# single CPack configuration serving every packaging workflow. Overridable via
+# the cache for exotic targets; empty disables the entry.
+set(MU_EMOJI_FONT_PACKAGE "" CACHE STRING "Optional color-emoji font package name")
+if(NOT MU_EMOJI_FONT_PACKAGE AND EXISTS "/etc/os-release")
+    file(READ "/etc/os-release" _mu_os_release)
+    if(_mu_os_release MATCHES "ID_LIKE=.*opensuse|ID=opensuse")
+        set(MU_EMOJI_FONT_PACKAGE "google-noto-coloremoji-fonts")
+    elseif(_mu_os_release MATCHES "ID_LIKE=.*fedora|ID=fedora")
+        set(MU_EMOJI_FONT_PACKAGE "google-noto-color-emoji-fonts")
+    elseif(_mu_os_release MATCHES "ID_LIKE=.*debian|ID=debian|ID=ubuntu")
+        set(MU_EMOJI_FONT_PACKAGE "fonts-noto-color-emoji")
+    endif()
+    unset(_mu_os_release)
+endif()
+
 set(CPACK_PACKAGE_NAME "okular-mupdf-ng")
 set(CPACK_PACKAGE_VERSION "${MU_COMPAT_VERSION}")
 set(CPACK_PACKAGE_CONTACT "l4rzy <me@23ro.org>")
@@ -125,6 +144,7 @@ set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION_SUMMARY}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "okular")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "${MU_EMOJI_FONT_PACKAGE}")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_RPM_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
 set(CPACK_RPM_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}")
@@ -137,5 +157,6 @@ set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION_SUMMARY}")
 set(CPACK_RPM_PACKAGE_REQUIRES
     "okular"
     CACHE STRING "Explicit runtime dependencies for RPM packages")
+set(CPACK_RPM_PACKAGE_RECOMMENDS "${MU_EMOJI_FONT_PACKAGE}")
 set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
 include(CPack)

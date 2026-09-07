@@ -108,6 +108,7 @@ jobs:
           test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = aarch64
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
+          test "$(rpm --queryformat '%{RECOMMENDS}' -qp "$package")" = google-noto-color-emoji-fonts
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfngsettings\.kcfg$'

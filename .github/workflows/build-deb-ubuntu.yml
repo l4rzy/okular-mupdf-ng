@@ -98,6 +98,7 @@ jobs:
           test "$(dpkg-deb --field "$package" Version)" = "${expected_version}-1"
           test "$(dpkg-deb --field "$package" Architecture)" = amd64
           dependencies=$(dpkg-deb --field "$package" Depends)
+          test "$(dpkg-deb --field "$package" Suggests)" = fonts-noto-color-emoji
           printf '%s\n' "$dependencies" | grep -Eq '(^|, )okular([ (]|,|$)'
           dpkg-deb --contents "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           dpkg-deb --contents "$package" | grep -q '/okular-mupdf-ng/okular-mupdf-worker$'

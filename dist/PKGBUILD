@@ -24,6 +24,9 @@ _common_depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp')
 depends=("${_common_depends[@]}"
          'brotli' 'freetype2' 'harfbuzz' 'jbig2dec' 'leptonica'
          'libjpeg-turbo' 'openjpeg2' 'zlib')
+optdepends=(
+  'emoji-font: display sandbox enforcement status'
+)
 conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 # Replace with source=("git+$url.git") when the PKGBUILD is standalone.
 source=("$_pkgname::git+file://$startdir/..")
