@@ -9,7 +9,7 @@ arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('GPL-3.0-or-later')
 depends=('gcc-libs' 'glibc' 'kcoreaddons' 'ki18n' 'okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp' 'libmupdf>=1.28.0' 'zlib')
-makedepends=('cmake' 'extra-cmake-modules' 'git' 'ninja' 'qt6-tools')
+makedepends=('cmake' 'extra-cmake-modules' 'git' 'openssl' 'ninja' 'qt6-tools')
 provides=('okular-mupdf-ng')
 conflicts=('okular-mupdf-ng')
 source=("$_pkgname::git+$url.git")
