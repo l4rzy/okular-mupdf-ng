@@ -34,6 +34,10 @@ if sys.version_info < (3, 12):
 version = os.environ.get("MUPDF_VERSION", MUPDF_VERSION).strip() or MUPDF_VERSION
 source_name = f"mupdf-{version}-source"
 url = f"https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/{version}/{source_name}.tar.gz"
+# Artifex's own archive host, tried when the GitHub mirror keeps failing.
+fallback_url = f"https://casper.mupdf.com/downloads/archive/{source_name}.tar.gz"
+urls = (url, fallback_url)
+MAX_ATTEMPTS = 3
 
 script_dir = Path(__file__).resolve().parent
 thirdparty_dir = (script_dir / "../thirdparty").resolve()
@@ -43,6 +47,31 @@ source_dir = thirdparty_dir / source_name
 def fail(msg: str) -> None:
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def _retryable(e: BaseException) -> bool:
+    """True for transient errors worth retrying; HTTP 4xx client errors fail fast."""
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code == 408 or e.code == 429 or e.code >= 500
+    return isinstance(e, OSError)
+
+
+def _download(url: str, dest: Path) -> str:
+    """Stream url into dest and return the sha256 hex digest."""
+    with urllib.request.urlopen(url, timeout=30) as resp:
+        if resp.status != 200:
+            raise urllib.error.HTTPError(url, resp.status, f"HTTP {resp.status}", resp.headers, None)
+        expected = int(resp.headers.get("Content-Length") or 0)
+        h = hashlib.sha256()
+        received = 0
+        with dest.open("wb") as out:
+            while chunk := resp.read(65536):
+                out.write(chunk)
+                h.update(chunk)
+                received += len(chunk)
+        if expected and received != expected:
+            raise ConnectionError(f"truncated download: got {received} of {expected} bytes")
+        return h.hexdigest()
 
 
 if source_dir.exists():
@@ -57,41 +86,27 @@ archive_path = work_dir / f"{source_name}.tar.gz"
 try:
     print(f"Downloading MuPDF {version}...")
     last_error: Exception | None = None
-    for attempt in range(1, 4):
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        # Primary GitHub URL first; fall back to Artifex's archive host on retry.
+        attempt_url = urls[0] if attempt == 1 else urls[-1]
+        print(f"attempt {attempt}/{MAX_ATTEMPTS}: {attempt_url}")
         try:
-            if archive_path.exists():
-                archive_path.unlink()
-            h = hashlib.sha256()
-            with urllib.request.urlopen(url, timeout=30) as resp:
-                if resp.status != 200:
-                    raise urllib.error.HTTPError(url, resp.status, f"HTTP {resp.status}", resp.headers, None)
-                with archive_path.open("wb") as out:
-                    while True:
-                        chunk = resp.read(8192)
-                        if not chunk:
-                            break
-                        out.write(chunk)
-                        h.update(chunk)
+            archive_path.unlink(missing_ok=True)
+            digest = _download(attempt_url, archive_path)
             if version == MUPDF_VERSION:
-                actual = h.hexdigest()
-                if actual.lower() != MUPDF_SHA256.lower():
-                    raise ValueError(f"sha256 mismatch: expected {MUPDF_SHA256} got {actual}")
-                else:
-                    print("Hash OK")
+                if digest.lower() != MUPDF_SHA256.lower():
+                    raise ValueError(f"sha256 mismatch: expected {MUPDF_SHA256} got {digest}")
+                print("Hash OK")
             else:
                 print(f"warning: MUPDF_VERSION={version} != {MUPDF_VERSION}, skipping sha256 check", file=sys.stderr)
             last_error = None
             break
         except Exception as e:  # noqa: BLE001
             last_error = e
-            if archive_path.exists():
-                try:
-                    archive_path.unlink()
-                except OSError:
-                    pass
-            if attempt == 3:
+            archive_path.unlink(missing_ok=True)
+            if attempt == MAX_ATTEMPTS or not _retryable(e):
                 break
-            time.sleep(attempt)
+            time.sleep(2**attempt)
 
     if last_error is not None:
         fail(f"download failed: {last_error}")
