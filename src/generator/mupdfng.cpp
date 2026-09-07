@@ -75,6 +75,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
+    setFeature(SupportsCancelling);
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
@@ -1011,8 +1012,10 @@ QImage Main::image(Okular::PixmapRequest* request)
 
     const int pageNum = request->page()->number();
 
-    if (m_placeholder.isActive())
-        return m_placeholder.image(request->width(), request->height());
+    if (m_placeholder.isActive()) {
+        QImage image = m_placeholder.image(request->width(), request->height());
+        return request->shouldAbortRender() ? QImage { } : image;
+    }
 
     // Rendering is isolated in the worker process.
     if (m_worker.isConnected()) {
@@ -1045,6 +1048,8 @@ QImage Main::image(Okular::PixmapRequest* request)
                          static_cast<int>(bottom - top));
         }
         QImage img = m_worker.render(pageNum, request->width(), request->height(), tile);
+        if (request->shouldAbortRender())
+            return { };
         if (img.isNull()) {
             MU_LOG(warning,
                    "Mu::Generator::Main",
@@ -1059,7 +1064,7 @@ QImage Main::image(Okular::PixmapRequest* request)
                    "normalized render frame from " + std::to_string(sourceSize.width()) + "x"
                        + std::to_string(sourceSize.height()) + " to " + std::to_string(img.width()) + "x"
                        + std::to_string(img.height()));
-        return img;
+        return request->shouldAbortRender() ? QImage { } : img;
     }
     return { };
 }
