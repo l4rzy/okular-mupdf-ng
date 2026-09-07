@@ -79,9 +79,13 @@ if(MU_DEBUG_BUILD)
     target_link_libraries(mupdf_plugin_worker PUBLIC mupdf_ipc_debug)
 endif()
 target_compile_definitions(mupdf_plugin_worker PRIVATE
-    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
     WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
 )
+if(ENABLE_BUILD_TREE_WORKER_PATH)
+    target_compile_definitions(mupdf_plugin_worker PRIVATE
+        WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    )
+endif()
 
 add_library(mupdf_plugin_ocr STATIC plugin/ocr/controller.cpp)
 target_include_directories(mupdf_plugin_ocr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

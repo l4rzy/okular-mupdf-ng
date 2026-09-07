@@ -96,8 +96,3 @@ target_compile_definitions(okular-mupdf-worker PRIVATE MUPDF_HAS_OCR TESSDATA_DI
 install(TARGETS okular-mupdf-worker
     DESTINATION "${MUPDF_WORKER_INSTALL_DIR}"
 )
-
-# Expose the build-time path so the plugin can find the binary without install
-set(WORKER_BUILD_PATH
-    "$<TARGET_FILE:okular-mupdf-worker>"
-    CACHE INTERNAL "Full path to the okular-mupdf-worker binary in the build tree")

@@ -52,6 +52,15 @@ else()
     set(DEFAULT_IPC_DEBUG ON)
 endif()
 
+set(DEFAULT_BUILD_TREE_WORKER_PATH OFF)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(DEFAULT_BUILD_TREE_WORKER_PATH ON)
+endif()
+
+option(ENABLE_BUILD_TREE_WORKER_PATH
+    "Embed the build-tree worker path for uninstalled developer runs"
+    ${DEFAULT_BUILD_TREE_WORKER_PATH})
+
 option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics" ${DEFAULT_IPC_DEBUG})
 set(MU_DEBUG_BUILD OFF)
 if(ENABLE_MU_DEBUG AND NOT CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
@@ -87,6 +96,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
+message(STATUS "Build-tree worker path: ${ENABLE_BUILD_TREE_WORKER_PATH}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
 message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
 # BUILD_TESTING is defined by ECM's KDECMakeSettings (default ON).
