@@ -86,12 +86,46 @@ else()
     set(MUPDF_THIRD_LIBRARY "${MUPDF_BUILD_DIR}/libmupdf-third.a")
     set(MUPDF_THREADS_LIBRARY "${MUPDF_BUILD_DIR}/libmupdf-threads.a")
 
+    set(_mupdf_c_flags "${CMAKE_C_FLAGS}")
+    set(_mupdf_cxx_flags "${CMAKE_CXX_FLAGS}")
+    if(CMAKE_BUILD_TYPE)
+        string(TOUPPER "${CMAKE_BUILD_TYPE}" _mupdf_build_type_suffix)
+        set(_mupdf_config_c_flags_variable "CMAKE_C_FLAGS_${_mupdf_build_type_suffix}")
+        set(_mupdf_config_cxx_flags_variable "CMAKE_CXX_FLAGS_${_mupdf_build_type_suffix}")
+        set(_mupdf_config_c_flags "${${_mupdf_config_c_flags_variable}}")
+        set(_mupdf_config_cxx_flags "${${_mupdf_config_cxx_flags_variable}}")
+        if(_mupdf_config_c_flags)
+            string(APPEND _mupdf_c_flags " ${_mupdf_config_c_flags}")
+        endif()
+        if(_mupdf_config_cxx_flags)
+            string(APPEND _mupdf_cxx_flags " ${_mupdf_config_cxx_flags}")
+        endif()
+    endif()
+
+    set(_mupdf_xcflags
+        "-DFZ_ENABLE_CBZ=0"
+        "-DFZ_ENABLE_IMG=0"
+        "-DFZ_ENABLE_FB2=0"
+        "-DFZ_ENABLE_MOBI=0"
+        "-DFZ_ENABLE_TXT=0"
+        "-DFZ_ENABLE_OFFICE=0"
+        "-DFZ_ENABLE_MD=0"
+        "-DFZ_ENABLE_DOCX_OUTPUT=0"
+        "-DFZ_ENABLE_ODT_OUTPUT=0")
+    if(_mupdf_c_flags)
+        list(APPEND _mupdf_xcflags "${_mupdf_c_flags}")
+    endif()
+    string(JOIN " " _mupdf_xcflags ${_mupdf_xcflags})
+
     add_custom_command(
         OUTPUT
             "${MUPDF_CORE_LIBRARY}"
             "${MUPDF_THIRD_LIBRARY}"
             "${MUPDF_THREADS_LIBRARY}"
         COMMAND
+            "${CMAKE_COMMAND}" -E env
+            "CFLAGS="
+            "CXXFLAGS="
             "${MUPDF_MAKE_EXECUTABLE}"
             -C "${MUPDF_SOURCE_DIR}"
             -j${MUPDF_BUILD_JOBS}
@@ -112,7 +146,8 @@ else()
             USE_SYSTEM_CURL=no
             USE_SYSTEM_LCMS2=no
             USE_CMARK_GFM=no
-            "XCFLAGS=-DFZ_ENABLE_CBZ=0 -DFZ_ENABLE_IMG=0 -DFZ_ENABLE_FB2=0 -DFZ_ENABLE_MOBI=0 -DFZ_ENABLE_TXT=0 -DFZ_ENABLE_OFFICE=0 -DFZ_ENABLE_MD=0 -DFZ_ENABLE_DOCX_OUTPUT=0 -DFZ_ENABLE_ODT_OUTPUT=0"
+            "XCFLAGS=${_mupdf_xcflags}"
+            "XCXXFLAGS=${_mupdf_cxx_flags}"
             libs
             libmupdf-threads
         DEPENDS
