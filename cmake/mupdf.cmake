@@ -24,6 +24,7 @@ if(USE_SYSTEM_MUPDF)
     set_target_properties(MuPDF::Engine PROPERTIES
         INTERFACE_LINK_LIBRARIES PkgConfig::MUPDF_SYSTEM)
     set(MUPDF_INCLUDE_DIR "${MUPDF_SYSTEM_INCLUDE_DIRS}")
+    set(MUPDF_BUILD_PROFILE system)
 else()
     set(MUPDF_SOURCE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/mupdf" CACHE PATH
         "Path to the pinned MuPDF source tree")
@@ -74,10 +75,10 @@ else()
         set(MUPDF_USE_SYSTEM_GUMBO no)
     endif()
 
-    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-        set(MUPDF_BUILD_PROFILE release)
-    else()
+    if(MU_IS_DEBUG_BUILD)
         set(MUPDF_BUILD_PROFILE debug)
+    else()
+        set(MUPDF_BUILD_PROFILE release)
     endif()
 
     set(MUPDF_BUILD_DIR "${CMAKE_BINARY_DIR}/mupdf/${MUPDF_BUILD_PROFILE}")

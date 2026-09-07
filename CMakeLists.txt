@@ -28,6 +28,14 @@ if(ENABLE_SANITIZERS)
         "ECM sanitizer set for the release test build" FORCE)
 endif()
 
+# Only the exact Debug configuration enables verbose diagnostics and the
+# bundled MuPDF debug profile. None is used by Arch packaging so that makepkg
+# owns the compiler flags; it must still produce a release-profile MuPDF build.
+set(MU_IS_DEBUG_BUILD OFF)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(MU_IS_DEBUG_BUILD ON)
+endif()
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mupdf.cmake")
 
 set(TESSDATA_DIR "/usr/share/tessdata" CACHE PATH "Path to tesseract tessdata directory")
@@ -46,14 +54,14 @@ find_package(KF6 REQUIRED COMPONENTS
     )
 find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network Xml)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-    set(DEFAULT_IPC_DEBUG OFF)
-else()
+if(MU_IS_DEBUG_BUILD)
     set(DEFAULT_IPC_DEBUG ON)
+else()
+    set(DEFAULT_IPC_DEBUG OFF)
 endif()
 
 set(DEFAULT_BUILD_TREE_WORKER_PATH OFF)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(MU_IS_DEBUG_BUILD)
     set(DEFAULT_BUILD_TREE_WORKER_PATH ON)
 endif()
 
@@ -61,9 +69,9 @@ option(ENABLE_BUILD_TREE_WORKER_PATH
     "Embed the build-tree worker path for uninstalled developer runs"
     ${DEFAULT_BUILD_TREE_WORKER_PATH})
 
-option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics" ${DEFAULT_IPC_DEBUG})
+option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics (Debug builds only)" ${DEFAULT_IPC_DEBUG})
 set(MU_DEBUG_BUILD OFF)
-if(ENABLE_MU_DEBUG AND NOT CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+if(MU_IS_DEBUG_BUILD AND ENABLE_MU_DEBUG)
     set(MU_DEBUG_BUILD ON)
 endif()
 
@@ -95,6 +103,8 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
 
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "MuPDF build profile: ${MUPDF_BUILD_PROFILE}")
+message(STATUS "Mu debug diagnostics: ${MU_DEBUG_BUILD}")
 message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
 message(STATUS "Build-tree worker path: ${ENABLE_BUILD_TREE_WORKER_PATH}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
