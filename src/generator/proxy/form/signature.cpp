@@ -8,10 +8,10 @@
 #include <limits>
 
 #include "generator/conversion/certificate.hpp"
+#include "generator/conversion/signing.hpp"
 
 #ifdef MUPDF_FORMFIELD_REMOTE_SIGNING
 #include "plugin/util/signature_image.hpp"
-#include "plugin/util/signing_timestamp.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/model/types.hpp"
 #endif
@@ -207,20 +207,16 @@ std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSigna
     if (!m_backend || !m_backend->isConnected()) {
         return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
     }
-    const auto bgImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
+    auto appearance = Conversion::toModelSignatureAppearance(data);
+    appearance.backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
         data.backgroundImagePath(), rect().width(), rect().height());
-    const auto signingTimestamp = Plugin::Util::SigningTimestamp::current();
     const auto result = m_backend->sign({ { },
                                           m_data.page,
                                           { },
                                           data.certNickname().toStdString(),
                                           data.certSubjectCommonName().toStdString(),
-                                          data.reason().toStdString(),
-                                          data.location().toStdString(),
                                           m_data.objectNumber,
-                                          bgImage,
-                                          signingTimestamp.epochSeconds,
-                                          signingTimestamp.displayDate.toStdString() },
+                                          std::move(appearance) },
                                         data.password(),
                                         newPath);
     switch (result.result) {

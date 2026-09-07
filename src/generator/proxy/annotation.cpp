@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "generator/conversion/annotation.hpp"
+#include "generator/conversion/signing.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/signature_image.hpp"
-#include "plugin/util/signing_timestamp.hpp"
 #include "plugin/worker_client.hpp"
 
 namespace Mu::Generator::Proxy {
@@ -70,20 +70,16 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                     return std::make_pair(Okular::KeyMissing, QStringLiteral("Signing certificate was not found"));
                 const QString imagePath =
                     !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
-                const auto bgImage =
+                auto appearance = Conversion::toModelSignatureAppearance(data);
+                appearance.backgroundImage =
                     Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
-                const auto signingTimestamp = Plugin::Util::SigningTimestamp::current();
                 return signingResult(backend->sign({ { },
                                                      page,
                                                      { bounds.left, bounds.top, bounds.right, bounds.bottom },
                                                      data.certNickname().toStdString(),
                                                      commonName.toStdString(),
-                                                     data.reason().toStdString(),
-                                                     data.location().toStdString(),
                                                      -1,
-                                                     bgImage,
-                                                     signingTimestamp.epochSeconds,
-                                                     signingTimestamp.displayDate.toStdString() },
+                                                     std::move(appearance) },
                                                    data.password(),
                                                    fileName));
             });

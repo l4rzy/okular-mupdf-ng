@@ -128,6 +128,10 @@ target_link_libraries(test_generator_proxies PRIVATE
     KF6::I18n
 )
 
+add_layer_test(test_generator_signingconversion generator/test_signing_conversion.cpp generator)
+target_include_directories(test_generator_signingconversion PRIVATE ../src)
+target_link_libraries(test_generator_signingconversion PRIVATE mupdf_generator_adapters KF6::I18n)
+
 # Security policy checks execute in a child because sandbox activation is irreversible.
 add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp)
 target_include_directories(test_security_sandbox PRIVATE ../src ../src/worker ${SECCOMP_INCLUDE_DIRS})

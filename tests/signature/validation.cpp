@@ -42,6 +42,40 @@ bool openDocument(Mu::Worker::Engine::PdfDocument& document, QFile& source, cons
     return document.openFd(::dup(source.handle()), path.toStdString());
 }
 
+// Extracts the signature widget appearance text of page 0 through MuPDF's
+// structured text device, so tests can assert which SignatureElement lines the
+// worker rendered regardless of font glyph encoding.
+std::string signatureAppearanceText(const Mu::Worker::Engine::PdfDocument& document)
+{
+    fz_context* context = document.context();
+    pdf_document* pdf = pdf_specifics(context, document.document());
+    if (!pdf)
+        return { };
+    fz_page* page = fz_load_page(context, document.document(), 0);
+    pdf_page* pdfPage = page ? pdf_page_from_fz_page(context, page) : nullptr;
+
+    std::string text;
+    for (pdf_annot* widget = pdfPage ? pdf_first_widget(context, pdfPage) : nullptr; widget;
+         widget = pdf_next_widget(context, widget)) {
+        fz_stext_options options { };
+        fz_stext_page* stext = pdf_new_stext_page_from_annot(context, widget, &options);
+        if (!stext)
+            continue;
+        for (fz_stext_block* block = stext->first_block; block; block = block->next) {
+            if (block->type != FZ_STEXT_BLOCK_TEXT)
+                continue;
+            for (fz_stext_line* line = block->u.t.first_line; line; line = line->next) {
+                for (fz_stext_char* character = line->first_char; character; character = character->next)
+                    text.push_back(static_cast<char>(character->c));
+                text.push_back('\n');
+            }
+        }
+        fz_drop_stext_page(context, stext);
+    }
+    fz_drop_page(context, page);
+    return text;
+}
+
 Mu::Worker::Engine::CmsResult createCms(const std::array<std::uint8_t, 32>& digest, const std::string& nickname)
 {
     const auto result =
@@ -806,10 +840,8 @@ private slots:
                 .rectangle = { .1, .1, .5, .2 },
                 .certificateNickname = "okular-mupdf-test",
                 .certificateSubjectCommonName = "Okular MuPDF Test Signer",
-                .reason = "Okular signing test",
-                .location = "Test location",
                 .existingFieldObjectNumber = -1,
-                .backgroundImage = { },
+                .appearance = { .reason = "Okular signing test", .location = "Test location" },
             },
             createCms,
             outputFd,
@@ -850,6 +882,60 @@ private slots:
         QVERIFY(foundSignature);
     }
 
+    void appearanceElementsControlRenderedText()
+    {
+        // Signs with a reduced element set and decodes the widget appearance
+        // stream: the shared SignatureElement bitmask must control which info
+        // lines the worker renders into /AP.
+        const auto sign = [](std::uint8_t elements) -> std::string {
+            const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR) + QStringLiteral("/pdfreference1.0.pdf");
+            QFile source(sourcePath);
+            Mu::Worker::Engine::PdfDocument document;
+            if (!openDocument(document, source, sourcePath))
+                return { };
+
+            QTemporaryFile output;
+            if (!output.open())
+                return { };
+            std::string error;
+            if (!document.signFd(::Mu::Model::SignRequest { .file = { },
+                                                            .page = 0,
+                                                            .rectangle = { .1, .1, .5, .2 },
+                                                            .certificateNickname = "okular-mupdf-test",
+                                                            .certificateSubjectCommonName = "Okular MuPDF Test Signer",
+                                                            .existingFieldObjectNumber = -1,
+                                                            .appearance = { .elements = elements,
+                                                                            .reason = "Okular signing test",
+                                                                            .location = "Test location" } },
+                                 createCms,
+                                 ::dup(output.handle()),
+                                 nullptr,
+                                 &error))
+                return { };
+            if (!output.flush())
+                return { };
+
+            QFile signedSource(output.fileName());
+            Mu::Worker::Engine::PdfDocument signedDocument;
+            if (!openDocument(signedDocument, signedSource, output.fileName()))
+                return { };
+            return signatureAppearanceText(signedDocument);
+        };
+
+        const std::string text = sign(static_cast<std::uint8_t>(::Mu::Model::SignatureElement::Labels)
+                                      | static_cast<std::uint8_t>(::Mu::Model::SignatureElement::Date));
+        QVERIFY2(!text.empty(), "appearance extraction failed");
+        QVERIFY(text.find("Date:") != std::string::npos);
+        QVERIFY(text.find("Digitally signed by") == std::string::npos);
+        QVERIFY(text.find("DN:") == std::string::npos);
+
+        const std::string defaultText = sign(::Mu::Model::SignatureElementDefault);
+        QVERIFY2(!defaultText.empty(), "appearance extraction failed");
+        QVERIFY(defaultText.find("Digitally signed by") != std::string::npos);
+        QVERIFY(defaultText.find("DN:") != std::string::npos);
+        QVERIFY(defaultText.find("Date:") != std::string::npos);
+    }
+
     void newSignatureDoesNotLockExistingFormFields()
     {
         QTemporaryFile sourceFile;
@@ -879,10 +965,7 @@ private slots:
                          .rectangle = { .1, .1, .5, .2 },
                          .certificateNickname = "okular-mupdf-test",
                          .certificateSubjectCommonName = "Okular MuPDF Test Signer",
-                         .reason = { },
-                         .location = { },
                          .existingFieldObjectNumber = -1,
-                         .backgroundImage = { },
                      },
                      createCms,
                      ::dup(output.handle()),
@@ -934,10 +1017,7 @@ private slots:
                          .rectangle = { },
                          .certificateNickname = "okular-mupdf-test",
                          .certificateSubjectCommonName = "Okular MuPDF Test Signer",
-                         .reason = { },
-                         .location = { },
                          .existingFieldObjectNumber = unsignedFields.front().objectNumber,
-                         .backgroundImage = { },
                      },
                      createCms,
                      ::dup(output.handle()),
@@ -988,10 +1068,8 @@ private slots:
                     .rectangle = { .1, .1, .5, .3 },
                     .certificateNickname = "okular-mupdf-test",
                     .certificateSubjectCommonName = "Okular MuPDF Test Signer",
-                    .reason = reason,
-                    .location = "Test location",
                     .existingFieldObjectNumber = -1,
-                    .backgroundImage = backgroundImage,
+                    .appearance = { .reason = reason, .location = "Test location", .backgroundImage = backgroundImage },
                 },
                 createCms,
                 outputFd,

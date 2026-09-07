@@ -103,6 +103,7 @@ add_library(mupdf_generator_adapters STATIC
   generator/conversion/annotation.cpp
   generator/conversion/certificate.cpp
   generator/conversion/document.cpp
+  generator/conversion/signing.cpp
   generator/conversion/text.cpp
   generator/proxy/annotation.cpp
   generator/proxy/form/text.cpp

@@ -1,5 +1,5 @@
+#include "engine/mupdf_helpers.hpp"
 #include "engine/pdf/document.hpp"
-#include "engine/signature_date.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>

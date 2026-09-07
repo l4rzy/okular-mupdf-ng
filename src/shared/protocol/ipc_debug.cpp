@@ -369,11 +369,16 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                      value.rectangle.right,
                      value.rectangle.bottom);
                 field(out, "certificate", value.certificateNickname);
-                field(out, "reason", value.reason);
-                field(out, "location", value.location);
-                field(out, "hasBackground", !value.backgroundImage.empty());
-                field(out, "signingEpoch", value.signingEpochSeconds);
-                field(out, "displayDate", value.signingDisplayDate);
+                {
+                    std::ostringstream hex;
+                    hex << "0x" << std::hex << static_cast<unsigned>(value.appearance.elements) << std::dec;
+                    field(out, "elements", hex.str());
+                }
+                field(out, "reason", value.appearance.reason);
+                field(out, "location", value.appearance.location);
+                field(out, "hasBackground", !value.appearance.backgroundImage.empty());
+                field(out, "signingEpoch", value.appearance.signingEpochSeconds);
+                field(out, "displayDate", value.appearance.signingDisplayDate);
             } else if constexpr (std::is_same_v<T, Model::SignReply>) {
                 out << "sign-reply";
                 field(out, "job", value.jobId);

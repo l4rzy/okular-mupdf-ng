@@ -19,7 +19,7 @@ extern "C" {
 }
 
 #include "engine/constants.hpp"
-#include "engine/signature_date.hpp"
+#include "engine/mupdf_helpers.hpp"
 #include "engine/signer.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
@@ -79,6 +79,11 @@ void clearSignatureMutation(fz_context* context, pdf_page* page, pdf_annot* widg
         }
     }
     pdf_clear_signature(context, widget);
+}
+
+bool hasElement(std::uint8_t elements, SignatureElement element)
+{
+    return (elements & static_cast<std::uint8_t>(element)) != 0;
 }
 
 std::optional<SignatureField> extractSignatureField(fz_context* context,
@@ -378,13 +383,13 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         }
 
         // Optional: Load background image graphic if provided
-        if (!request.backgroundImage.empty()) {
+        if (!request.appearance.backgroundImage.empty()) {
             fz_buffer* imgBuf = nullptr;
             fz_var(imgBuf);
             fz_try(m_context)
             {
                 imgBuf = fz_new_buffer_from_copied_data(
-                    m_context, request.backgroundImage.data(), request.backgroundImage.size());
+                    m_context, request.appearance.backgroundImage.data(), request.appearance.backgroundImage.size());
                 graphic = fz_new_image_from_buffer(m_context, imgBuf);
             }
             fz_always(m_context)
@@ -400,16 +405,19 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
         // Step 3: Register signer with MuPDF and compute incremental write.
         // The appearance info text is composed explicitly instead of calling
-        // pdf_sign_signature so the date can use the plugin-provided friendly
-        // format; MuPDF's built-in text hardcodes an ISO-8601 timestamp.
-        const std::int64_t signingTime =
-            request.signingEpochSeconds > 0 ? request.signingEpochSeconds : static_cast<std::int64_t>(::time(nullptr));
-        const char* reason = request.reason.empty() ? nullptr : request.reason.c_str();
-        const char* location = request.location.empty() ? nullptr : request.location.c_str();
+        // pdf_sign_signature so the element set and the date format can follow
+        // the shared SignatureAppearance; MuPDF's built-in text hardcodes an
+        // ISO-8601 timestamp and always renders every element.
+        const std::int64_t signingTime = request.appearance.signingEpochSeconds > 0
+            ? request.appearance.signingEpochSeconds
+            : static_cast<std::int64_t>(::time(nullptr));
+        const char* reason = request.appearance.reason.empty() ? nullptr : request.appearance.reason.c_str();
+        const char* location = request.appearance.location.empty() ? nullptr : request.appearance.location.c_str();
         const char* signerCn =
             request.certificateSubjectCommonName.empty() ? nullptr : request.certificateSubjectCommonName.c_str();
-        const std::string displayDate =
-            !request.signingDisplayDate.empty() ? request.signingDisplayDate : formatSignatureDate(signingTime);
+        const std::string displayDate = !request.appearance.signingDisplayDate.empty()
+            ? request.appearance.signingDisplayDate
+            : formatSignatureDate(signingTime);
 
         fz_try(m_context)
         {
@@ -422,23 +430,34 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
             fz_try(m_context)
             {
                 // date -1 suppresses MuPDF's ISO date line; the friendly date is appended below.
-                info = pdf_signature_info(m_context, signerCn, dn, reason, location, -1, 1);
+                info = pdf_signature_info(
+                    m_context,
+                    hasElement(request.appearance.elements, SignatureElement::TextName) ? signerCn : nullptr,
+                    hasElement(request.appearance.elements, SignatureElement::DistinguishedName) ? dn : nullptr,
+                    reason,
+                    location,
+                    -1,
+                    hasElement(request.appearance.elements, SignatureElement::Labels) ? 1 : 0);
                 std::string text = info ? info : "";
-                if (!displayDate.empty()) {
+                if (hasElement(request.appearance.elements, SignatureElement::Date) && !displayDate.empty()) {
                     if (!text.empty())
                         text += '\n';
-                    text += "Date: ";
+                    if (hasElement(request.appearance.elements, SignatureElement::Labels))
+                        text += "Date: ";
                     text += displayDate;
                 }
 
                 const fz_rect rect = pdf_annot_rect(m_context, widget);
                 const fz_text_language lang = pdf_annot_language(m_context, widget);
-                const int logo = PDF_SIGNATURE_DEFAULT_APPEARANCE & PDF_SIGNATURE_SHOW_LOGO;
-                const char* appearanceText = text.c_str(); // consumed within this scope
+                const int logo =
+                    hasElement(request.appearance.elements, SignatureElement::Logo) ? PDF_SIGNATURE_SHOW_LOGO : 0;
+                // Null (not empty) when nothing is rendered: pdf_signature_appearance_signed
+                // treats a non-null right_text as present and would reserve half the box for it.
+                const char* appearanceText = text.empty() ? nullptr : text.c_str();
                 if (graphic)
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, graphic, nullptr, appearanceText, logo);
-                else if (PDF_SIGNATURE_DEFAULT_APPEARANCE & PDF_SIGNATURE_SHOW_GRAPHIC_NAME)
+                else if (hasElement(request.appearance.elements, SignatureElement::GraphicName))
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, nullptr, signerCn, appearanceText, logo);
                 else

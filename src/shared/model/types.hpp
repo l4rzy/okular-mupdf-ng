@@ -779,6 +779,35 @@ struct SavePdfRequest {
     std::vector<std::int32_t> pages;
 };
 
+/// Elements rendered into the signature appearance stream (bitmask).
+enum class SignatureElement : std::uint8_t {
+    Labels = 1 << 0, // "Digitally signed by", "DN:", "Date:" prefixes
+    DistinguishedName = 1 << 1,
+    Date = 1 << 2,
+    TextName = 1 << 3, // signer common name as a text line
+    GraphicName = 1 << 4, // signer common name as the left graphic text
+    Logo = 1 << 5,
+};
+
+inline constexpr std::uint8_t SignatureElementDefault = static_cast<std::uint8_t>(SignatureElement::Labels)
+    | static_cast<std::uint8_t>(SignatureElement::DistinguishedName) | static_cast<std::uint8_t>(SignatureElement::Date)
+    | static_cast<std::uint8_t>(SignatureElement::TextName) | static_cast<std::uint8_t>(SignatureElement::GraphicName)
+    | static_cast<std::uint8_t>(SignatureElement::Logo);
+
+/// Visual signature content configured by the caller and rendered by the worker.
+struct SignatureAppearance {
+    /// Bitmask of SignatureElement values included in the appearance stream.
+    std::uint8_t elements = SignatureElementDefault;
+    std::string reason;
+    std::string location;
+    /// Signing timestamp (epoch seconds) shared by /M and the appearance; 0 = worker uses time(NULL).
+    std::int64_t signingEpochSeconds = 0;
+    /// Pre-formatted appearance date ("Sep 7, 2026 13:14 CDT"); empty = worker-side fallback format.
+    std::string signingDisplayDate;
+    /// Background image PNG bytes; empty = no graphic.
+    std::vector<std::uint8_t> backgroundImage;
+};
+
 /// Creates or updates a PDF signature widget and requests CMS signing.
 struct SignRequest {
     FileTransfer file;
@@ -786,15 +815,9 @@ struct SignRequest {
     NormalizedRect rectangle;
     std::string certificateNickname;
     std::string certificateSubjectCommonName;
-    std::string reason;
-    std::string location;
     /// Existing widget object number, or a negative value to create a widget.
     std::int32_t existingFieldObjectNumber = -1;
-    std::vector<std::uint8_t> backgroundImage;
-    /// Signing timestamp (epoch seconds) shared by /M and the appearance; 0 = worker uses time(NULL).
-    std::int64_t signingEpochSeconds = 0;
-    /// Pre-formatted appearance date ("Sep 7, 2026 13:14 CDT"); empty = worker-side fallback format.
-    std::string signingDisplayDate;
+    SignatureAppearance appearance;
 };
 
 /// All request body alternatives supported by the worker protocol.
