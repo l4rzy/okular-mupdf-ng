@@ -1218,12 +1218,21 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
 // Okular Generator Func: reports the supported export formats.
 Okular::ExportFormat::List Main::exportFormats() const
 {
-    return { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
+    Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
+    if (m_document.type == Model::DocumentType::Epub)
+        formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
+    return formats;
 }
 
-// Okular Generator Func: exports the document text to a file.
+// Okular Generator Func: exports the document to a selected format.
 bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 {
+    if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
+        if (m_document.type != Model::DocumentType::Epub || m_placeholder.isActive() || !m_worker.isConnected())
+            return false;
+        return m_worker.printPdfToFile(fileName, { });
+    }
+
     if (!format.mimeType().inherits(QStringLiteral("text/plain")) || m_placeholder.isActive()
         || !m_worker.isConnected())
         return false;
