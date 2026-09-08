@@ -66,7 +66,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -102,7 +102,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -138,7 +138,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -190,7 +190,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -229,7 +229,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -287,7 +287,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -366,7 +366,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -406,7 +406,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -439,7 +439,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -608,7 +608,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -657,7 +657,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>
@@ -693,7 +693,7 @@
                </sizepolicy>
               </property>
               <property name="styleSheet">
-               <string notr="true">border: none; border-top: 1px solid #444444;</string>
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
               </property>
               <property name="frameShape">
                <enum>QFrame::Shape::HLine</enum>

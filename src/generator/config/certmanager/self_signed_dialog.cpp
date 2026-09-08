@@ -71,7 +71,7 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
 
         auto* line = new QFrame(row);
         line->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        line->setStyleSheet(QStringLiteral("border: none; border-top: 1px solid #444444;"));
+        line->setStyleSheet(QStringLiteral("border: none; border-bottom: 1px solid palette(midlight);"));
         line->setFrameShape(QFrame::HLine);
         line->setFrameShadow(QFrame::Plain);
         rowLayout->addWidget(line);
