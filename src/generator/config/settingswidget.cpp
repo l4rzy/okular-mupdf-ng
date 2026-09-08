@@ -38,9 +38,9 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
 
     auto* imgQ = m_mupdfsw->kcfg_ImageRenderingQuality;
     imgQ->clear();
-    imgQ->addItem(i18n("Balance"), MuPDFSettings::EnumImageRenderingQuality::Balance);
-    imgQ->addItem(i18n("Quality"), MuPDFSettings::EnumImageRenderingQuality::Quality);
     imgQ->addItem(i18n("Speed"), MuPDFSettings::EnumImageRenderingQuality::Speed);
+    imgQ->addItem(i18n("Balanced"), MuPDFSettings::EnumImageRenderingQuality::Balanced);
+    imgQ->addItem(i18n("Quality"), MuPDFSettings::EnumImageRenderingQuality::Quality);
 
     auto* memLimit = m_mupdfsw->kcfg_MemoryLimit;
     memLimit->clear();
@@ -63,9 +63,9 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
 
     auto* epubPageSize = m_mupdfsw->kcfg_EpubPageSize;
     epubPageSize->clear();
-    epubPageSize->addItem(i18n("B5 (176 × 250 mm)"), MuPDFSettings::EnumEpubPageSize::B5);
     epubPageSize->addItem(i18n("A5 (148 × 210 mm)"), MuPDFSettings::EnumEpubPageSize::A5);
     epubPageSize->addItem(i18n("6×9 (152 × 229 mm)"), MuPDFSettings::EnumEpubPageSize::SixByNine);
+    epubPageSize->addItem(i18n("B5 (176 × 250 mm)"), MuPDFSettings::EnumEpubPageSize::B5);
     epubPageSize->addItem(i18n("Letter (216 × 279 mm)"), MuPDFSettings::EnumEpubPageSize::Letter);
 
     auto* epubFontFamily = m_mupdfsw->kcfg_EpubFontFamily;
@@ -118,7 +118,7 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     auto* ocrQuality = m_mupdfsw->kcfg_OcrQuality;
     ocrQuality->clear();
     ocrQuality->addItem(i18n("Speed (150dpi)"), MuPDFSettings::EnumOcrQuality::Speed);
-    ocrQuality->addItem(i18n("Balance (225dpi)"), MuPDFSettings::EnumOcrQuality::Balance);
+    ocrQuality->addItem(i18n("Balanced (225dpi)"), MuPDFSettings::EnumOcrQuality::Balanced);
     ocrQuality->addItem(i18n("Accuracy (300dpi)"), MuPDFSettings::EnumOcrQuality::Accuracy);
 
     auto* triggerMode = m_mupdfsw->kcfg_OcrTriggerMode;

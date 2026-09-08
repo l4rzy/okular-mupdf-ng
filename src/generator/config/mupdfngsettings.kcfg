@@ -59,11 +59,11 @@
       </choices>
     </entry>
     <entry key="ImageRenderingQuality" type="Enum">
-      <default>Balance</default>
+      <default>Balanced</default>
       <choices>
-        <choice name="Balance" />
-        <choice name="Quality" />
         <choice name="Speed" />
+        <choice name="Balanced" />
+        <choice name="Quality" />
       </choices>
     </entry>
     <entry key="ImageInterpolation" type="Bool">
@@ -87,10 +87,10 @@
       <default>true</default>
     </entry>
     <entry key="OcrQuality" type="Enum">
-      <default>Balance</default>
+      <default>Balanced</default>
       <choices>
         <choice name="Speed" />
-        <choice name="Balance" />
+        <choice name="Balanced" />
         <choice name="Accuracy" />
       </choices>
     </entry>
@@ -127,9 +127,9 @@
     <entry key="EpubPageSize" type="Enum">
       <default>A5</default>
       <choices>
-        <choice name="B5" />
         <choice name="A5" />
         <choice name="SixByNine" />
+        <choice name="B5" />
         <choice name="Letter" />
       </choices>
     </entry>
