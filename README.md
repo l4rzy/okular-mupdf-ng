@@ -9,10 +9,10 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml)](https://github.com/l4rzy/okular-mupdf-ng/actions)
 [![Github Release](https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/releases)
 
-A secure and fast PDF and EPUB generator for Okular.
+A secure and fast PDF and ePUB generator for Okular.
 <!-- Note -->
 > [!NOTE]
-> This project is in beta and not stable yet. If you encounter any issue, please report via Github Issues. If you're editing (annotations, forms) an important PDF, use the official PDF backend (Poppler generator) that comes with Okular.
+> This project is in beta and is not stable yet. If you encounter any issue, please report via Github Issues. If you're editing (annotations, forms) an important PDF, use the official PDF backend (Poppler generator) that comes with Okular instead.
 
 ![Screenshot](screenshot.png)
 ---
