@@ -76,7 +76,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
     // Dummy flag to help with zooming artifacts
-    setFeature(SupportsCancelling);
+    // setFeature(SupportsCancelling);
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
