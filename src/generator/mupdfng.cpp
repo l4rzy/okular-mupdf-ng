@@ -75,6 +75,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
+    // Dummy flag to help with zooming artifacts
     setFeature(SupportsCancelling);
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
@@ -869,7 +870,6 @@ bool Main::doCloseDocument()
     // mutex protects their ownership.
     m_formsDirty = false;
     m_annotationsDirty = false;
-    m_renderTracker.reset();
     QMutexLocker locker(userMutex());
     clearWorkerDerivedState();
     m_okularPages.clear();
@@ -1008,9 +1008,9 @@ Okular::FontInfo::List Main::fontsForPage(int page)
 // Okular Generator Func: renders a page or tile for Okular.
 QImage Main::image(Okular::PixmapRequest* request)
 {
-    const bool preserveLikelyZoomIn = m_renderTracker.isLikelyZoomIn(request);
-    const auto shouldAbort = [request, preserveLikelyZoomIn] {
-        return request->shouldAbortRender() && !preserveLikelyZoomIn;
+    // Place holder for future render cancellation, right now it's a dummy
+    const auto shouldAbort = [] {
+        return false;
     };
 
     if (shouldAbort())

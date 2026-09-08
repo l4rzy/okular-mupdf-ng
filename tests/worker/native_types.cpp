@@ -229,19 +229,18 @@ private slots:
     {
         using namespace Mu;
         const Model::RequestMessage request { 12,
-                                              Model::SignRequest {
-                                                  { 9 },
-                                                  2,
-                                                  { 0.1, 0.2, 0.8, 0.9 },
-                                                  "cert",
-                                                  "Subject",
-                                                  -1,
-                                                  { .elements = Model::SignatureElementDefault,
-                                                    .reason = "reason",
-                                                    .location = "location",
-                                                    .signingEpochSeconds = 1'788'804'840,
-                                                    .signingDisplayDate = "Sep 7, 2026 13:14 CDT",
-                                                    .backgroundImage = { } } } };
+                                              Model::SignRequest { { 9 },
+                                                                   2,
+                                                                   { 0.1, 0.2, 0.8, 0.9 },
+                                                                   "cert",
+                                                                   "Subject",
+                                                                   -1,
+                                                                   { .elements = Model::SignatureElementDefault,
+                                                                     .reason = "reason",
+                                                                     .location = "location",
+                                                                     .signingEpochSeconds = 1'788'804'840,
+                                                                     .signingDisplayDate = "Sep 7, 2026 13:14 CDT",
+                                                                     .backgroundImage = { } } } };
         const auto requestText = ::Mu::IPC::Debug::request(request);
         QVERIFY(requestText.rfind("[sign] id=12", 0) == 0);
         QVERIFY(requestText.find("sign") != std::string::npos);
