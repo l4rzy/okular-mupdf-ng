@@ -330,6 +330,19 @@ ResponseMessage CommandService::savePdfFdResponse(std::uint64_t id, const SavePd
     return success(id);
 }
 
+ResponseMessage CommandService::exportPdfFdResponse(std::uint64_t id, const ExportPdfRequest& payload, int fd)
+{
+    Sys::FileDescriptor ownedFd(fd);
+    if (!hasOpenDocument()) {
+        return failure(id, ErrorCode::NotOpen, "export_pdf", "no document is open");
+    }
+    std::string error;
+    if (!m_document->exportPdfFd(ownedFd.release(), payload.pages, &error))
+        return failure(id, ErrorCode::Internal, "export_pdf", error);
+
+    return success(id);
+}
+
 void CommandService::closeDocument() noexcept
 {
     // Closing is a document boundary. No password, opaque handle, deferred link,
@@ -1039,6 +1052,11 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
             [&](const SavePdfRequest& payload) {
                 return dispatchWithFd("save_pdf", payload.file.transferId, [&](int fd) {
                     return savePdfFdResponse(request.id, payload, fd);
+                });
+            },
+            [&](const ExportPdfRequest& payload) {
+                return dispatchWithFd("export_pdf", payload.file.transferId, [&](int fd) {
+                    return exportPdfFdResponse(request.id, payload, fd);
                 });
             },
             [&](const SignRequest& payload) {

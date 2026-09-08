@@ -273,6 +273,14 @@ bool WorkerClient::printPdfToFile(const QString& t, const QVector<int>& pages)
     return result;
 }
 
+bool WorkerClient::exportPdfToFile(const QString& t, const QVector<int>& pages)
+{
+    bool result = false;
+    QMetaObject::invokeMethod(
+        m_transport, [&] { result = m_transport->exportPdfToFile(t, pages); }, Qt::BlockingQueuedConnection);
+    return result;
+}
+
 SignResponse WorkerClient::sign(const SignRequest& r, const QString& password, const QString& t)
 {
     SignResponse result { SigningResult::GenericError, "worker is unavailable" };

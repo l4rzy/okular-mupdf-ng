@@ -35,6 +35,7 @@ using ::Mu::Model::AnnotationAddRequest;
 using ::Mu::Model::AnnotationModifyRequest;
 using ::Mu::Model::AnnotationRemoveRequest;
 using ::Mu::Model::DocumentType;
+using ::Mu::Model::ExportPdfRequest;
 using ::Mu::Model::FontsRequest;
 using ::Mu::Model::FormResetRequest;
 using ::Mu::Model::FormUpdateRequest;
@@ -164,8 +165,11 @@ public:
     /// Saves document modifications back to an output file descriptor.
     [[nodiscard]] ResponseMessage saveFdResponse(std::uint64_t id, int fd);
 
-    /// Exports page subsets to a PDF output file descriptor.
+    /// Builds a page-subset PDF for print jobs.
     [[nodiscard]] ResponseMessage savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd);
+
+    /// Exports a document through its format-specific PDF export path.
+    [[nodiscard]] ResponseMessage exportPdfFdResponse(std::uint64_t id, const ExportPdfRequest& payload, int fd);
 
     /// Performs digital signature signing on a document page field.
     [[nodiscard]] ResponseMessage signFdResponse(const RequestMessage& request, const SignRequest& sign, int fd);

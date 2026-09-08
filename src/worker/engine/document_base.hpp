@@ -168,8 +168,11 @@ public:
     /// Saves document modifications to an output file descriptor (PDF only).
     [[nodiscard]] virtual bool saveFd(int fd, std::string* error = nullptr);
 
-    /// Exports page subsets to a PDF output file descriptor (PDF only).
+    /// Builds a page-subset PDF for print jobs (PDF only).
     [[nodiscard]] virtual bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr);
+
+    /// Exports a document to a PDF output file descriptor (document-specific export path).
+    [[nodiscard]] virtual bool exportPdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr);
 
     /// Digitally signs a signature field or rectangle on a page (PDF only).
     [[nodiscard]] virtual bool signFd(const Model::SignRequest& request,

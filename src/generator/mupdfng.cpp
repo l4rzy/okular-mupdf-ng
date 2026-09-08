@@ -1230,7 +1230,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
         if (m_document.type != Model::DocumentType::Epub || m_placeholder.isActive() || !m_worker.isConnected())
             return false;
-        return m_worker.printPdfToFile(fileName, { });
+        return m_worker.exportPdfToFile(fileName, { });
     }
 
     if (!format.mimeType().inherits(QStringLiteral("text/plain")) || m_placeholder.isActive()

@@ -18,7 +18,9 @@
 #include <QTemporaryFile>
 #include <QVector>
 
+#include <cerrno>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,6 +28,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "shared/logging.hpp"
 #include "shared/model/types.hpp"
 #include "shared/transport/ctrl_channel.hpp"
 #include "shared/transport/fd_channel.hpp"
@@ -88,6 +91,7 @@ public:
     Q_INVOKABLE bool removeAnnotation(int page, const QString& handle);
     Q_INVOKABLE bool saveToFile(const QString& target);
     Q_INVOKABLE bool savePdfToFile(const QString& target, const QVector<int>& pages);
+    Q_INVOKABLE bool exportPdfToFile(const QString& target, const QVector<int>& pages);
     Q_INVOKABLE Model::SignResponse
     signToFile(Model::SignRequest request, const QString& password, const QString& target);
     Q_INVOKABLE std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
@@ -110,18 +114,42 @@ private:
     {
         QFileInfo info(target);
         QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdf-worker-XXXXXX"));
-        if (!file.open())
+        if (!file.open()) {
+            MU_LOG(warning,
+                   "Mu::Plugin",
+                   "could not create temporary file for " + target.toStdString() + ": "
+                       + file.errorString().toStdString());
             return false;
+        }
         const auto transfer = m_nextTransfer++;
         std::string e;
-        if (!m_fd.send(transfer, file.handle(), &e))
+        if (!m_fd.send(transfer, file.handle(), &e)) {
+            MU_LOG(warning, "Mu::Plugin", "could not send output FD for " + target.toStdString() + ": " + e);
             return false;
+        }
         payload.file.transferId = transfer;
         auto response = call(std::move(payload));
-        if (!response || response->error || !file.flush())
+        if (!response) {
+            MU_LOG(warning, "Mu::Plugin", "worker did not answer the write request for " + target.toStdString());
             return false;
+        }
+        if (response->error) {
+            MU_LOG(warning,
+                   "Mu::Plugin",
+                   "worker failed to write " + target.toStdString() + ": " + response->error->message);
+            return false;
+        }
+        if (!file.flush()) {
+            MU_LOG(warning,
+                   "Mu::Plugin",
+                   "could not flush output for " + target.toStdString() + ": " + file.errorString().toStdString());
+            return false;
+        }
         file.setAutoRemove(false);
         if (::rename(QFile::encodeName(file.fileName()).constData(), QFile::encodeName(target).constData())) {
+            MU_LOG(warning,
+                   "Mu::Plugin",
+                   "could not move output to " + target.toStdString() + ": " + std::strerror(errno));
             file.setAutoRemove(true);
             return false;
         }

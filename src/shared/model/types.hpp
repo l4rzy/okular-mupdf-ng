@@ -779,6 +779,12 @@ struct SavePdfRequest {
     std::vector<std::int32_t> pages;
 };
 
+/// Exports a document to PDF using its format-specific export path.
+struct ExportPdfRequest {
+    FileTransfer file;
+    std::vector<std::int32_t> pages;
+};
+
 /// Elements rendered into the signature appearance stream (bitmask).
 enum class SignatureElement : std::uint8_t {
     Labels = 1 << 0, // "Digitally signed by", "DN:", "Date:" prefixes
@@ -840,6 +846,7 @@ using RequestPayload = std::variant<PingRequest,
                                     SettingsRequest,
                                     SaveRequest,
                                     SavePdfRequest,
+                                    ExportPdfRequest,
                                     SignRequest,
                                     SignReply,
                                     FormUpdateRequest,

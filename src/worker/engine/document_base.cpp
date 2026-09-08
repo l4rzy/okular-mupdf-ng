@@ -60,6 +60,13 @@ bool DocumentBase::savePdfFd(int fd, const std::vector<int>&, std::string* error
     return fail(error, "save is not supported for this document type");
 }
 
+bool DocumentBase::exportPdfFd(int fd, const std::vector<int>&, std::string* error)
+{
+    if (fd >= 0)
+        ::close(fd);
+    return fail(error, "PDF export is not supported for this document type");
+}
+
 bool DocumentBase::signFd(const Model::SignRequest&, CmsCallback, int outputFd, SigningResult*, std::string* error)
 {
     if (outputFd >= 0)
