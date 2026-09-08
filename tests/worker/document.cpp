@@ -357,7 +357,8 @@ private slots:
               .rectangle = { },
               .certificateNickname = "test-certificate",
               .certificateSubjectCommonName = "Test Signer",
-              .existingFieldObjectNumber = fields.front().objectNumber },
+              .existingFieldObjectNumber = fields.front().objectNumber,
+              .appearance = { } },
             [](const std::array<std::uint8_t, 32>&, const std::string&) -> ::Mu::Worker::Engine::CmsResult {
                 throw std::runtime_error("test callback failure");
             },
