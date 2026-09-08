@@ -3,6 +3,7 @@
 
 #include "engine/constants.hpp"
 #include "engine/epub/document.hpp"
+#include "shared/logging.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -184,6 +185,59 @@ bool EpubDocument::exportPdfFd(int fd, const std::vector<int>& pages, std::strin
     for (std::size_t index = 0; index < targetPages.size(); ++index)
         destinationPages.emplace(targetPages[index], static_cast<int>(index));
 
+    // Source table of contents flattened in document order, with internal
+    // destinations mapped to destination page indexes. Built outside fz_try;
+    // only plain reads of this data happen inside the MuPDF error domain.
+    struct FlatOutline {
+        const OutlineNode* node;
+        std::int32_t destIndex;
+        std::int32_t depth;
+    };
+
+    // The outline tree outlives the flat copy and the fz_try region below,
+    // which only reads it; it must not be scoped to the block that fills it.
+    std::vector<OutlineNode> outlineNodes;
+    std::vector<FlatOutline> flatOutline;
+    {
+        std::string outlineError;
+        outlineNodes = outline(&outlineError);
+        if (!outlineError.empty())
+            MU_LOG(warning, "Mu::Worker::Epub", "could not load outline for PDF export: " + outlineError);
+        if (!outlineNodes.empty()) {
+            // Depth is carried per frame: the stack holds the whole future
+            // sibling frontier for pre-pushed roots, so its size is not the
+            // DFS depth of the node being emitted.
+            struct FlatFrame {
+                const OutlineNode* node;
+                std::size_t nextChild;
+                std::int32_t depth;
+            };
+
+            std::vector<FlatFrame> stack;
+            for (const OutlineNode& root : outlineNodes)
+                stack.push_back({ &root, 0, 0 });
+            while (!stack.empty()) {
+                FlatFrame& frame = stack.back();
+                if (frame.nextChild == 0) {
+                    std::int32_t destIndex = -1;
+                    if (frame.node->link.valid && !frame.node->link.external) {
+                        const auto target = destinationPages.find(frame.node->link.viewport.page);
+                        if (target != destinationPages.end())
+                            destIndex = target->second;
+                    }
+                    flatOutline.push_back({ frame.node, destIndex, frame.depth });
+                }
+                if (frame.nextChild < frame.node->children.size()) {
+                    const OutlineNode& child = frame.node->children[frame.nextChild++];
+                    const std::int32_t childDepth = frame.depth + 1;
+                    stack.push_back({ &child, 0, childDepth });
+                } else {
+                    stack.pop_back();
+                }
+            }
+        }
+    }
+
     fz_output* output = nullptr;
     pdf_document* destination = nullptr;
     fz_page* page = nullptr;
@@ -333,6 +387,93 @@ bool EpubDocument::exportPdfFd(int fd, const std::vector<int>& pages, std::strin
             pdf_drop_page(m_context, destinationPage);
             destinationPage = nullptr;
             ++destinationIndex;
+        }
+
+        // Pass 3: build the outline from the source table of contents.
+        // Outline destinations are resolved immediately against the page
+        // tree, so this must also run after all pages exist. Best-effort: a
+        // failed build keeps pages and links and only drops the TOC.
+        if (!flatOutline.empty()) {
+            struct OpenFrame {
+                std::size_t entry;
+                bool hasChildren;
+            };
+
+            // Declared before the nested fz_try: a skipped destructor on the
+            // error longjmp path would leak the frame stack.
+            std::vector<OpenFrame> openFrames;
+            fz_outline_iterator* iterator = pdf_new_outline_iterator(m_context, destination);
+            fz_var(iterator);
+            fz_try(m_context)
+            {
+                // Drives the destination outline iterator like MuPDF's
+                // pdfmerge tool: each insert runs in the state the previous
+                // step left (empty root, dangling MOD_BELOW below a fresh
+                // item, or MOD_AFTER behind the previously emitted node).
+
+                const auto fillItem = [&](fz_outline_item* item, const FlatOutline& entry) {
+                    item->title = entry.node->title.empty() ? nullptr : const_cast<char*>(entry.node->title.c_str());
+                    item->is_open = entry.node->open ? 1 : 0;
+                    if (!entry.node->link.valid)
+                        return;
+                    if (entry.node->link.external) {
+                        if (!entry.node->link.uri.empty())
+                            item->uri = const_cast<char*>(entry.node->link.uri.c_str());
+                    } else if (entry.destIndex >= 0) {
+                        generatedUri = pdf_new_uri_from_explicit_dest(
+                            m_context, fz_make_link_dest_xyz(0, entry.destIndex, quietNaN, quietNaN, quietNaN));
+                        item->uri = generatedUri;
+                    }
+                };
+                const auto releaseUri = [&] {
+                    if (generatedUri) {
+                        fz_free(m_context, generatedUri);
+                        generatedUri = nullptr;
+                    }
+                };
+                const auto popFrame = [&] {
+                    const OpenFrame frame = openFrames.back();
+                    const FlatOutline& entry = flatOutline[frame.entry];
+                    fz_outline_iterator_up(m_context, iterator);
+                    if (frame.hasChildren && !entry.node->open) {
+                        // Honor a collapsed source entry; expanded is the
+                        // automatic default for parents in PDF.
+                        fz_outline_item item { };
+                        fillItem(&item, entry);
+                        fz_outline_iterator_update(m_context, iterator, &item);
+                        releaseUri();
+                    }
+                    fz_outline_iterator_next(m_context, iterator);
+                    openFrames.pop_back();
+                };
+
+                for (std::size_t index = 0; index < flatOutline.size(); ++index) {
+                    const FlatOutline& entry = flatOutline[index];
+                    while (static_cast<std::int32_t>(openFrames.size()) > entry.depth)
+                        popFrame();
+                    fz_outline_item item { };
+                    fillItem(&item, entry);
+                    fz_outline_iterator_insert(m_context, iterator, &item);
+                    releaseUri();
+                    fz_outline_iterator_prev(m_context, iterator);
+                    fz_outline_iterator_down(m_context, iterator);
+                    openFrames.push_back(
+                        { index, index + 1 < flatOutline.size() && flatOutline[index + 1].depth > entry.depth });
+                }
+                while (!openFrames.empty())
+                    popFrame();
+            }
+            fz_always(m_context)
+            {
+                if (iterator)
+                    fz_drop_outline_iterator(m_context, iterator);
+            }
+            fz_catch(m_context)
+            {
+                MU_LOG(warning,
+                       "Mu::Worker::Epub",
+                       std::string("PDF outline build failed: ") + fz_caught_message(m_context));
+            }
         }
 
         pdf_update_open_pages(m_context, destination);
