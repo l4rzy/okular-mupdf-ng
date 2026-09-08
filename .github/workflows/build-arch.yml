@@ -59,5 +59,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: arch-package
-          path: dist/*.pkg.tar.zst
+          path: |
+            dist/okular-mupdf-ng-[0-9]*.pkg.tar.zst
+            dist/okular-mupdf-ng-dynamic-[0-9]*.pkg.tar.zst
           if-no-files-found: error

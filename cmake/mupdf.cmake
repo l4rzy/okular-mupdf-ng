@@ -102,6 +102,26 @@ else()
         endif()
     endif()
 
+    # MuPDF is an external build with its own warning policy. Forward useful
+    # compiler and configuration flags, but keep the project's -W options on
+    # project targets only. Linker forwarding flags such as -Wl,... are not
+    # compiler warnings and remain available to MuPDF.
+    foreach(_mupdf_flags_variable IN ITEMS _mupdf_c_flags _mupdf_cxx_flags)
+        separate_arguments(_mupdf_flag_list UNIX_COMMAND "${${_mupdf_flags_variable}}")
+        set(_mupdf_filtered_flag_list)
+        foreach(_mupdf_flag IN LISTS _mupdf_flag_list)
+            if(NOT _mupdf_flag MATCHES "^-W" OR _mupdf_flag MATCHES "^-Wl,")
+                list(APPEND _mupdf_filtered_flag_list "${_mupdf_flag}")
+            endif()
+        endforeach()
+        if(_mupdf_filtered_flag_list)
+            string(JOIN " " _mupdf_filtered_flags ${_mupdf_filtered_flag_list})
+        else()
+            set(_mupdf_filtered_flags "")
+        endif()
+        set(${_mupdf_flags_variable} "${_mupdf_filtered_flags}")
+    endforeach()
+
     set(_mupdf_xcflags
         "-DFZ_ENABLE_CBZ=0"
         "-DFZ_ENABLE_IMG=0"
