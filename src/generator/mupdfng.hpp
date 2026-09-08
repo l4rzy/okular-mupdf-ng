@@ -26,6 +26,7 @@
 #include "generator/proxy/certificate_store.hpp"
 #include "generator/proxy/form/coordinator.hpp"
 #include "generator/proxy/form/signature.hpp"
+#include "generator/render_tracker.hpp"
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/worker_client.hpp"
 
@@ -222,6 +223,7 @@ private:
     Config::WorkerSettings m_settings;
     // Opaque page background requested by Okular (paper-color setting).
     std::uint32_t m_paperColorRgb = 0xFFFFFF;
+    RenderTracker m_renderTracker;
 
     // Restart decision state: whether pending settings need an Okular
     // restart, and whether the one-shot dialog notice was already shown.

@@ -869,6 +869,7 @@ bool Main::doCloseDocument()
     // mutex protects their ownership.
     m_formsDirty = false;
     m_annotationsDirty = false;
+    m_renderTracker.reset();
     QMutexLocker locker(userMutex());
     clearWorkerDerivedState();
     m_okularPages.clear();
@@ -1007,14 +1008,19 @@ Okular::FontInfo::List Main::fontsForPage(int page)
 // Okular Generator Func: renders a page or tile for Okular.
 QImage Main::image(Okular::PixmapRequest* request)
 {
-    if (request->shouldAbortRender())
+    const bool preserveLikelyZoomIn = m_renderTracker.isLikelyZoomIn(request);
+    const auto shouldAbort = [request, preserveLikelyZoomIn] {
+        return request->shouldAbortRender() && !preserveLikelyZoomIn;
+    };
+
+    if (shouldAbort())
         return { };
 
     const int pageNum = request->page()->number();
 
     if (m_placeholder.isActive()) {
         QImage image = m_placeholder.image(request->width(), request->height());
-        return request->shouldAbortRender() ? QImage { } : image;
+        return shouldAbort() ? QImage { } : image;
     }
 
     // Rendering is isolated in the worker process.
@@ -1048,7 +1054,7 @@ QImage Main::image(Okular::PixmapRequest* request)
                          static_cast<int>(bottom - top));
         }
         QImage img = m_worker.render(pageNum, request->width(), request->height(), tile);
-        if (request->shouldAbortRender())
+        if (shouldAbort())
             return { };
         if (img.isNull()) {
             MU_LOG(warning,
@@ -1064,7 +1070,7 @@ QImage Main::image(Okular::PixmapRequest* request)
                    "normalized render frame from " + std::to_string(sourceSize.width()) + "x"
                        + std::to_string(sourceSize.height()) + " to " + std::to_string(img.width()) + "x"
                        + std::to_string(img.height()));
-        return request->shouldAbortRender() ? QImage { } : img;
+        return shouldAbort() ? QImage { } : img;
     }
     return { };
 }
