@@ -150,6 +150,7 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
     return saved;
 }
 
+// Export a PDF with proper TOC and Links built
 bool EpubDocument::exportPdfFd(int fd, const std::vector<int>& pages, std::string* error)
 {
     if (fd < 0)
@@ -204,36 +205,32 @@ bool EpubDocument::exportPdfFd(int fd, const std::vector<int>& pages, std::strin
         if (!outlineError.empty())
             MU_LOG(warning, "Mu::Worker::Epub", "could not load outline for PDF export: " + outlineError);
         if (!outlineNodes.empty()) {
-            // Depth is carried per frame: the stack holds the whole future
-            // sibling frontier for pre-pushed roots, so its size is not the
-            // DFS depth of the node being emitted.
+            // List-walker DFS: every frame walks one sibling list in forward
+            // order, so roots and children are emitted in document order and
+            // the depth is exactly the number of ancestor frames below.
             struct FlatFrame {
-                const OutlineNode* node;
-                std::size_t nextChild;
-                std::int32_t depth;
+                const std::vector<OutlineNode>* list;
+                std::size_t index;
             };
 
             std::vector<FlatFrame> stack;
-            for (const OutlineNode& root : outlineNodes)
-                stack.push_back({ &root, 0, 0 });
+            stack.push_back({ &outlineNodes, 0 });
             while (!stack.empty()) {
                 FlatFrame& frame = stack.back();
-                if (frame.nextChild == 0) {
-                    std::int32_t destIndex = -1;
-                    if (frame.node->link.valid && !frame.node->link.external) {
-                        const auto target = destinationPages.find(frame.node->link.viewport.page);
-                        if (target != destinationPages.end())
-                            destIndex = target->second;
-                    }
-                    flatOutline.push_back({ frame.node, destIndex, frame.depth });
-                }
-                if (frame.nextChild < frame.node->children.size()) {
-                    const OutlineNode& child = frame.node->children[frame.nextChild++];
-                    const std::int32_t childDepth = frame.depth + 1;
-                    stack.push_back({ &child, 0, childDepth });
-                } else {
+                if (frame.index >= frame.list->size()) {
                     stack.pop_back();
+                    continue;
                 }
+                const OutlineNode& node = (*frame.list)[frame.index++];
+                std::int32_t destIndex = -1;
+                if (node.link.valid && !node.link.external) {
+                    const auto target = destinationPages.find(node.link.viewport.page);
+                    if (target != destinationPages.end())
+                        destIndex = target->second;
+                }
+                flatOutline.push_back({ &node, destIndex, static_cast<std::int32_t>(stack.size() - 1) });
+                if (!node.children.empty())
+                    stack.push_back({ &node.children, 0 });
             }
         }
     }

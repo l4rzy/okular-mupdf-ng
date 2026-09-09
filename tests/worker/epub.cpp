@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fcntl.h>
@@ -575,6 +576,131 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(hashOnlyMeta.values.size(), size_t(1));
         QCOMPARE(hashOnlyMeta.values.at("hash"), allMeta.values.at("hash"));
+    }
+
+    void testExportPdfRendersPagesAndLinks()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "linked.epub", &error), error.c_str());
+        file.close();
+        QVERIFY(document.pageCount() > 1);
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
+        const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fullFd >= 0);
+        QVERIFY2(document.exportPdfFd(fullFd, { }, &error), error.c_str());
+
+        QFile fullFile(fullPath);
+        QVERIFY(fullFile.open(QIODevice::ReadOnly));
+        QVERIFY(fullFile.read(5) == "%PDF-");
+        ::Mu::Worker::Engine::PdfDocument fullPdf;
+        QVERIFY2(fullPdf.openFd(::dup(fullFile.handle()), "exported.pdf", &error), error.c_str());
+        fullFile.close();
+        QCOMPARE(fullPdf.pageCount(), document.pageCount());
+
+        // Page 0 must carry the forward internal reference (the regression
+        // class of "cannot find page N in page tree") and the external URI.
+        const auto links = fullPdf.extractLinks(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        bool forwardInternal = false;
+        bool external = false;
+        for (const auto& link : links) {
+            if (link.target.valid && !link.target.external && link.target.viewport.page > 0)
+                forwardInternal = true;
+            if (link.target.external && link.target.uri == "https://example.org/external")
+                external = true;
+        }
+        QVERIFY(forwardInternal);
+        QVERIFY(external);
+    }
+
+    void testExportPdfOutlineNesting()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "linked.epub", &error), error.c_str());
+        file.close();
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
+        const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fullFd >= 0);
+        QVERIFY2(document.exportPdfFd(fullFd, { }, &error), error.c_str());
+
+        QFile fullFile(fullPath);
+        QVERIFY(fullFile.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument fullPdf;
+        QVERIFY2(fullPdf.openFd(::dup(fullFile.handle()), "exported.pdf", &error), error.c_str());
+        fullFile.close();
+
+        // The nesting regression placed "Chapter Two" inside "Chapter One";
+        // both must stay top level with the nested section under the first.
+        const auto nodes = fullPdf.outline(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(nodes.size(), std::size_t(2));
+        QCOMPARE(QString::fromStdString(nodes.front().title), QStringLiteral("Chapter One"));
+        QVERIFY(nodes.front().link.valid);
+        QCOMPARE(nodes.front().link.viewport.page, 0);
+        QCOMPARE(nodes.front().children.size(), std::size_t(1));
+        QCOMPARE(QString::fromStdString(nodes.front().children.front().title), QStringLiteral("Section 1.1"));
+        QVERIFY(nodes.front().children.front().link.valid);
+        QVERIFY(nodes.front().children.front().link.viewport.page >= 1);
+        QCOMPARE(QString::fromStdString(nodes.back().title), QStringLiteral("Chapter Two"));
+        QVERIFY(nodes.back().link.valid);
+        QVERIFY(nodes.back().link.viewport.page > nodes.front().children.front().link.viewport.page);
+    }
+
+    void testExportPdfSubsetAndErrors()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "linked.epub", &error), error.c_str());
+        file.close();
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        // A page subset must succeed even though page 0 links forward to an
+        // excluded destination page; the missing target is skipped while the
+        // external URI survives.
+        const QString subsetPath = directory.filePath(QStringLiteral("subset.pdf"));
+        const int subsetFd = ::open(subsetPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(subsetFd >= 0);
+        QVERIFY2(document.exportPdfFd(subsetFd, { 0 }, &error), error.c_str());
+
+        QFile subsetFile(subsetPath);
+        QVERIFY(subsetFile.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument subsetPdf;
+        QVERIFY2(subsetPdf.openFd(::dup(subsetFile.handle()), "subset.pdf", &error), error.c_str());
+        subsetFile.close();
+        QCOMPARE(subsetPdf.pageCount(), 1);
+        const auto links = subsetPdf.extractLinks(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const bool external = std::any_of(links.cbegin(), links.cend(), [](const auto& link) {
+            return link.target.external && link.target.uri == "https://example.org/external";
+        });
+        QVERIFY(external);
+
+        // Invalid descriptors and out-of-range selections must fail cleanly.
+        error.clear();
+        QVERIFY(!document.exportPdfFd(-1, { }, &error));
+        QVERIFY(!error.empty());
+
+        const QString rejectPath = directory.filePath(QStringLiteral("rejected.pdf"));
+        const int rejectFd = ::open(rejectPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(rejectFd >= 0);
+        QVERIFY(!document.exportPdfFd(rejectFd, { document.pageCount() }, &error));
+        QVERIFY(!error.empty());
     }
 };
 

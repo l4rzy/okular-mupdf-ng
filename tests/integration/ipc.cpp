@@ -1,3 +1,4 @@
+#include "engine/pdf/document.hpp"
 #include "genpdf.hpp"
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/epub_cache.hpp"
@@ -190,6 +191,29 @@ private slots:
         const auto second = m_client.synopsis();
         QCOMPARE(second.size(), first.size());
         QCOMPARE(second.front().title, first.front().title);
+        QVERIFY(m_client.close());
+    }
+
+    void epubExportPdfOverIpc()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        QVERIFY(!pages.isEmpty());
+
+        QTemporaryDir outputDirectory;
+        QVERIFY(outputDirectory.isValid());
+        const QString outputPath = outputDirectory.filePath(QStringLiteral("export.pdf"));
+        QVERIFY(m_client.exportPdfToFile(outputPath, { }));
+
+        QFile output(outputPath);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        QVERIFY(output.read(5) == "%PDF-");
+        ::Mu::Worker::Engine::PdfDocument exported;
+        std::string error;
+        QVERIFY2(exported.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
+        output.close();
+        QCOMPARE(exported.pageCount(), pages.size());
+
         QVERIFY(m_client.close());
     }
 
