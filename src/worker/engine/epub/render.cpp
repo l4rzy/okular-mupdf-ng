@@ -101,9 +101,9 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         }
 
         // Initialize background with the opaque Okular paper color.
-        float paper[3] = { ((m_settings.paperColorRgb >> 16) & 0xFF) / 255.0f,
-                           ((m_settings.paperColorRgb >> 8) & 0xFF) / 255.0f,
-                           (m_settings.paperColorRgb & 0xFF) / 255.0f };
+        float paper[3] = { static_cast<float>((m_settings.paperColorRgb >> 16) & 0xFF) / 255.0f,
+                           static_cast<float>((m_settings.paperColorRgb >> 8) & 0xFF) / 255.0f,
+                           static_cast<float>(m_settings.paperColorRgb & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
         dev = fz_new_draw_device(m_context, ctm, pix);
         fz_run_page(m_context, page, dev, fz_identity, nullptr);

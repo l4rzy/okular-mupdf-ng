@@ -5,9 +5,13 @@
 #define MU_GENERATOR_PROXY_FORM_SIGNATURE_HPP
 
 #include <okular/core/form.h>
+#include <okular/core/version.h>
+
+#include <QtCore/qglobal.h>
 
 #include <map>
 #include <mutex>
+#include <utility>
 
 #include "shared/model/types.hpp"
 
@@ -37,14 +41,21 @@ public:
 
     Okular::FormFieldSignature::SignatureType signatureType() const override;
     Okular::SignatureInfo signatureInfo() const override;
+#if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
     std::pair<Okular::SigningResult, QString> sign(const Okular::NewSignatureData& data,
                                                    const QString& newPath) const override;
+#else
+    bool sign(const Okular::NewSignatureData& data, const QString& newPath) const override;
+#endif
     SubscriptionHandle subscribeUpdates(const std::function<void()>& callback) const override;
     bool unsubscribeUpdates(const SubscriptionHandle& handle) const override;
 
     int id() const override { return m_id; }
 
 private:
+    std::pair<Okular::SigningResult, QString> signResult(const Okular::NewSignatureData& data,
+                                                         const QString& newPath) const;
+
     int m_id;
     // Verification and display data are a snapshot from the active document.
     Model::SignatureField m_data;

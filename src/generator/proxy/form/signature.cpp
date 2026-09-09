@@ -192,8 +192,8 @@ Okular::SignatureInfo Signature::signatureInfo() const
     return info;
 }
 
-std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSignatureData& data,
-                                                          const QString& newPath) const
+std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::NewSignatureData& data,
+                                                                const QString& newPath) const
 {
 #ifndef MUPDF_FORMFIELD_REMOTE_SIGNING
     // Keep the feature compile-time gated; builds without remote signing still
@@ -237,6 +237,19 @@ std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSigna
     }
 #endif
 }
+
+#if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
+std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSignatureData& data,
+                                                          const QString& newPath) const
+{
+    return signResult(data, newPath);
+}
+#else
+bool Signature::sign(const Okular::NewSignatureData& data, const QString& newPath) const
+{
+    return signResult(data, newPath).first == Okular::SigningSuccess;
+}
+#endif
 
 Signature::SubscriptionHandle Signature::subscribeUpdates(const std::function<void()>& callback) const
 {

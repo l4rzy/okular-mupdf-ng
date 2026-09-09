@@ -17,7 +17,10 @@
 #include <okular/interfaces/saveinterface.h>
 
 #include <QByteArray>
+#include <QtCore/qglobal.h>
+
 #include <memory>
+#include <utility>
 
 #include "generator/config/settings.hpp"
 #include "generator/placeholder.hpp"
@@ -93,8 +96,12 @@ public:
     // Okular Generator Func: reports that worker-backed signing is supported.
     bool canSign() const override;
     // Okular Generator Func: signs the document using the supplied data.
+#if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
     std::pair<Okular::SigningResult, QString> sign(const Okular::NewSignatureData& data,
                                                    const QString& rFilename) override;
+#else
+    bool sign(const Okular::NewSignatureData& data, const QString& rFilename) override;
+#endif
     // Okular Generator Func: returns the certificate store used for signing.
     Okular::CertificateStore* certificateStore() const override;
 
@@ -116,6 +123,9 @@ protected:
     void addPages(KConfigDialog* dialog) override;
 
 private:
+    std::pair<Okular::SigningResult, QString> signResult(const Okular::NewSignatureData& data,
+                                                         const QString& rFilename);
+
     // Updates OCR scheduling from the pages currently visible in Okular.
     void observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount);
     // Reopens the retained source after a worker restart and verifies that it

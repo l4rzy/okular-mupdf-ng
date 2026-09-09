@@ -42,7 +42,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         return fail(error, "render dimensions are invalid");
 
     // Validate tile geometry against target dimensions
-    const RenderTile tile = request.tile.value_or({ 0, 0, width, height });
+    const RenderTile tile = request.tile.value_or(RenderTile { 0, 0, width, height });
     if (!isValidRenderTile(width, height, tile.x, tile.y, tile.width, tile.height))
         return fail(error, "render tile is outside the requested image");
 
@@ -96,9 +96,9 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         }
 
         // Initialize background with the opaque Okular paper color.
-        float paper[3] = { ((m_settings.paperColorRgb >> 16) & 0xFF) / 255.0f,
-                           ((m_settings.paperColorRgb >> 8) & 0xFF) / 255.0f,
-                           (m_settings.paperColorRgb & 0xFF) / 255.0f };
+        float paper[3] = { static_cast<float>((m_settings.paperColorRgb >> 16) & 0xFF) / 255.0f,
+                           static_cast<float>((m_settings.paperColorRgb >> 8) & 0xFF) / 255.0f,
+                           static_cast<float>(m_settings.paperColorRgb & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pixmap, fz_device_rgb(m_context), paper, fz_default_color_params);
         device = fz_new_draw_device(m_context, tiled ? transform : fz_identity, pixmap);
 

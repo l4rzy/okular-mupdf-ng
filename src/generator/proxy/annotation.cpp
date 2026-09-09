@@ -4,6 +4,9 @@
 #include "generator/proxy/annotation.hpp"
 
 #include <okular/core/document.h>
+#include <okular/core/version.h>
+
+#include <QtCore/qglobal.h>
 
 #include <utility>
 
@@ -61,28 +64,36 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
         signature->setPage(page);
         const Okular::NormalizedRect bounds = signature->boundingRectangle();
         Plugin::WorkerClient* const backend = m_backend;
-        signature->setSignFunction(
-            [backend, page, bounds, signature](const Okular::NewSignatureData& data, const QString& fileName) {
-                if (!backend || !backend->isConnected())
-                    return std::make_pair(Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable"));
-                const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
-                if (commonName.isEmpty())
-                    return std::make_pair(Okular::KeyMissing, QStringLiteral("Signing certificate was not found"));
-                const QString imagePath =
-                    !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
-                auto appearance = Conversion::toModelSignatureAppearance(data);
-                appearance.backgroundImage =
-                    Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
-                return signingResult(backend->sign({ { },
-                                                     page,
-                                                     { bounds.left, bounds.top, bounds.right, bounds.bottom },
-                                                     data.certNickname().toStdString(),
-                                                     commonName.toStdString(),
-                                                     -1,
-                                                     std::move(appearance) },
-                                                   data.password(),
-                                                   fileName));
-            });
+        const auto sign =
+            [backend, page, bounds, signature](const Okular::NewSignatureData& data,
+                                               const QString& fileName) -> std::pair<Okular::SigningResult, QString> {
+            if (!backend || !backend->isConnected())
+                return std::make_pair(Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable"));
+            const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
+            if (commonName.isEmpty())
+                return std::make_pair(Okular::KeyMissing, QStringLiteral("Signing certificate was not found"));
+            const QString imagePath =
+                !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
+            auto appearance = Conversion::toModelSignatureAppearance(data);
+            appearance.backgroundImage =
+                Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
+            return signingResult(backend->sign({ { },
+                                                 page,
+                                                 { bounds.left, bounds.top, bounds.right, bounds.bottom },
+                                                 data.certNickname().toStdString(),
+                                                 commonName.toStdString(),
+                                                 -1,
+                                                 std::move(appearance) },
+                                               data.password(),
+                                               fileName));
+        };
+#if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
+        signature->setSignFunction(sign);
+#else
+        signature->setSignFunction([sign](const Okular::NewSignatureData& data, const QString& fileName) {
+            return sign(data, fileName).first;
+        });
+#endif
         return;
     }
     const auto model = Conversion::toModel(annotation);

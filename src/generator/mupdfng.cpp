@@ -1344,8 +1344,8 @@ QWidget* Main::printConfigurationWidget() const
     return page;
 }
 
-// Okular Generator Func: signs the document using the supplied data.
-std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
+std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSignatureData& data,
+                                                           const QString& rFilename)
 {
     if (m_placeholder.isActive())
         return { Okular::GenericSigningError,
@@ -1388,6 +1388,19 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
     }
     return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
 }
+
+// Okular Generator Func: signs the document using the supplied data.
+#if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
+std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
+{
+    return signResult(data, rFilename);
+}
+#else
+bool Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
+{
+    return signResult(data, rFilename).first == Okular::SigningSuccess;
+}
+#endif
 
 // Okular Generator Func: reports that worker-backed signing is supported.
 bool Main::canSign() const
