@@ -90,8 +90,7 @@ public:
     modifyAnnotation(int page, const QString& handle, const Model::Annotation& annotation, bool appearance);
     Q_INVOKABLE bool removeAnnotation(int page, const QString& handle);
     Q_INVOKABLE bool saveToFile(const QString& target);
-    Q_INVOKABLE bool savePdfToFile(const QString& target, const QVector<int>& pages);
-    Q_INVOKABLE bool exportPdfToFile(const QString& target, const QVector<int>& pages);
+    Q_INVOKABLE bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
     Q_INVOKABLE Model::SignResponse
     signToFile(Model::SignRequest request, const QString& password, const QString& target);
     Q_INVOKABLE std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);

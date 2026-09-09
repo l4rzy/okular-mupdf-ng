@@ -265,19 +265,13 @@ bool WorkerClient::saveToFile(const QString& t)
     return result;
 }
 
-bool WorkerClient::printPdfToFile(const QString& t, const QVector<int>& pages)
+bool WorkerClient::savePdfToFile(const QString& t, const QVector<int>& pages, bool withReferences)
 {
     bool result = false;
     QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->savePdfToFile(t, pages); }, Qt::BlockingQueuedConnection);
-    return result;
-}
-
-bool WorkerClient::exportPdfToFile(const QString& t, const QVector<int>& pages)
-{
-    bool result = false;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->exportPdfToFile(t, pages); }, Qt::BlockingQueuedConnection);
+        m_transport,
+        [&] { result = m_transport->savePdfToFile(t, pages, withReferences); },
+        Qt::BlockingQueuedConnection);
     return result;
 }
 

@@ -163,7 +163,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("output.pdf"));
-        QVERIFY(m_client.printPdfToFile(outputPath, { 0 }));
+        QVERIFY(m_client.savePdfToFile(outputPath, { 0 }));
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));
         QVERIFY(output.read(5) == "%PDF-");
@@ -203,7 +203,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export.pdf"));
-        QVERIFY(m_client.exportPdfToFile(outputPath, { }));
+        QVERIFY(m_client.savePdfToFile(outputPath, { }, true));
 
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));

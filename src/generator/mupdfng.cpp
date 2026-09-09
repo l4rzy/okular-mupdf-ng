@@ -1230,7 +1230,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
         if (m_document.type != Model::DocumentType::Epub || m_placeholder.isActive() || !m_worker.isConnected())
             return false;
-        return m_worker.exportPdfToFile(fileName, { });
+        return m_worker.savePdfToFile(fileName, { }, true);
     }
 
     if (!format.mimeType().inherits(QStringLiteral("text/plain")) || m_placeholder.isActive()
@@ -1293,7 +1293,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     tempFile.setAutoRemove(false);
     tempFile.close();
 
-    if (!m_worker.printPdfToFile(fileName, selectedPages)) {
+    if (!m_worker.savePdfToFile(fileName, selectedPages)) {
         QFile::remove(fileName);
         return Okular::Document::FileConversionPrintError;
     }

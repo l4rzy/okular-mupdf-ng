@@ -644,22 +644,13 @@ bool WorkerTransport::saveToFile(const QString& target)
     return writeFile(SaveRequest { }, target);
 }
 
-bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& pages)
+bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences)
 {
     std::vector<std::int32_t> pageList;
     pageList.reserve(static_cast<std::size_t>(pages.size()));
     for (int p : pages)
         pageList.push_back(p);
-    return writeFile(SavePdfRequest { { }, std::move(pageList) }, target);
-}
-
-bool WorkerTransport::exportPdfToFile(const QString& target, const QVector<int>& pages)
-{
-    std::vector<std::int32_t> pageList;
-    pageList.reserve(static_cast<std::size_t>(pages.size()));
-    for (int p : pages)
-        pageList.push_back(p);
-    return writeFile(ExportPdfRequest { { }, std::move(pageList) }, target);
+    return writeFile(SavePdfRequest { { }, std::move(pageList), withReferences }, target);
 }
 
 SignResponse WorkerTransport::signToFile(SignRequest request, const QString& password, const QString& target)

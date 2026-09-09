@@ -60,7 +60,7 @@ bool DocumentBase::savePdfFd(int fd, const std::vector<int>&, std::string* error
     return fail(error, "save is not supported for this document type");
 }
 
-bool DocumentBase::exportPdfFd(int fd, const std::vector<int>&, std::string* error)
+bool DocumentBase::savePdfFdWithReferences(int fd, const std::vector<int>&, std::string* error)
 {
     if (fd >= 0)
         ::close(fd);

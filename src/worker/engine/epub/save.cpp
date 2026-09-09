@@ -151,7 +151,7 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
 }
 
 // Export a PDF with proper TOC and Links built
-bool EpubDocument::exportPdfFd(int fd, const std::vector<int>& pages, std::string* error)
+bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error)
 {
     if (fd < 0)
         return fail(error, "output FD is invalid");

@@ -319,26 +319,17 @@ ResponseMessage CommandService::saveFdResponse(std::uint64_t id, int fd)
 
 ResponseMessage CommandService::savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd)
 {
+    const char* method = payload.withReferences ? "export_pdf" : "save_pdf";
     Sys::FileDescriptor ownedFd(fd);
     if (!hasOpenDocument()) {
-        return failure(id, ErrorCode::NotOpen, "save_pdf", "no document is open");
+        return failure(id, ErrorCode::NotOpen, method, "no document is open");
     }
     std::string error;
-    if (!m_document->savePdfFd(ownedFd.release(), payload.pages, &error))
-        return failure(id, ErrorCode::Internal, "save_pdf", error);
-
-    return success(id);
-}
-
-ResponseMessage CommandService::exportPdfFdResponse(std::uint64_t id, const ExportPdfRequest& payload, int fd)
-{
-    Sys::FileDescriptor ownedFd(fd);
-    if (!hasOpenDocument()) {
-        return failure(id, ErrorCode::NotOpen, "export_pdf", "no document is open");
-    }
-    std::string error;
-    if (!m_document->exportPdfFd(ownedFd.release(), payload.pages, &error))
-        return failure(id, ErrorCode::Internal, "export_pdf", error);
+    const bool ok = payload.withReferences
+        ? m_document->savePdfFdWithReferences(ownedFd.release(), payload.pages, &error)
+        : m_document->savePdfFd(ownedFd.release(), payload.pages, &error);
+    if (!ok)
+        return failure(id, ErrorCode::Internal, method, error);
 
     return success(id);
 }
@@ -1050,14 +1041,9 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
                     "save", payload.file.transferId, [&](int fd) { return saveFdResponse(request.id, fd); });
             },
             [&](const SavePdfRequest& payload) {
-                return dispatchWithFd("save_pdf", payload.file.transferId, [&](int fd) {
-                    return savePdfFdResponse(request.id, payload, fd);
-                });
-            },
-            [&](const ExportPdfRequest& payload) {
-                return dispatchWithFd("export_pdf", payload.file.transferId, [&](int fd) {
-                    return exportPdfFdResponse(request.id, payload, fd);
-                });
+                return dispatchWithFd(payload.withReferences ? "export_pdf" : "save_pdf",
+                                      payload.file.transferId,
+                                      [&](int fd) { return savePdfFdResponse(request.id, payload, fd); });
             },
             [&](const SignRequest& payload) {
                 return dispatchWithFd(

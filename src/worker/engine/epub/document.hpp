@@ -90,7 +90,8 @@ public:
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
     [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
-    [[nodiscard]] bool exportPdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
+    [[nodiscard]] bool
+    savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
 
 private:
     struct LayoutGeometry {

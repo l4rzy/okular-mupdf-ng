@@ -593,7 +593,7 @@ private slots:
         const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        QVERIFY2(document.exportPdfFd(fullFd, { }, &error), error.c_str());
+        QVERIFY2(document.savePdfFdWithReferences(fullFd, { }, &error), error.c_str());
 
         QFile fullFile(fullPath);
         QVERIFY(fullFile.open(QIODevice::ReadOnly));
@@ -633,7 +633,7 @@ private slots:
         const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        QVERIFY2(document.exportPdfFd(fullFd, { }, &error), error.c_str());
+        QVERIFY2(document.savePdfFdWithReferences(fullFd, { }, &error), error.c_str());
 
         QFile fullFile(fullPath);
         QVERIFY(fullFile.open(QIODevice::ReadOnly));
@@ -676,7 +676,7 @@ private slots:
         const QString subsetPath = directory.filePath(QStringLiteral("subset.pdf"));
         const int subsetFd = ::open(subsetPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(subsetFd >= 0);
-        QVERIFY2(document.exportPdfFd(subsetFd, { 0 }, &error), error.c_str());
+        QVERIFY2(document.savePdfFdWithReferences(subsetFd, { 0 }, &error), error.c_str());
 
         QFile subsetFile(subsetPath);
         QVERIFY(subsetFile.open(QIODevice::ReadOnly));
@@ -693,13 +693,13 @@ private slots:
 
         // Invalid descriptors and out-of-range selections must fail cleanly.
         error.clear();
-        QVERIFY(!document.exportPdfFd(-1, { }, &error));
+        QVERIFY(!document.savePdfFdWithReferences(-1, { }, &error));
         QVERIFY(!error.empty());
 
         const QString rejectPath = directory.filePath(QStringLiteral("rejected.pdf"));
         const int rejectFd = ::open(rejectPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(rejectFd >= 0);
-        QVERIFY(!document.exportPdfFd(rejectFd, { document.pageCount() }, &error));
+        QVERIFY(!document.savePdfFdWithReferences(rejectFd, { document.pageCount() }, &error));
         QVERIFY(!error.empty());
     }
 };

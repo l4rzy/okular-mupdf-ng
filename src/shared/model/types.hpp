@@ -773,16 +773,13 @@ struct SaveRequest {
     FileTransfer file;
 };
 
-/// Saves selected PDF pages to a transferred output descriptor.
+/// Saves selected pages to a transferred output descriptor as PDF.
 struct SavePdfRequest {
     FileTransfer file;
     std::vector<std::int32_t> pages;
-};
-
-/// Exports a document to PDF using its format-specific export path.
-struct ExportPdfRequest {
-    FileTransfer file;
-    std::vector<std::int32_t> pages;
+    /// True builds the PDF via the format-specific export path (savePdfFdWithReferences);
+    /// false uses a plain page copy (savePdfFd).
+    bool withReferences = false;
 };
 
 /// Elements rendered into the signature appearance stream (bitmask).
@@ -846,7 +843,6 @@ using RequestPayload = std::variant<PingRequest,
                                     SettingsRequest,
                                     SaveRequest,
                                     SavePdfRequest,
-                                    ExportPdfRequest,
                                     SignRequest,
                                     SignReply,
                                     FormUpdateRequest,
