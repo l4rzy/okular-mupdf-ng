@@ -34,10 +34,8 @@ private slots:
         fz_register_document_handlers(context);
         createTextPDF(context, m_textPath);
         createEncryptedPDF(context, m_encryptedPath, QStringLiteral("correct-password"));
-#ifdef MUPDF_HAS_OCR
         m_scannedPath = m_tempDir.filePath("scanned.pdf");
         createScannedPDF(context, m_textPath, m_scannedPath);
-#endif
         fz_drop_context(context);
     }
 
@@ -48,7 +46,6 @@ private slots:
         QVERIFY(result.boxes.empty());
     }
 
-#ifdef MUPDF_HAS_OCR
     void testTextOnlyPageSkipsOcr()
     {
         const int fd = ::open(QFile::encodeName(m_textPath).constData(), O_RDONLY);
@@ -91,7 +88,6 @@ private slots:
         QCOMPARE(result.status, Mu::Model::OcrStatus::Failed);
         QVERIFY(result.boxes.empty());
     }
-#endif
 };
 
 int runTestWorkerOcr(int argc, char** argv)

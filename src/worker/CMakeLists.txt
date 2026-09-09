@@ -53,7 +53,6 @@ target_link_libraries(mupdf_worker_core PUBLIC
 
 # The bundled MuPDF is built with tesseract enabled, so OCR is always available.
 target_compile_definitions(mupdf_worker_core PRIVATE
-    MUPDF_HAS_OCR
     TESSDATA_DIR="${TESSDATA_DIR}"
 )
 
@@ -91,7 +90,7 @@ if(SECCOMP_FOUND)
     target_compile_definitions(okular-mupdf-worker PRIVATE MUPDF_HAVE_LIBSECCOMP)
 endif()
 
-target_compile_definitions(okular-mupdf-worker PRIVATE MUPDF_HAS_OCR TESSDATA_DIR="${TESSDATA_DIR}")
+target_compile_definitions(okular-mupdf-worker PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
 
 install(TARGETS okular-mupdf-worker
     DESTINATION "${MUPDF_WORKER_INSTALL_DIR}"

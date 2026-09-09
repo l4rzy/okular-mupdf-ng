@@ -81,7 +81,7 @@ endif()
 target_compile_definitions(mupdf_plugin_worker PRIVATE
     WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
 )
-if(ENABLE_BUILD_TREE_WORKER_PATH)
+if(ENABLE_BUILD_TREE_WORKER)
     target_compile_definitions(mupdf_plugin_worker PRIVATE
         WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
     )
@@ -228,7 +228,6 @@ target_include_directories(okularGenerator_mupdfng PRIVATE
 )
 
 target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
-target_compile_definitions(okularGenerator_mupdfng PRIVATE MUPDF_HAS_OCR)
 
 target_link_libraries(okularGenerator_mupdfng
     mupdf_generator_adapters

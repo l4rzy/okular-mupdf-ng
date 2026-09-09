@@ -68,7 +68,7 @@ if [ "$BUILD_TYPE" = "Release" ]; then
   cmake_args+=(-DBUILD_TESTING=OFF)
 fi
 if [ "$1" = "asan" ]; then
-  cmake_args+=(-DENABLE_SANITIZERS=ON)
+  cmake_args+=(-DENABLE_SANITIZERS=ON -DMUPDF_OPTIMIZED_BUILD=OFF)
 fi
 # Link with mold when available and supported (CMake >= 3.29); otherwise the
 # default linker is used unchanged.

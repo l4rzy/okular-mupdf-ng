@@ -38,7 +38,6 @@ struct ImagePresenceDevice {
     bool hasImage = false;
 };
 
-#ifdef MUPDF_HAS_OCR
 void detectImage(fz_context*, fz_device* device, fz_image*, fz_matrix, float, fz_color_params)
 {
     static_cast<ImagePresenceDevice*>(static_cast<void*>(device))->hasImage = true;
@@ -78,7 +77,6 @@ bool pageHasImages(fz_context* context, fz_page* page, fz_cookie* cookie)
     }
     return hasImage;
 }
-#endif
 
 } // namespace
 
@@ -125,13 +123,6 @@ std::string tessdataLanguage(std::string language)
         result.status = ::Mu::Model::OcrStatus::Failed;
         return result;
     }
-#ifndef MUPDF_HAS_OCR
-    (void)password;
-    (void)language;
-    (void)cookie;
-    result.status = ::Mu::Model::OcrStatus::Unavailable;
-    return result;
-#else
     if (cookie && cookie->isCancelled()) {
         result.status = ::Mu::Model::OcrStatus::Cancelled;
         return result;
@@ -189,7 +180,6 @@ std::string tessdataLanguage(std::string language)
             // Step 3: Instantiate Tesseract OCR engine filter device
             text = fz_new_stext_page(context, fz_empty_rect);
             textDevice = fz_new_stext_device(context, text, nullptr);
-#ifdef TESSDATA_DIR
             ocrDevice = fz_new_ocr_device(context,
                                           textDevice,
                                           fz_scale(dpi / 72.0f, dpi / 72.0f),
@@ -199,17 +189,6 @@ std::string tessdataLanguage(std::string language)
                                           TESSDATA_DIR,
                                           nullptr,
                                           nullptr);
-#else
-            ocrDevice = fz_new_ocr_device(context,
-                                          textDevice,
-                                          fz_scale(dpi / 72.0f, dpi / 72.0f),
-                                          { 0, 0, width, height },
-                                          1,
-                                          lang.c_str(),
-                                          nullptr,
-                                          nullptr,
-                                          nullptr);
-#endif
             activeCookie->sync();
             if (activeCookie->isCancelled()) {
                 fz_throw(context, FZ_ERROR_ABORT, "OCR job cancelled before render");
@@ -310,7 +289,6 @@ std::string tessdataLanguage(std::string language)
     if (failed)
         result.status = ::Mu::Model::OcrStatus::Failed;
     return result;
-#endif
 }
 
 } // namespace Mu::Worker::Engine

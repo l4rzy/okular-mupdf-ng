@@ -83,17 +83,10 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
             this,
             &MuPDFSettingsWidget::updateCustomCssButtonText);
 
-#ifndef MUPDF_HAS_OCR
-    m_mupdfsw->ocrGroupBox->hide();
-#else
     auto* ocrLang = m_mupdfsw->kcfg_OcrLanguage;
     ocrLang->clear();
     ocrLang->setEditable(false);
     ocrLang->setProperty("kcfg_property", QByteArrayLiteral("currentText"));
-
-#ifndef TESSDATA_DIR
-#define TESSDATA_DIR "/usr/share/tessdata"
-#endif
 
     const QString tessDir = QStringLiteral(TESSDATA_DIR);
     QDir dir(tessDir);
@@ -132,7 +125,6 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
              "Choose \"Never\" to disable automatic OCR or \"Always\" to run OCR on every page.");
     triggerMode->setToolTip(ocrTriggerToolTip);
     m_mupdfsw->labelOcrTriggerMode->setToolTip(ocrTriggerToolTip);
-#endif // MUPDF_HAS_OCR
 
     m_mupdfsw->defaultLabel->setText(Plugin::Crypto::defaultSystemNssDbPath());
 

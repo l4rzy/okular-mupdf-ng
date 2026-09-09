@@ -54,7 +54,6 @@ target_compile_definitions(test_mupdf PRIVATE
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
     TESSDATA_DIR="${TESSDATA_DIR}")
-target_compile_definitions(test_mupdf PRIVATE MUPDF_HAS_OCR)
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_mupdf PRIVATE MU_DEBUG_ENABLED)
 endif()

@@ -28,9 +28,11 @@ if(ENABLE_SANITIZERS)
         "ECM sanitizer set for the release test build" FORCE)
 endif()
 
-# Only the exact Debug configuration enables verbose diagnostics and the
-# bundled MuPDF debug profile. None is used by Arch packaging so that makepkg
-# owns the compiler flags; it must still produce a release-profile MuPDF build.
+# Only the exact Debug configuration enables verbose diagnostics. None is used
+# by Arch packaging so that makepkg owns the compiler flags; it must still
+# produce a release-profile MuPDF build. The bundled MuPDF profile itself is
+# controlled by MUPDF_OPTIMIZED_BUILD (default ON: release profile in every
+# preset).
 set(MU_IS_DEBUG_BUILD OFF)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(MU_IS_DEBUG_BUILD ON)
@@ -54,22 +56,11 @@ find_package(KF6 REQUIRED COMPONENTS
     )
 find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network Xml)
 
-if(MU_IS_DEBUG_BUILD)
-    set(DEFAULT_IPC_DEBUG ON)
-else()
-    set(DEFAULT_IPC_DEBUG OFF)
-endif()
+option(ENABLE_BUILD_TREE_WORKER
+    "Embed the build-tree worker for uninstalled developer runs"
+    ${MU_IS_DEBUG_BUILD})
 
-set(DEFAULT_BUILD_TREE_WORKER_PATH OFF)
-if(MU_IS_DEBUG_BUILD)
-    set(DEFAULT_BUILD_TREE_WORKER_PATH ON)
-endif()
-
-option(ENABLE_BUILD_TREE_WORKER_PATH
-    "Embed the build-tree worker path for uninstalled developer runs"
-    ${DEFAULT_BUILD_TREE_WORKER_PATH})
-
-option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics (Debug builds only)" ${DEFAULT_IPC_DEBUG})
+option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics (Debug builds only)" ${MU_IS_DEBUG_BUILD})
 set(MU_DEBUG_BUILD OFF)
 if(MU_IS_DEBUG_BUILD AND ENABLE_MU_DEBUG)
     set(MU_DEBUG_BUILD ON)
@@ -106,7 +97,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "MuPDF build profile: ${MUPDF_BUILD_PROFILE}")
 message(STATUS "Mu debug diagnostics: ${MU_DEBUG_BUILD}")
 message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
-message(STATUS "Build-tree worker path: ${ENABLE_BUILD_TREE_WORKER_PATH}")
+message(STATUS "Build-tree worker: ${ENABLE_BUILD_TREE_WORKER}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
 message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
 # BUILD_TESTING is defined by ECM's KDECMakeSettings (default ON).

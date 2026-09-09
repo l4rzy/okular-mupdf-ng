@@ -1100,7 +1100,6 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     if (m_worker.isConnected()) {
         const std::vector<Model::TextBox> workerBoxes =
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
-#ifdef MUPDF_HAS_OCR
         const Config::OcrSettings ocrSettings = Config::readOcrSettings();
         const Config::OcrTarget ocrTarget = Config::ocrTargetFor(m_document.hash, ocrSettings);
         const auto ocrConfig = Config::ocrConfigFor(
@@ -1133,7 +1132,6 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             Plugin::Caching::OCR::Cache::save(*key, pageNum, items);
             return Conversion::ocrTextPage(items);
         }
-#endif
         return Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height());
     }
     return nullptr;

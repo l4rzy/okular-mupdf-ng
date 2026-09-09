@@ -7,10 +7,17 @@ string(STRIP "${_mupdf_file_version}" _mupdf_file_version)
 if(NOT _mupdf_file_version MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
     message(FATAL_ERROR "Invalid version in cmake/mupdf.version: ${_mupdf_file_version}")
 endif()
-set(MUPDF_REQUIRED_VERSION "${_mupdf_file_version}" CACHE STRING "Required MuPDF version (from cmake/mupdf.version)")
+# Re-derived from cmake/mupdf.version on every configure; deliberately not a
+# cache entry so version bumps take effect in existing build directories.
+set(MUPDF_REQUIRED_VERSION "${_mupdf_file_version}")
 
 option(USE_SYSTEM_MUPDF "Use the system MuPDF package instead of bundled MuPDF" OFF)
 option(USE_SYSTEM_GUMBO "Use the system Gumbo package instead of bundled Gumbo" OFF)
+option(MUPDF_OPTIMIZED_BUILD "Build bundled MuPDF with the release profile (-O2)" ON)
+
+if(USE_SYSTEM_MUPDF AND USE_SYSTEM_GUMBO)
+    message(WARNING "USE_SYSTEM_GUMBO is ignored when USE_SYSTEM_MUPDF is ON")
+endif()
 
 if(USE_SYSTEM_MUPDF)
     # The bundled build is pinned to MUPDF_REQUIRED_VERSION; the system variant
@@ -75,10 +82,10 @@ else()
         set(MUPDF_USE_SYSTEM_GUMBO no)
     endif()
 
-    if(MU_IS_DEBUG_BUILD)
-        set(MUPDF_BUILD_PROFILE debug)
-    else()
+    if(MUPDF_OPTIMIZED_BUILD)
         set(MUPDF_BUILD_PROFILE release)
+    else()
+        set(MUPDF_BUILD_PROFILE debug)
     endif()
 
     set(MUPDF_BUILD_DIR "${CMAKE_BINARY_DIR}/mupdf/${MUPDF_BUILD_PROFILE}")
