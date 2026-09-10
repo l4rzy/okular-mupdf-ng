@@ -40,6 +40,15 @@ bool isValidUtf8(std::string_view str) noexcept;
 /// Counts non-continuation bytes, which represent code points in valid UTF-8.
 std::size_t utf8CodepointCount(std::string_view str) noexcept;
 
+/// Validates standard base64 syntax: 4-byte alignment, the standard alphabet
+/// (A-Z, a-z, 0-9, +, /), and '=' padding only in the last two positions
+/// (padding itself is optional). Empty input is valid.
+bool isValidBase64(std::string_view encoded) noexcept;
+
+/// Validates stored EPUB custom CSS in its encoded form: standard base64
+/// syntax plus the stored byte cap. Empty input is valid and means no CSS.
+bool isValidEpubCustomCssBase64(std::string_view encoded) noexcept;
+
 /// Reports whether a string is safe to pass to NUL-terminated APIs.
 bool hasNoEmbeddedNul(std::string_view str) noexcept;
 

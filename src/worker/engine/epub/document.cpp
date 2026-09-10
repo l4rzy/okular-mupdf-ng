@@ -61,28 +61,14 @@ constexpr const char* fontFamilyCss(EpubFontFamily fontFamily) noexcept
     }
 }
 
-/// Decodes base64-encoded user CSS and validates UTF-8 sanity.
+/// Decodes base64-encoded user CSS and validates UTF-8 sanity. The encoded
+/// syntax is validated by the shared Mu::Model validator.
 std::optional<std::string> decodeCustomCss(fz_context* context, std::string_view encoded)
 {
     if (encoded.empty())
         return std::string();
-    if (encoded.size() > MaxEpubCustomCssBase64Bytes || encoded.size() % 4 != 0)
+    if (!isValidEpubCustomCssBase64(encoded))
         return std::nullopt;
-
-    const auto isBase64 = [](char c) {
-        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/';
-    };
-    std::size_t padding = 0;
-    for (std::size_t i = 0; i < encoded.size(); ++i) {
-        const char c = encoded[i];
-        if (c == '=') {
-            ++padding;
-            if (i < encoded.size() - 2 || padding > 2)
-                return std::nullopt;
-        } else if (!isBase64(c) || padding != 0) {
-            return std::nullopt;
-        }
-    }
 
     fz_buffer* decoded = nullptr;
     const unsigned char* decodedData = nullptr;

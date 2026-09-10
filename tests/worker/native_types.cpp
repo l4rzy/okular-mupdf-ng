@@ -402,6 +402,32 @@ private slots:
         QVERIFY(!isValidOcrDpi(600.1f));
         QVERIFY(!isValidOcrDpi(std::numeric_limits<float>::quiet_NaN()));
 
+        // EPUB custom CSS base64 validation
+        QVERIFY(isValidEpubCustomCssBase64(""));
+        QVERIFY(isValidEpubCustomCssBase64("AA=="));
+        QVERIFY(isValidEpubCustomCssBase64("QUJD"));
+        QVERIFY(isValidEpubCustomCssBase64("QUJDRA=="));
+        // Padding is optional, but '=' must sit in the last two positions only.
+        QVERIFY(!isValidEpubCustomCssBase64("A="));
+        QVERIFY(!isValidEpubCustomCssBase64("AB=C"));
+        QVERIFY(!isValidEpubCustomCssBase64("AAAA===="));
+        QVERIFY(!isValidEpubCustomCssBase64("AAA=AAAA"));
+        // URL-safe alphabet and whitespace are rejected.
+        QVERIFY(!isValidEpubCustomCssBase64("A-B_"));
+        QVERIFY(!isValidEpubCustomCssBase64("AAA "));
+        QVERIFY(!isValidEpubCustomCssBase64("\nAAA"));
+        // Alignment and the stored byte cap.
+        QVERIFY(!isValidEpubCustomCssBase64("AAAAA"));
+        QVERIFY(!isValidEpubCustomCssBase64(std::string(Mu::Limit::MaxEpubCustomCssBase64Bytes + 1, 'A')));
+        QVERIFY(isValidEpubCustomCssBase64(std::string(Mu::Limit::MaxEpubCustomCssBase64Bytes, 'A')));
+
+        // Generic base64 syntax carries no size cap.
+        QVERIFY(isValidBase64(""));
+        QVERIFY(isValidBase64("QUJDRA=="));
+        QVERIFY(isValidBase64(std::string(Mu::Limit::MaxEpubCustomCssBase64Bytes + 8, 'A')));
+        QVERIFY(!isValidBase64("A="));
+        QVERIFY(!isValidEpubCustomCssBase64(std::string(Mu::Limit::MaxEpubCustomCssBase64Bytes + 8, 'A')));
+
         // Annotation validation
         Annotation validAnnot;
         validAnnot.x0 = 0.1;

@@ -8,6 +8,7 @@
 
 #include "highlighter.hpp"
 #include "shared/model/types.hpp"
+#include "shared/model/validation.hpp"
 
 namespace Mu::Generator {
 
@@ -55,7 +56,15 @@ void CssEditor::setEncodedText(const QString& value)
 {
     // Loading settings must not trigger a second settings write through
     // encodedTextChanged.
+    // Reject stored values that are not valid base64 (e.g. a hand-edited
+    // config) instead of leniently mangling them and re-encoding the garbage
+    // back into the settings on save.
     const QByteArray encoded = value.toLatin1();
+    if (!Model::isValidEpubCustomCssBase64(encoded.toStdString())) {
+        const QSignalBlocker blocker(this);
+        setPlainText(QString());
+        return;
+    }
     const QByteArray decoded = QByteArray::fromBase64(encoded);
     const QString css = truncateCharacters(QString::fromUtf8(decoded));
     const QSignalBlocker blocker(this);

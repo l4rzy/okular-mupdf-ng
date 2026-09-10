@@ -137,6 +137,35 @@ std::size_t utf8CodepointCount(std::string_view str) noexcept
     return count;
 }
 
+bool isValidBase64(std::string_view encoded) noexcept
+{
+    if (encoded.size() % 4 != 0)
+        return false;
+
+    const auto isBase64 = [](char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/';
+    };
+    std::size_t padding = 0;
+    for (std::size_t i = 0; i < encoded.size(); ++i) {
+        const char c = encoded[i];
+        if (c == '=') {
+            ++padding;
+            if (i < encoded.size() - 2 || padding > 2)
+                return false;
+        } else if (!isBase64(c) || padding != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isValidEpubCustomCssBase64(std::string_view encoded) noexcept
+{
+    // The byte cap is the CSS-specific part; syntax is purely base64. Empty
+    // input passes both trivially and means no custom CSS.
+    return encoded.size() <= MaxEpubCustomCssBase64Bytes && isValidBase64(encoded);
+}
+
 bool hasNoEmbeddedNul(std::string_view str) noexcept
 {
     // std::string_view may contain NUL bytes even though many consumers treat
