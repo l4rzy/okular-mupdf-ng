@@ -3,14 +3,17 @@
 
 #include "engine/constants.hpp"
 #include "engine/epub/document.hpp"
+#include "shared/compat.hpp"
 #include "shared/logging.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <string_view>
 #include <unistd.h>
 #include <unordered_map>
+#include <utility>
 
 extern "C" {
 #include <mupdf/fitz.h>
@@ -18,6 +21,20 @@ extern "C" {
 }
 
 namespace Mu::Worker::Engine {
+
+namespace {
+
+/// Maps a source metadata name to the PDF Info key it is written under.
+const char* pdfInfoKey(std::string_view name)
+{
+    if (name == "title")
+        return FZ_META_INFO_TITLE;
+    if (name == "author")
+        return FZ_META_INFO_AUTHOR;
+    return nullptr;
+}
+
+} // namespace
 
 // =============================================================================
 // EPUB-to-PDF Printing and Export
@@ -230,6 +247,20 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
         }
     }
 
+    // Source metadata is gathered outside the MuPDF error domain; the
+    // application below only reads these owning values. Title/Author come from
+    // the EPUB, the Producer identifies this exporter.
+    std::string metadataError;
+    const DocumentMetadata sourceMetadata = metadata({ "title", "author" }, &metadataError);
+    if (!metadataError.empty())
+        MU_LOG(warning, "Mu::Worker::Epub", "could not read EPUB metadata for PDF export: " + metadataError);
+    std::vector<std::pair<const char*, std::string>> infoFields;
+    for (const auto& [name, value] : sourceMetadata.values) {
+        if (const char* key = pdfInfoKey(name))
+            infoFields.emplace_back(key, value);
+    }
+    const std::string producer = "Okular/okular-mupdf-ng " + std::string(::Mu::IPC::COMPAT);
+
     fz_output* output = nullptr;
     pdf_document* destination = nullptr;
     fz_page* page = nullptr;
@@ -259,6 +290,22 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
     {
         output = fz_new_output_with_file_ptr(m_context, file);
         destination = pdf_create_document(m_context);
+
+        // Metadata is best-effort: a failure keeps the visible export and only
+        // drops the Info entries. The nested boundary abandons the partially
+        // applied operation without failing the whole document.
+        fz_try(m_context)
+        {
+            for (const auto& [key, value] : infoFields)
+                fz_set_metadata(m_context, &destination->super, key, value.c_str());
+            fz_set_metadata(m_context, &destination->super, FZ_META_INFO_PRODUCER, producer.c_str());
+        }
+        fz_catch(m_context)
+        {
+            MU_LOG(warning,
+                   "Mu::Worker::Epub",
+                   std::string("could not apply PDF metadata: ") + fz_caught_message(m_context));
+        }
 
         pdf_write_options options = pdf_default_write_options;
         pdf_parse_write_options(m_context, &options, Constant::EpubPdfWriterOptions);

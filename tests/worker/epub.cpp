@@ -5,6 +5,7 @@
 #include "engine/epub/export_jobs.hpp"
 #include "engine/pdf/document.hpp"
 #include "runtime/command_service.hpp"
+#include "shared/compat.hpp"
 #include "shared/model/types.hpp"
 #include "shared/transport/fd_channel.hpp"
 #include <QByteArray>
@@ -648,6 +649,15 @@ private slots:
         QVERIFY2(fullPdf.openFd(::dup(fullFile.handle()), "exported.pdf", &error), error.c_str());
         fullFile.close();
         QCOMPARE(fullPdf.pageCount(), document.pageCount());
+
+        // The EPUB Title/Author and the exporter's Producer reach the PDF Info
+        // dictionary through the references export path.
+        const auto exportedMeta = fullPdf.metadata({ "title", "author", "producer" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(QString::fromStdString(exportedMeta.values.at("title")), QStringLiteral("Linked Test EPUB"));
+        QCOMPARE(QString::fromStdString(exportedMeta.values.at("author")), QStringLiteral("Linked Author"));
+        QCOMPARE(QString::fromStdString(exportedMeta.values.at("producer")),
+                 QStringLiteral("Okular/mupdf-ng ") + QString::fromStdString(std::string(::Mu::IPC::COMPAT)));
 
         // Page 0 must carry the forward internal reference (the regression
         // class of "cannot find page N in page tree") and the external URI.
