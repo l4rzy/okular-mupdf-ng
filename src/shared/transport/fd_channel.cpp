@@ -3,6 +3,8 @@
 
 #include "shared/transport/fd_channel.hpp"
 
+#include "shared/logging.hpp"
+
 #include <array>
 #include <cerrno>
 #include <cstring>
@@ -171,13 +173,24 @@ int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int
         const int descriptor = extractDescriptor(msg);
         // Validate payload size, ancillary completeness, and correlation before
         // returning ownership of any descriptor to the caller.
-        const bool packetValid = read == ssize_t(sizeof(transferId)) && !(msg.msg_flags & (MSG_CTRUNC | MSG_TRUNC))
-            && transferId == expectedTransferId && descriptor >= 0;
-        if (packetValid)
+        const bool packetWellFormed =
+            read == ssize_t(sizeof(transferId)) && !(msg.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) && descriptor >= 0;
+        if (!packetWellFormed) {
+            closeDescriptors(msg);
+            fail(error, "invalid FD channel packet");
+            return -1;
+        }
+        if (transferId == expectedTransferId)
             return descriptor;
+        // A well-formed packet carrying a different transfer id is an orphaned
+        // transfer from an abandoned submission. Discard it and keep scanning:
+        // descriptors are queued per direction in order, so the expected
+        // transfer is found if it was ever sent; the deadline bounds the wait.
+        MU_LOG(debug,
+               "Mu::IPC::FdChannel",
+               "skipping stale FD transfer " + std::to_string(transferId) + " while waiting for "
+                   + std::to_string(expectedTransferId));
         closeDescriptors(msg);
-        fail(error, "invalid FD channel packet");
-        return -1;
     }
 }
 

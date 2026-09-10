@@ -678,6 +678,14 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     if (!isConnected() || m_export || m_sourcePath.isEmpty())
         return std::nullopt;
 
+    // Every fallible local step precedes any FD send: a descriptor queued but
+    // never claimed by its request would desynchronize the channel.
+    QFile input(m_sourcePath);
+    if (!input.open(QIODevice::ReadOnly)) {
+        MU_LOG(warning, "Mu::Plugin", "could not open source for " + target.toStdString());
+        return std::nullopt;
+    }
+
     const QFileInfo info(target);
     auto file = std::make_unique<QTemporaryFile>(info.absolutePath() + QStringLiteral("/.mupdf-worker-XXXXXX"));
     if (!file->open()) {
@@ -694,11 +702,6 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
         return std::nullopt;
     }
 
-    QFile input(m_sourcePath);
-    if (!input.open(QIODevice::ReadOnly)) {
-        MU_LOG(warning, "Mu::Plugin", "could not open source for " + target.toStdString());
-        return std::nullopt;
-    }
     const auto inputTransfer = m_nextTransfer++;
     if (!m_fd.send(inputTransfer, input.handle(), &e)) {
         MU_LOG(warning, "Mu::Plugin", "could not send input FD for " + target.toStdString() + ": " + e);

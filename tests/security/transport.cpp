@@ -340,7 +340,7 @@ private slots:
         QCOMPARE(::Mu::IPC::tryReadFrame(reader, &frame, nullptr), ::Mu::IPC::ReadStatus::Error);
     }
 
-    void fdChannelTransfersDescriptorAndRejectsWrongId()
+    void fdChannelTransfersDescriptorAndSkipsStaleTransfers()
     {
         QTemporaryDir dir(::Mu::Plugin::Util::tempDirectory() + QStringLiteral("/test-XXXXXX"));
         QVERIFY(dir.isValid());
@@ -380,9 +380,29 @@ private slots:
         ::close(delayed);
 
         QVERIFY(peer.send(42, sourceFd, &error));
-        const int received = listener.receive(41, &error);
-        QCOMPARE(received, -1);
-        QVERIFY(!error.empty());
+        // A well-formed packet with a stale transfer id is an orphan from an
+        // abandoned submission: it is discarded and the scan continues until
+        // the expected id or the deadline. The expected id is never queued, so
+        // the receive times out after discarding the stale packet.
+        const int orphaned = listener.receive(41, &error, 100);
+        QCOMPARE(orphaned, -1);
+        QVERIFY(QString::fromStdString(error).contains(QStringLiteral("timed out")));
+        // A freshly queued transfer of the same id is received normally.
+        QVERIFY(peer.send(42, sourceFd, &error));
+        const int rescued = listener.receive(42, &error);
+        QVERIFY(rescued >= 0);
+        ::close(rescued);
+
+        // A stale head does not block a matching transfer queued behind it.
+        QVERIFY(peer.send(44, sourceFd, &error));
+        QVERIFY(peer.send(45, sourceFd, &error));
+        const int rescuedFromBehind = listener.receive(45, &error);
+        QVERIFY(rescuedFromBehind >= 0);
+        ::close(rescuedFromBehind);
+        // The skipped transfer 44 was discarded, not left queued.
+        QCOMPARE(listener.receive(44, &error, 50), -1);
+        QVERIFY(QString::fromStdString(error).contains(QStringLiteral("timed out")));
+
         QVERIFY(peer.send(42, sourceFd, &error));
         // SCM_RIGHTS keeps its own reference once sendmsg succeeds. Closing the
         // sender descriptor before receive must not invalidate the transfer.

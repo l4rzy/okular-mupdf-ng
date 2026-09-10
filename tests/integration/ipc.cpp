@@ -214,6 +214,37 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    // A failed export submission must not queue an orphan descriptor: opening
+    // the source happens before any FD send, so the FD channel stays clean and
+    // subsequent file operations keep working.
+    void failedExportSubmitKeepsFdChannelClean()
+    {
+        // Copy the corpus EPUB so its path can be deleted for this test.
+        const QString sourceCopy = m_fixtureRoot.filePath(QStringLiteral("export-source.epub"));
+        QVERIFY(QFile::copy(m_epub, sourceCopy));
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(sourceCopy, { }, pages, ::Mu::Model::DocumentType::Epub),
+                 ::Mu::Model::OpenStatus::Success);
+        QVERIFY(!pages.isEmpty());
+
+        // Deleting the source path makes the submit's source-open fail after
+        // the session is established; in-flight descriptors are unaffected.
+        QVERIFY(QFile::remove(sourceCopy));
+
+        QTemporaryDir outputDirectory;
+        QVERIFY(outputDirectory.isValid());
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+        QVERIFY(!m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("export.pdf")), { }).has_value());
+
+        // The FD channel must be clean: a synchronous FD-based operation works.
+        QVERIFY(m_client.savePdfToFile(outputDirectory.filePath(QStringLiteral("print.pdf")), { }, false));
+        QVERIFY(QFile(outputDirectory.filePath(QStringLiteral("print.pdf"))).open(QIODevice::ReadOnly));
+
+        // No export notification was queued by the failed submission.
+        QVERIFY2(spy.isEmpty(), "failed submit must not emit a completion signal");
+        QVERIFY(m_client.close());
+    }
+
     void epubOutlineCacheRoundTrip()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
