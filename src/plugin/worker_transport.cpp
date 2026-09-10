@@ -743,7 +743,13 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
 
     const auto inputTransfer = m_nextTransfer++;
     if (!m_fd.send(inputTransfer, input.handle(), &e)) {
-        MU_LOG(warning, "Mu::Plugin", "could not send input FD for " + target.toStdString() + ": " + e);
+        // The output descriptor is already queued, but no request will be sent
+        // to claim it. Tear the session down so the orphaned packet cannot
+        // desynchronize later FD exchanges.
+        MU_LOG(critical,
+               "Mu::Plugin",
+               "could not send input FD for " + target.toStdString() + ": " + e + "; aborting transport");
+        abort();
         return std::nullopt;
     }
 
