@@ -30,6 +30,7 @@
 #include "plugin/util/temp_dir.hpp"
 #include "shared/compat.hpp"
 #include "shared/logging.hpp"
+#include "shared/model/validation.hpp"
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 #include "shared/transport/fd_channel.hpp"
@@ -573,11 +574,21 @@ bool WorkerTransport::sendOcrInput(QFile& input, std::uint64_t& transfer)
 
 std::optional<ResponseMessage> WorkerTransport::requestOcr(int page, const QString& language, int dpi, bool async)
 {
+    // The request must be known valid before sendOcrInput transfers the
+    // document descriptor: the worker pre-validates this payload and would
+    // reject it before reading the FD, stranding it on the channel.
+    OcrPageRequest request { { m_nextTransfer }, page, dpi, language.toStdString(), async };
+    if (!isValidOcrPageRequest(request))
+        return std::nullopt;
+
     QFile input(m_sourcePath);
     std::uint64_t transfer = 0;
     if (!sendOcrInput(input, transfer))
         return std::nullopt;
-    return call(OcrPageRequest { { transfer }, page, dpi, language.toStdString(), async });
+    // sendOcrInput advances the same counter, so the validated candidate is the
+    // identifier the descriptor was sent with.
+    request.file.transferId = transfer;
+    return call(std::move(request));
 }
 
 OcrResult WorkerTransport::ocrPage(int page, const QString& language, int dpi, bool async)
@@ -818,10 +829,12 @@ SignResponse WorkerTransport::signToFile(SignRequest request, const QString& pas
     if (!file.open())
         return { SigningResult::WriteFailed, "could not create signing output" };
     const auto transfer = m_nextTransfer++;
+    request.file.transferId = transfer;
+    if (!isValidSignRequest(request))
+        return { SigningResult::GenericError, "invalid signing request" };
     std::string error;
     if (!m_fd.send(transfer, file.handle(), &error))
         return { SigningResult::WriteFailed, error };
-    request.file.transferId = transfer;
     m_activeSignPassword = password;
     auto response = call(std::move(request));
     m_activeSignPassword.fill(u'\0');
@@ -862,6 +875,8 @@ std::optional<FormUpdateResponse> WorkerTransport::resetForm(const FormResetRequ
 
 bool WorkerTransport::settings(const DocumentSettings& settings)
 {
+    if (!isValidDocumentSettings(settings))
+        return false;
     auto response = call(SettingsRequest { settings });
     if (!response || response->error)
         return false;

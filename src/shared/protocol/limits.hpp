@@ -30,7 +30,15 @@ inline constexpr int MaxRenderDimension = 16'384;
 // tile bleed when calculating the bounding box.
 inline constexpr int MaxTiledRenderDimension = 65'534;
 
+// --- Worker Settings Limits ---
+inline constexpr std::int32_t MaxDocumentAntialiasing = 8;
+inline constexpr std::int32_t MaxDocumentImageQuality = 2;
+inline constexpr std::int64_t MinDocumentMemoryCacheBytes = 32LL * 1024 * 1024;
+inline constexpr std::int64_t MaxDocumentMemoryCacheBytes = 256LL * 1024 * 1024;
+
 // --- EPUB / Content Limits ---
+inline constexpr std::int32_t MinEpubFontSize = 10;
+inline constexpr std::int32_t MaxEpubFontSize = 20;
 inline constexpr std::size_t MaxEpubCustomCssCharacters = 1000;
 inline constexpr std::size_t MaxEpubCustomCssBase64Bytes = 8192;
 
@@ -52,7 +60,8 @@ inline constexpr std::size_t MaxFormFieldStringBytes = 64 * 1024;
 inline constexpr std::size_t MaxAggregateFormTextBytes = 4 * 1024 * 1024;
 inline constexpr std::size_t MaxFormChoices = 10'000;
 inline constexpr std::size_t MaxFormSelectedIndices = 1'000;
-inline constexpr std::size_t MaxFormFieldHandleBytes = 128;
+inline constexpr std::size_t MaxHandleBytes = 128;
+inline constexpr std::size_t MaxFormFieldHandleBytes = MaxHandleBytes;
 inline constexpr std::size_t MaxFormNameBytes = 1024;
 
 } // namespace Mu::Limit

@@ -14,6 +14,7 @@
 
 #include "plugin/ocr/config.hpp"
 #include "shared/model/types.hpp"
+#include "shared/protocol/limits.hpp"
 
 namespace Mu::Generator::Config {
 
@@ -78,14 +79,16 @@ inline Model::DocumentType documentTypeForMime(const QString& mime)
 inline Model::DocumentSettings
 documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub, std::uint32_t paperColorRgb)
 {
-    // Clamp UI values at the IPC boundary; generated settings can outlive the
-    // enum range accepted by the worker.
+    // Clamp UI values to the shared worker limits at the IPC boundary; the
+    // generated settings can outlive the enum range accepted by the worker, and
+    // the validator rejects anything outside these bounds.
     Model::DocumentSettings settings;
-    settings.graphicsAntialiasing = rendering.graphicsAntialiasing;
-    settings.textAntialiasing = rendering.textAntialiasing;
-    settings.imageQuality = rendering.imageQuality;
+    settings.graphicsAntialiasing = std::clamp(rendering.graphicsAntialiasing, 0, Limit::MaxDocumentAntialiasing);
+    settings.textAntialiasing = std::clamp(rendering.textAntialiasing, 0, Limit::MaxDocumentAntialiasing);
+    settings.imageQuality = std::clamp(rendering.imageQuality, 0, Limit::MaxDocumentImageQuality);
     settings.interpolateImages = rendering.interpolateImages;
-    settings.memoryCacheBytes = rendering.memoryCacheBytes;
+    settings.memoryCacheBytes =
+        std::clamp(rendering.memoryCacheBytes, Limit::MinDocumentMemoryCacheBytes, Limit::MaxDocumentMemoryCacheBytes);
     // Clamp the trim level at the IPC boundary like the EPUB enums; the
     // worker normalizes again, but stable values keep change detection exact.
     settings.idleTrimAggressiveness = (rendering.idleTrimAggressiveness >= Model::IdleTrimLevel::Off
@@ -93,9 +96,11 @@ documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub
         ? rendering.idleTrimAggressiveness
         : Model::IdleTrimLevel::Balanced;
     settings.paperColorRgb = paperColorRgb;
-    settings.epub.fontSize = std::clamp(epub.fontSize, 10, 20);
-    settings.epub.pageSize = static_cast<Model::EpubPageSize>(std::clamp(epub.pageSize, 0, 3));
-    settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(std::clamp(epub.fontFamily, 0, 3));
+    settings.epub.fontSize = std::clamp(epub.fontSize, Limit::MinEpubFontSize, Limit::MaxEpubFontSize);
+    settings.epub.pageSize =
+        static_cast<Model::EpubPageSize>(std::clamp(epub.pageSize, 0, static_cast<int>(Model::EpubPageSize::Letter)));
+    settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(
+        std::clamp(epub.fontFamily, 0, static_cast<int>(Model::EpubFontFamily::Monospace)));
     settings.epub.customCssBase64 = epub.customCssBase64.toStdString();
     return settings;
 }

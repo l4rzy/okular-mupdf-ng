@@ -3,8 +3,12 @@
 
 #include <QTest>
 
+#include <array>
+#include <string_view>
+
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
+#include "shared/model/validation.hpp"
 
 class TestGeneratorConfig : public QObject {
     Q_OBJECT
@@ -59,6 +63,34 @@ private slots:
         const auto settings = ::Mu::Generator::Config::documentSettingsFor(
             rendering, ::Mu::Generator::Config::EpubSettings { }, 0xFFFFFF);
         QCOMPARE(settings.idleTrimAggressiveness, ::Mu::Model::IdleTrimLevel::Balanced);
+    }
+
+    void clampedSettingsAlwaysValidate()
+    {
+        using ::Mu::Generator::Config::EpubSettings;
+        using ::Mu::Generator::Config::RenderingSettings;
+
+        // Extreme UI values must clamp into the shared worker bounds, which is
+        // the single source of truth the validator enforces.
+        const std::array<RenderingSettings, 4> renderings {
+            RenderingSettings { -5, 99, 9, true, -1LL, ::Mu::Model::IdleTrimLevel::Off },
+            RenderingSettings { 0, 0, 0, false, 0LL, -7 },
+            RenderingSettings { 99, 99, 99, true, 1LL << 40, ::Mu::Model::IdleTrimLevel::Aggressive },
+            RenderingSettings { 8, 8, 2, true, 256LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Balanced },
+        };
+        const std::array<EpubSettings, 3> epubs {
+            EpubSettings { -100, -100, -100, QStringLiteral("Ym9keXt9") },
+            EpubSettings { 0, 0, 0, QString() },
+            EpubSettings { 999, 999, 999, QStringLiteral("Ym9keXt9") },
+        };
+
+        for (const auto& rendering : renderings) {
+            for (const auto& epub : epubs) {
+                const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0);
+                std::string_view reason;
+                QVERIFY2(::Mu::Model::isValidDocumentSettings(settings, &reason), std::string(reason).c_str());
+            }
+        }
     }
 
     void buildsOcrConfiguration()

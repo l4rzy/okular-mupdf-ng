@@ -373,9 +373,69 @@ private slots:
         QVERIFY(!staleRelease.error);
     }
 
+    void commandServiceValidatesRequestsBeforeHandlers()
+    {
+        using namespace ::Mu;
+        Worker::Runtime::CommandService service({ });
+
+        const auto invalidRender = service.dispatch({ 12, Model::RenderRequest { 0, 0, 100, std::nullopt } });
+        QVERIFY(invalidRender.error);
+        QCOMPARE(invalidRender.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(invalidRender.error->operation, std::string("render"));
+
+        // Geometry over the hard cap is request-level invalid before a document
+        // is consulted; the render frame budget still enforces resource limits.
+        const auto oversizedRender = service.dispatch(
+            { 17, Model::RenderRequest { 0, ::Mu::Limit::MaxRenderDimension + 1, 100, std::nullopt } });
+        QVERIFY(oversizedRender.error);
+        QCOMPARE(oversizedRender.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(oversizedRender.error->operation, std::string("render"));
+
+        Model::DocumentSettings invalidSettings;
+        invalidSettings.epub.fontSize = 99;
+        const auto invalidSettingsResponse = service.dispatch({ 13, Model::SettingsRequest { invalidSettings } });
+        QVERIFY(invalidSettingsResponse.error);
+        QCOMPARE(invalidSettingsResponse.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(invalidSettingsResponse.error->operation, std::string("settings"));
+
+        const auto invalidForm = service.dispatch({ 14, Model::FormUpdateRequest { { }, Model::FormTextValue { } } });
+        QVERIFY(invalidForm.error);
+        QCOMPARE(invalidForm.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(invalidForm.error->operation, std::string("form_update"));
+
+        const auto invalidSign = service.dispatch({ 15, Model::SignRequest { } });
+        QVERIFY(invalidSign.error);
+        QCOMPARE(invalidSign.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(invalidSign.error->operation, std::string("sign"));
+
+        const auto validSettingsResponse = service.dispatch({ 16, Model::SettingsRequest { } });
+        QVERIFY(!validSettingsResponse.error);
+    }
+
     void validationHelpers()
     {
         using namespace ::Mu::Model;
+
+        // Request-level validation is shared by the plugin and worker. The
+        // worker-side command test above verifies that these rules run before
+        // document state or descriptor ownership is consulted.
+        std::string_view reason;
+        QVERIFY(isValidFileTransfer({ 1 }, &reason));
+        QVERIFY(!isValidFileTransfer({ 0 }, &reason));
+
+        QVERIFY(isValidRenderRequest({ 0, 640, 480, RenderTile { 10, 10, 100, 100 } }, &reason));
+        QVERIFY(!isValidRenderRequest({ 0, 0, 480, std::nullopt }, &reason));
+        QVERIFY(!isValidRenderRequest({ 0, 640, 480, RenderTile { 600, 10, 100, 100 } }, &reason));
+
+        QVERIFY(isValidTextBoxesRequest({ 0, 72, 144, false }, &reason));
+        QVERIFY(!isValidTextBoxesRequest({ 0, 0, 144, false }, &reason));
+        QVERIFY(isValidOcrPageRequest({ { 1 }, 0, 225, "eng", false }, &reason));
+        QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng", false }, &reason));
+
+        DocumentSettings validSettings;
+        QVERIFY(isValidDocumentSettings(validSettings, &reason));
+        validSettings.memoryCacheBytes = ::Mu::Limit::MaxDocumentMemoryCacheBytes + 1;
+        QVERIFY(!isValidDocumentSettings(validSettings, &reason));
 
         // Render Tile validation
         QVERIFY(isValidRenderTile(1000, 1000, 0, 0, 1000, 1000));
@@ -437,7 +497,6 @@ private slots:
         validAnnot.contents = "Test annotation";
         validAnnot.author = "Author";
         validAnnot.uuid = "uuid-1234";
-        std::string_view reason;
         QVERIFY(isValidAnnotation(validAnnot, &reason));
 
         Annotation invalidCoord = validAnnot;
@@ -456,6 +515,20 @@ private slots:
         Annotation embeddedNul = validAnnot;
         embeddedNul.author = std::string("author\0suffix", 13);
         QVERIFY(!isValidAnnotation(embeddedNul, &reason));
+
+        QVERIFY(isValidAnnotationAddRequest({ 0, validAnnot }, &reason));
+        QVERIFY(isValidAnnotationModifyRequest({ { 0, { "annotation" }, validAnnot, true } }, &reason));
+        QVERIFY(isValidAnnotationRemoveRequest({ 0, { "annotation" } }, &reason));
+        QVERIFY(!isValidAnnotationRemoveRequest({ 0, { } }, &reason));
+
+        SignRequest sign;
+        sign.file.transferId = 1;
+        sign.page = 0;
+        sign.rectangle = { 0.1, 0.1, 0.9, 0.9 };
+        sign.certificateNickname = "certificate";
+        QVERIFY(isValidSignRequest(sign, &reason));
+        sign.appearance.elements = 0x80;
+        QVERIFY(!isValidSignRequest(sign, &reason));
     }
 
     void renderRequestsFitSharedFrameBudget()

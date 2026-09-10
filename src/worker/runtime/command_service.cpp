@@ -91,6 +91,82 @@ inline ResponseMessage failure(std::uint64_t id, ErrorCode code, std::string ope
     return { id, std::monostate { }, Error { code, std::move(operation), std::move(message) } };
 }
 
+// The worker validates every request it acts on before any handler or
+// descriptor receipt, so the plugin keeps only local invariants (FD ordering,
+// its own cached settings). Rejections here are request-level InvalidRequest;
+// resource-level limits (render frame budget, document page counts) stay in the
+// handlers that own that state.
+std::optional<ResponseMessage> validateInboundRequest(std::uint64_t id, const RequestPayload& payload)
+{
+    std::string_view reason;
+    std::string_view operation = "request";
+    const bool valid = std::visit(Overloaded {
+                                      [&](const OpenRequest& request) {
+                                          operation = "open";
+                                          return isValidFileTransfer(request.file, &reason);
+                                      },
+                                      [&](const SaveRequest& request) {
+                                          operation = "save";
+                                          return isValidFileTransfer(request.file, &reason);
+                                      },
+                                      [&](const SavePdfRequest& request) {
+                                          operation = "save_pdf";
+                                          return isValidFileTransfer(request.file, &reason);
+                                      },
+                                      [&](const ExportPdfAsyncRequest& request) {
+                                          operation = "export_pdf_async";
+                                          return isValidFileTransfer(request.output, &reason)
+                                              && isValidFileTransfer(request.input, &reason);
+                                      },
+                                      [&](const RenderRequest& request) {
+                                          operation = "render";
+                                          return isValidRenderRequest(request, &reason);
+                                      },
+                                      [&](const TextBoxesRequest& request) {
+                                          operation = "text_boxes";
+                                          return isValidTextBoxesRequest(request, &reason);
+                                      },
+                                      [&](const OcrPageRequest& request) {
+                                          operation = "ocr_page";
+                                          return isValidOcrPageRequest(request, &reason);
+                                      },
+                                      [&](const AnnotationAddRequest& request) {
+                                          operation = "annot_add";
+                                          return isValidAnnotationAddRequest(request, &reason);
+                                      },
+                                      [&](const AnnotationModifyRequest& request) {
+                                          operation = "annot_modify";
+                                          return isValidAnnotationModifyRequest(request, &reason);
+                                      },
+                                      [&](const AnnotationRemoveRequest& request) {
+                                          operation = "annot_remove";
+                                          return isValidAnnotationRemoveRequest(request, &reason);
+                                      },
+                                      [&](const SettingsRequest& request) {
+                                          operation = "settings";
+                                          return isValidDocumentSettings(request.settings, &reason);
+                                      },
+                                      [&](const SignRequest& request) {
+                                          operation = "sign";
+                                          return isValidSignRequest(request, &reason);
+                                      },
+                                      [&](const FormUpdateRequest& request) {
+                                          operation = "form_update";
+                                          return isValidFormUpdateRequest(request, &reason);
+                                      },
+                                      [&](const FormResetRequest& request) {
+                                          operation = "form_reset";
+                                          return isValidFormResetRequest(request, &reason);
+                                      },
+                                      [&](const auto&) { return true; },
+                                  },
+                                  payload);
+
+    if (valid)
+        return std::nullopt;
+    return failure(id, ErrorCode::InvalidRequest, std::string(operation), std::string(reason));
+}
+
 // Counts outline nodes recursively up to a safety limit to prevent recursion depth exhaustion
 std::size_t countOutlineNodes(const std::vector<OutlineNode>& nodes, std::size_t limit)
 {
@@ -445,23 +521,11 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     if (!hasOpenDocument())
         return failure(request.id, ErrorCode::NotOpen, "render", "no document is open");
 
-    if (render.page < 0 || render.page >= m_document->pageCount() || render.width <= 0 || render.height <= 0)
-        return failure(request.id, ErrorCode::InvalidRequest, "render", "invalid page or dimensions");
-
-    // Reject extreme dimensions immediately; over-budget requests below this
-    // hard cap fall through to fitRenderRequestToFrameBudget below.
-    const int hardMax = render.tile ? Limit::MaxTiledRenderDimension : Limit::MaxRenderDimension;
-    if (render.width > hardMax || render.height > hardMax)
-        return failure(request.id, ErrorCode::ResourceLimit, "render", "render dimensions exceed hard cap");
+    if (render.page >= m_document->pageCount())
+        return failure(request.id, ErrorCode::InvalidRequest, "render", "invalid page");
 
     if (!m_session.fdChannel)
         return failure(request.id, ErrorCode::Unavailable, "render", "FD channel unavailable");
-
-    if (render.tile) {
-        const auto& t = *render.tile;
-        if (!isValidRenderTile(render.width, render.height, t.x, t.y, t.width, t.height))
-            return failure(request.id, ErrorCode::InvalidRequest, "render", "tile is outside the image");
-    }
 
     // Fit oversized requests before allocation. The frame remains valid while
     // Okular scales the returned lower-resolution image into its original bounds.
@@ -603,10 +667,8 @@ ResponseMessage CommandService::signFdResponse(const RequestMessage& request, co
         return failure(request.id, ErrorCode::Unavailable, "sign", "control socket unavailable");
     }
 
-    if (!m_document || sign.page < 0 || sign.page >= m_document->pageCount()
-        || (sign.existingFieldObjectNumber < 0 && !isValidNormalizedRect(sign.rectangle))) {
-        return failure(request.id, ErrorCode::InvalidRequest, "sign", "invalid page or rectangle");
-    }
+    if (!m_document || sign.page >= m_document->pageCount())
+        return failure(request.id, ErrorCode::InvalidRequest, "sign", "invalid page");
 
     // CMS signature callback bridging MuPDF signer to plugin NSS crypto engine.
     auto callback = [this](const std::array<std::uint8_t, 32>& digest, const std::string& nickname) {
@@ -720,11 +782,8 @@ ResponseMessage CommandService::annotationAdd(const RequestMessage& r, const Ann
 {
     if (!hasOpenDocument())
         return failure(r.id, ErrorCode::NotOpen, "annot_add", "no document is open");
-    if (a.page < 0 || a.page >= m_document->pageCount())
+    if (a.page >= m_document->pageCount())
         return failure(r.id, ErrorCode::InvalidRequest, "annot_add", "invalid annotation");
-    std::string_view reason;
-    if (!isValidAnnotation(a.annotation, &reason))
-        return failure(r.id, ErrorCode::InvalidRequest, "annot_add", std::string(reason));
 
     std::string e;
     std::int32_t object = -1;
@@ -741,9 +800,6 @@ ResponseMessage CommandService::annotationModify(const RequestMessage& r, const 
     const auto it = m_annotationHandles.find(m.mutation.handle.value);
     if (it == m_annotationHandles.end() || it->second.page != m.mutation.page)
         return failure(r.id, ErrorCode::InvalidRequest, "annot_modify", "invalid annotation handle");
-    std::string_view reason;
-    if (!isValidAnnotation(m.mutation.annotation, &reason))
-        return failure(r.id, ErrorCode::InvalidRequest, "annot_modify", std::string(reason));
 
     std::string e;
     if (!m_document->modifyAnnotation(
@@ -907,9 +963,8 @@ ResponseMessage CommandService::ocrPage(const RequestMessage& r, const OcrPageRe
         return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR is only supported for PDF documents");
     }
 
-    if (o.page < 0 || o.page >= m_document->pageCount() || !isValidOcrDpi(static_cast<float>(o.dpi))) {
-        return failure(r.id, ErrorCode::InvalidRequest, "ocr_page", "invalid page or DPI");
-    }
+    if (o.page >= m_document->pageCount())
+        return failure(r.id, ErrorCode::InvalidRequest, "ocr_page", "invalid page");
 
     auto language = o.language.empty() ? std::string("eng") : o.language;
     if (o.asynchronous) {
@@ -950,8 +1005,8 @@ ResponseMessage CommandService::textBoxes(const RequestMessage& r, const TextBox
 {
     if (!hasOpenDocument())
         return failure(r.id, ErrorCode::NotOpen, "text_boxes", "no document is open");
-    if (b.page < 0 || !isValidDpi(b.dpiX, b.dpiY))
-        return failure(r.id, ErrorCode::InvalidRequest, "text_boxes", "invalid page or DPI");
+    if (b.page >= m_document->pageCount())
+        return failure(r.id, ErrorCode::InvalidRequest, "text_boxes", "invalid page");
 
     std::string e;
     auto values = m_document->textBoxes(b.page, b.dpiX, b.dpiY, MaxResponseBoxes, b.skipAnnots, &e);
@@ -1047,6 +1102,12 @@ int CommandService::receiveFd(std::uint64_t requestId,
                               std::uint64_t transferId,
                               ResponseMessage* failureResponse)
 {
+    // Keep this fail-closed adapter guard even though dispatch validates the
+    // request first: FdChannel accepts an expected transfer id of zero, and
+    // this helper owns the final descriptor-receipt precondition.
+    // A pre-dispatch rejection never strands a descriptor: the plugin validates
+    // FD-bearing requests before sending their FD, and every other inbound
+    // check here is limited to the transfer identifier.
     if (!m_session.fdChannel || transferId == 0) {
         *failureResponse = failure(requestId, ErrorCode::InvalidRequest, method, "invalid file transfer");
         return -1;
@@ -1062,6 +1123,9 @@ int CommandService::receiveFd(std::uint64_t requestId,
 
 ResponseMessage CommandService::dispatch(const RequestMessage& request)
 {
+    if (const auto invalid = validateInboundRequest(request.id, request.payload))
+        return *invalid;
+
     const auto dispatchWithFd = [&](const char* method, std::uint64_t transferId, auto&& handler) {
         ResponseMessage err;
         const int fd = receiveFd(request.id, method, transferId, &err);

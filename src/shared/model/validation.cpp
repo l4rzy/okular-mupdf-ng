@@ -45,6 +45,104 @@ bool isValidOcrDpi(float dpi) noexcept
     return std::isfinite(dpi) && dpi >= 72.0f && dpi <= 600.0f;
 }
 
+namespace {
+
+bool failWith(std::string_view value, std::string_view* reason) noexcept
+{
+    if (reason)
+        *reason = value;
+    return false;
+}
+
+bool isValidText(std::string_view value,
+                 std::string_view tooLargeMessage,
+                 std::string_view invalidUtf8Message,
+                 std::string_view embeddedNulMessage,
+                 std::string_view* reason) noexcept
+{
+    if (value.size() > Limit::MaxString)
+        return failWith(tooLargeMessage, reason);
+    if (!isValidUtf8(value))
+        return failWith(invalidUtf8Message, reason);
+    if (!hasNoEmbeddedNul(value))
+        return failWith(embeddedNulMessage, reason);
+    return true;
+}
+
+bool isValidHandle(std::string_view handle, std::string_view field, std::string_view* reason) noexcept
+{
+    if (handle.empty() || handle.size() > Limit::MaxHandleBytes)
+        return failWith(field, reason);
+    return isValidText(
+        handle, "handle exceeds limit", "handle contains invalid UTF-8", "handle contains embedded NUL", reason);
+}
+
+} // namespace
+
+bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason) noexcept
+{
+    return transfer.transferId != 0 || failWith("file transfer identifier is zero", reason);
+}
+
+bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason) noexcept
+{
+    if (request.page < 0)
+        return failWith("render page index is negative", reason);
+    if (!isValidRenderDimensions(request.width, request.height, request.tile.has_value()))
+        return failWith("render dimensions are invalid", reason);
+    if (request.tile) {
+        const auto& tile = *request.tile;
+        if (!isValidRenderTile(request.width, request.height, tile.x, tile.y, tile.width, tile.height))
+            return failWith("render tile is outside the image", reason);
+    }
+    return true;
+}
+
+bool isValidTextBoxesRequest(const TextBoxesRequest& request, std::string_view* reason) noexcept
+{
+    if (request.page < 0)
+        return failWith("text-box page index is negative", reason);
+    return isValidDpi(request.dpiX, request.dpiY) || failWith("text-box DPI is invalid", reason);
+}
+
+bool isValidOcrPageRequest(const OcrPageRequest& request, std::string_view* reason) noexcept
+{
+    if (!isValidFileTransfer(request.file, reason))
+        return false;
+    if (request.page < 0)
+        return failWith("OCR page index is negative", reason);
+    if (!isValidOcrDpi(static_cast<float>(request.dpi)))
+        return failWith("OCR DPI is invalid", reason);
+    return isValidText(request.language,
+                       "OCR language exceeds limit",
+                       "OCR language contains invalid UTF-8",
+                       "OCR language contains embedded NUL",
+                       reason);
+}
+
+bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view* reason) noexcept
+{
+    if (settings.graphicsAntialiasing < 0 || settings.graphicsAntialiasing > Limit::MaxDocumentAntialiasing
+        || settings.textAntialiasing < 0 || settings.textAntialiasing > Limit::MaxDocumentAntialiasing)
+        return failWith("antialiasing level is invalid", reason);
+    if (settings.imageQuality < 0 || settings.imageQuality > Limit::MaxDocumentImageQuality)
+        return failWith("image quality is invalid", reason);
+    if (settings.memoryCacheBytes < Limit::MinDocumentMemoryCacheBytes
+        || settings.memoryCacheBytes > Limit::MaxDocumentMemoryCacheBytes)
+        return failWith("memory cache size is invalid", reason);
+    if (settings.idleTrimAggressiveness < IdleTrimLevel::Off
+        || settings.idleTrimAggressiveness > IdleTrimLevel::Aggressive)
+        return failWith("idle trim level is invalid", reason);
+    if (settings.epub.fontSize < Limit::MinEpubFontSize || settings.epub.fontSize > Limit::MaxEpubFontSize)
+        return failWith("EPUB font size is invalid", reason);
+    if (static_cast<std::uint8_t>(settings.epub.pageSize) > static_cast<std::uint8_t>(EpubPageSize::Letter))
+        return failWith("EPUB page size is invalid", reason);
+    if (static_cast<std::uint8_t>(settings.epub.fontFamily) > static_cast<std::uint8_t>(EpubFontFamily::Monospace))
+        return failWith("EPUB font family is invalid", reason);
+    return isValidEpubCustomCssBase64(settings.epub.customCssBase64)
+        || failWith("EPUB custom CSS encoding is invalid", reason);
+}
+
 namespace Detail {
 
 bool isValidAnnotationExtensionValue(const Value& value, std::size_t depth, std::size_t& entries)
@@ -355,6 +453,70 @@ bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* 
         return false;
     }
     return true;
+}
+
+bool isValidAnnotationAddRequest(const AnnotationAddRequest& request, std::string_view* reason)
+{
+    if (request.page < 0)
+        return failWith("annotation page index is negative", reason);
+    return isValidAnnotation(request.annotation, reason);
+}
+
+bool isValidAnnotationModifyRequest(const AnnotationModifyRequest& request, std::string_view* reason)
+{
+    if (request.mutation.page < 0)
+        return failWith("annotation page index is negative", reason);
+    if (!isValidHandle(request.mutation.handle.value, "annotation handle is empty or too large", reason))
+        return false;
+    return isValidAnnotation(request.mutation.annotation, reason);
+}
+
+bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std::string_view* reason)
+{
+    if (request.page < 0)
+        return failWith("annotation page index is negative", reason);
+    return isValidHandle(request.handle.value, "annotation handle is empty or too large", reason);
+}
+
+bool isValidSignRequest(const SignRequest& request, std::string_view* reason)
+{
+    if (!isValidFileTransfer(request.file, reason))
+        return false;
+    if (request.page < 0)
+        return failWith("signing page index is negative", reason);
+    if (request.existingFieldObjectNumber < 0 && !isValidNormalizedRect(request.rectangle))
+        return failWith("signing rectangle is invalid", reason);
+    if ((request.appearance.elements & ~SignatureElementDefault) != 0)
+        return failWith("signing appearance contains unknown elements", reason);
+    if (!isValidText(request.certificateNickname,
+                     "certificate nickname exceeds limit",
+                     "certificate nickname contains invalid UTF-8",
+                     "certificate nickname contains embedded NUL",
+                     reason))
+        return false;
+    if (!isValidText(request.certificateSubjectCommonName,
+                     "certificate subject exceeds limit",
+                     "certificate subject contains invalid UTF-8",
+                     "certificate subject contains embedded NUL",
+                     reason))
+        return false;
+    if (!isValidText(request.appearance.reason,
+                     "signature reason exceeds limit",
+                     "signature reason contains invalid UTF-8",
+                     "signature reason contains embedded NUL",
+                     reason))
+        return false;
+    if (!isValidText(request.appearance.location,
+                     "signature location exceeds limit",
+                     "signature location contains invalid UTF-8",
+                     "signature location contains embedded NUL",
+                     reason))
+        return false;
+    return isValidText(request.appearance.signingDisplayDate,
+                       "signature date exceeds limit",
+                       "signature date contains invalid UTF-8",
+                       "signature date contains embedded NUL",
+                       reason);
 }
 
 } // namespace Mu::Model

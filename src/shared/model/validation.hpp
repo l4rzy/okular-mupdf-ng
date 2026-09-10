@@ -24,6 +24,22 @@ bool isValidDpi(double dpiX, double dpiY) noexcept;
 /// Validates OCR resolution against the supported 72–600 DPI range.
 bool isValidOcrDpi(float dpi) noexcept;
 
+/// Validates a descriptor transfer identifier before it reaches the FD channel.
+bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason = nullptr) noexcept;
+
+/// Validates request-level render geometry. Document and page-count state stay
+/// in the command boundary because they are not available to the plugin.
+bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason = nullptr) noexcept;
+
+/// Validates request-level text extraction geometry.
+bool isValidTextBoxesRequest(const TextBoxesRequest& request, std::string_view* reason = nullptr) noexcept;
+
+/// Validates request-level OCR inputs. Empty language means the worker default.
+bool isValidOcrPageRequest(const OcrPageRequest& request, std::string_view* reason = nullptr) noexcept;
+
+/// Validates worker rendering and EPUB layout settings before they are applied.
+bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view* reason = nullptr) noexcept;
+
 namespace Detail {
 
 /// Recursively validates extension values while enforcing depth and entry limits.
@@ -74,6 +90,18 @@ bool isValidFormUpdateRequest(const FormUpdateRequest& request, std::string_view
 /// Validates the handle carried by a form reset request.
 /// On failure, optionally stores a stable diagnostic in `reason`.
 bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* reason = nullptr);
+
+/// Validates an annotation add request before document state is consulted.
+bool isValidAnnotationAddRequest(const AnnotationAddRequest& request, std::string_view* reason = nullptr);
+
+/// Validates an annotation modification request before handle lookup.
+bool isValidAnnotationModifyRequest(const AnnotationModifyRequest& request, std::string_view* reason = nullptr);
+
+/// Validates an annotation removal request before handle lookup.
+bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std::string_view* reason = nullptr);
+
+/// Validates signing fields independent of the open document and backend.
+bool isValidSignRequest(const SignRequest& request, std::string_view* reason = nullptr);
 
 } // namespace Mu::Model
 

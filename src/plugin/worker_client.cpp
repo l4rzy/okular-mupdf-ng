@@ -3,8 +3,6 @@
 
 #include "plugin/worker_client.hpp"
 
-#include "shared/model/validation.hpp"
-
 #include <chrono>
 #include <deque>
 
@@ -240,9 +238,6 @@ bool WorkerClient::removeAnnotation(int p, const QString& h) const
 
 std::optional<Model::FormUpdateResponse> WorkerClient::updateForm(const Model::FormUpdateRequest& request) const
 {
-    if (!Model::isValidFormUpdateRequest(request))
-        return std::nullopt;
-
     std::optional<Model::FormUpdateResponse> result;
     QMetaObject::invokeMethod(
         m_transport, [&] { result = m_transport->updateForm(request); }, Qt::BlockingQueuedConnection);
@@ -251,9 +246,6 @@ std::optional<Model::FormUpdateResponse> WorkerClient::updateForm(const Model::F
 
 std::optional<Model::FormUpdateResponse> WorkerClient::resetForm(const Model::FormResetRequest& request) const
 {
-    if (!Model::isValidFormResetRequest(request))
-        return std::nullopt;
-
     std::optional<Model::FormUpdateResponse> result;
     QMetaObject::invokeMethod(
         m_transport, [&] { result = m_transport->resetForm(request); }, Qt::BlockingQueuedConnection);
