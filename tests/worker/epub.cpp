@@ -657,7 +657,7 @@ private slots:
         QCOMPARE(QString::fromStdString(exportedMeta.values.at("title")), QStringLiteral("Linked Test EPUB"));
         QCOMPARE(QString::fromStdString(exportedMeta.values.at("author")), QStringLiteral("Linked Author"));
         QCOMPARE(QString::fromStdString(exportedMeta.values.at("producer")),
-                 QStringLiteral("Okular/mupdf-ng ") + QString::fromStdString(std::string(::Mu::IPC::COMPAT)));
+                 QStringLiteral("Okular/okular-mupdf-ng ") + QString::fromStdString(std::string(::Mu::IPC::COMPAT)));
 
         // Page 0 must carry the forward internal reference (the regression
         // class of "cannot find page N in page tree") and the external URI.
