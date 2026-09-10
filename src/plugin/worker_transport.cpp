@@ -373,6 +373,18 @@ bool WorkerTransport::close()
         QFile::remove(m_tempPath);
         m_tempPath.clear();
     }
+    // A document boundary abandons the awaiting export without notifying: the
+    // generator holds no export state, and a failure signal here would be
+    // attributed to whatever document is open next. The worker job finishes on
+    // its own; its late notification is discarded by the jobId check. The
+    // temporary file is removed with the owned QTemporaryFile.
+    if (m_export) {
+        if (m_exportTimer)
+            m_exportTimer->stop();
+        MU_LOG(
+            debug, "Mu::Plugin", "export abandoned at document boundary (job " + std::to_string(m_export->jobId) + ")");
+        m_export.reset();
+    }
     m_sourcePath.clear();
     m_useEpubCache = false;
     m_linkGeneration = 0;

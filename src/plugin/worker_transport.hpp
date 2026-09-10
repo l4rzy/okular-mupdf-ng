@@ -75,6 +75,8 @@ public:
                                            const QString& password,
                                            QList<Model::PageInfo>* pages,
                                            Model::DocumentType type = Model::DocumentType::Pdf);
+    /// Closes the open document and clears staged input. Abandons any
+    /// in-flight background PDF export silently (result discarded, no signal).
     Q_INVOKABLE bool close();
     Q_INVOKABLE QImage render(int page, int width, int height, const QRect& rect);
     Q_INVOKABLE std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false);

@@ -376,6 +376,11 @@ void CommandService::closeDocument() noexcept
     m_formFieldHandles.clear();
     m_formObjectHandles.clear();
     m_ocrJobs.cancelAll();
+    // Background PDF export jobs are intentionally exempt from this boundary:
+    // they are file-scoped and run on a private document copy opened from a
+    // snapshot descriptor, so closing can neither invalidate nor cross-wire
+    // their results. The plugin abandons the pending export at the same
+    // boundary and discards the late completion notification by jobId.
     m_rendersSinceTrim = 0;
     m_bytesSinceTrim = 0;
     m_lastTrim = std::chrono::steady_clock::now();

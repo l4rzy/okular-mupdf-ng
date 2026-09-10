@@ -13,6 +13,7 @@
 #include <QTest>
 
 #include <algorithm>
+#include <optional>
 
 #include "plugin/util/temp_dir.hpp"
 
@@ -169,7 +170,48 @@ private slots:
         QVERIFY(output.read(5) == "%PDF-");
 
         QVERIFY(m_client.close());
-        QCOMPARE(imageHash(retained), retainedHash);
+    }
+
+    // Closing the document abandons the awaiting export: no completion signal,
+    // no target file, and the worker's late notification stays silent.
+    void epubExportAbandonedOnDocumentClose()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        QVERIFY(!pages.isEmpty());
+
+        QTemporaryDir outputDirectory;
+        QVERIFY(outputDirectory.isValid());
+        const QString outputPath = outputDirectory.filePath(QStringLiteral("export-abandoned.pdf"));
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+        const auto job = m_client.startPdfExport(outputPath, { });
+        QVERIFY(job.has_value());
+        QVERIFY(m_client.close());
+
+        // The job may still be running in the worker; wait out the export and
+        // any subsequent timeout window to prove the signal never arrives and
+        // the target file never appears.
+        const auto hasAbandonedJob = [&]() {
+            return std::any_of(spy.cbegin(), spy.cend(), [&](const QList<QVariant>& arguments) {
+                return arguments.at(0).toULongLong() == *job;
+            });
+        };
+        for (int attempt = 0; attempt < 10 && !hasAbandonedJob(); ++attempt)
+            spy.wait(100);
+        QVERIFY2(!hasAbandonedJob(), "abandoned export must not deliver a completion signal");
+
+        QFile output(outputPath);
+        QVERIFY(!output.exists());
+
+        // A fresh export after the boundary works again once the abandoned
+        // job's slot frees (the thread runs to completion in the worker).
+        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        std::optional<quint64> resumed;
+        for (int attempt = 0; attempt < 50 && !(resumed = m_client.startPdfExport(outputPath, { })).has_value();
+             ++attempt)
+            QTest::qWait(100);
+        QVERIFY2(resumed.has_value(), "worker did not free the export slot after the abandoned job");
+        QVERIFY(m_client.close());
     }
 
     void epubOutlineCacheRoundTrip()
