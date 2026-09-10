@@ -132,6 +132,37 @@ Main::Main(QObject* parent, const QVariantList& args)
             m_annotationsDirty = false;
         }
     });
+    connect(&m_worker, &Plugin::WorkerClient::workerRestarted, this, [this] {
+        if (m_placeholder.isActive())
+            return;
+        // Defer recovery to avoid reopening the document from inside a worker
+        // lifecycle signal; the queued call runs on the generator's Qt thread.
+        QMetaObject::invokeMethod(
+            this,
+            [this] {
+                // Without a retained source there is no document to restore; the
+                // next successful load commits the session instead.
+                if (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty())
+                    return;
+                if (reopenWorkerDocument()) {
+                    m_worker.commitSessionReady();
+                    return;
+                }
+                m_worker.commitSessionFailed();
+                failClosed(i18n("The document renderer restarted but the document could not be reopened. Restart "
+                                "Okular to try again."));
+            },
+            Qt::QueuedConnection);
+    });
+    connect(
+        &m_worker,
+        &Plugin::WorkerClient::workerUnavailable,
+        this,
+        [this] {
+            MU_LOG(critical, "Mu::Generator::Main", "worker restart limit reached; displaying error image");
+            failClosed(i18n("The document renderer stopped responding. Restart Okular to try again."));
+        },
+        Qt::QueuedConnection);
     connect(
         &m_worker,
         &Plugin::WorkerClient::pageLinksReady,
@@ -168,22 +199,6 @@ Main::Main(QObject* parent, const QVariantList& args)
                 MU_LOG(debug, "Mu::Generator::Main", "PDF export completed");
                 Q_EMIT notice(i18n("Export to PDF finished."), 3000);
             }
-        },
-        Qt::QueuedConnection);
-    connect(&m_worker, &Plugin::WorkerClient::workerRestarted, this, [this] {
-        if (m_placeholder.isActive())
-            return;
-        // Defer recovery to avoid reopening the document from inside a worker
-        // lifecycle signal; the queued call runs on the generator's Qt thread.
-        QMetaObject::invokeMethod(this, [this] { reopenWorkerDocument(); }, Qt::QueuedConnection);
-    });
-    connect(
-        &m_worker,
-        &Plugin::WorkerClient::workerUnavailable,
-        this,
-        [this] {
-            MU_LOG(critical, "Mu::Generator::Main", "worker restart limit reached; displaying error image");
-            failClosed(i18n("The document renderer stopped responding. Restart Okular to try again."));
         },
         Qt::QueuedConnection);
     connect(m_ocrController.get(),
@@ -249,8 +264,7 @@ bool Main::reparseConfig()
     m_settings.rendering = settings.rendering;
 
     // Propagate changed settings to the worker process.
-    if (settingsChanged && m_worker.isConnected()
-        && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
+    if (settingsChanged && workerReady() && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
 
     // Re-evaluate sandbox enforcement for the active document. Blocking
@@ -449,6 +463,9 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
     m_annotationProxy.setAvailable(true);
+    // A fully constructed document session is the only point where worker
+    // operations may resume after a restart.
+    m_worker.commitSessionReady();
     return Okular::Document::OpenSuccess;
 }
 
@@ -600,6 +617,14 @@ bool Main::sandboxGated() const
 {
     return Config::readSandboxEnforcement() == Config::SandboxEnforcement::Strict
         && !m_worker.sandboxStatus().isFullyHardened();
+}
+
+// Gates every worker-backed generator operation on an explicit session state.
+// Isolated here because render threads call it while the client thread mutates
+// the state.
+bool Main::workerReady() const
+{
+    return m_worker.operational() && !m_placeholder.isActive();
 }
 
 // Localized Strict-gate guidance shown on the placeholder card and in
@@ -916,7 +941,7 @@ Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo:
     if (m_placeholder.isActive())
         return { };
     // Native text extraction is worker-owned.
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         const auto info = m_worker.getDocumentInfo();
         if (!info.values.empty()) {
             Okular::DocumentInfo di;
@@ -999,7 +1024,7 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
         return nullptr;
 
     std::vector<Model::OutlineNode> nodes;
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         nodes = m_worker.synopsis();
     }
     m_synopsis = Conversion::documentSynopsis(nodes);
@@ -1012,7 +1037,7 @@ Okular::FontInfo::List Main::fontsForPage(int page)
     QMutexLocker locker(userMutex());
     if (m_placeholder.isActive())
         return { };
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         const std::vector<Model::Font> source = m_worker.fonts(page);
         Okular::FontInfo::List result;
         for (const auto& font : source) {
@@ -1042,7 +1067,7 @@ QImage Main::image(Okular::PixmapRequest* request)
     }
 
     // Rendering is isolated in the worker process.
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         // Okular validates the returned pixmap against its original geometry,
         // whose right/bottom edges are inclusive, while the worker renders a
         // half-open clamped rectangle. Keep both sizes so the generator can
@@ -1103,7 +1128,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     const int pageNum = request->page()->number();
 
     if (m_document.type == Model::DocumentType::Epub) {
-        if (!m_worker.isConnected())
+        if (!workerReady())
             return nullptr;
         const std::vector<Model::TextBox> workerBoxes =
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
@@ -1115,7 +1140,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     // signal.
     if (const auto ready = m_ocrController->takeReady(pageNum))
         return Conversion::ocrTextPage(*ready);
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         const std::vector<Model::TextBox> workerBoxes =
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
         const Config::OcrSettings ocrSettings = Config::readOcrSettings();
@@ -1187,7 +1212,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
     // Convert shared embedded-file models to Okular objects on first
     // call. The generator owns the converted list via m_embeddedFilesCache.
     if (!m_embeddedFilesCache) {
-        if (!m_worker.isConnected())
+        if (!workerReady())
             return nullptr;
         const auto source = m_worker.embeddedFiles();
         m_embeddedFilesCache = std::make_unique<QList<Okular::EmbeddedFile*>>();
@@ -1219,7 +1244,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
                 : i18n("MuPDF worker is unavailable.");
         return false;
     }
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         if (m_worker.saveToFile(fileName))
             return true;
         if (errorText)
@@ -1244,7 +1269,7 @@ Okular::ExportFormat::List Main::exportFormats() const
 bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 {
     if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
-        if (m_document.type != Model::DocumentType::Epub || m_placeholder.isActive() || !m_worker.isConnected())
+        if (m_document.type != Model::DocumentType::Epub || !workerReady())
             return false;
         // The background export runs in an isolated worker job, so the
         // document stays fully usable while it completes. Without a source
@@ -1256,8 +1281,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
         return m_worker.startPdfExport(fileName, { }).has_value();
     }
 
-    if (!format.mimeType().inherits(QStringLiteral("text/plain")) || m_placeholder.isActive()
-        || !m_worker.isConnected())
+    if (!format.mimeType().inherits(QStringLiteral("text/plain")) || !workerReady())
         return false;
 
     QFile file(fileName);
@@ -1267,7 +1291,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     QTextStream stream(&file);
     const int pageCount = document() ? static_cast<int>(document()->pages()) : 0;
     for (int page = 0; page < pageCount; ++page) {
-        if (!m_worker.isConnected())
+        if (!workerReady())
             return false;
         const auto boxes = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true);
         stream << Conversion::plainText(boxes);
@@ -1288,7 +1312,7 @@ Okular::AnnotationProxy* Main::annotationProxy() const
 // Okular Generator Func: prints through a temporary worker output file.
 Okular::Document::PrintError Main::print(QPrinter& printer)
 {
-    if (m_placeholder.isActive() || !m_worker.isConnected())
+    if (!workerReady())
         return Okular::Document::FileConversionPrintError;
 
     const int totalPages = !m_okularPages.isEmpty() ? static_cast<int>(m_okularPages.size()) : 0;
@@ -1377,7 +1401,7 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
                  m_placeholder.reason() == Placeholder::Reason::WorkerUnavailable
                      ? QStringLiteral("MuPDF worker is unavailable")
                      : QStringLiteral("Strict sandbox enforcement blocks this document") };
-    if (m_worker.isConnected()) {
+    if (workerReady()) {
         const Okular::NormalizedRect rect = data.boundingRectangle();
         const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
         if (commonName.isEmpty())

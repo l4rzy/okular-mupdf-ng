@@ -19,13 +19,10 @@
 #include <QTimer>
 #include <QVector>
 
-#include <cerrno>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
@@ -62,51 +59,47 @@ public:
     // These methods are invoked on the transport thread. The process, control
     // channel, FD channel, and temporary paths must never be accessed by the
     // generator thread directly.
-    Q_INVOKABLE bool
-    start(const QString& hint, const QStringList& tessDataDirectories, Model::PingResponse* workerInfo);
-    Q_INVOKABLE void stop();
-    Q_INVOKABLE void abort();
-    Q_INVOKABLE bool isConnected() const;
-    Q_INVOKABLE Model::OpenStatus open(const QString& path,
-                                       const QString& password,
-                                       QList<Model::PageInfo>* pages,
-                                       Model::DocumentType type = Model::DocumentType::Pdf);
-    Q_INVOKABLE Model::OpenStatus openData(const QByteArray& data,
-                                           const QString& password,
-                                           QList<Model::PageInfo>* pages,
-                                           Model::DocumentType type = Model::DocumentType::Pdf);
+    bool start(const QString& hint, const QStringList& tessDataDirectories, Model::PingResponse* workerInfo);
+    void stop();
+    bool isConnected() const;
+    Model::OpenStatus open(const QString& path,
+                           const QString& password,
+                           QList<Model::PageInfo>* pages,
+                           Model::DocumentType type = Model::DocumentType::Pdf);
+    Model::OpenStatus openData(const QByteArray& data,
+                               const QString& password,
+                               QList<Model::PageInfo>* pages,
+                               Model::DocumentType type = Model::DocumentType::Pdf);
     /// Closes the open document and clears staged input. Abandons any
     /// in-flight background PDF export silently (result discarded, no signal).
-    Q_INVOKABLE bool close();
-    Q_INVOKABLE QImage render(int page, int width, int height, const QRect& rect);
-    Q_INVOKABLE std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false);
-    Q_INVOKABLE Model::OcrResult ocrPage(int page, const QString& language, int dpi, bool async);
-    Q_INVOKABLE std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);
-    Q_INVOKABLE Model::OcrResult ocrResult(quint64 id);
-    Q_INVOKABLE bool cancelOcrJobs();
-    Q_INVOKABLE std::vector<Model::Font> fonts(int page);
-    Q_INVOKABLE std::vector<Model::EmbeddedFile> embeddedFiles();
-    Q_INVOKABLE std::vector<Model::OutlineNode> synopsis();
-    Q_INVOKABLE Model::DocumentMetadata getDocumentInfo(const QStringList& keys);
-    Q_INVOKABLE std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation);
-    Q_INVOKABLE bool
-    modifyAnnotation(int page, const QString& handle, const Model::Annotation& annotation, bool appearance);
-    Q_INVOKABLE bool removeAnnotation(int page, const QString& handle);
-    Q_INVOKABLE bool saveToFile(const QString& target);
-    Q_INVOKABLE bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    bool close();
+    QImage render(int page, int width, int height, const QRect& rect);
+    std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false);
+    Model::OcrResult ocrPage(int page, const QString& language, int dpi, bool async);
+    std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);
+    Model::OcrResult ocrResult(quint64 id);
+    bool cancelOcrJobs();
+    std::vector<Model::Font> fonts(int page);
+    std::vector<Model::EmbeddedFile> embeddedFiles();
+    std::vector<Model::OutlineNode> synopsis();
+    Model::DocumentMetadata getDocumentInfo(const QStringList& keys);
+    std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation);
+    bool modifyAnnotation(int page, const QString& handle, const Model::Annotation& annotation, bool appearance);
+    bool removeAnnotation(int page, const QString& handle);
+    bool saveToFile(const QString& target);
+    bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
     /// Submits an asynchronous background PDF export and returns its job id
     /// immediately; the output file is finalized when the worker reports
     /// completion via pdfExportFinished. Returns nullopt when no source path
     /// exists, the transport is busy, or the submit failed.
-    Q_INVOKABLE std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages);
-    Q_INVOKABLE Model::SignResponse
-    signToFile(Model::SignRequest request, const QString& password, const QString& target);
-    Q_INVOKABLE std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
-    Q_INVOKABLE std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
-    Q_INVOKABLE bool settings(const Model::DocumentSettings& settings);
+    std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages);
+    Model::SignResponse signToFile(Model::SignRequest request, const QString& password, const QString& target);
+    std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
+    std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
+    bool settings(const Model::DocumentSettings& settings);
 
 signals:
-    void workerDied(int);
+    void processExited(int);
     void ocrDone(quint64, int);
     void pageLinksReady(quint64, std::vector<Model::PageLinks>, bool, QString);
     void pdfExportFinished(quint64 jobId, bool success, QString error);
@@ -126,6 +119,12 @@ private:
     /// Single completion exit: stops the timer, finalizes or discards the
     /// temporary file, clears the pending export, and emits the result signal.
     void completePdfExport(bool success, QString error);
+
+    /// Flushes the staged temporary file and atomically moves it onto target.
+    /// The auto-remove flag is left enabled on failure so the staged data is
+    /// cleaned up. When syncToDisk is set the data is fsynced before the move,
+    /// which signing requires. Returns false and fills error on failure.
+    bool finalizeTempFile(QTemporaryFile& file, const QString& target, bool syncToDisk, QString* error);
 
     // File-producing requests use a temporary file and rename it only after
     // the worker has completed, so a failed or interrupted export cannot
@@ -159,18 +158,11 @@ private:
                    "worker failed to write " + target.toStdString() + ": " + response->error->message);
             return false;
         }
-        if (!file.flush()) {
+        QString error;
+        if (!finalizeTempFile(file, target, /*syncToDisk=*/false, &error)) {
             MU_LOG(warning,
                    "Mu::Plugin",
-                   "could not flush output for " + target.toStdString() + ": " + file.errorString().toStdString());
-            return false;
-        }
-        file.setAutoRemove(false);
-        if (::rename(QFile::encodeName(file.fileName()).constData(), QFile::encodeName(target).constData())) {
-            MU_LOG(warning,
-                   "Mu::Plugin",
-                   "could not move output to " + target.toStdString() + ": " + std::strerror(errno));
-            file.setAutoRemove(true);
+                   "could not finalize output for " + target.toStdString() + ": " + error.toStdString());
             return false;
         }
         return true;
@@ -192,6 +184,7 @@ private:
     void releaseFrameSlot(quint64 session, quint64 slotId, quint64 leaseId);
     static QString findBinary(const QString& hint);
     void finished(int code, QProcess::ExitStatus status);
+    void abort();
     void cleanupSession();
 
     QProcess m_process;

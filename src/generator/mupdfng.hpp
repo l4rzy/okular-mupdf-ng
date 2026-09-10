@@ -155,6 +155,10 @@ private:
     QString generatorExtraDescription() const;
     // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
     [[nodiscard]] bool sandboxGated() const;
+    // Reports whether worker-backed operations may run: the worker session is
+    // ready (not stopped, recovering, or failed) and no placeholder withholds
+    // the document.
+    [[nodiscard]] bool workerReady() const;
     // Loads a single synthetic placeholder page while Strict enforcement
     // withholds the real document from the worker.
     Okular::Document::OpenResult loadBlockedPlaceholderDocument(QVector<Okular::Page*>& pages);

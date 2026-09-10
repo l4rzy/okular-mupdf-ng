@@ -87,6 +87,31 @@ void cleanupMappedFrame(void* data)
     delete frame;
 }
 
+// Receives a render frame descriptor, verifies its size and seals, and maps it
+// read-only. The descriptor FD is always closed; on success the caller owns the
+// mapping and must munmap it.
+std::optional<MappedFrame>
+receiveRenderFrame(IPC::FdChannel& channel, quint64 transferId, const char* label, std::string* error)
+{
+    const int fd = channel.receive(transferId, error);
+    if (fd < 0) {
+        MU_LOG(warning, "Mu::Plugin", std::string(label) + " receive failed: " + *error);
+        return std::nullopt;
+    }
+    std::string descriptorError;
+    const auto size = inspectFrameDescriptor(fd, &descriptorError);
+    if (!size) {
+        MU_LOG(warning, "Mu::Plugin", std::string(label) + " descriptor invalid: " + descriptorError);
+        ::close(fd);
+        return std::nullopt;
+    }
+    void* mapping = mmap(nullptr, *size, PROT_READ, MAP_SHARED, fd, 0);
+    ::close(fd);
+    if (mapping == MAP_FAILED)
+        return std::nullopt;
+    return MappedFrame { mapping, *size };
+}
+
 int timeoutFor(const RequestPayload& payload)
 {
     return std::visit(
@@ -157,12 +182,10 @@ bool WorkerTransport::start(const QString& binaryPath,
                             Model::PingResponse* workerInfo)
 {
     // Phase 1: reset the previous session. Start doubles as the recovery path:
-    // a connected transport is stopped and a partial one is cleaned so both
-    // converge on the same baseline before anything new is allocated.
-    if (isConnected())
-        stop();
-    else
-        cleanupSession();
+    // stop() cleans a live or partial session so both converge on the same
+    // baseline, and marking the exit intentional keeps it from being reported
+    // as a crash while the new process is starting.
+    stop();
     m_intentionalStop = false;
     const auto failStart = [this] {
         cleanupSession();
@@ -488,25 +511,12 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
             if (!render->frame.transferId)
                 return rejectSlot();
             std::string error;
-            const int fd = m_fd.receive(render->frame.transferId, &error);
-            if (fd < 0) {
-                MU_LOG(warning, "Mu::Plugin", std::string("render slot receive failed: ") + error);
-                return rejectSlot();
-            }
-            std::string descriptorError;
-            const auto size = inspectFrameDescriptor(fd, &descriptorError);
-            if (!size) {
-                MU_LOG(warning, "Mu::Plugin", "invalid render slot descriptor: " + descriptorError);
-                ::close(fd);
-                return rejectSlot();
-            }
-            void* mapping = mmap(nullptr, *size, PROT_READ, MAP_SHARED, fd, 0);
-            ::close(fd);
-            if (mapping == MAP_FAILED)
+            const auto frame = receiveRenderFrame(m_fd, render->frame.transferId, "render slot", &error);
+            if (!frame)
                 return rejectSlot();
             slot = std::make_shared<FrameSlotMapping>();
-            slot->mapping = mapping;
-            slot->size = *size;
+            slot->mapping = frame->mapping;
+            slot->size = frame->size;
         }
 
         if (!validFrame(slot->mapping, slot->size))
@@ -523,32 +533,15 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
     if (!render->frame.transferId)
         return { };
     std::string error;
-    const int fd = m_fd.receive(render->frame.transferId, &error);
-    if (fd < 0) {
-        MU_LOG(warning, "Mu::Plugin", std::string("render receive failed: ") + error);
+    const auto frame = receiveRenderFrame(m_fd, render->frame.transferId, "render", &error);
+    if (!frame)
+        return { };
+    if (!validFrame(frame->mapping, frame->size)) {
+        ::munmap(frame->mapping, frame->size);
         return { };
     }
-    const auto rejectFrame = [&](void* mapping = MAP_FAILED, std::size_t size = 0) {
-        if (mapping != MAP_FAILED)
-            ::munmap(mapping, size);
-        ::close(fd);
-        return QImage { };
-    };
-    std::string descriptorError;
-    const auto size = inspectFrameDescriptor(fd, &descriptorError);
-    if (!size) {
-        MU_LOG(warning, "Mu::Plugin", "invalid render descriptor: " + descriptorError);
-        return rejectFrame();
-    }
-    void* mapping = mmap(nullptr, *size, PROT_READ, MAP_SHARED, fd, 0);
-    if (mapping == MAP_FAILED)
-        return rejectFrame();
-    if (!validFrame(mapping, *size))
-        return rejectFrame(mapping, *size);
-
-    ::close(fd);
-    auto* mappedFrame = new MappedFrame { mapping, *size };
-    return createImage(mapping, cleanupMappedFrame, mappedFrame);
+    auto* mappedFrame = new MappedFrame { frame->mapping, frame->size };
+    return createImage(frame->mapping, cleanupMappedFrame, mappedFrame);
 }
 
 std::vector<TextBox> WorkerTransport::getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots)
@@ -785,6 +778,26 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     return job->jobId;
 }
 
+bool WorkerTransport::finalizeTempFile(QTemporaryFile& file, const QString& target, bool syncToDisk, QString* error)
+{
+    const auto fail = [&](const QString& message) {
+        if (error)
+            *error = message;
+        file.setAutoRemove(true);
+        return false;
+    };
+    if (!file.flush())
+        return fail(file.errorString());
+    // Signing is the only caller that needs the bytes durably on disk before
+    // the destination name is published.
+    if (syncToDisk && ::fsync(file.handle()) != 0)
+        return fail(QString::fromStdString(std::strerror(errno)));
+    file.setAutoRemove(false);
+    if (::rename(QFile::encodeName(file.fileName()).constData(), QFile::encodeName(target).constData()) != 0)
+        return fail(QString::fromStdString(std::strerror(errno)));
+    return true;
+}
+
 void WorkerTransport::completePdfExport(bool success, QString error)
 {
     if (!m_export)
@@ -797,24 +810,13 @@ void WorkerTransport::completePdfExport(bool success, QString error)
         // Same finalize contract as writeFile(): flush the temporary file and
         // rename it into place only after the worker completed, so a failed
         // export cannot leave a partial destination.
-        m_export->file->setAutoRemove(false);
-        if (m_export->file->flush()) {
-            delivered = ::rename(QFile::encodeName(m_export->file->fileName()).constData(),
-                                 QFile::encodeName(m_export->target).constData())
-                == 0;
-            if (!delivered)
-                MU_LOG(warning,
-                       "Mu::Plugin",
-                       "could not move export output to " + m_export->target.toStdString() + ": "
-                           + std::strerror(errno));
-        } else {
+        QString finalizeError;
+        delivered = finalizeTempFile(*m_export->file, m_export->target, /*syncToDisk=*/false, &finalizeError);
+        if (!delivered)
             MU_LOG(warning,
                    "Mu::Plugin",
-                   "could not flush export output for " + m_export->target.toStdString() + ": "
-                       + m_export->file->errorString().toStdString());
-        }
-        if (!delivered)
-            m_export->file->setAutoRemove(true);
+                   "could not finalize export output for " + m_export->target.toStdString() + ": "
+                       + finalizeError.toStdString());
     }
     if (!delivered && error.isEmpty())
         error = QStringLiteral("export failed");
@@ -847,13 +849,8 @@ SignResponse WorkerTransport::signToFile(SignRequest request, const QString& pas
         return { SigningResult::GenericError, "worker returned an invalid signing response" };
     if (result->result != SigningResult::Success)
         return *result;
-    if (!file.flush() || fsync(file.handle()))
-        return { SigningResult::WriteFailed, "could not flush signed output" };
-    file.setAutoRemove(false);
-    if (::rename(QFile::encodeName(file.fileName()).constData(), QFile::encodeName(target).constData())) {
-        file.setAutoRemove(true);
-        return { SigningResult::WriteFailed, "could not replace signing output" };
-    }
+    if (!finalizeTempFile(file, target, /*syncToDisk=*/true, nullptr))
+        return { SigningResult::WriteFailed, "could not finalize signing output" };
     return *result;
 }
 
@@ -1109,7 +1106,7 @@ void WorkerTransport::finished(int code, QProcess::ExitStatus /*status*/)
     // Intentional stop/abort already performed cleanup; only an unplanned
     // process exit is surfaced to the client for recovery.
     if (!m_intentionalStop)
-        Q_EMIT workerDied(code);
+        Q_EMIT processExited(code);
 }
 
 } // namespace Mu::Plugin

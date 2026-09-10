@@ -4,7 +4,6 @@
 #include "plugin/worker_client.hpp"
 
 #include <chrono>
-#include <deque>
 
 #include "plugin/worker_transport.hpp"
 #include "shared/logging.hpp"
@@ -20,19 +19,22 @@ WorkerClient::WorkerClient(QObject* parent)
     // Keep the transport event loop independent from the generator event
     // loop. This prevents socket waits and worker notifications from blocking
     // UI-facing plugin calls.
-    m_restartTimer.setSingleShot(true);
-    connect(&m_restartTimer, &QTimer::timeout, this, &WorkerClient::restartWorker);
+    m_lifecycle.timer.setSingleShot(true);
+    connect(&m_lifecycle.timer, &QTimer::timeout, this, &WorkerClient::restartWorker);
     m_thread = new QThread();
     m_transport = new WorkerTransport();
     m_transport->moveToThread(m_thread);
     connect(m_thread, &QThread::finished, m_transport, &QObject::deleteLater);
     connect(
         m_transport,
-        &WorkerTransport::workerDied,
+        &WorkerTransport::processExited,
         this,
         [this](int exitCode) {
             // The worker is gone; its cached handshake facts no longer apply.
-            m_workerInfo = { };
+            m_lifecycle.info = { };
+            // A running document session ended with the process. Recovery is
+            // only complete once the generator revalidates and commits it.
+            m_lifecycle.setState(State::Recovering);
             Q_EMIT workerDied(exitCode);
             scheduleRestart();
         },
@@ -48,9 +50,7 @@ WorkerClient::~WorkerClient()
 {
     // Stop on the transport thread before joining it; deleting the thread
     // first could leave queued socket/process work accessing freed state.
-    m_restartTimer.stop();
-    if (m_transport)
-        QMetaObject::invokeMethod(m_transport, "stop", Qt::BlockingQueuedConnection);
+    stop();
     m_thread->quit();
     m_thread->wait();
     delete m_thread;
@@ -60,24 +60,20 @@ bool WorkerClient::start(const QString& binaryPath, const QStringList& tessDataD
 {
     // A manual start resets automatic-recovery history and becomes the new
     // baseline for subsequent crash recovery.
-    m_stopping = false;
-    m_restartTimer.stop();
-    m_restartAttempts = 0;
-    m_restartTimes.clear();
-    m_restartSequence = 0;
-    m_restartDisabled = false;
-    m_workerBinary = binaryPath;
-    m_tessDataDirectories = tessDataDirectories;
-    return startWorker(binaryPath);
+    m_lifecycle.reset(binaryPath, tessDataDirectories);
+    const bool started = startWorker();
+    m_lifecycle.setState(started ? State::Ready : State::Stopped);
+    return started;
 }
 
-bool WorkerClient::startWorker(const QString& binaryPath)
+bool WorkerClient::startWorker()
 {
     // BlockingQueuedConnection is the synchronization boundary: the caller
     // sees the completed transport transition, while all transport state
     // remains thread-confined.
     bool result = false;
-    const QStringList tessDataDirectories = m_tessDataDirectories;
+    const QString binaryPath = m_lifecycle.binary;
+    const QStringList tessDataDirectories = m_lifecycle.tessDataDirectories;
     Model::PingResponse workerInfo;
     QMetaObject::invokeMethod(
         m_transport,
@@ -86,7 +82,7 @@ bool WorkerClient::startWorker(const QString& binaryPath)
         },
         Qt::BlockingQueuedConnection);
     // The blocking call provides the happens-before edge for the cached info.
-    m_workerInfo = result ? workerInfo : Model::PingResponse { };
+    m_lifecycle.info = result ? workerInfo : Model::PingResponse { };
     return result;
 }
 
@@ -94,262 +90,234 @@ void WorkerClient::stop()
 {
     // Mark the stop before invoking transport cleanup so an intentional exit
     // is not reported as a worker crash and restarted.
-    m_stopping = true;
-    m_restartTimer.stop();
+    m_lifecycle.beginStop();
+    m_lifecycle.timer.stop();
     if (m_transport)
-        QMetaObject::invokeMethod(m_transport, "stop", Qt::BlockingQueuedConnection);
-    m_workerInfo = { };
+        QMetaObject::invokeMethod(m_transport, [t = m_transport] { t->stop(); }, Qt::BlockingQueuedConnection);
+    m_lifecycle.info = { };
+    m_lifecycle.setState(State::Stopped);
 }
 
 bool WorkerClient::isConnected() const
 {
-    bool result = false;
-    if (m_transport)
-        QMetaObject::invokeMethod(
-            m_transport, [&] { result = m_transport->isConnected(); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->isConnected(); });
 }
 
 OpenStatus WorkerClient::open(const QString& p, const QString& w, QList<PageInfo>& pages, DocumentType type)
 {
-    OpenStatus result = OpenStatus::Failed;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->open(p, w, &pages, type); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->open(p, w, &pages, type); }, OpenStatus::Failed);
 }
 
 OpenStatus WorkerClient::openData(const QByteArray& d, const QString& p, QList<PageInfo>& pages, DocumentType type)
 {
-    OpenStatus result = OpenStatus::Failed;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->openData(d, p, &pages, type); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->openData(d, p, &pages, type); },
+                OpenStatus::Failed);
 }
 
 bool WorkerClient::close()
 {
-    bool result = false;
-    QMetaObject::invokeMethod(m_transport, [&] { result = m_transport->close(); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->close(); });
 }
 
 QImage WorkerClient::render(int p, int w, int h, const QRect& t)
 {
-    QImage result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->render(p, w, h, t); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->render(p, w, h, t); });
 }
 
 std::vector<TextBox> WorkerClient::getTextBoxesForPage(int p, qreal x, qreal y, bool skipAnnots) const
 {
-    std::vector<TextBox> result;
-    QMetaObject::invokeMethod(
-        m_transport,
-        [&] { result = m_transport->getTextBoxesForPage(p, x, y, skipAnnots); },
-        Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->getTextBoxesForPage(p, x, y, skipAnnots); });
 }
 
 OcrResult WorkerClient::ocrPage(int p, const QString& l, int d, bool a) const
 {
-    OcrResult result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->ocrPage(p, l, d, a); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->ocrPage(p, l, d, a); });
 }
 
 std::optional<quint64> WorkerClient::startOcrPage(int p, const QString& l, int d) const
 {
-    std::optional<quint64> result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->startOcrPage(p, l, d); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->startOcrPage(p, l, d); });
 }
 
 OcrResult WorkerClient::ocrResult(quint64 id) const
 {
-    OcrResult result;
-    QMetaObject::invokeMethod(m_transport, [&] { result = m_transport->ocrResult(id); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->ocrResult(id); });
 }
 
 bool WorkerClient::cancelOcrJobs() const
 {
-    bool result = false;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->cancelOcrJobs(); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->cancelOcrJobs(); });
 }
 
 std::vector<Font> WorkerClient::fonts(int p) const
 {
-    std::vector<Font> result;
-    QMetaObject::invokeMethod(m_transport, [&] { result = m_transport->fonts(p); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->fonts(p); });
 }
 
 std::vector<EmbeddedFile> WorkerClient::embeddedFiles() const
 {
-    std::vector<EmbeddedFile> result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->embeddedFiles(); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->embeddedFiles(); });
 }
 
 std::vector<OutlineNode> WorkerClient::synopsis() const
 {
-    std::vector<OutlineNode> result;
-    QMetaObject::invokeMethod(m_transport, [&] { result = m_transport->synopsis(); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->synopsis(); });
 }
 
 DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& k) const
 {
-    DocumentMetadata result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->getDocumentInfo(k); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->getDocumentInfo(k); });
 }
 
 std::optional<AnnotationHandle> WorkerClient::addAnnotation(int p, const Annotation& a) const
 {
-    std::optional<AnnotationHandle> result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->addAnnotation(p, a); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->addAnnotation(p, a); });
 }
 
 bool WorkerClient::modifyAnnotation(int p, const QString& h, const Annotation& a, bool c) const
 {
-    bool result = false;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->modifyAnnotation(p, h, a, c); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->modifyAnnotation(p, h, a, c); });
 }
 
 bool WorkerClient::removeAnnotation(int p, const QString& h) const
 {
-    bool result = false;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->removeAnnotation(p, h); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->removeAnnotation(p, h); });
 }
 
 std::optional<Model::FormUpdateResponse> WorkerClient::updateForm(const Model::FormUpdateRequest& request) const
 {
-    std::optional<Model::FormUpdateResponse> result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->updateForm(request); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->updateForm(request); });
 }
 
 std::optional<Model::FormUpdateResponse> WorkerClient::resetForm(const Model::FormResetRequest& request) const
 {
-    std::optional<Model::FormUpdateResponse> result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->resetForm(request); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->resetForm(request); });
 }
 
 bool WorkerClient::saveToFile(const QString& t)
 {
-    bool result = false;
-    QMetaObject::invokeMethod(m_transport, [&] { result = m_transport->saveToFile(t); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->saveToFile(t); });
 }
 
 bool WorkerClient::savePdfToFile(const QString& t, const QVector<int>& pages, bool withReferences)
 {
-    bool result = false;
-    QMetaObject::invokeMethod(
-        m_transport,
-        [&] { result = m_transport->savePdfToFile(t, pages, withReferences); },
-        Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->savePdfToFile(t, pages, withReferences); });
 }
 
 std::optional<quint64> WorkerClient::startPdfExport(const QString& t, const QVector<int>& pages) const
 {
-    std::optional<quint64> result;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->startPdfExport(t, pages); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->startPdfExport(t, pages); });
 }
 
 SignResponse WorkerClient::sign(const SignRequest& r, const QString& password, const QString& t)
 {
-    SignResponse result { SigningResult::GenericError, "worker is unavailable" };
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->signToFile(r, password, t); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->signToFile(r, password, t); },
+                SignResponse { SigningResult::GenericError, "worker is unavailable" });
 }
 
 bool WorkerClient::setSettings(const DocumentSettings& settings)
 {
-    bool result = false;
-    QMetaObject::invokeMethod(
-        m_transport, [&] { result = m_transport->settings(settings); }, Qt::BlockingQueuedConnection);
-    return result;
+    return sync([&](WorkerTransport* transport) { return transport->settings(settings); });
 }
 
 SandboxStatus WorkerClient::sandboxStatus() const
 {
-    return m_workerInfo.sandbox;
+    return m_lifecycle.info.sandbox;
 }
 
 std::string WorkerClient::engineVersion() const
 {
-    return m_workerInfo.engineVersion;
+    return m_lifecycle.info.engineVersion;
 }
 
-void WorkerClient::pruneRestartHistory()
+void WorkerClient::LifeCycle::prune() noexcept
 {
-    const auto cutoff = std::chrono::steady_clock::now() - std::chrono::seconds(5);
-    while (!m_restartTimes.empty() && m_restartTimes.front() <= cutoff)
-        m_restartTimes.pop_front();
+    const auto cutoff = std::chrono::steady_clock::now() - Window;
+    while (!restartTimes.empty() && restartTimes.front() <= cutoff)
+        restartTimes.pop_front();
+}
+
+void WorkerClient::LifeCycle::reset(const QString& binaryPath, const QStringList& directories)
+{
+    timer.stop();
+    binary = binaryPath;
+    tessDataDirectories = directories;
+    info = { };
+    stopping = false;
+    restartsDisabled = false;
+    attempts = 0;
+    restartTimes.clear();
+    sequence = 0;
+}
+
+bool WorkerClient::LifeCycle::budgetExhausted()
+{
+    prune();
+    return attempts >= MaxAttempts || restartTimes.size() >= MaxRestartsPerWindow;
+}
+
+int WorkerClient::LifeCycle::nextRestartDelayMs() noexcept
+{
+    static constexpr int DelaysMs[] = { 250, 500, 1000 };
+    return DelaysMs[attempts++];
+}
+
+void WorkerClient::LifeCycle::recordRestart()
+{
+    prune();
+    restartTimes.push_back(std::chrono::steady_clock::now());
+    ++sequence;
+    attempts = 0;
 }
 
 void WorkerClient::scheduleRestart()
 {
-    // Recovery is deliberately bounded in both delay and frequency. A worker
-    // that repeatedly dies must not create an endless restart storm.
-    if (m_stopping || m_restartDisabled || m_restartTimer.isActive() || m_restartAttempts >= 3)
+    // A worker that repeatedly dies must not create an endless restart storm.
+    if (!m_lifecycle.canScheduleRestart() || m_lifecycle.timer.isActive())
         return;
-    pruneRestartHistory();
-    if (m_restartTimes.size() >= 2) {
-        m_restartDisabled = true;
-        m_restartTimer.stop();
+    if (m_lifecycle.budgetExhausted()) {
+        m_lifecycle.disableRestarts();
+        m_lifecycle.timer.stop();
         MU_LOG(critical,
                "Mu::Plugin",
                "worker restart limit reached; automatic recovery disabled recentRestarts="
-                   + std::to_string(m_restartTimes.size()) + " windowSeconds=5");
+                   + std::to_string(m_lifecycle.recentRestarts())
+                   + " windowSeconds=" + std::to_string(LifeCycle::Window.count()));
+        m_lifecycle.setState(State::Failed);
         Q_EMIT workerUnavailable();
         return;
     }
-    static constexpr int delaysMs[] = { 250, 500, 1000 };
-    m_restartTimer.start(delaysMs[m_restartAttempts++]);
+    m_lifecycle.timer.start(m_lifecycle.nextRestartDelayMs());
 }
 
 void WorkerClient::restartWorker()
 {
     // A successful restart only restores the process; the generator must
-    // reopen its document after receiving workerRestarted.
-    if (m_stopping || m_restartDisabled || isConnected())
+    // reopen its document and commit the session before operations resume.
+    if (!m_lifecycle.canScheduleRestart() || isConnected())
         return;
-    if (startWorker(m_workerBinary)) {
-        pruneRestartHistory();
-        m_restartTimes.push_back(std::chrono::steady_clock::now());
-        ++m_restartSequence;
-        m_restartAttempts = 0;
+    if (startWorker()) {
+        m_lifecycle.recordRestart();
+        m_lifecycle.setState(State::Recovering);
         MU_LOG(warning,
                "Mu::Plugin",
-               "worker revived restart=" + std::to_string(m_restartSequence)
-                   + " recentRestarts=" + std::to_string(m_restartTimes.size()) + " windowSeconds=5");
+               "worker revived restart=" + std::to_string(m_lifecycle.sequence)
+                   + " recentRestarts=" + std::to_string(m_lifecycle.recentRestarts())
+                   + " windowSeconds=" + std::to_string(LifeCycle::Window.count()));
         Q_EMIT workerRestarted();
         return;
     }
     scheduleRestart();
+}
+
+void WorkerClient::commitSessionReady()
+{
+    m_lifecycle.setState(State::Ready);
+}
+
+void WorkerClient::commitSessionFailed()
+{
+    m_lifecycle.setState(State::Failed);
 }
 
 } // namespace Mu::Plugin

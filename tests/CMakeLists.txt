@@ -112,6 +112,10 @@ target_include_directories(test_plugin_ocrcontroller PRIVATE
     ../src ${MU_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
 target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_plugin_ocr Qt6::Gui Qt6::Network)
 
+add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp plugin)
+target_include_directories(test_plugin_workerclientstate PRIVATE ../src)
+target_link_libraries(test_plugin_workerclientstate PRIVATE mupdf_plugin_worker)
+
 add_layer_test(test_generator_config generator/test_config.cpp generator)
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(test_generator_config PRIVATE Qt6::Gui mupdf_generator_settings)

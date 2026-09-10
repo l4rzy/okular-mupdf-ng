@@ -115,7 +115,9 @@ void Controller::reset()
 
 bool Controller::shouldRun(int page)
 {
-    if (!m_backend->isConnected())
+    // Recovering workers have no document yet; only a committed session may
+    // receive OCR work.
+    if (!m_backend->operational())
         return false;
     if (m_config.force)
         return true;

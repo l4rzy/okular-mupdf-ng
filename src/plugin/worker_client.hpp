@@ -11,8 +11,11 @@
 #include <QTimer>
 #include <QVector>
 
+#include <atomic>
 #include <chrono>
 #include <deque>
+#include <type_traits>
+#include <utility>
 
 #include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"
@@ -33,12 +36,26 @@ class WorkerClient final : public QObject, public Model::FormBackend {
     Q_OBJECT
 
 public:
+    /// Worker process/session lifecycle. The process can be running while the
+    /// generator has not yet confirmed its document session (Recovering); user
+    /// operations must be gated on State::Ready.
+    enum class State { Stopped, Ready, Recovering, Failed };
+
     using PageInfo = Model::PageInfo;
     explicit WorkerClient(QObject* parent = nullptr);
     ~WorkerClient() override;
     bool start(const QString& binaryPath, const QStringList& tessDataDirectories = { });
     void stop();
     bool isConnected() const;
+
+    [[nodiscard]] State state() const noexcept { return m_lifecycle.current(); }
+
+    [[nodiscard]] bool operational() const noexcept { return state() == State::Ready; }
+
+    /// Marks recovery complete after the generator revalidated its document.
+    void commitSessionReady();
+    /// Marks recovery unrecoverable; no automatic restart will make it Ready.
+    void commitSessionFailed();
     Model::OpenStatus open(const QString& path,
                            const QString& password,
                            QList<PageInfo>& pages,
@@ -85,27 +102,79 @@ signals:
     void pdfExportFinished(quint64 jobId, bool success, const QString& error);
 
 private:
-    // Restart state is owned by the client thread; transport failures are
+    // Everything tied to the worker process lifecycle: launch configuration,
+    // restart-budget policy, cached handshake facts, the restart timer, and
+    // the observable state used for operation gating.
+    struct LifeCycle {
+        // Launch configuration, reused for every restart.
+        QString binary;
+        QStringList tessDataDirectories;
+        Model::PingResponse info;
+
+        // Restart budget: at most MaxAttempts delayed retries, and no more
+        // than MaxRestartsPerWindow successful restarts within Window.
+        static constexpr int MaxAttempts = 3;
+        static constexpr std::size_t MaxRestartsPerWindow = 2;
+        static constexpr std::chrono::seconds Window { 5 };
+
+        QTimer timer;
+        bool stopping = false;
+        bool restartsDisabled = false;
+        int attempts = 0;
+        std::deque<std::chrono::steady_clock::time_point> restartTimes;
+        quint64 sequence = 0;
+
+        // Generator render threads read this; the client thread writes it.
+        std::atomic<State> state { State::Stopped };
+
+        void reset(const QString& binaryPath, const QStringList& directories);
+
+        void beginStop() noexcept { stopping = true; }
+
+        [[nodiscard]] bool canScheduleRestart() const noexcept { return !stopping && !restartsDisabled; }
+
+        [[nodiscard]] bool budgetExhausted();
+        [[nodiscard]] int nextRestartDelayMs() noexcept;
+        void recordRestart();
+
+        void disableRestarts() noexcept { restartsDisabled = true; }
+
+        [[nodiscard]] std::size_t recentRestarts() const noexcept { return restartTimes.size(); }
+
+        [[nodiscard]] State current() const noexcept { return state.load(std::memory_order_acquire); }
+
+        void setState(State value) noexcept { state.store(value, std::memory_order_release); }
+
+    private:
+        void prune() noexcept;
+    };
+
+    // Restart policy is owned by the client thread; transport failures are
     // converted into bounded, delayed recovery attempts here.
-    bool startWorker(const QString& binaryPath);
-    void pruneRestartHistory();
+    bool startWorker();
     void scheduleRestart();
     void restartWorker();
 
+    // Runs a transport call on the transport thread and returns its result,
+    // seeded with a failure value so a failed dispatch cannot masquerade as
+    // success. BlockingQueuedConnection is the synchronization boundary while
+    // all transport state stays thread-confined.
+    template <class Fn, class Result = std::invoke_result_t<Fn, WorkerTransport*>>
+    Result sync(Fn&& fn, Result initial = { }) const
+    {
+        Result result = std::move(initial);
+        if (!m_transport)
+            return result;
+        QMetaObject::invokeMethod(
+            m_transport,
+            [t = m_transport, fn = std::forward<Fn>(fn), &result] { result = fn(t); },
+            Qt::BlockingQueuedConnection);
+        return result;
+    }
+
     QThread* m_thread = nullptr;
     WorkerTransport* m_transport = nullptr;
-    QTimer m_restartTimer;
-    QString m_workerBinary;
-    QStringList m_tessDataDirectories;
-    int m_restartAttempts = 0;
-    std::deque<std::chrono::steady_clock::time_point> m_restartTimes;
-    quint64 m_restartSequence = 0;
-    bool m_restartDisabled = false;
-    bool m_stopping = false;
-    // Cached handshake facts about the worker, refreshed only at
-    // synchronized points (start, stop, worker death) so generator-thread
-    // reads need no cross-thread round trip.
-    Model::PingResponse m_workerInfo;
+    LifeCycle m_lifecycle;
 };
 
 } // namespace Mu::Plugin
