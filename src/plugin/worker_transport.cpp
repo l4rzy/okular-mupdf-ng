@@ -16,6 +16,9 @@
 #ifdef MU_DEBUG_ENABLED
 #include <chrono>
 #endif
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <optional>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -43,6 +46,35 @@ struct MappedFrame {
     void* mapping = nullptr;
     std::size_t size = 0;
 };
+
+std::optional<std::size_t> inspectFrameDescriptor(int fd, std::string* error)
+{
+    struct stat info { };
+    if (::fstat(fd, &info) != 0) {
+        if (error)
+            *error = std::strerror(errno);
+        return std::nullopt;
+    }
+    if (!S_ISREG(info.st_mode) || info.st_size < 0) {
+        if (error)
+            *error = "frame descriptor is not a regular file";
+        return std::nullopt;
+    }
+    const auto size = IPC::checkedFrameMappingSize(static_cast<std::uint64_t>(info.st_size));
+    if (!size) {
+        if (error)
+            *error = "frame descriptor size is outside the permitted range";
+        return std::nullopt;
+    }
+    const int seals = ::fcntl(fd, F_GET_SEALS);
+    constexpr int requiredSeals = F_SEAL_SHRINK | F_SEAL_GROW;
+    if (seals < 0 || (seals & requiredSeals) != requiredSeals) {
+        if (error)
+            *error = "frame descriptor is not size-sealed";
+        return std::nullopt;
+    }
+    return size;
+}
 
 void cleanupMappedFrame(void* data)
 {
@@ -460,19 +492,20 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
                 MU_LOG(warning, "Mu::Plugin", std::string("render slot receive failed: ") + error);
                 return rejectSlot();
             }
-            struct stat info { };
-            if (fstat(fd, &info) || info.st_size < static_cast<off_t>(sizeof(IPC::FrameBufferHeader))) {
+            std::string descriptorError;
+            const auto size = inspectFrameDescriptor(fd, &descriptorError);
+            if (!size) {
+                MU_LOG(warning, "Mu::Plugin", "invalid render slot descriptor: " + descriptorError);
                 ::close(fd);
                 return rejectSlot();
             }
-            const auto size = static_cast<std::size_t>(info.st_size);
-            void* mapping = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
+            void* mapping = mmap(nullptr, *size, PROT_READ, MAP_SHARED, fd, 0);
             ::close(fd);
             if (mapping == MAP_FAILED)
                 return rejectSlot();
             slot = std::make_shared<FrameSlotMapping>();
             slot->mapping = mapping;
-            slot->size = size;
+            slot->size = *size;
         }
 
         if (!validFrame(slot->mapping, slot->size))
@@ -500,18 +533,20 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
         ::close(fd);
         return QImage { };
     };
-    struct stat info { };
-    if (fstat(fd, &info) || info.st_size < static_cast<off_t>(sizeof(IPC::FrameBufferHeader)))
+    std::string descriptorError;
+    const auto size = inspectFrameDescriptor(fd, &descriptorError);
+    if (!size) {
+        MU_LOG(warning, "Mu::Plugin", "invalid render descriptor: " + descriptorError);
         return rejectFrame();
-    const auto size = static_cast<std::size_t>(info.st_size);
-    void* mapping = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
+    }
+    void* mapping = mmap(nullptr, *size, PROT_READ, MAP_SHARED, fd, 0);
     if (mapping == MAP_FAILED)
         return rejectFrame();
-    if (!validFrame(mapping, size))
-        return rejectFrame(mapping, size);
+    if (!validFrame(mapping, *size))
+        return rejectFrame(mapping, *size);
 
     ::close(fd);
-    auto* mappedFrame = new MappedFrame { mapping, size };
+    auto* mappedFrame = new MappedFrame { mapping, *size };
     return createImage(mapping, cleanupMappedFrame, mappedFrame);
 }
 

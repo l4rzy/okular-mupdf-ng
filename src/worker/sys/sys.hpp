@@ -77,7 +77,8 @@ private:
 /// Creates a non-blocking Linux eventfd descriptor (EFD_NONBLOCK | EFD_CLOEXEC).
 std::optional<FileDescriptor> createEventFd(std::string* error = nullptr);
 
-/// Creates an anonymous in-memory file descriptor (memfd_create with MFD_CLOEXEC) sized to `size` bytes.
+/// Creates a fixed-size anonymous in-memory file descriptor. The returned
+/// descriptor has MFD_CLOEXEC and F_SEAL_SHRINK | F_SEAL_GROW applied.
 std::optional<FileDescriptor> createMemfd(std::string_view name, std::size_t size, std::string* error = nullptr);
 
 } // namespace Mu::Worker::Sys

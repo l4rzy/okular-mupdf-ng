@@ -54,6 +54,12 @@ int runTestWorkerNativeRuntime()
 
     auto memfd = createMemfd("mupdf-worker-test", 4096, &error);
     assert(memfd && error.empty());
+    const int seals = ::fcntl(memfd->get(), F_GET_SEALS);
+    assert(seals >= 0 && (seals & (F_SEAL_SHRINK | F_SEAL_GROW)) == (F_SEAL_SHRINK | F_SEAL_GROW));
+    errno = 0;
+    assert(::ftruncate(memfd->get(), 2048) != 0 && errno == EPERM);
+    errno = 0;
+    assert(::ftruncate(memfd->get(), 8192) != 0 && errno == EPERM);
     void* mapped = ::mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, memfd->get(), 0);
     assert(mapped != MAP_FAILED);
     Mapping mapping(mapped, 4096);

@@ -5,7 +5,9 @@
 
 #include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <limits>
+#include <linux/memfd.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -129,18 +131,20 @@ std::optional<FileDescriptor> createEventFd(std::string* error)
 
 // memfd_create has no libc wrapper on several toolchains, so it goes through
 // syscall(2) directly; the anonymous file is pre-sized with ftruncate so the
-// peer can map it immediately after the FD transfer over SCM_RIGHTS.
+// peer can map it immediately after the FD transfer over SCM_RIGHTS. The
+// returned descriptor has a fixed size so a peer cannot observe a truncated
+// mapping.
 std::optional<FileDescriptor> createMemfd(std::string_view name, std::size_t size, std::string* error)
 {
-    MU_LOG(debug, "Mu::Worker", std::string("MemFD created, size = ") + std::to_string(size));
     if (name.empty() || size == 0 || size > static_cast<std::size_t>(std::numeric_limits<off_t>::max())) {
         if (error)
             *error = "memfd name or size is invalid";
         return std::nullopt;
     }
     // Invoke memfd_create syscall directly
-    const int fd = static_cast<int>(::syscall(SYS_memfd_create, name.data(), MFD_CLOEXEC));
-    if (fd < 0 || ::ftruncate(fd, static_cast<off_t>(size)) != 0) {
+    const int fd = static_cast<int>(::syscall(SYS_memfd_create, name.data(), MFD_CLOEXEC | MFD_ALLOW_SEALING));
+    if (fd < 0 || ::ftruncate(fd, static_cast<off_t>(size)) != 0
+        || ::fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW) != 0) {
         const int saved = errno;
         if (fd >= 0)
             ::close(fd);
@@ -148,6 +152,7 @@ std::optional<FileDescriptor> createMemfd(std::string_view name, std::size_t siz
             *error = std::strerror(saved);
         return std::nullopt;
     }
+    MU_LOG(debug, "Mu::Worker", std::string("MemFD created, size = ") + std::to_string(size));
     return FileDescriptor(fd);
 }
 

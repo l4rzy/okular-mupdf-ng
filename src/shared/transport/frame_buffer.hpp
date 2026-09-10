@@ -5,6 +5,8 @@
 #define MU_SHARED_TRANSPORT_FRAME_BUFFER_HPP
 
 #include <cstdint>
+#include <limits>
+#include <optional>
 
 /// @file frame_buffer.hpp
 /// @brief Layout of a per-request shared-memory frame segment.
@@ -50,7 +52,16 @@ struct alignas(64) FrameBufferHeader {
 
 static_assert(sizeof(FrameBufferHeader) == 64, "FrameBufferHeader must be exactly 64 bytes (one cache line)");
 
-/// Pointer to the pixel data region within a mapped SHM segment.
+/// Returns a safe mapping size for a received frame descriptor.
+inline std::optional<std::size_t> checkedFrameMappingSize(std::uint64_t mappedSize)
+{
+    if (mappedSize < sizeof(FrameBufferHeader) || mappedSize > Limit::MaxSharedFrameBytes
+        || mappedSize > std::numeric_limits<std::size_t>::max())
+        return std::nullopt;
+    return static_cast<std::size_t>(mappedSize);
+}
+
+/// Pointer to the pixel data region within the mapped SHM segment.
 inline void* framePixelData(void* base)
 {
     return static_cast<char*>(base) + sizeof(FrameBufferHeader);

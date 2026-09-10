@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 
 #include "plugin/util/temp_dir.hpp"
 #include "shared/compat.hpp"
@@ -67,6 +68,15 @@ private slots:
         // reading the header fields beyond the mapped region.
         QVERIFY(!::Mu::IPC::validateFrameHeader(
             &header, 2, 3, 8, 1, 7, uint64_t(sizeof(::Mu::IPC::FrameBufferHeader)) - 1));
+
+        const std::array<std::pair<std::uint64_t, bool>, 4> mappingSizes {
+            std::pair { uint64_t(sizeof(::Mu::IPC::FrameBufferHeader)) - 1, false },
+            std::pair { uint64_t(sizeof(::Mu::IPC::FrameBufferHeader)), true },
+            std::pair { uint64_t(::Mu::Limit::MaxSharedFrameBytes), true },
+            std::pair { uint64_t(::Mu::Limit::MaxSharedFrameBytes) + 1, false },
+        };
+        for (const auto& [size, valid] : mappingSizes)
+            QCOMPARE(::Mu::IPC::checkedFrameMappingSize(size).has_value(), valid);
     }
 
     void tempDirectoryIsPerUser()
