@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "engine/document_base.hpp"
+#include "engine/epub/export_jobs.hpp"
 #include "engine/ocr/jobs.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
@@ -35,6 +36,7 @@ using ::Mu::Model::AnnotationAddRequest;
 using ::Mu::Model::AnnotationModifyRequest;
 using ::Mu::Model::AnnotationRemoveRequest;
 using ::Mu::Model::DocumentType;
+using ::Mu::Model::ExportPdfAsyncRequest;
 using ::Mu::Model::FontsRequest;
 using ::Mu::Model::FormResetRequest;
 using ::Mu::Model::FormUpdateRequest;
@@ -56,6 +58,7 @@ using ::Mu::Model::TextBoxesRequest;
 using ::Mu::IPC::CtrlChannel;
 using ::Mu::IPC::FdChannel;
 using ::Mu::Worker::Engine::DocumentBase;
+using ::Mu::Worker::Engine::ExportJobs;
 using ::Mu::Worker::Engine::OcrJobs;
 
 // Resource limits protecting the worker process against DoS or memory exhaustion on untrusted input
@@ -126,6 +129,13 @@ public:
     /// Drains all completed OCR job notifications from the queue.
     [[nodiscard]] std::vector<OcrJobs::Notification> drainOcrNotifications();
 
+    /// Returns the event file descriptor signaled when background PDF export
+    /// jobs complete.
+    [[nodiscard]] int exportCompletionFd() const noexcept;
+
+    /// Drains all completed background PDF export notifications.
+    [[nodiscard]] std::vector<ExportJobs::Notification> drainExportNotifications();
+
     /// Extracts one page per event-loop turn and returns a generation-tagged aggregate
     /// only after every page succeeds or a terminal error is reached.
     [[nodiscard]] std::optional<PageLinksNotification> processPageLinks();
@@ -166,6 +176,13 @@ public:
 
     /// Saves page-subset PDF via plain copy or the format-specific export path (withReferences).
     [[nodiscard]] ResponseMessage savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd);
+
+    /// Submits a background PDF export job using an isolated document copy.
+    /// Consumes both descriptors on every path.
+    [[nodiscard]] ResponseMessage exportPdfAsyncResponse(const RequestMessage& request,
+                                                         const ExportPdfAsyncRequest& payload,
+                                                         int outputFd,
+                                                         int inputFd);
 
     /// Performs digital signature signing on a document page field.
     [[nodiscard]] ResponseMessage signFdResponse(const RequestMessage& request, const SignRequest& sign, int fd);
@@ -280,6 +297,9 @@ private:
 
     // Async OCR job controller
     OcrJobs m_ocrJobs;
+
+    // Async background PDF export controller
+    ExportJobs m_exportJobs;
 
     // Monotonic counter sequences
     std::uint64_t m_annotationGeneration = 0;

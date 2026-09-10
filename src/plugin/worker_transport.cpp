@@ -63,6 +63,10 @@ int timeoutFor(const RequestPayload& payload)
                 return Timeout::RenderMs;
             if constexpr (std::is_same_v<T, OcrPageRequest> || std::is_same_v<T, OcrResultRequest>)
                 return Timeout::OcrMs;
+            if constexpr (std::is_same_v<T, ExportPdfAsyncRequest>)
+                // Only the job submission round-trip is bounded here; the
+                // export itself completes out-of-band via a notification.
+                return Timeout::GenericOpMs;
             if constexpr (std::is_same_v<T, SignRequest>)
                 return Timeout::SignMs;
             return Timeout::GenericOpMs;
@@ -245,6 +249,8 @@ void WorkerTransport::cleanupSession()
     m_activeSignPassword.fill(u'\0');
     m_activeSignPassword.clear();
     m_inFlight = false;
+    if (m_export)
+        completePdfExport(false, QStringLiteral("worker terminated"));
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt.reset();
 #endif
@@ -653,6 +659,110 @@ bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& p
     return writeFile(SavePdfRequest { { }, std::move(pageList), withReferences }, target);
 }
 
+std::optional<quint64>
+WorkerTransport::startPdfExport(const QString& target, const QVector<int>& pages, bool withReferences)
+{
+    // One export at a time; the caller falls back to the synchronous path when
+    // no source path exists (the background job needs a fresh input FD).
+    if (!isConnected() || m_export || m_sourcePath.isEmpty())
+        return std::nullopt;
+
+    const QFileInfo info(target);
+    auto file = std::make_unique<QTemporaryFile>(info.absolutePath() + QStringLiteral("/.mupdf-worker-XXXXXX"));
+    if (!file->open()) {
+        MU_LOG(warning,
+               "Mu::Plugin",
+               "could not create temporary file for " + target.toStdString() + ": "
+                   + file->errorString().toStdString());
+        return std::nullopt;
+    }
+    const auto outputTransfer = m_nextTransfer++;
+    std::string e;
+    if (!m_fd.send(outputTransfer, file->handle(), &e)) {
+        MU_LOG(warning, "Mu::Plugin", "could not send output FD for " + target.toStdString() + ": " + e);
+        return std::nullopt;
+    }
+
+    QFile input(m_sourcePath);
+    if (!input.open(QIODevice::ReadOnly)) {
+        MU_LOG(warning, "Mu::Plugin", "could not open source for " + target.toStdString());
+        return std::nullopt;
+    }
+    const auto inputTransfer = m_nextTransfer++;
+    if (!m_fd.send(inputTransfer, input.handle(), &e)) {
+        MU_LOG(warning, "Mu::Plugin", "could not send input FD for " + target.toStdString() + ": " + e);
+        return std::nullopt;
+    }
+
+    std::vector<std::int32_t> pageList;
+    pageList.reserve(static_cast<std::size_t>(pages.size()));
+    for (int p : pages)
+        pageList.push_back(p);
+
+    auto response =
+        call(ExportPdfAsyncRequest { { outputTransfer }, { inputTransfer }, std::move(pageList), withReferences });
+    if (!response || response->error) {
+        MU_LOG(warning,
+               "Mu::Plugin",
+               "worker did not accept the async export for " + target.toStdString() + ": "
+                   + (response && response->error ? response->error->message : "no response"));
+        return std::nullopt;
+    }
+    const auto* job = std::get_if<JobResponse>(&response->payload);
+    if (!job || job->jobId == 0) {
+        MU_LOG(warning, "Mu::Plugin", "worker returned no export job id for " + target.toStdString());
+        return std::nullopt;
+    }
+
+    if (!m_exportTimer) {
+        m_exportTimer = std::make_unique<QTimer>(this);
+        m_exportTimer->setSingleShot(true);
+        connect(m_exportTimer.get(), &QTimer::timeout, this, [this] {
+            completePdfExport(false, QStringLiteral("export timed out"));
+        });
+    }
+    m_export = PendingExport { std::move(file), target, job->jobId };
+    m_exportTimer->start(Timeout::ExportMs);
+    return job->jobId;
+}
+
+void WorkerTransport::completePdfExport(bool success, QString error)
+{
+    if (!m_export)
+        return;
+    if (m_exportTimer)
+        m_exportTimer->stop();
+    const auto jobId = m_export->jobId;
+    bool delivered = false;
+    if (success && m_export->file) {
+        // Same finalize contract as writeFile(): flush the temporary file and
+        // rename it into place only after the worker completed, so a failed
+        // export cannot leave a partial destination.
+        m_export->file->setAutoRemove(false);
+        if (m_export->file->flush()) {
+            delivered = ::rename(QFile::encodeName(m_export->file->fileName()).constData(),
+                                 QFile::encodeName(m_export->target).constData())
+                == 0;
+            if (!delivered)
+                MU_LOG(warning,
+                       "Mu::Plugin",
+                       "could not move export output to " + m_export->target.toStdString() + ": "
+                           + std::strerror(errno));
+        } else {
+            MU_LOG(warning,
+                   "Mu::Plugin",
+                   "could not flush export output for " + m_export->target.toStdString() + ": "
+                       + m_export->file->errorString().toStdString());
+        }
+        if (!delivered)
+            m_export->file->setAutoRemove(true);
+    }
+    if (!delivered && error.isEmpty())
+        error = QStringLiteral("export failed");
+    m_export.reset();
+    Q_EMIT pdfExportFinished(jobId, delivered, error);
+}
+
 SignResponse WorkerTransport::signToFile(SignRequest request, const QString& password, const QString& target)
 {
     QFileInfo info(target);
@@ -833,6 +943,15 @@ bool WorkerTransport::handleNotification(const NotificationMessage& notification
 
     if (auto* done = std::get_if<OcrDoneNotification>(&notification.payload)) {
         Q_EMIT ocrDone(done->jobId, done->page);
+        return true;
+    }
+    if (auto* exportDone = std::get_if<ExportDoneNotification>(&notification.payload)) {
+        // A late notification after a timeout or teardown no longer matches a
+        // pending export and is ignored; the job result is discarded.
+        if (m_export && m_export->jobId == exportDone->jobId)
+            completePdfExport(exportDone->success, QString::fromStdString(exportDone->error));
+        else
+            MU_LOG(debug, "Mu::Plugin", "ignoring stale export notification");
         return true;
     }
     if (auto* links = std::get_if<PageLinksNotification>(&notification.payload)) {

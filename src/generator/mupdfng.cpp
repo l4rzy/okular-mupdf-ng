@@ -152,6 +152,24 @@ Main::Main(QObject* parent, const QVariantList& args)
             }
         },
         Qt::QueuedConnection);
+    connect(
+        &m_worker,
+        &Plugin::WorkerClient::pdfExportFinished,
+        this,
+        [this](quint64 jobId, bool success, QString error) {
+            // The background export leaves the document untouched, so there is
+            // nothing to resume; failures surface as warnings, successes as a
+            // transient status notice.
+            Q_UNUSED(jobId);
+            if (!success) {
+                MU_LOG(warning, "Mu::Generator::Main", std::string("PDF export failed: ") + error.toStdString());
+                Q_EMIT warning(i18n("Export to PDF failed: %1", error), 10000);
+            } else {
+                MU_LOG(debug, "Mu::Generator::Main", "PDF export completed");
+                Q_EMIT notice(i18n("Export to PDF finished."), 3000);
+            }
+        },
+        Qt::QueuedConnection);
     connect(&m_worker, &Plugin::WorkerClient::workerRestarted, this, [this] {
         if (m_placeholder.isActive())
             return;
@@ -1228,7 +1246,14 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
         if (m_document.type != Model::DocumentType::Epub || m_placeholder.isActive() || !m_worker.isConnected())
             return false;
-        return m_worker.savePdfToFile(fileName, { }, true);
+        // The background export runs in an isolated worker job, so the
+        // document stays fully usable while it completes. Without a source
+        // path (data-opened documents) the plugin cannot supply the fresh
+        // input descriptor the job needs; fall back to the synchronous path.
+        if (m_document.sourcePath.isEmpty())
+            return m_worker.savePdfToFile(fileName, { }, true);
+        Q_EMIT notice(i18n("Starting to export to PDF."), 3000);
+        return m_worker.startPdfExport(fileName, { }).has_value();
     }
 
     if (!format.mimeType().inherits(QStringLiteral("text/plain")) || m_placeholder.isActive()

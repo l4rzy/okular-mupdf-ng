@@ -61,6 +61,10 @@ public:
     bool setSettings(const Model::DocumentSettings& settings);
     bool saveToFile(const QString& target);
     bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    /// Submits an asynchronous background PDF export; returns the job id
+    /// immediately. Completion arrives via the pdfExportFinished signal.
+    std::optional<quint64>
+    startPdfExport(const QString& target, const QVector<int>& pages, bool withReferences = true) const;
     Model::SignResponse sign(const Model::SignRequest& request, const QString& password, const QString& target);
     std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation) const;
     bool
@@ -79,6 +83,7 @@ signals:
     void ocrDone(quint64 jobId, int page);
     void
     pageLinksReady(quint64 generation, std::vector<Model::PageLinks> pages, bool resourceLimited, const QString& error);
+    void pdfExportFinished(quint64 jobId, bool success, const QString& error);
 
 private:
     // Restart state is owned by the client thread; transport failures are

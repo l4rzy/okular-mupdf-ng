@@ -67,6 +67,9 @@ private:
     /// Drains and transmits pending asynchronous OCR completion notifications to the client.
     bool writeOcrNotifications(std::string* error);
 
+    /// Drains and transmits pending asynchronous PDF export notifications to the client.
+    bool writeExportNotifications(std::string* error);
+
     /// Sends the final incremental page-link aggregate or its terminal error notification.
     bool writePageLinks(std::string* error);
 

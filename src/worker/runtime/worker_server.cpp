@@ -25,6 +25,7 @@ using ::Mu::IPC::FdChannel;
 using ::Mu::IPC::MonotonicDeadline;
 using ::Mu::IPC::PollLoop;
 namespace Timeout = ::Mu::IPC::Timeout;
+using ::Mu::Model::ExportDoneNotification;
 using ::Mu::Model::NotificationMessage;
 using ::Mu::Model::OcrDoneNotification;
 using ::Mu::Model::RequestMessage;
@@ -189,6 +190,24 @@ bool WorkerServer::writeOcrNotifications(std::string* error)
     return true;
 }
 
+bool WorkerServer::writeExportNotifications(std::string* error)
+{
+    // Drain all queued completion events from the background export thread
+    for (const auto& notification : m_commandService->drainExportNotifications()) {
+        const NotificationMessage message { ExportDoneNotification {
+            notification.id, notification.success, notification.error } };
+
+        MU_LOG(debug, "Worker -> Plugin", IPC::Debug::notification(message, true));
+        if (!ZppCodec::writeMessage(*m_client, message, Timeout::ControlWriteMs, error, "worker")) {
+            MU_LOG(
+                warning, "Mu::Worker", std::string("notification write failed: ") + (error ? *error : "unknown error"));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool WorkerServer::writePageLinks(std::string* error)
 {
     // CommandService advances one page at a time. It returns a notification only
@@ -297,6 +316,17 @@ int WorkerServer::run(std::string* error)
                 if (revents & POLLIN) {
                     std::string notificationError;
                     if (!writeOcrNotifications(&notificationError)) {
+                        disconnected = true;
+                    }
+                }
+            });
+        }
+
+        if (m_commandService->exportCompletionFd() >= 0) {
+            loop.watch(m_commandService->exportCompletionFd(), POLLIN, [&](short revents) {
+                if (revents & POLLIN) {
+                    std::string notificationError;
+                    if (!writeExportNotifications(&notificationError)) {
                         disconnected = true;
                     }
                 }

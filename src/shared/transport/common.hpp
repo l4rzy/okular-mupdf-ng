@@ -28,6 +28,9 @@ inline constexpr int OcrMs = 45'000;
 inline constexpr int SignMs = 45'000;
 inline constexpr int SignRoundTripMs = 30'000;
 inline constexpr int FdChannelTimeoutMs = 5'000;
+/// Bound for waiting on an asynchronous PDF export completion notification.
+/// Only the awaiting side gives up; the worker job itself is not cancellable.
+inline constexpr int ExportMs = 60'000;
 
 } // namespace Timeout
 

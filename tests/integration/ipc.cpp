@@ -217,6 +217,47 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    // End-to-end: async EPUB export submits immediately, the document stays
+    // usable while the background job runs, and the target file appears when
+    // the completion notification finalizes it.
+    void epubExportPdfAsyncOverIpc()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        QVERIFY(!pages.isEmpty());
+
+        QTemporaryDir outputDirectory;
+        QVERIFY(outputDirectory.isValid());
+        const QString outputPath = outputDirectory.filePath(QStringLiteral("export-async.pdf"));
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+        const auto job = m_client.startPdfExport(outputPath, { });
+        QVERIFY(job.has_value());
+
+        // The session document stays usable while the export job runs.
+        QVERIFY(!m_client.render(0, 100, 100).isNull());
+
+        const auto hasJob = [&]() {
+            return std::any_of(spy.cbegin(), spy.cend(), [&](const QList<QVariant>& arguments) {
+                return arguments.at(0).toULongLong() == *job && arguments.at(1).toBool();
+            });
+        };
+        // Arrival, not speed: keep the budget generous for loaded CI.
+        for (int attempt = 0; attempt < 50 && !hasJob(); ++attempt)
+            spy.wait(100);
+        QVERIFY2(hasJob(), "Timed out waiting for async PDF export completion");
+
+        QFile output(outputPath);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        QVERIFY(output.read(5) == "%PDF-");
+        ::Mu::Worker::Engine::PdfDocument exported;
+        std::string error;
+        QVERIFY2(exported.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
+        output.close();
+        QCOMPARE(exported.pageCount(), pages.size());
+
+        QVERIFY(m_client.close());
+    }
+
     void ocrCompletionArrivesWhileTransportIdle()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;

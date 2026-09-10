@@ -47,6 +47,7 @@ and the source-tree layout.
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
 | **Formats** | PDF, ePUB | ✓ | ✓ |
 | **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
+| **ePUB export** | Export ePUB to PDF | ✓ | ✗ |
 | **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ (plus basic XFA & Js support) |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
 | **Cert Manager** | NSS Certificate Manager | ✓ | ✗ |

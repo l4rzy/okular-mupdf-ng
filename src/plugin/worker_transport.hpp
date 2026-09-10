@@ -16,6 +16,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTemporaryFile>
+#include <QTimer>
 #include <QVector>
 
 #include <cerrno>
@@ -91,6 +92,12 @@ public:
     Q_INVOKABLE bool removeAnnotation(int page, const QString& handle);
     Q_INVOKABLE bool saveToFile(const QString& target);
     Q_INVOKABLE bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    /// Submits an asynchronous background PDF export and returns its job id
+    /// immediately; the output file is finalized when the worker reports
+    /// completion via pdfExportFinished. Returns nullopt when no source path
+    /// exists, the transport is busy, or the submit failed.
+    Q_INVOKABLE std::optional<quint64>
+    startPdfExport(const QString& target, const QVector<int>& pages, bool withReferences = true);
     Q_INVOKABLE Model::SignResponse
     signToFile(Model::SignRequest request, const QString& password, const QString& target);
     Q_INVOKABLE std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
@@ -101,10 +108,23 @@ signals:
     void workerDied(int);
     void ocrDone(quint64, int);
     void pageLinksReady(quint64, std::vector<Model::PageLinks>, bool, QString);
+    void pdfExportFinished(quint64 jobId, bool success, QString error);
 
 private:
     struct FrameSlotMapping;
     struct FrameLease;
+
+    /// In-flight asynchronous export owned until the completion notification,
+    /// the 60s timeout, or session teardown finalizes or discards it.
+    struct PendingExport {
+        std::unique_ptr<QTemporaryFile> file;
+        QString target;
+        quint64 jobId = 0;
+    };
+
+    /// Single completion exit: stops the timer, finalizes or discards the
+    /// temporary file, clears the pending export, and emits the result signal.
+    void completePdfExport(bool success, QString error);
 
     // File-producing requests use a temporary file and rename it only after
     // the worker has completed, so a failed or interrupted export cannot
@@ -180,6 +200,8 @@ private:
     QString m_socketPath, m_fdSocketPath, m_tempPath, m_sourcePath;
     QString m_activeSignPassword;
     Model::DocumentSettings m_settings;
+    std::optional<PendingExport> m_export;
+    std::unique_ptr<QTimer> m_exportTimer;
     std::unordered_map<std::uint64_t, std::shared_ptr<FrameSlotMapping>> m_frameSlots;
     quint64 m_nextId = 1, m_nextTransfer = 1, m_linkGeneration = 0;
     quint64 m_frameSession = 0;

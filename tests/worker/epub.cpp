@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/epub/document.hpp"
+#include "engine/epub/export_jobs.hpp"
 #include "engine/pdf/document.hpp"
 #include "runtime/command_service.hpp"
 #include "shared/model/types.hpp"
@@ -14,9 +15,53 @@
 #include <array>
 #include <cmath>
 #include <fcntl.h>
+#include <poll.h>
 #include <string>
 #include <unistd.h>
 #include <vector>
+
+namespace {
+
+void verifyPdfFile(const QString& path)
+{
+    QFile pdfFile(path);
+    QVERIFY(pdfFile.open(QIODevice::ReadOnly));
+    const QByteArray content = pdfFile.read(32);
+    pdfFile.close();
+    QVERIFY2(content.startsWith("%PDF-"), content.constData());
+}
+
+/// Polls the export completion eventfd and drains notifications until at
+/// least `count` arrive or the deadline passes. Returns whatever arrived.
+std::vector<::Mu::Worker::Engine::ExportJobs::Notification>
+waitForExportNotifications(::Mu::Worker::Engine::ExportJobs& jobs, std::size_t count)
+{
+    const int fd = jobs.eventFd();
+    std::vector<::Mu::Worker::Engine::ExportJobs::Notification> result;
+    for (int tick = 0; tick < 300 && result.size() < count && fd >= 0; ++tick) {
+        pollfd pollSet { fd, POLLIN, 0 };
+        ::poll(&pollSet, 1, 100);
+        auto drained = jobs.drainNotifications();
+        result.insert(result.end(), drained.begin(), drained.end());
+    }
+    return result;
+}
+
+std::vector<::Mu::Worker::Engine::ExportJobs::Notification>
+waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::size_t count)
+{
+    const int fd = service.exportCompletionFd();
+    std::vector<::Mu::Worker::Engine::ExportJobs::Notification> result;
+    for (int tick = 0; tick < 300 && result.size() < count && fd >= 0; ++tick) {
+        pollfd pollSet { fd, POLLIN, 0 };
+        ::poll(&pollSet, 1, 100);
+        auto drained = service.drainExportNotifications();
+        result.insert(result.end(), drained.begin(), drained.end());
+    }
+    return result;
+}
+
+} // namespace
 
 class TestEpub : public QObject {
     Q_OBJECT
@@ -701,6 +746,100 @@ private slots:
         QVERIFY(rejectFd >= 0);
         QVERIFY(!document.savePdfFdWithReferences(rejectFd, { document.pageCount() }, &error));
         QVERIFY(!error.empty());
+    }
+
+    void testExportJobsBackgroundCompletion()
+    {
+        ::Mu::Worker::Engine::ExportJobs jobs;
+        QVERIFY(jobs.eventFd() >= 0);
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const ::Mu::Model::DocumentSettings settings;
+
+        const QString outputPath = directory.filePath(QStringLiteral("job.pdf"));
+        int outFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outFd >= 0);
+        const auto jobId = jobs.submit(::dup(file.handle()), outFd, settings, { }, true);
+        QVERIFY(jobId.has_value());
+
+        const auto completed = waitForExportNotifications(jobs, 1);
+        QCOMPARE(completed.size(), std::size_t(1));
+        QCOMPARE(completed.front().id, *jobId);
+        QVERIFY(completed.front().success);
+        QVERIFY(completed.front().error.empty());
+        verifyPdfFile(outputPath);
+
+        // A finished job frees the single in-flight slot for the next export.
+        const QString jobPath = directory.filePath(QStringLiteral("job2.pdf"));
+        outFd = ::open(jobPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outFd >= 0);
+        const auto secondJob = jobs.submit(::dup(file.handle()), outFd, settings, { }, true);
+        QVERIFY(secondJob.has_value());
+        file.close();
+
+        const auto secondCompleted = waitForExportNotifications(jobs, 1);
+        QCOMPARE(secondCompleted.size(), std::size_t(1));
+        QCOMPARE(secondCompleted.front().id, *secondJob);
+        QVERIFY(secondCompleted.front().success);
+        QVERIFY(secondCompleted.front().error.empty());
+        verifyPdfFile(jobPath);
+    }
+
+    void testAsyncPdfExportDispatch()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+
+        ::Mu::IPC::FdChannel receiver;
+        const auto socketPath = directory.filePath(QStringLiteral("fd.sock")).toStdString();
+        std::string error;
+        if (!receiver.listen(socketPath, &error))
+            QSKIP(qPrintable(QStringLiteral("FD socket unavailable: ") + QString::fromStdString(error)));
+        ::Mu::IPC::FdChannel sender;
+        QVERIFY(sender.connect(socketPath, &error));
+        QVERIFY(receiver.accept(&error));
+
+        ::Mu::Worker::Runtime::CommandService service({ .sandbox = { }, .fdChannel = &receiver });
+        QVERIFY2(service.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error),
+                 error.c_str());
+
+        // Without a channel the transfer cannot be received and the request fails.
+        const auto noChannel =
+            service.dispatch({ 1, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { }, true } });
+        QVERIFY(noChannel.error);
+        QCOMPARE(noChannel.error->code, ::Mu::Model::ErrorCode::InvalidRequest);
+
+        const QString outputPath = directory.filePath(QStringLiteral("dispatched.pdf"));
+        int outFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outFd >= 0);
+        QVERIFY(sender.send(201, outFd, &error));
+        ::close(outFd);
+        int inFd = ::dup(file.handle());
+        QVERIFY(inFd >= 0);
+        QVERIFY(sender.send(202, inFd, &error));
+        ::close(inFd);
+        const auto response =
+            service.dispatch({ 2, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { }, true } });
+        QVERIFY2(!response.error, response.error ? response.error->message.c_str() : "");
+        const auto* job = std::get_if<::Mu::Model::JobResponse>(&response.payload);
+        QVERIFY(job);
+        QVERIFY(job->jobId != 0);
+
+        const auto notifications = waitForExportNotifications(service, 1);
+        QCOMPARE(notifications.size(), std::size_t(1));
+        QCOMPARE(notifications.front().id, job->jobId);
+        QVERIFY(notifications.front().success);
+        QVERIFY(notifications.front().error.empty());
+        verifyPdfFile(outputPath);
+
+        // The session document stays fully usable while and after the job ran.
+        const auto text = service.dispatch({ 3, ::Mu::Model::TextBoxesRequest { 0, 72, 72, true } });
+        QVERIFY2(!text.error, text.error ? text.error->message.c_str() : "");
     }
 };
 

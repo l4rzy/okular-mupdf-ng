@@ -411,6 +411,12 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
             } else if constexpr (std::is_same_v<T, Model::FormResetRequest>) {
                 out << "form-reset";
                 field(out, "handle", value.handle);
+            } else if constexpr (std::is_same_v<T, Model::ExportPdfAsyncRequest>) {
+                out << "export-pdf-async";
+                field(out, "outputTransfer", value.output.transferId);
+                field(out, "inputTransfer", value.input.transferId);
+                field(out, "pages", value.pages.size());
+                field(out, "withReferences", value.withReferences);
             }
         },
         payload);
@@ -563,7 +569,9 @@ std::string notification(const Model::NotificationMessage& message, bool coloriz
                 out << Color::tag("sign-input", colorize) << " job=" << value.jobId;
                 Detail::field(out, "nonce", value.nonce);
                 Detail::field(out, "certificate", value.certificateNickname);
-            }
+            } else if constexpr (std::is_same_v<T, Model::ExportDoneNotification>)
+                out << Color::tag("export-done", colorize) << " job=" << value.jobId << " ok=" << value.success
+                    << " error=" << std::quoted(value.error);
         },
         message.payload);
     return out.str();

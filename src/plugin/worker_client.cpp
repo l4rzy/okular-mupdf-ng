@@ -41,6 +41,8 @@ WorkerClient::WorkerClient(QObject* parent)
         Qt::QueuedConnection);
     connect(m_transport, &WorkerTransport::ocrDone, this, &WorkerClient::ocrDone, Qt::QueuedConnection);
     connect(m_transport, &WorkerTransport::pageLinksReady, this, &WorkerClient::pageLinksReady, Qt::QueuedConnection);
+    connect(
+        m_transport, &WorkerTransport::pdfExportFinished, this, &WorkerClient::pdfExportFinished, Qt::QueuedConnection);
     m_thread->start();
 }
 
@@ -271,6 +273,17 @@ bool WorkerClient::savePdfToFile(const QString& t, const QVector<int>& pages, bo
     QMetaObject::invokeMethod(
         m_transport,
         [&] { result = m_transport->savePdfToFile(t, pages, withReferences); },
+        Qt::BlockingQueuedConnection);
+    return result;
+}
+
+std::optional<quint64>
+WorkerClient::startPdfExport(const QString& t, const QVector<int>& pages, bool withReferences) const
+{
+    std::optional<quint64> result;
+    QMetaObject::invokeMethod(
+        m_transport,
+        [&] { result = m_transport->startPdfExport(t, pages, withReferences); },
         Qt::BlockingQueuedConnection);
     return result;
 }

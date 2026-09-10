@@ -782,6 +782,20 @@ struct SavePdfRequest {
     bool withReferences = false;
 };
 
+/// Exports the open document to PDF in a background job using an isolated
+/// copy of the source file, writing to a transferred output descriptor.
+/// The session document is untouched; completion is reported asynchronously.
+struct ExportPdfAsyncRequest {
+    /// Output descriptor receiving the generated PDF.
+    FileTransfer output;
+    /// Fresh copy of the source document opened by the background job.
+    FileTransfer input;
+    std::vector<std::int32_t> pages;
+    /// True builds the PDF via the format-specific export path
+    /// (savePdfFdWithReferences); false uses a plain page copy (savePdfFd).
+    bool withReferences = true;
+};
+
 /// Elements rendered into the signature appearance stream (bitmask).
 enum class SignatureElement : std::uint8_t {
     Labels = 1 << 0, // "Digitally signed by", "DN:", "Date:" prefixes
@@ -846,7 +860,8 @@ using RequestPayload = std::variant<PingRequest,
                                     SignRequest,
                                     SignReply,
                                     FormUpdateRequest,
-                                    FormResetRequest>;
+                                    FormResetRequest,
+                                    ExportPdfAsyncRequest>;
 
 /// Correlated request envelope sent over the control channel.
 struct RequestMessage {
@@ -963,8 +978,17 @@ struct OcrDoneNotification {
     std::int32_t page = -1;
 };
 
+/// Notification that an asynchronous PDF export job has finished.
+struct ExportDoneNotification {
+    std::uint64_t jobId = 0;
+    /// True when the output descriptor received a complete PDF.
+    bool success = false;
+    /// Failure diagnostic; empty on success.
+    std::string error;
+};
+
 /// Uncorrelated event body alternatives sent outside request/response matching.
-using NotificationPayload = std::variant<OcrDoneNotification, PageLinksNotification, SignInput>;
+using NotificationPayload = std::variant<OcrDoneNotification, PageLinksNotification, SignInput, ExportDoneNotification>;
 
 /// Uncorrelated event sent by the worker or plugin.
 struct NotificationMessage {

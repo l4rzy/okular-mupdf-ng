@@ -334,6 +334,32 @@ ResponseMessage CommandService::savePdfFdResponse(std::uint64_t id, const SavePd
     return success(id);
 }
 
+ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
+                                                       const ExportPdfAsyncRequest& payload,
+                                                       int outputFd,
+                                                       int inputFd)
+{
+    // Both descriptors are consumed on every path: ExportJobs::submit closes
+    // them on rejection, and a started job transfers them to the engine.
+    if (!hasOpenDocument()) {
+        ::close(outputFd);
+        ::close(inputFd);
+        return failure(r.id, ErrorCode::NotOpen, "export_pdf_async", "no document is open");
+    }
+    // The background job re-opens the source file with the session's fixed
+    // EPUB settings, which reproduce the live document's layout exactly.
+    if (!dynamic_cast<Engine::EpubDocument*>(m_document.get())) {
+        ::close(outputFd);
+        ::close(inputFd);
+        return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an EPUB document");
+    }
+
+    auto job = m_exportJobs.submit(inputFd, outputFd, m_settings, payload.pages, payload.withReferences);
+    if (!job)
+        return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
+    return success(r.id, JobResponse { *job });
+}
+
 void CommandService::closeDocument() noexcept
 {
     // Closing is a document boundary. No password, opaque handle, deferred link,
@@ -802,6 +828,16 @@ std::vector<OcrJobs::Notification> CommandService::drainOcrNotifications()
     return m_ocrJobs.drainNotifications();
 }
 
+int CommandService::exportCompletionFd() const noexcept
+{
+    return m_exportJobs.eventFd();
+}
+
+std::vector<ExportJobs::Notification> CommandService::drainExportNotifications()
+{
+    return m_exportJobs.drainNotifications();
+}
+
 std::optional<PageLinksNotification> CommandService::processPageLinks()
 {
     if (!m_pendingPageLinks || !hasOpenDocument())
@@ -1044,6 +1080,19 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
                 return dispatchWithFd(payload.withReferences ? "export_pdf" : "save_pdf",
                                       payload.file.transferId,
                                       [&](int fd) { return savePdfFdResponse(request.id, payload, fd); });
+            },
+            [&](const ExportPdfAsyncRequest& payload) {
+                ResponseMessage outErr;
+                ResponseMessage inErr;
+                const int outputFd = receiveFd(request.id, "export_pdf_async", payload.output.transferId, &outErr);
+                if (outputFd < 0)
+                    return outErr;
+                const int inputFd = receiveFd(request.id, "export_pdf_async", payload.input.transferId, &inErr);
+                if (inputFd < 0) {
+                    ::close(outputFd);
+                    return inErr;
+                }
+                return exportPdfAsyncResponse(request, payload, outputFd, inputFd);
             },
             [&](const SignRequest& payload) {
                 return dispatchWithFd(
