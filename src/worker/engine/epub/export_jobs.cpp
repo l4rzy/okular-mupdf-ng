@@ -18,8 +18,15 @@ namespace Mu::Worker::Engine {
 // =============================================================================
 
 ExportJobs::ExportJobs()
+    : ExportJobs(::Mu::Worker::Sys::createEventFd().value_or(::Mu::Worker::Sys::FileDescriptor { }))
 {
-    m_state->event = ::Mu::Worker::Sys::createEventFd().value_or(::Mu::Worker::Sys::FileDescriptor { });
+}
+
+ExportJobs::ExportJobs(::Mu::Worker::Sys::FileDescriptor event)
+{
+    m_state->event = std::move(event);
+    if (m_state->event.get() < 0)
+        MU_LOG(warning, "Mu::Worker::Export", "eventfd creation failed; PDF export is disabled for this worker");
 }
 
 int ExportJobs::eventFd() const noexcept
@@ -40,7 +47,9 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
     std::uint64_t id = 0;
     {
         std::lock_guard lock(m_state->mutex);
-        if (m_state->active)
+        // Without a completion eventfd the notification could never be pumped
+        // to the event loop, so accepting the job would strand it.
+        if (m_state->active || m_state->event.get() < 0)
             return std::nullopt;
         id = m_state->nextId++;
         m_state->active = true;

@@ -13,6 +13,7 @@
 #include <QTest>
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cmath>
 #include <fcntl.h>
 #include <poll.h>
@@ -746,6 +747,32 @@ private slots:
         QVERIFY(rejectFd >= 0);
         QVERIFY(!document.savePdfFdWithReferences(rejectFd, { document.pageCount() }, &error));
         QVERIFY(!error.empty());
+    }
+
+    void testExportJobsRejectsSubmissionsWithoutCompletionChannel()
+    {
+        // A dead completion eventfd strands every job silently, so the runner
+        // must reject submissions and close the offered descriptors.
+        ::Mu::Worker::Sys::FileDescriptor dead;
+        ::Mu::Worker::Engine::ExportJobs jobs(std::move(dead));
+        QCOMPARE(jobs.eventFd(), -1);
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        int outFd = ::open(
+            directory.filePath(QStringLiteral("rejected.pdf")).toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outFd >= 0);
+        int inFd = ::dup(file.handle());
+        QVERIFY(inFd >= 0);
+        QVERIFY(!jobs.submit(inFd, outFd, { }, { }).has_value());
+        // Rejection consumed both descriptors.
+        const bool inClosed = ::fcntl(inFd, F_GETFD) == -1 && errno == EBADF;
+        QVERIFY(inClosed);
+        const bool outClosed = ::fcntl(outFd, F_GETFD) == -1 && errno == EBADF;
+        QVERIFY(outClosed);
+        file.close();
     }
 
     void testExportJobsBackgroundCompletion()

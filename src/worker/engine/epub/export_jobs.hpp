@@ -43,6 +43,10 @@ public:
     ExportJobs(ExportJobs&&) noexcept = delete;
     ExportJobs& operator=(ExportJobs&&) noexcept = delete;
 
+    /// Test seam: constructs the job runner around a caller-provided eventfd
+    /// descriptor, which may be invalid to exercise the disabled state.
+    explicit ExportJobs(::Mu::Worker::Sys::FileDescriptor event);
+
     /// Returns the Linux eventfd descriptor notified on job completion.
     [[nodiscard]] int eventFd() const noexcept;
 

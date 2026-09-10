@@ -354,6 +354,11 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
         return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an EPUB document");
     }
 
+    // A dead completion eventfd would strand the job silently, so reject the
+    // request with an accurate diagnostic instead of the busy-slot message.
+    if (m_exportJobs.eventFd() < 0)
+        return failure(r.id, ErrorCode::Internal, "export_pdf_async", "export completion channel is unavailable");
+
     auto job = m_exportJobs.submit(inputFd, outputFd, m_settings, payload.pages);
     if (!job)
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");

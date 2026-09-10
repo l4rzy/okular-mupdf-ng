@@ -6,6 +6,7 @@
 #include <chrono>
 
 #include "engine/ocr/ocr.hpp"
+#include "shared/logging.hpp"
 #include "sys/sys.hpp"
 
 namespace Mu::Worker::Engine {
@@ -21,6 +22,8 @@ OcrJobs::OcrJobs(std::size_t limit)
     auto event = ::Mu::Worker::Sys::createEventFd();
     if (event) {
         m_state->event = std::move(*event);
+    } else {
+        MU_LOG(warning, "Mu::Worker::Ocr", "eventfd creation failed; asynchronous OCR is disabled for this worker");
     }
 }
 
