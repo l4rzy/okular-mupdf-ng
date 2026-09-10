@@ -84,29 +84,35 @@ std::optional<std::string> decodeCustomCss(fz_context* context, std::string_view
         }
     }
 
-    std::optional<std::string> result;
     fz_buffer* decoded = nullptr;
+    const unsigned char* decodedData = nullptr;
+    std::size_t decodedSize = 0;
     fz_try(context)
     {
         decoded = fz_new_buffer_from_base64(context, encoded.data(), encoded.size());
-        unsigned char* data = nullptr;
-        const std::size_t decodedSize = fz_buffer_storage(context, decoded, &data);
-        const std::string_view cssView(reinterpret_cast<const char*>(data), decodedSize);
-        result = std::string(cssView);
-
-        if (result && (!isValidUtf8(*result) || utf8CodepointCount(*result) > MaxEpubCustomCssCharacters))
-            result.reset();
-    }
-    fz_always(context)
-    {
-        if (decoded)
-            fz_drop_buffer(context, decoded);
+        decodedSize = fz_buffer_storage(context, decoded, const_cast<unsigned char**>(&decodedData));
     }
     fz_catch(context)
     {
         return std::nullopt;
     }
-    return result;
+
+    // The buffer stays alive while the CSS is copied: only PODs crossed the
+    // fz_try boundary, and the copy is guarded so a bad_alloc cannot leak the
+    // buffer. The pointer is only valid until the drop below.
+    std::string css;
+    try {
+        css.assign(reinterpret_cast<const char*>(decodedData), decodedSize);
+    } catch (...) {
+        fz_drop_buffer(context, decoded);
+        // Degrading an OOM to "no custom CSS" matches the invalid-CSS path.
+        return std::nullopt;
+    }
+    fz_drop_buffer(context, decoded);
+
+    if (!isValidUtf8(css) || utf8CodepointCount(css) > MaxEpubCustomCssCharacters)
+        return std::nullopt;
+    return css;
 }
 
 /// Constructs composite CSS string for EPUB styling injection.
@@ -172,8 +178,14 @@ bool EpubDocument::openFdWithAccelerator(int fd,
                                          std::string* error)
 {
     close();
-    if (!m_context || fd < 0)
+    if (fd < 0)
         return fail(error, "input FD is invalid");
+    // DocumentBase::openFd takes ownership of the descriptor on every exit
+    // path, including the failed-construction path where no context exists.
+    if (!m_context) {
+        ::close(fd);
+        return fail(error, "input FD is invalid");
+    }
     m_input = ::fdopen(fd, "rb");
     if (!m_input) {
         ::close(fd);
@@ -311,6 +323,7 @@ void EpubDocument::close() noexcept
     m_pageCount = 0;
     m_layoutWidth = 0;
     m_layoutHeight = 0;
+    m_layoutEm = 0;
     m_displayName.clear();
 
     trimProcessMemory(m_context);
@@ -358,7 +371,8 @@ bool EpubDocument::layoutTo(float widthPoints, float heightPoints, float fontSiz
 {
     if (!m_document || !m_context)
         return false;
-    if (std::abs(m_layoutWidth - widthPoints) < 1.0f && std::abs(m_layoutHeight - heightPoints) < 1.0f)
+    if (std::abs(m_layoutWidth - widthPoints) < 1.0f && std::abs(m_layoutHeight - heightPoints) < 1.0f
+        && std::abs(m_layoutEm - fontSize) < 0.01f)
         return true;
 
     // The caller owns the surrounding fz_try block. Let MuPDF exceptions
@@ -367,6 +381,7 @@ bool EpubDocument::layoutTo(float widthPoints, float heightPoints, float fontSiz
     m_pageCount = fz_count_pages(m_context, m_document);
     m_layoutWidth = widthPoints;
     m_layoutHeight = heightPoints;
+    m_layoutEm = fontSize;
     return true;
 }
 

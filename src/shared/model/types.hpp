@@ -785,15 +785,14 @@ struct SavePdfRequest {
 /// Exports the open document to PDF in a background job using an isolated
 /// copy of the source file, writing to a transferred output descriptor.
 /// The session document is untouched; completion is reported asynchronously.
+/// The format-specific export path (savePdfFdWithReferences) always applies,
+/// so the generated PDF carries pages, links, and the outline.
 struct ExportPdfAsyncRequest {
     /// Output descriptor receiving the generated PDF.
     FileTransfer output;
     /// Fresh copy of the source document opened by the background job.
     FileTransfer input;
     std::vector<std::int32_t> pages;
-    /// True builds the PDF via the format-specific export path
-    /// (savePdfFdWithReferences); false uses a plain page copy (savePdfFd).
-    bool withReferences = true;
 };
 
 /// Elements rendered into the signature appearance stream (bitmask).

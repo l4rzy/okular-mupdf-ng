@@ -96,8 +96,7 @@ public:
     /// immediately; the output file is finalized when the worker reports
     /// completion via pdfExportFinished. Returns nullopt when no source path
     /// exists, the transport is busy, or the submit failed.
-    Q_INVOKABLE std::optional<quint64>
-    startPdfExport(const QString& target, const QVector<int>& pages, bool withReferences = true);
+    Q_INVOKABLE std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages);
     Q_INVOKABLE Model::SignResponse
     signToFile(Model::SignRequest request, const QString& password, const QString& target);
     Q_INVOKABLE std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);

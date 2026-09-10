@@ -10,8 +10,6 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <sys/eventfd.h>
-#include <thread>
 #include <vector>
 
 #include "shared/model/types.hpp"
@@ -50,13 +48,10 @@ public:
 
     /// Submits a background export job. Consumes both descriptors on every
     /// path: rejection closes them here; a started job transfers ownership to
-    /// the engine (DocumentBase::openFd/savePdfFd close them on all paths).
-    /// Returns nullopt while another export is running.
-    [[nodiscard]] std::optional<std::uint64_t> submit(int inputFd,
-                                                      int outputFd,
-                                                      const ::Mu::Model::DocumentSettings& settings,
-                                                      std::vector<std::int32_t> pages,
-                                                      bool withReferences);
+    /// the engine (DocumentBase::openFd/savePdfFdWithReferences close them on
+    /// all paths). Returns nullopt while another export is running.
+    [[nodiscard]] std::optional<std::uint64_t>
+    submit(int inputFd, int outputFd, const ::Mu::Model::DocumentSettings& settings, std::vector<std::int32_t> pages);
 
     /// Drains all completed export job notifications.
     [[nodiscard]] std::vector<Notification> drainNotifications();

@@ -416,7 +416,6 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "outputTransfer", value.output.transferId);
                 field(out, "inputTransfer", value.input.transferId);
                 field(out, "pages", value.pages.size());
-                field(out, "withReferences", value.withReferences);
             }
         },
         payload);

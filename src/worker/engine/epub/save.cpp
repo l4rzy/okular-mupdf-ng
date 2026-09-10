@@ -46,12 +46,10 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
         return fail(error, "could not adopt output FD");
     }
 
-    fz_output* output = nullptr;
     fz_document_writer* writer = nullptr;
     fz_page* page = nullptr;
     fz_device* device = nullptr;
     bool saved = false;
-    fz_var(output);
     fz_var(writer);
     fz_var(page);
     fz_var(saved);
@@ -67,7 +65,7 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
 
     fz_try(m_context)
     {
-        output = fz_new_output_with_file_ptr(m_context, file);
+        fz_output* output = fz_new_output_with_file_ptr(m_context, file);
 
         // The writer takes ownership of output immediately, including when
         // construction throws. Do not drop output or close FILE* afterwards.
@@ -77,12 +75,12 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
         }
         fz_catch(m_context)
         {
-            output = nullptr;
+            // The failed constructor already dropped its output and closed the
+            // FILE*; forget the FILE* so the outer fz_catch cannot close it twice.
             file = nullptr;
             fz_rethrow(m_context);
         }
         // The writer now owns both output and FILE*.
-        output = nullptr;
         file = nullptr;
 
         const auto layout = layoutGeometry();
@@ -92,9 +90,6 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
         // Write each paginated EPUB reflow page as a vector PDF page
         const fz_rect mediaBox { 0, 0, layout.paperWidth, layout.paperHeight };
         for (const int pageNumber : targetPages) {
-            if (pageNumber < 0 || pageNumber >= m_pageCount)
-                continue;
-
             fz_rect bounds { };
             pageError.clear();
             page = loadPageWithBounds(pageNumber, &bounds, &pageError);
@@ -134,14 +129,14 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
     }
     fz_catch(m_context)
     {
-        // If writer construction succeeded, dropping it also closes its output;
-        // otherwise output/file still need the direct cleanup below.
+        // If writer construction succeeded, dropping it also closes its output
+        // and the adopted FILE*; the inner fz_catch above owns the construction
+        // failure case. Only a FILE* orphaned by fdopen without an fz_output
+        // (OOM between the two) needs the direct close here.
         if (writer) {
             fz_drop_document_writer(m_context, writer);
             writer = nullptr;
         }
-        if (output)
-            fz_drop_output(m_context, output);
         if (file)
             ::fclose(file);
         fail(error, fz_caught_message(m_context));

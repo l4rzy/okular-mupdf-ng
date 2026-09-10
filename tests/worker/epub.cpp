@@ -762,7 +762,7 @@ private slots:
         const QString outputPath = directory.filePath(QStringLiteral("job.pdf"));
         int outFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outFd >= 0);
-        const auto jobId = jobs.submit(::dup(file.handle()), outFd, settings, { }, true);
+        const auto jobId = jobs.submit(::dup(file.handle()), outFd, settings, { });
         QVERIFY(jobId.has_value());
 
         const auto completed = waitForExportNotifications(jobs, 1);
@@ -776,7 +776,7 @@ private slots:
         const QString jobPath = directory.filePath(QStringLiteral("job2.pdf"));
         outFd = ::open(jobPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outFd >= 0);
-        const auto secondJob = jobs.submit(::dup(file.handle()), outFd, settings, { }, true);
+        const auto secondJob = jobs.submit(::dup(file.handle()), outFd, settings, { });
         QVERIFY(secondJob.has_value());
         file.close();
 
@@ -795,9 +795,19 @@ private slots:
         QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
         QVERIFY(file.open(QIODevice::ReadOnly));
 
+        // A channel-less service rejects the transfer lookup instantly; the
+        // fd-backed service below exercises the full happy path.
+        std::string error;
+        ::Mu::Worker::Runtime::CommandService plainService({ });
+        QVERIFY2(plainService.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error),
+                 error.c_str());
+        const auto noChannel =
+            plainService.dispatch({ 1, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } } });
+        QVERIFY(noChannel.error);
+        QCOMPARE(noChannel.error->code, ::Mu::Model::ErrorCode::InvalidRequest);
+
         ::Mu::IPC::FdChannel receiver;
         const auto socketPath = directory.filePath(QStringLiteral("fd.sock")).toStdString();
-        std::string error;
         if (!receiver.listen(socketPath, &error))
             QSKIP(qPrintable(QStringLiteral("FD socket unavailable: ") + QString::fromStdString(error)));
         ::Mu::IPC::FdChannel sender;
@@ -808,12 +818,6 @@ private slots:
         QVERIFY2(service.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error),
                  error.c_str());
 
-        // Without a channel the transfer cannot be received and the request fails.
-        const auto noChannel =
-            service.dispatch({ 1, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { }, true } });
-        QVERIFY(noChannel.error);
-        QCOMPARE(noChannel.error->code, ::Mu::Model::ErrorCode::InvalidRequest);
-
         const QString outputPath = directory.filePath(QStringLiteral("dispatched.pdf"));
         int outFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outFd >= 0);
@@ -823,8 +827,7 @@ private slots:
         QVERIFY(inFd >= 0);
         QVERIFY(sender.send(202, inFd, &error));
         ::close(inFd);
-        const auto response =
-            service.dispatch({ 2, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { }, true } });
+        const auto response = service.dispatch({ 2, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } } });
         QVERIFY2(!response.error, response.error ? response.error->message.c_str() : "");
         const auto* job = std::get_if<::Mu::Model::JobResponse>(&response.payload);
         QVERIFY(job);

@@ -659,8 +659,7 @@ bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& p
     return writeFile(SavePdfRequest { { }, std::move(pageList), withReferences }, target);
 }
 
-std::optional<quint64>
-WorkerTransport::startPdfExport(const QString& target, const QVector<int>& pages, bool withReferences)
+std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, const QVector<int>& pages)
 {
     // One export at a time; the caller falls back to the synchronous path when
     // no source path exists (the background job needs a fresh input FD).
@@ -699,8 +698,7 @@ WorkerTransport::startPdfExport(const QString& target, const QVector<int>& pages
     for (int p : pages)
         pageList.push_back(p);
 
-    auto response =
-        call(ExportPdfAsyncRequest { { outputTransfer }, { inputTransfer }, std::move(pageList), withReferences });
+    auto response = call(ExportPdfAsyncRequest { { outputTransfer }, { inputTransfer }, std::move(pageList) });
     if (!response || response->error) {
         MU_LOG(warning,
                "Mu::Plugin",

@@ -29,16 +29,18 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     if (!m_document || request.width <= 0 || request.height <= 0)
         return fail(error, "invalid render target dimensions");
 
+    // Validate the tile before deriving the minimum row bytes from its width,
+    // so an invalid tile reports the real problem instead of a stride error.
+    if (request.tile
+        && !isValidRenderTile(
+            request.width, request.height, request.tile->x, request.tile->y, request.tile->width, request.tile->height))
+        return fail(error, "render tile is invalid");
+
     const int targetWidth = request.tile ? request.tile->width : request.width;
     const int targetHeight = request.tile ? request.tile->height : request.height;
     const std::size_t minRowBytes = static_cast<std::size_t>(targetWidth) * 4;
     if (dstStride < minRowBytes)
         return fail(error, "destination stride is too small");
-
-    if (request.tile
-        && !isValidRenderTile(
-            request.width, request.height, request.tile->x, request.tile->y, request.tile->width, request.tile->height))
-        return fail(error, "render tile is invalid");
 
     fz_rect bounds { };
     fz_page* page = loadPageWithBounds(request.page, &bounds, error);
@@ -111,39 +113,22 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         fz_drop_device(m_context, dev);
         dev = nullptr;
 
-        // Blit only when the temporary-pixmap fallback was required.
+        // Blit only when the temporary-pixmap fallback was required. The pixmap
+        // is always created as opaque RGB (RGBA8888, 4 bytes per pixel).
         if (dstStride != minRowBytes) {
             const int pWidth = fz_pixmap_width(m_context, pix);
             const int pHeight = fz_pixmap_height(m_context, pix);
             const int pStride = fz_pixmap_stride(m_context, pix);
             const unsigned char* samples = fz_pixmap_samples(m_context, pix);
-            const int n = fz_pixmap_components(m_context, pix);
 
             auto* dstBase = static_cast<unsigned char*>(dstPixels);
             const int copyWidth = std::min(targetWidth, pWidth);
             const int copyHeight = std::min(targetHeight, pHeight);
-            if (n == 4) {
-                const std::size_t copyRowBytes = static_cast<std::size_t>(copyWidth) * 4U;
-                for (int y = 0; y < copyHeight; ++y) {
-                    const unsigned char* srcRow =
-                        samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(pStride);
-                    unsigned char* dstRow = dstBase + static_cast<std::size_t>(y) * dstStride;
-                    std::memcpy(dstRow, srcRow, copyRowBytes);
-                }
-            } else {
-                for (int y = 0; y < copyHeight; ++y) {
-                    const unsigned char* srcRow =
-                        samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(pStride);
-                    unsigned char* dstRow = dstBase + static_cast<std::size_t>(y) * dstStride;
-                    for (int x = 0; x < copyWidth; ++x) {
-                        const unsigned char* src = srcRow + x * n;
-                        unsigned char* dst = dstRow + x * 4;
-                        dst[0] = src[0];
-                        dst[1] = src[1];
-                        dst[2] = src[2];
-                        dst[3] = (n >= 4) ? src[3] : 255;
-                    }
-                }
+            const std::size_t copyRowBytes = static_cast<std::size_t>(copyWidth) * 4U;
+            for (int y = 0; y < copyHeight; ++y) {
+                const unsigned char* srcRow = samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(pStride);
+                unsigned char* dstRow = dstBase + static_cast<std::size_t>(y) * dstStride;
+                std::memcpy(dstRow, srcRow, copyRowBytes);
             }
         }
     }

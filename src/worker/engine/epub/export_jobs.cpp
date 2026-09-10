@@ -3,6 +3,8 @@
 
 #include "engine/epub/export_jobs.hpp"
 
+#include <sys/eventfd.h>
+#include <thread>
 #include <unistd.h>
 #include <utility>
 
@@ -29,8 +31,7 @@ int ExportJobs::eventFd() const noexcept
 std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                                                 int outputFd,
                                                 const ::Mu::Model::DocumentSettings& settings,
-                                                std::vector<std::int32_t> pages,
-                                                bool withReferences)
+                                                std::vector<std::int32_t> pages)
 {
     // Both descriptors are consumed on every path below, including rejection.
     Sys::FileDescriptor ownedInput(inputFd);
@@ -50,7 +51,6 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                  id,
                  settings,
                  pages = std::move(pages),
-                 withReferences,
                  inputFd = ownedInput.release(),
                  outputFd = ownedOutput.release()] {
         std::string error;
@@ -61,10 +61,10 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
             EpubDocument document(static_cast<std::size_t>(settings.memoryCacheBytes));
             document.setSettings(settings);
             if (document.openFdWithAccelerator(inputFd, "export.epub", { }, &error)) {
-                // Both save paths adopt and close the output descriptor on
-                // every exit path, so ownership simply moves to the engine.
-                success = withReferences ? document.savePdfFdWithReferences(outputFd, pages, &error)
-                                         : document.savePdfFd(outputFd, pages, &error);
+                // savePdfFdWithReferences adopts and closes the output
+                // descriptor on every exit path, so ownership simply moves to
+                // the engine.
+                success = document.savePdfFdWithReferences(outputFd, pages, &error);
             } else {
                 // Opening consumed the input fd; the output fd is still ours.
                 ::close(outputFd);

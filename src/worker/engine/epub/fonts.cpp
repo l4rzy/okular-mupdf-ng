@@ -3,6 +3,8 @@
 
 #include "engine/epub/document.hpp"
 
+#include "shared/logging.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <string_view>
@@ -89,7 +91,10 @@ std::vector<Font> EpubDocument::fonts(const std::vector<int>&, std::string*) con
     }
     fz_catch(m_context)
     {
-        m_fonts->clear();
+        // Report the swallowed archive-open failure so callers can distinguish
+        // an EPUB without embedded fonts from an unreadable ZIP container.
+        MU_LOG(
+            warning, "Mu::Worker::EpubFonts", std::string("font archive open failed: ") + fz_caught_message(m_context));
         return *m_fonts;
     }
 

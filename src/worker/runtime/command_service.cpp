@@ -354,7 +354,7 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
         return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an EPUB document");
     }
 
-    auto job = m_exportJobs.submit(inputFd, outputFd, m_settings, payload.pages, payload.withReferences);
+    auto job = m_exportJobs.submit(inputFd, outputFd, m_settings, payload.pages);
     if (!job)
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
     return success(r.id, JobResponse { *job });

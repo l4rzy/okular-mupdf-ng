@@ -277,14 +277,11 @@ bool WorkerClient::savePdfToFile(const QString& t, const QVector<int>& pages, bo
     return result;
 }
 
-std::optional<quint64>
-WorkerClient::startPdfExport(const QString& t, const QVector<int>& pages, bool withReferences) const
+std::optional<quint64> WorkerClient::startPdfExport(const QString& t, const QVector<int>& pages) const
 {
     std::optional<quint64> result;
     QMetaObject::invokeMethod(
-        m_transport,
-        [&] { result = m_transport->startPdfExport(t, pages, withReferences); },
-        Qt::BlockingQueuedConnection);
+        m_transport, [&] { result = m_transport->startPdfExport(t, pages); }, Qt::BlockingQueuedConnection);
     return result;
 }
 

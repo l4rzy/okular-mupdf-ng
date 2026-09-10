@@ -129,6 +129,7 @@ private:
     mutable int m_pageCount = 0;
     mutable float m_layoutWidth = 0;
     mutable float m_layoutHeight = 0;
+    mutable float m_layoutEm = 0;
     mutable fz_archive* m_archive = nullptr;
     mutable std::optional<std::vector<Font>> m_fonts;
     DocumentSettings m_settings;
