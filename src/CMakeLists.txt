@@ -44,7 +44,10 @@ add_library(mupdf_plugin_cache STATIC
   plugin/caching/epub_cache.cpp
   plugin/caching/ocr_cache.cpp
 )
-target_include_directories(mupdf_plugin_cache PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(mupdf_plugin_cache PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${MU_GENERATED_INCLUDE_DIR}
+)
 target_link_libraries(mupdf_plugin_cache PUBLIC Qt6::Core mupdf_shared ZLIB::ZLIB)
 
 add_library(mupdf_plugin_crypto STATIC

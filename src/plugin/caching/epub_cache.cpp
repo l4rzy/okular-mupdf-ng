@@ -8,13 +8,13 @@
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QFile>
-#include <QFileInfo>
 
 #include <cmath>
 #include <limits>
 #include <optional>
 #include <utility>
 
+#include "shared/compat.hpp"
 #include "shared/protocol/limits.hpp"
 
 namespace Mu::Plugin::Caching::EPUB {
@@ -23,29 +23,19 @@ namespace {
 
 // Cache files are versioned so the reader can reject stale or incompatible
 // layouts without trying to interpret their payload as current data.
-constexpr quint32 V1Magic = 0x45504131; // 'EPA1'
-constexpr quint32 V2Magic = 0x45504132; // 'EPA2'
-constexpr quint32 V1Version = 1;
-constexpr quint32 V2Version = 2;
-constexpr qint64 V1HeaderBytes = 28;
-constexpr qint64 V2HeaderBytes = 32;
+constexpr quint32 V3Magic = 0x45504133; // 'EPA3'
+constexpr quint32 V3Version = 3;
+constexpr qint64 V3HeaderBytes = 16;
+// Bytes probed from each end of the source to derive the content-addressed key.
+constexpr qint64 IdentityProbeBytes = 64LL * 1024LL;
 constexpr qint64 MaxAcceleratorBytes = static_cast<qint64>(Model::MaxEpubAcceleratorBytes);
 constexpr qint64 MaxOutlineCompressedBytes = 8LL * 1024LL * 1024LL;
 constexpr qint64 MaxOutlineRawBytes = 64LL * 1024LL * 1024LL;
-constexpr qint64 MaxCacheBytes = V2HeaderBytes + 2 * 8 + MaxAcceleratorBytes + MaxOutlineCompressedBytes;
+constexpr qint64 MaxCacheBytes = V3HeaderBytes + 2 * 8 + MaxAcceleratorBytes + MaxOutlineCompressedBytes;
 constexpr quint32 AcceleratorSection = 1;
 constexpr quint32 OutlineSection = 2;
 constexpr std::size_t MaxOutlineDepth = 64;
 constexpr std::size_t MaxOutlineNodes = 50'000;
-
-QString sourcePath(const QString& path)
-{
-    // Canonicalize existing paths so aliases and relative spellings share one
-    // cache entry; absolutePath remains a useful fallback for unusual sources.
-    const QFileInfo info(path);
-    const QString canonical = info.canonicalFilePath();
-    return canonical.isEmpty() ? info.absoluteFilePath() : canonical;
-}
 
 QByteArray layoutFingerprint(const Model::DocumentSettings& settings)
 {
@@ -206,40 +196,19 @@ std::optional<std::vector<Model::OutlineNode>> deserializeOutline(const QByteArr
     return result;
 }
 
-bool readV1(const QByteArray& data, qint64 expectedSize, qint64 expectedModified, CacheEntry* entry)
+bool readV3(const QByteArray& data, CacheEntry* entry)
 {
-    if (!entry || data.size() < V1HeaderBytes)
-        return false;
-    QDataStream stream(data);
-    stream.setVersion(QDataStream::Qt_6_0);
-    quint32 magic = 0, version = 0, payloadSize = 0;
-    qint64 sourceSize = 0, sourceModified = 0;
-    stream >> magic >> version >> sourceSize >> sourceModified >> payloadSize;
-    // V1 contains only an accelerator. Its source metadata and exact payload
-    // size must match before the legacy entry is accepted.
-    if (stream.status() != QDataStream::Ok || magic != V1Magic || version != V1Version || sourceSize != expectedSize
-        || sourceModified != expectedModified || payloadSize == 0 || payloadSize > MaxAcceleratorBytes
-        || data.size() != V1HeaderBytes + static_cast<qint64>(payloadSize))
-        return false;
-    entry->accelerator = data.sliced(V1HeaderBytes);
-    entry->outline.reset();
-    return true;
-}
-
-bool readV2(const QByteArray& data, qint64 expectedSize, qint64 expectedModified, CacheEntry* entry)
-{
-    if (!entry || data.size() < V2HeaderBytes)
+    if (!entry || data.size() < V3HeaderBytes)
         return false;
     QDataStream stream(data);
     stream.setVersion(QDataStream::Qt_6_0);
     quint32 magic = 0, version = 0, sectionCount = 0, payloadBytes = 0;
-    qint64 sourceSize = 0, sourceModified = 0;
-    stream >> magic >> version >> sourceSize >> sourceModified >> sectionCount >> payloadBytes;
+    stream >> magic >> version >> sectionCount >> payloadBytes;
     // The header bounds the entire section area before individual sections are
     // read, preventing a corrupt count or size from extending past the file.
-    if (stream.status() != QDataStream::Ok || magic != V2Magic || version != V2Version || sourceSize != expectedSize
-        || sourceModified != expectedModified || sectionCount == 0 || sectionCount > 2
-        || payloadBytes > MaxCacheBytes - V2HeaderBytes || data.size() != V2HeaderBytes + payloadBytes)
+    if (stream.status() != QDataStream::Ok || magic != V3Magic || version != V3Version || sectionCount == 0
+        || sectionCount > 2 || payloadBytes > MaxCacheBytes - V3HeaderBytes
+        || data.size() != V3HeaderBytes + payloadBytes)
         return false;
 
     bool sawAccelerator = false;
@@ -278,7 +247,7 @@ bool readV2(const QByteArray& data, qint64 expectedSize, qint64 expectedModified
 
 std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32* sectionCount)
 {
-    // A V2 cache must contain at least one known section; optional fields let
+    // A V3 cache must contain at least one known section; optional fields let
     // accelerator and outline generation happen independently.
     if (!sectionCount || (!entry.accelerator && !entry.outline))
         return std::nullopt;
@@ -296,7 +265,7 @@ std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32* se
         static_cast<quint32>(entry.accelerator.has_value()) + static_cast<quint32>(entry.outline.has_value());
     const qint64 payloadBytes =
         (entry.accelerator ? 8 + entry.accelerator->size() : 0) + (entry.outline ? 8 + outline.size() : 0);
-    if (payloadBytes > MaxCacheBytes - V2HeaderBytes)
+    if (payloadBytes > MaxCacheBytes - V3HeaderBytes)
         return std::nullopt;
 
     QByteArray sections;
@@ -316,98 +285,103 @@ std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32* se
     return stream.status() == QDataStream::Ok ? std::optional<QByteArray>(sections) : std::nullopt;
 }
 
-bool saveEntry(const QString& cachePath, qint64 sourceSize, qint64 sourceModified, const CacheEntry& entry)
+bool saveEntry(const QString& cachePath, const CacheEntry& entry)
 {
     quint32 sectionCount = 0;
     const auto sections = serializeSections(entry, &sectionCount);
     if (!sections)
         return false;
     QByteArray data;
-    data.reserve(static_cast<qsizetype>(V2HeaderBytes + sections->size()));
+    data.reserve(static_cast<qsizetype>(V3HeaderBytes + sections->size()));
     QDataStream stream(&data, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_6_0);
-    stream << V2Magic << V2Version << sourceSize << sourceModified << sectionCount
-           << static_cast<quint32>(sections->size());
+    stream << V3Magic << V3Version << sectionCount << static_cast<quint32>(sections->size());
     data.append(*sections);
     // QSaveFile commits the complete file atomically, so readers never observe
     // a partially rewritten cache entry.
     return stream.status() == QDataStream::Ok && writeAtomically(cachePath, data);
 }
 
-struct SourceMetadata {
-    QFileInfo source;
-    QString cachePath;
-};
-
-std::optional<SourceMetadata> sourceMetadata(const QString& path, const QString& cachePath)
-{
-    // A missing source or derived path makes the cache unusable and avoids
-    // creating entries that cannot be invalidated reliably later.
-    QFileInfo source(path);
-    if (!source.exists() || cachePath.isEmpty())
-        return std::nullopt;
-    return SourceMetadata { std::move(source), cachePath };
-}
-
-std::optional<CacheEntry> loadEntry(const SourceMetadata& metadata)
+std::optional<CacheEntry> loadEntry(const QString& cachePath)
 {
     // Bound the read before parsing because cache files are user-writable data,
     // not trusted application state.
-    const auto data = readBounded(metadata.cachePath, MaxCacheBytes);
+    const auto data = readBounded(cachePath, MaxCacheBytes);
     if (!data)
         return std::nullopt;
 
     CacheEntry entry;
-    const bool valid = readV1(*data, metadata.source.size(), metadata.source.lastModified().toMSecsSinceEpoch(), &entry)
-        || readV2(*data, metadata.source.size(), metadata.source.lastModified().toMSecsSinceEpoch(), &entry);
-    if (!valid) {
-        // A malformed or stale entry is disposable; the next save can rebuild
-        // it from the current document.
-        QFile::remove(metadata.cachePath);
+    if (!readV3(*data, &entry)) {
+        // A malformed entry is disposable; the next save can rebuild it from
+        // the current document.
+        QFile::remove(cachePath);
         return std::nullopt;
     }
     return entry;
 }
 
-template <typename Update> bool updateEntry(const QString& path, const QString& cachePath, Update&& update)
+template <typename Update> bool updateEntry(const QString& cachePath, Update&& update)
 {
-    const auto metadata = sourceMetadata(path, cachePath);
-    if (!metadata)
+    if (cachePath.isEmpty())
         return false;
 
     // Preserve the other cache section when updating one artifact. A missing or
-    // invalid old entry simply starts a fresh V2 entry.
-    CacheEntry entry = loadEntry(*metadata).value_or(CacheEntry { });
+    // invalid old entry simply starts a fresh V3 entry.
+    CacheEntry entry = loadEntry(cachePath).value_or(CacheEntry { });
     update(entry);
-    return saveEntry(
-        metadata->cachePath, metadata->source.size(), metadata->source.lastModified().toMSecsSinceEpoch(), entry);
+    return saveEntry(cachePath, entry);
 }
 
 } // namespace
 
 QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings& settings)
 {
-    const QString source = sourcePath(path);
-    if (source.isEmpty())
+    // The cache is content-addressed: the filename binds the source bytes
+    // (bounded head/tail probes plus size), the EPUB layout settings, and the
+    // engine/compat versions, so any of those changing yields a distinct key.
+    QFile source(path);
+    if (!source.open(QIODevice::ReadOnly))
+        return { };
+    const qint64 size = source.size();
+    if (size < 0)
+        return { };
+
+    const qint64 probeSize = size < IdentityProbeBytes ? size : IdentityProbeBytes;
+    const QByteArray head = source.read(probeSize);
+    if (head.size() != probeSize)
+        return { };
+
+    QByteArray tail = head;
+    if (size > IdentityProbeBytes) {
+        if (!source.seek(size - IdentityProbeBytes))
+            return { };
+        tail = source.read(IdentityProbeBytes);
+        if (tail.size() != IdentityProbeBytes)
+            return { };
+    }
+
+    QByteArray payload;
+    QDataStream stream(&payload, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_6_0);
+    stream << QByteArray(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size()))
+           << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
+           << static_cast<quint64>(size) << head << tail << layoutFingerprint(settings);
+    if (stream.status() != QDataStream::Ok)
         return { };
 
     // SHA-256 gives a compact, collision-resistant filename without exposing
     // source paths or CSS contents in the cache directory.
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    hash.addData(source.toUtf8());
-    hash.addData(layoutFingerprint(settings));
-    return directory(QStringLiteral("epub_accelerators")) + QLatin1Char('/')
-        + QString::fromLatin1(hash.result().toHex()) + QStringLiteral(".bin");
+    const QByteArray digest = QCryptographicHash::hash(payload, QCryptographicHash::Sha256);
+    return directory(QStringLiteral("epub_accelerators")) + QLatin1Char('/') + QString::fromLatin1(digest.toHex())
+        + QStringLiteral(".bin");
 }
 
 std::optional<CacheEntry> Cache::load(const QString& path, const Model::DocumentSettings& settings)
 {
-    // Source size and modification time are stored in the file header and
-    // checked by loadEntry, while layout settings are part of the filename.
-    const auto metadata = sourceMetadata(path, cacheFilePath(path, settings));
-    if (!metadata)
+    const QString cachePath = cacheFilePath(path, settings);
+    if (cachePath.isEmpty())
         return std::nullopt;
-    return loadEntry(*metadata);
+    return loadEntry(cachePath);
 }
 
 bool Cache::saveAccelerator(const QString& path, const Model::DocumentSettings& settings, const QByteArray& bytes)
@@ -415,7 +389,7 @@ bool Cache::saveAccelerator(const QString& path, const Model::DocumentSettings& 
     // Empty and oversized accelerators are never useful cache entries.
     if (bytes.isEmpty() || bytes.size() > MaxAcceleratorBytes)
         return false;
-    return updateEntry(path, cacheFilePath(path, settings), [&bytes](CacheEntry& entry) { entry.accelerator = bytes; });
+    return updateEntry(cacheFilePath(path, settings), [&bytes](CacheEntry& entry) { entry.accelerator = bytes; });
 }
 
 bool Cache::saveOutline(const QString& path,
@@ -423,7 +397,7 @@ bool Cache::saveOutline(const QString& path,
                         const std::vector<Model::OutlineNode>& outline)
 {
     // Outline serialization performs its own size, depth, and node-count checks.
-    return updateEntry(path, cacheFilePath(path, settings), [&outline](CacheEntry& entry) { entry.outline = outline; });
+    return updateEntry(cacheFilePath(path, settings), [&outline](CacheEntry& entry) { entry.outline = outline; });
 }
 
 } // namespace Mu::Plugin::Caching::EPUB
