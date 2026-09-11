@@ -1,0 +1,128 @@
+name: Coverage
+
+# Post-merge coverage signal only. This workflow is intentionally standalone:
+# it is not wired into the release chain in ci.yml, so packaging and releases
+# never wait on it.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  coverage:
+    name: Report test coverage (Clang + llvm-cov)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    timeout-minutes: 60
+
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm --needed \
+            base-devel \
+            git \
+            cmake \
+            ninja \
+            extra-cmake-modules \
+            clang \
+            llvm \
+            compiler-rt \
+            qt6-base \
+            kcoreaddons \
+            ki18n \
+            kconfig \
+            kconfigwidgets \
+            kio \
+            okular \
+            mupdf \
+            openssl \
+            nss \
+            libseccomp \
+            zlib \
+            tesseract \
+            tesseract-data-eng \
+            leptonica
+
+      - name: Download bundled MuPDF source
+        run: python3 ./scripts/download-mupdf.py
+
+      - name: Configure instrumented build
+        run: |
+          cmake -B build-coverage -S . -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            "-DCMAKE_C_FLAGS=-Wall -Wextra -Wpedantic -Wconversion -Wshadow -fprofile-instr-generate -fcoverage-mapping" \
+            "-DCMAKE_CXX_FLAGS=-Wall -Wextra -Wpedantic -Wconversion -Wshadow -fprofile-instr-generate -fcoverage-mapping" \
+            "-DCMAKE_EXE_LINKER_FLAGS=-fprofile-instr-generate -fcoverage-mapping" \
+            "-DCMAKE_SHARED_LINKER_FLAGS=-fprofile-instr-generate -fcoverage-mapping" \
+            "-DCMAKE_MODULE_LINKER_FLAGS=-fprofile-instr-generate -fcoverage-mapping" \
+            -DTESSDATA_DIR=/usr/share/tessdata
+
+      - name: Build instrumented tests
+        run: cmake --build build-coverage -j"$(nproc)"
+
+      - name: Run tests under profiling
+        run: |
+          mkdir -p build-coverage/profraw
+          LLVM_PROFILE_FILE="$PWD/build-coverage/profraw/%p.profraw" \
+            ctest --test-dir build-coverage --output-on-failure
+
+      - name: Merge profiles and publish summary
+        run: |
+          llvm-profdata merge -sparse build-coverage/profraw/*.profraw \
+            -o build-coverage/merged.profdata
+          mapfile -t binaries < <(ls -d build-coverage/bin/test_* \
+            build-coverage/bin/okular-mupdf-worker \
+            build-coverage/bin/okular_generators/*.so)
+          ignore='.*(tests/|thirdparty|build-coverage|autogen|mocs_|qrc_|mupdfngsettings|ui_settingswidget).*'
+          llvm-cov report "${binaries[@]}" \
+            -instr-profile=build-coverage/merged.profdata \
+            --ignore-filename-regex="$ignore" > build-coverage/report.txt
+          totals=$(awk '/^TOTAL/ {print $4, $7, $10, $13}' build-coverage/report.txt)
+          read -r regions funcs lines branches <<< "$totals"
+          {
+            echo "## Coverage (llvm-cov, this push to main)"
+            echo
+            echo "| Metric | Rate |"
+            echo "| --- | --- |"
+            echo "| Regions | $regions |"
+            echo "| Functions | $funcs |"
+            echo "| Lines | $lines |"
+            echo "| Branches | $branches |"
+            echo
+            echo "<details><summary>Files below 50% line coverage</summary>"
+            echo
+            echo '```'
+            awk '$10 ~ /%$/ && $1 != "TOTAL" && $1 != "Filename" {v = substr($10, 1, length($10)-1); if (v + 0 < 50) print $1, $10}' \
+              build-coverage/report.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          llvm-cov show "${binaries[@]}" \
+            -instr-profile=build-coverage/merged.profdata \
+            --ignore-filename-regex="$ignore" \
+            -format=html -output-dir=build-coverage/html
+
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: build-coverage/html

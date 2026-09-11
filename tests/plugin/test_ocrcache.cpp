@@ -352,6 +352,44 @@ private slots:
         QCOMPARE(::Mu::Plugin::OCR::dominantPage(tied), 4);
         QCOMPARE(::Mu::Plugin::OCR::dominantPage(tied, 5), 5);
     }
+
+    void stripsLanguageSuffix()
+    {
+        using ::Mu::Plugin::Caching::OCR::Cache;
+        QCOMPARE(Cache::stripLangSuffix(QStringLiteral("eng.traineddata")), QStringLiteral("eng"));
+        QCOMPARE(Cache::stripLangSuffix(QStringLiteral("eng")), QStringLiteral("eng"));
+        QCOMPARE(Cache::stripLangSuffix(QStringLiteral("deu_300dpi")), QStringLiteral("deu_300dpi"));
+        QCOMPARE(Cache::stripLangSuffix(QString()), QString());
+    }
+
+    void mapsQualityToDpi()
+    {
+        using ::Mu::Plugin::Caching::OCR::Cache;
+        // Unknown quality values fall back to Balanced, never the slowest mode.
+        QCOMPARE(Cache::qualityToDpi(0), 150.0f);
+        QCOMPARE(Cache::qualityToDpi(1), 225.0f);
+        QCOMPARE(Cache::qualityToDpi(2), 300.0f);
+        QCOMPARE(Cache::qualityToDpi(-1), 225.0f);
+        QCOMPARE(Cache::qualityToDpi(99), 225.0f);
+    }
+
+    void convertsCacheItems()
+    {
+        using ::Mu::Plugin::Caching::OCR::Cache;
+        const std::vector<::Mu::Model::TextBox> boxes {
+            { "hello", 0.1, 0.2, 0.3, 0.4, false },
+            { "wörld", 0.5, 0.6, 0.7, 0.8, true },
+        };
+        const auto items = Cache::convertToCacheItems(boxes);
+        QCOMPARE(items.size(), 2);
+        QCOMPARE(items.at(0).ch, QStringLiteral("hello"));
+        QCOMPARE(items.at(0).l, 0.1);
+        QCOMPARE(items.at(0).t, 0.2);
+        QCOMPARE(items.at(0).r, 0.3);
+        QCOMPARE(items.at(0).b, 0.4);
+        QCOMPARE(items.at(1).ch, QString::fromUtf8("wörld"));
+        QVERIFY(Cache::convertToCacheItems({ }).isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestOCRCache)
