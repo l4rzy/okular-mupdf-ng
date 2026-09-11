@@ -1,4 +1,4 @@
 File=mupdfngsettings.kcfg
-ClassName=MuPDFSettings
+ClassName=MuPDFNGSettings
 Mutators=true
 Singleton=true

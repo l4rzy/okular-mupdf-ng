@@ -117,23 +117,23 @@ private slots:
 
     void clampsOcrDebounceDelay()
     {
-        const int originalDebounce = MuPDFSettings::ocrDebounceMs();
-        MuPDFSettings::setOcrDebounceMs(5000);
+        const int originalDebounce = MuPDFNGSettings::ocrDebounceMs();
+        MuPDFNGSettings::setOcrDebounceMs(5000);
         QCOMPARE(::Mu::Generator::Config::readOcrSettings().debounceMs, 2000);
-        MuPDFSettings::setOcrDebounceMs(50);
+        MuPDFNGSettings::setOcrDebounceMs(50);
         QCOMPARE(::Mu::Generator::Config::readOcrSettings().debounceMs, 100);
-        MuPDFSettings::setOcrDebounceMs(100);
+        MuPDFNGSettings::setOcrDebounceMs(100);
         QCOMPARE(::Mu::Generator::Config::readOcrSettings().debounceMs, 100);
-        MuPDFSettings::setOcrDebounceMs(originalDebounce);
+        MuPDFNGSettings::setOcrDebounceMs(originalDebounce);
     }
 
     void disablesAutomaticOcrWhenNeverSelected()
     {
-        const int originalTriggerMode = MuPDFSettings::ocrTriggerMode();
-        MuPDFSettings::setOcrTriggerMode(MuPDFSettings::EnumOcrTriggerMode::Never);
+        const int originalTriggerMode = MuPDFNGSettings::ocrTriggerMode();
+        MuPDFNGSettings::setOcrTriggerMode(MuPDFNGSettings::EnumOcrTriggerMode::Never);
 
         const auto settings = ::Mu::Generator::Config::readOcrSettings();
-        MuPDFSettings::setOcrTriggerMode(originalTriggerMode);
+        MuPDFNGSettings::setOcrTriggerMode(originalTriggerMode);
 
         QVERIFY(!settings.force);
         QVERIFY(!settings.autoTrigger);
@@ -141,14 +141,14 @@ private slots:
 
     void disablesOcrTriggersWhenNoModelInstalled()
     {
-        const QString originalLanguage = MuPDFSettings::ocrLanguage();
-        const int originalTriggerMode = MuPDFSettings::ocrTriggerMode();
-        MuPDFSettings::setOcrLanguage(QStringLiteral("-"));
-        MuPDFSettings::setOcrTriggerMode(MuPDFSettings::EnumOcrTriggerMode::Always);
+        const QString originalLanguage = MuPDFNGSettings::ocrLanguage();
+        const int originalTriggerMode = MuPDFNGSettings::ocrTriggerMode();
+        MuPDFNGSettings::setOcrLanguage(QStringLiteral("-"));
+        MuPDFNGSettings::setOcrTriggerMode(MuPDFNGSettings::EnumOcrTriggerMode::Always);
 
         const auto settings = ::Mu::Generator::Config::readOcrSettings();
-        MuPDFSettings::setOcrLanguage(originalLanguage);
-        MuPDFSettings::setOcrTriggerMode(originalTriggerMode);
+        MuPDFNGSettings::setOcrLanguage(originalLanguage);
+        MuPDFNGSettings::setOcrTriggerMode(originalTriggerMode);
 
         // An unset language follows the installed models, so either nothing
         // usable exists and OCR stays off, or a model was auto-picked (stored
@@ -213,14 +213,14 @@ private slots:
 
     void disablesOcrWhenLanguageIsNotAModelFilename()
     {
-        const QString originalLanguage = MuPDFSettings::ocrLanguage();
-        const int originalTriggerMode = MuPDFSettings::ocrTriggerMode();
-        MuPDFSettings::setOcrLanguage(QStringLiteral("deu"));
-        MuPDFSettings::setOcrTriggerMode(MuPDFSettings::EnumOcrTriggerMode::Always);
+        const QString originalLanguage = MuPDFNGSettings::ocrLanguage();
+        const int originalTriggerMode = MuPDFNGSettings::ocrTriggerMode();
+        MuPDFNGSettings::setOcrLanguage(QStringLiteral("deu"));
+        MuPDFNGSettings::setOcrTriggerMode(MuPDFNGSettings::EnumOcrTriggerMode::Always);
 
         const auto settings = ::Mu::Generator::Config::readOcrSettings();
-        MuPDFSettings::setOcrLanguage(originalLanguage);
-        MuPDFSettings::setOcrTriggerMode(originalTriggerMode);
+        MuPDFNGSettings::setOcrLanguage(originalLanguage);
+        MuPDFNGSettings::setOcrTriggerMode(originalTriggerMode);
 
         QCOMPARE(settings.language, QStringLiteral("-"));
         QVERIFY(!settings.force);
@@ -229,12 +229,12 @@ private slots:
 
     void usesDefaultCertificateDatabasePerPreference()
     {
-        const bool original = MuPDFSettings::useDefaultCertDB();
-        MuPDFSettings::setUseDefaultCertDB(true);
+        const bool original = MuPDFNGSettings::useDefaultCertDB();
+        MuPDFNGSettings::setUseDefaultCertDB(true);
         QVERIFY(::Mu::Generator::Config::usesDefaultCertificateDatabase());
-        MuPDFSettings::setUseDefaultCertDB(false);
+        MuPDFNGSettings::setUseDefaultCertDB(false);
         QVERIFY(!::Mu::Generator::Config::usesDefaultCertificateDatabase());
-        MuPDFSettings::setUseDefaultCertDB(original);
+        MuPDFNGSettings::setUseDefaultCertDB(original);
     }
 
     void normalizesTessdataDirectories()

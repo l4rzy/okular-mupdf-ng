@@ -18,15 +18,15 @@ int graphicsAntialiasingBitsForConfig(int value) noexcept
 {
     // KDE stores a named level; MuPDF consumes the corresponding bit count.
     switch (value) {
-    case MuPDFSettings::EnumGraphicsAntialiasingBits::Disabled:
+    case MuPDFNGSettings::EnumGraphicsAntialiasingBits::Disabled:
         return 0;
-    case MuPDFSettings::EnumGraphicsAntialiasingBits::Minimum:
+    case MuPDFNGSettings::EnumGraphicsAntialiasingBits::Minimum:
         return 2;
-    case MuPDFSettings::EnumGraphicsAntialiasingBits::Low:
+    case MuPDFNGSettings::EnumGraphicsAntialiasingBits::Low:
         return 4;
-    case MuPDFSettings::EnumGraphicsAntialiasingBits::Medium:
+    case MuPDFNGSettings::EnumGraphicsAntialiasingBits::Medium:
         return 6;
-    case MuPDFSettings::EnumGraphicsAntialiasingBits::High:
+    case MuPDFNGSettings::EnumGraphicsAntialiasingBits::High:
     default:
         return 8;
     }
@@ -37,15 +37,15 @@ int textAntialiasingBitsForConfig(int value) noexcept
     // Keep text and graphics mappings explicit because their generated enums
     // are independent even though their numeric levels currently match.
     switch (value) {
-    case MuPDFSettings::EnumTextAntialiasingBits::Disabled:
+    case MuPDFNGSettings::EnumTextAntialiasingBits::Disabled:
         return 0;
-    case MuPDFSettings::EnumTextAntialiasingBits::Minimum:
+    case MuPDFNGSettings::EnumTextAntialiasingBits::Minimum:
         return 2;
-    case MuPDFSettings::EnumTextAntialiasingBits::Low:
+    case MuPDFNGSettings::EnumTextAntialiasingBits::Low:
         return 4;
-    case MuPDFSettings::EnumTextAntialiasingBits::Medium:
+    case MuPDFNGSettings::EnumTextAntialiasingBits::Medium:
         return 6;
-    case MuPDFSettings::EnumTextAntialiasingBits::High:
+    case MuPDFNGSettings::EnumTextAntialiasingBits::High:
     default:
         return 8;
     }
@@ -55,13 +55,13 @@ std::int64_t memoryCacheBytesForConfig(int value) noexcept
 {
     // Convert the UI's MiB choice once, before sending byte units over IPC.
     switch (value) {
-    case MuPDFSettings::EnumMemoryLimit::Size32MiB:
+    case MuPDFNGSettings::EnumMemoryLimit::Size32MiB:
         return 32LL * 1024 * 1024;
-    case MuPDFSettings::EnumMemoryLimit::Size128MiB:
+    case MuPDFNGSettings::EnumMemoryLimit::Size128MiB:
         return 128LL * 1024 * 1024;
-    case MuPDFSettings::EnumMemoryLimit::Size256MiB:
+    case MuPDFNGSettings::EnumMemoryLimit::Size256MiB:
         return 256LL * 1024 * 1024;
-    case MuPDFSettings::EnumMemoryLimit::Size64MiB:
+    case MuPDFNGSettings::EnumMemoryLimit::Size64MiB:
     default:
         return 64LL * 1024 * 1024;
     }
@@ -72,13 +72,13 @@ std::int32_t idleTrimAggressivenessForConfig(int value) noexcept
     // Generated enums are ints; map through the generated constants so a
     // renamed or reordered choice cannot silently flip the trim policy.
     switch (value) {
-    case MuPDFSettings::EnumIdleTrimLevel::Off:
+    case MuPDFNGSettings::EnumIdleTrimLevel::Off:
         return Model::IdleTrimLevel::Off;
-    case MuPDFSettings::EnumIdleTrimLevel::Conservative:
+    case MuPDFNGSettings::EnumIdleTrimLevel::Conservative:
         return Model::IdleTrimLevel::Conservative;
-    case MuPDFSettings::EnumIdleTrimLevel::Aggressive:
+    case MuPDFNGSettings::EnumIdleTrimLevel::Aggressive:
         return Model::IdleTrimLevel::Aggressive;
-    case MuPDFSettings::EnumIdleTrimLevel::Balanced:
+    case MuPDFNGSettings::EnumIdleTrimLevel::Balanced:
     default:
         return Model::IdleTrimLevel::Balanced;
     }
@@ -96,17 +96,17 @@ int ocrDebounceMsForConfig(int value) noexcept
 void reloadSettings()
 {
     // KConfigXT owns persistence; this only refreshes its generated singleton.
-    MuPDFSettings::self()->read();
+    MuPDFNGSettings::self()->read();
 }
 
 SandboxEnforcement readSandboxEnforcement()
 {
     // Generated enums are ints; map through the generated constants so a
     // renamed or reordered choice cannot silently flip the security policy.
-    switch (MuPDFSettings::sandboxEnforcement()) {
-    case MuPDFSettings::EnumSandboxEnforcement::Strict:
+    switch (MuPDFNGSettings::sandboxEnforcement()) {
+    case MuPDFNGSettings::EnumSandboxEnforcement::Strict:
         return SandboxEnforcement::Strict;
-    case MuPDFSettings::EnumSandboxEnforcement::Relaxed:
+    case MuPDFNGSettings::EnumSandboxEnforcement::Relaxed:
     default:
         return SandboxEnforcement::Relaxed;
     }
@@ -114,16 +114,16 @@ SandboxEnforcement readSandboxEnforcement()
 
 bool readDegradedSandboxNotificationEnabled()
 {
-    return MuPDFSettings::notifyDegradedSandbox();
+    return MuPDFNGSettings::notifyDegradedSandbox();
 }
 
 EpubSettings readEpubSettings()
 {
     // Keep custom CSS encoded exactly as stored; CssEditor owns the UI form.
-    return { MuPDFSettings::epubFontSize(),
-             MuPDFSettings::epubFontFamily(),
-             MuPDFSettings::epubPageSize(),
-             MuPDFSettings::epubCustomCss() };
+    return { MuPDFNGSettings::epubFontSize(),
+             MuPDFNGSettings::epubFontFamily(),
+             MuPDFNGSettings::epubPageSize(),
+             MuPDFNGSettings::epubCustomCss() };
 }
 
 WorkerSettings readWorkerSettings()
@@ -132,12 +132,12 @@ WorkerSettings readWorkerSettings()
     // normalized into worker-facing units; EPUB values stay encoded exactly
     // as stored (CssEditor owns the UI form).
     return {
-        { graphicsAntialiasingBitsForConfig(MuPDFSettings::graphicsAntialiasingBits()),
-          textAntialiasingBitsForConfig(MuPDFSettings::textAntialiasingBits()),
-          static_cast<int>(MuPDFSettings::imageRenderingQuality()),
-          MuPDFSettings::imageInterpolation(),
-          memoryCacheBytesForConfig(MuPDFSettings::memoryLimit()),
-          idleTrimAggressivenessForConfig(MuPDFSettings::idleTrimLevel()) },
+        { graphicsAntialiasingBitsForConfig(MuPDFNGSettings::graphicsAntialiasingBits()),
+          textAntialiasingBitsForConfig(MuPDFNGSettings::textAntialiasingBits()),
+          static_cast<int>(MuPDFNGSettings::imageRenderingQuality()),
+          MuPDFNGSettings::imageInterpolation(),
+          memoryCacheBytesForConfig(MuPDFNGSettings::memoryLimit()),
+          idleTrimAggressivenessForConfig(MuPDFNGSettings::idleTrimLevel()) },
         readEpubSettings(),
     };
 }
@@ -150,7 +150,7 @@ OcrSettings readOcrSettings()
     // that is not a model filename is malformed (only hand-edited config can
     // reach it) and must not silently flip OCR to English: degrade to off.
     OcrSettings settings;
-    QString language = MuPDFSettings::ocrLanguage();
+    QString language = MuPDFNGSettings::ocrLanguage();
     // An unset language follows the installed models, including the configured
     // extra tessdata directories: a usable model enables OCR without requiring
     // a settings visit first.
@@ -158,31 +158,31 @@ OcrSettings readOcrSettings()
         language = autoSelectOcrModel(installedOcrModels());
     if (language == QStringLiteral("-") || language.isEmpty() || !language.endsWith(QStringLiteral(".traineddata"))) {
         settings.language = QStringLiteral("-");
-        settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
-        settings.notify = MuPDFSettings::ocrNotify();
+        settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFNGSettings::ocrQuality()));
+        settings.notify = MuPDFNGSettings::ocrNotify();
         settings.force = false;
         settings.autoTrigger = false;
-        settings.debounceMs = ocrDebounceMsForConfig(MuPDFSettings::ocrDebounceMs());
+        settings.debounceMs = ocrDebounceMsForConfig(MuPDFNGSettings::ocrDebounceMs());
         return settings;
     }
     settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(language);
-    settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
-    settings.notify = MuPDFSettings::ocrNotify();
-    settings.debounceMs = ocrDebounceMsForConfig(MuPDFSettings::ocrDebounceMs());
+    settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFNGSettings::ocrQuality()));
+    settings.notify = MuPDFNGSettings::ocrNotify();
+    settings.debounceMs = ocrDebounceMsForConfig(MuPDFNGSettings::ocrDebounceMs());
 
-    switch (MuPDFSettings::ocrTriggerMode()) {
-    case MuPDFSettings::EnumOcrTriggerMode::Five:
+    switch (MuPDFNGSettings::ocrTriggerMode()) {
+    case MuPDFNGSettings::EnumOcrTriggerMode::Five:
         settings.autoTrigger = true;
         settings.triggerThreshold = 5;
         break;
-    case MuPDFSettings::EnumOcrTriggerMode::Twenty:
+    case MuPDFNGSettings::EnumOcrTriggerMode::Twenty:
         settings.autoTrigger = true;
         settings.triggerThreshold = 20;
         break;
-    case MuPDFSettings::EnumOcrTriggerMode::Always:
+    case MuPDFNGSettings::EnumOcrTriggerMode::Always:
         settings.force = true;
         break;
-    case MuPDFSettings::EnumOcrTriggerMode::Never:
+    case MuPDFNGSettings::EnumOcrTriggerMode::Never:
     default:
         settings.autoTrigger = false;
         break;
@@ -193,7 +193,7 @@ OcrSettings readOcrSettings()
 QStringList readTessDataDirectories()
 {
     // Apply the same path filtering used by the worker sandbox setup.
-    return normalizeTessDataDirectories(MuPDFSettings::tessDataDirectories());
+    return normalizeTessDataDirectories(MuPDFNGSettings::tessDataDirectories());
 }
 
 QStringList installedOcrModels(const QStringList& directories)
@@ -255,12 +255,12 @@ QString readCertificateDatabasePath(const QString& defaultPath)
 {
     // The default toggle selects the system path; otherwise preserve the
     // explicitly configured database path for certificate management.
-    return MuPDFSettings::useDefaultCertDB() ? defaultPath : MuPDFSettings::dBCertificatePath();
+    return MuPDFNGSettings::useDefaultCertDB() ? defaultPath : MuPDFNGSettings::dBCertificatePath();
 }
 
 bool usesDefaultCertificateDatabase()
 {
-    return MuPDFSettings::useDefaultCertDB();
+    return MuPDFNGSettings::useDefaultCertDB();
 }
 
 } // namespace Mu::Generator::Config

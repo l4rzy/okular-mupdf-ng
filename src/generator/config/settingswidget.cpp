@@ -15,66 +15,66 @@
 
 namespace Mu::Generator {
 
-MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
+MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     : QWidget(parent)
-    , m_mupdfsw(new Ui_MuPDFSettingsWidgetBase)
+    , m_mupdfsw(new Ui_MuPDFNGSettingsWidgetBase)
 {
     m_mupdfsw->setupUi(this);
 
     auto* gfxAA = m_mupdfsw->kcfg_GraphicsAntialiasingBits;
     gfxAA->clear();
-    gfxAA->addItem(i18n("Disabled"), MuPDFSettings::EnumGraphicsAntialiasingBits::Disabled);
-    gfxAA->addItem(i18n("Minimum"), MuPDFSettings::EnumGraphicsAntialiasingBits::Minimum);
-    gfxAA->addItem(i18n("Low"), MuPDFSettings::EnumGraphicsAntialiasingBits::Low);
-    gfxAA->addItem(i18n("Medium"), MuPDFSettings::EnumGraphicsAntialiasingBits::Medium);
-    gfxAA->addItem(i18n("High"), MuPDFSettings::EnumGraphicsAntialiasingBits::High);
+    gfxAA->addItem(i18n("Disabled"), MuPDFNGSettings::EnumGraphicsAntialiasingBits::Disabled);
+    gfxAA->addItem(i18n("Minimum"), MuPDFNGSettings::EnumGraphicsAntialiasingBits::Minimum);
+    gfxAA->addItem(i18n("Low"), MuPDFNGSettings::EnumGraphicsAntialiasingBits::Low);
+    gfxAA->addItem(i18n("Medium"), MuPDFNGSettings::EnumGraphicsAntialiasingBits::Medium);
+    gfxAA->addItem(i18n("High"), MuPDFNGSettings::EnumGraphicsAntialiasingBits::High);
 
     auto* txtAA = m_mupdfsw->kcfg_TextAntialiasingBits;
     txtAA->clear();
-    txtAA->addItem(i18n("Disabled"), MuPDFSettings::EnumTextAntialiasingBits::Disabled);
-    txtAA->addItem(i18n("Minimum"), MuPDFSettings::EnumTextAntialiasingBits::Minimum);
-    txtAA->addItem(i18n("Low"), MuPDFSettings::EnumTextAntialiasingBits::Low);
-    txtAA->addItem(i18n("Medium"), MuPDFSettings::EnumTextAntialiasingBits::Medium);
-    txtAA->addItem(i18n("High"), MuPDFSettings::EnumTextAntialiasingBits::High);
+    txtAA->addItem(i18n("Disabled"), MuPDFNGSettings::EnumTextAntialiasingBits::Disabled);
+    txtAA->addItem(i18n("Minimum"), MuPDFNGSettings::EnumTextAntialiasingBits::Minimum);
+    txtAA->addItem(i18n("Low"), MuPDFNGSettings::EnumTextAntialiasingBits::Low);
+    txtAA->addItem(i18n("Medium"), MuPDFNGSettings::EnumTextAntialiasingBits::Medium);
+    txtAA->addItem(i18n("High"), MuPDFNGSettings::EnumTextAntialiasingBits::High);
 
     auto* imgQ = m_mupdfsw->kcfg_ImageRenderingQuality;
     imgQ->clear();
-    imgQ->addItem(i18n("Speed"), MuPDFSettings::EnumImageRenderingQuality::Speed);
-    imgQ->addItem(i18n("Balanced"), MuPDFSettings::EnumImageRenderingQuality::Balanced);
-    imgQ->addItem(i18n("Quality"), MuPDFSettings::EnumImageRenderingQuality::Quality);
+    imgQ->addItem(i18n("Speed"), MuPDFNGSettings::EnumImageRenderingQuality::Speed);
+    imgQ->addItem(i18n("Balanced"), MuPDFNGSettings::EnumImageRenderingQuality::Balanced);
+    imgQ->addItem(i18n("Quality"), MuPDFNGSettings::EnumImageRenderingQuality::Quality);
 
     auto* memLimit = m_mupdfsw->kcfg_MemoryLimit;
     memLimit->clear();
-    memLimit->addItem(i18n("32 MiB"), MuPDFSettings::EnumMemoryLimit::Size32MiB);
-    memLimit->addItem(i18n("64 MiB"), MuPDFSettings::EnumMemoryLimit::Size64MiB);
-    memLimit->addItem(i18n("128 MiB"), MuPDFSettings::EnumMemoryLimit::Size128MiB);
-    memLimit->addItem(i18n("256 MiB"), MuPDFSettings::EnumMemoryLimit::Size256MiB);
+    memLimit->addItem(i18n("32 MiB"), MuPDFNGSettings::EnumMemoryLimit::Size32MiB);
+    memLimit->addItem(i18n("64 MiB"), MuPDFNGSettings::EnumMemoryLimit::Size64MiB);
+    memLimit->addItem(i18n("128 MiB"), MuPDFNGSettings::EnumMemoryLimit::Size128MiB);
+    memLimit->addItem(i18n("256 MiB"), MuPDFNGSettings::EnumMemoryLimit::Size256MiB);
 
     auto* idleTrim = m_mupdfsw->kcfg_IdleTrimLevel;
     idleTrim->clear();
-    idleTrim->addItem(i18n("Off"), MuPDFSettings::EnumIdleTrimLevel::Off);
-    idleTrim->addItem(i18n("Conservative"), MuPDFSettings::EnumIdleTrimLevel::Conservative);
-    idleTrim->addItem(i18n("Balanced"), MuPDFSettings::EnumIdleTrimLevel::Balanced);
-    idleTrim->addItem(i18n("Aggressive"), MuPDFSettings::EnumIdleTrimLevel::Aggressive);
+    idleTrim->addItem(i18n("Off"), MuPDFNGSettings::EnumIdleTrimLevel::Off);
+    idleTrim->addItem(i18n("Conservative"), MuPDFNGSettings::EnumIdleTrimLevel::Conservative);
+    idleTrim->addItem(i18n("Balanced"), MuPDFNGSettings::EnumIdleTrimLevel::Balanced);
+    idleTrim->addItem(i18n("Aggressive"), MuPDFNGSettings::EnumIdleTrimLevel::Aggressive);
 
     auto* sandboxEnforcement = m_mupdfsw->kcfg_SandboxEnforcement;
     sandboxEnforcement->clear();
-    sandboxEnforcement->addItem(i18n("Relaxed"), MuPDFSettings::EnumSandboxEnforcement::Relaxed);
-    sandboxEnforcement->addItem(i18n("Strict"), MuPDFSettings::EnumSandboxEnforcement::Strict);
+    sandboxEnforcement->addItem(i18n("Relaxed"), MuPDFNGSettings::EnumSandboxEnforcement::Relaxed);
+    sandboxEnforcement->addItem(i18n("Strict"), MuPDFNGSettings::EnumSandboxEnforcement::Strict);
 
     auto* epubPageSize = m_mupdfsw->kcfg_EpubPageSize;
     epubPageSize->clear();
-    epubPageSize->addItem(i18n("A5 (148 × 210 mm)"), MuPDFSettings::EnumEpubPageSize::A5);
-    epubPageSize->addItem(i18n("6×9 (152 × 229 mm)"), MuPDFSettings::EnumEpubPageSize::SixByNine);
-    epubPageSize->addItem(i18n("B5 (176 × 250 mm)"), MuPDFSettings::EnumEpubPageSize::B5);
-    epubPageSize->addItem(i18n("Letter (216 × 279 mm)"), MuPDFSettings::EnumEpubPageSize::Letter);
+    epubPageSize->addItem(i18n("A5 (148 × 210 mm)"), MuPDFNGSettings::EnumEpubPageSize::A5);
+    epubPageSize->addItem(i18n("6×9 (152 × 229 mm)"), MuPDFNGSettings::EnumEpubPageSize::SixByNine);
+    epubPageSize->addItem(i18n("B5 (176 × 250 mm)"), MuPDFNGSettings::EnumEpubPageSize::B5);
+    epubPageSize->addItem(i18n("Letter (216 × 279 mm)"), MuPDFNGSettings::EnumEpubPageSize::Letter);
 
     auto* epubFontFamily = m_mupdfsw->kcfg_EpubFontFamily;
     epubFontFamily->clear();
-    epubFontFamily->addItem(i18n("Default"), MuPDFSettings::EnumEpubFontFamily::Default);
-    epubFontFamily->addItem(i18n("Serif"), MuPDFSettings::EnumEpubFontFamily::Serif);
-    epubFontFamily->addItem(i18n("Sans-serif"), MuPDFSettings::EnumEpubFontFamily::SansSerif);
-    epubFontFamily->addItem(i18n("Monospace"), MuPDFSettings::EnumEpubFontFamily::Monospace);
+    epubFontFamily->addItem(i18n("Default"), MuPDFNGSettings::EnumEpubFontFamily::Default);
+    epubFontFamily->addItem(i18n("Serif"), MuPDFNGSettings::EnumEpubFontFamily::Serif);
+    epubFontFamily->addItem(i18n("Sans-serif"), MuPDFNGSettings::EnumEpubFontFamily::SansSerif);
+    epubFontFamily->addItem(i18n("Monospace"), MuPDFNGSettings::EnumEpubFontFamily::Monospace);
 
     m_mupdfsw->kcfg_EpubCustomCss->setVisible(false);
     updateCustomCssButtonText();
@@ -82,7 +82,7 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     connect(m_mupdfsw->kcfg_EpubCustomCss,
             &CssEditor::encodedTextChanged,
             this,
-            &MuPDFSettingsWidget::updateCustomCssButtonText);
+            &MuPDFNGSettingsWidget::updateCustomCssButtonText);
 
     auto* ocrLang = m_mupdfsw->kcfg_OcrLanguage;
     ocrLang->clear();
@@ -105,7 +105,7 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     // the visible choice through the existing currentText binding.
     QTimer::singleShot(0, this, [this, models] {
         auto* ocrLang = m_mupdfsw->kcfg_OcrLanguage;
-        const QString stored = MuPDFSettings::ocrLanguage();
+        const QString stored = MuPDFNGSettings::ocrLanguage();
         if (!stored.isEmpty() && stored != QStringLiteral("-") && ocrLang->findData(stored) >= 0)
             return;
         const int index = ocrLang->findData(Config::autoSelectOcrModel(models));
@@ -114,16 +114,16 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     });
     auto* ocrQuality = m_mupdfsw->kcfg_OcrQuality;
     ocrQuality->clear();
-    ocrQuality->addItem(i18n("Speed (150dpi)"), MuPDFSettings::EnumOcrQuality::Speed);
-    ocrQuality->addItem(i18n("Balanced (225dpi)"), MuPDFSettings::EnumOcrQuality::Balanced);
-    ocrQuality->addItem(i18n("Accuracy (300dpi)"), MuPDFSettings::EnumOcrQuality::Accuracy);
+    ocrQuality->addItem(i18n("Speed (150dpi)"), MuPDFNGSettings::EnumOcrQuality::Speed);
+    ocrQuality->addItem(i18n("Balanced (225dpi)"), MuPDFNGSettings::EnumOcrQuality::Balanced);
+    ocrQuality->addItem(i18n("Accuracy (300dpi)"), MuPDFNGSettings::EnumOcrQuality::Accuracy);
 
     auto* triggerMode = m_mupdfsw->kcfg_OcrTriggerMode;
     triggerMode->clear();
-    triggerMode->addItem(i18n("0 (Never)"), MuPDFSettings::EnumOcrTriggerMode::Never);
-    triggerMode->addItem(i18n("5 characters"), MuPDFSettings::EnumOcrTriggerMode::Five);
-    triggerMode->addItem(i18n("20 characters"), MuPDFSettings::EnumOcrTriggerMode::Twenty);
-    triggerMode->addItem(i18n("∞ (Always)"), MuPDFSettings::EnumOcrTriggerMode::Always);
+    triggerMode->addItem(i18n("0 (Never)"), MuPDFNGSettings::EnumOcrTriggerMode::Never);
+    triggerMode->addItem(i18n("5 characters"), MuPDFNGSettings::EnumOcrTriggerMode::Five);
+    triggerMode->addItem(i18n("20 characters"), MuPDFNGSettings::EnumOcrTriggerMode::Twenty);
+    triggerMode->addItem(i18n("∞ (Always)"), MuPDFNGSettings::EnumOcrTriggerMode::Always);
     const QString ocrTriggerToolTip =
         i18n("Automatically run OCR when the page contains fewer extracted characters than the selected threshold.\n"
              "Choose \"Never\" to disable automatic OCR or \"Always\" to run OCR on every page.");
@@ -134,7 +134,7 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
 
     connect(
         m_mupdfsw->customRadioButton, &QRadioButton::toggled, m_mupdfsw->kcfg_dBCertificatePath, &QWidget::setEnabled);
-    if (MuPDFSettings::useDefaultCertDB()) {
+    if (MuPDFNGSettings::useDefaultCertDB()) {
         m_mupdfsw->kcfg_UseDefaultCertDB->setChecked(true);
     } else {
         m_mupdfsw->customRadioButton->setChecked(true);
@@ -148,13 +148,13 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     });
 }
 
-void MuPDFSettingsWidget::updateCustomCssButtonText()
+void MuPDFNGSettingsWidget::updateCustomCssButtonText()
 {
     const bool hasCustomCss = !m_mupdfsw->kcfg_EpubCustomCss->encodedText().isEmpty();
     m_mupdfsw->customCssButton->setText(hasCustomCss ? i18n("Custom CSS (configured)") : i18n("Custom CSS"));
 }
 
-void MuPDFSettingsWidget::updateManageCertificatesButton()
+void MuPDFNGSettingsWidget::updateManageCertificatesButton()
 {
     const QString databasePath = Plugin::Crypto::activeNssDatabasePath();
     const QString databaseLabel = databasePath.isEmpty() ? i18n("NSS database unavailable")
@@ -162,7 +162,7 @@ void MuPDFSettingsWidget::updateManageCertificatesButton()
     m_mupdfsw->manageCertificatesButton->setText(i18n("Manage Certificates - %1", databaseLabel));
 }
 
-MuPDFSettingsWidget::~MuPDFSettingsWidget()
+MuPDFNGSettingsWidget::~MuPDFNGSettingsWidget()
 {
     delete m_mupdfsw;
 }

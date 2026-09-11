@@ -3,23 +3,23 @@
 
 #include <QWidget>
 
-class Ui_MuPDFSettingsWidgetBase;
+class Ui_MuPDFNGSettingsWidgetBase;
 
 namespace Mu::Generator {
 
-class MuPDFSettingsWidget : public QWidget {
+class MuPDFNGSettingsWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit MuPDFSettingsWidget(QWidget* parent = nullptr);
-    ~MuPDFSettingsWidget() override;
+    explicit MuPDFNGSettingsWidget(QWidget* parent = nullptr);
+    ~MuPDFNGSettingsWidget() override;
 
     void updateCustomCssButtonText();
 
 private:
     void updateManageCertificatesButton();
 
-    Ui_MuPDFSettingsWidgetBase* m_mupdfsw;
+    Ui_MuPDFNGSettingsWidgetBase* m_mupdfsw;
 };
 
 } // namespace Mu::Generator

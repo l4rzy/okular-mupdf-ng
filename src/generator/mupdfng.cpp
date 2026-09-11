@@ -306,9 +306,12 @@ bool Main::reparseConfig()
 // Okular Generator Func: adds the generator settings page to Okular.
 void Main::addPages(KConfigDialog* dialog)
 {
-    MuPDFSettingsWidget* w = new MuPDFSettingsWidget(dialog);
-    dialog->addPage(
-        w, MuPDFSettings::self(), i18n("MuPDF-NG"), QStringLiteral("okular-mupdf-ng"), i18n("MuPDF-NG Configuration"));
+    MuPDFNGSettingsWidget* w = new MuPDFNGSettingsWidget(dialog);
+    dialog->addPage(w,
+                    MuPDFNGSettings::self(),
+                    i18n("MuPDF-NG"),
+                    QStringLiteral("okular-mupdf-ng"),
+                    i18n("MuPDF-NG Configuration"));
     w->updateCustomCssButtonText();
     connect(dialog, &KConfigDialog::settingsChanged, this, [this, w] {
         updateSettingRestartState();
@@ -394,7 +397,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
         for (Model::SignatureField& sfd : pageInfo.signatureFields) {
             if (canValidateSignatures)
-                Plugin::Crypto::validateDetachedPdfSignature(sfd, *signatureSource, MuPDFSettings::self()->useOcsp());
+                Plugin::Crypto::validateDetachedPdfSignature(sfd, *signatureSource, MuPDFNGSettings::self()->useOcsp());
             auto* sig = new Proxy::Form::Signature(sfd.objectNumber, std::move(sfd), &m_worker);
             formFields.append(sig);
         }
@@ -1356,7 +1359,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     // Scale mode: None keeps the original size; both fit modes rely on the
     // printer's fit-to-page handling (poppler maps them identically).
     const auto scaleMode =
-        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFSettings::self()->printScaleMode(), 0, 2));
+        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFNGSettings::self()->printScaleMode(), 0, 2));
     const auto filePrinterScaleMode = scaleMode == PrintScaleMode::None
         ? Okular::FilePrinter::ScaleMode::NoScaling
         : Okular::FilePrinter::ScaleMode::FitToPrintArea;
@@ -1380,10 +1383,10 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
 QWidget* Main::printConfigurationWidget() const
 {
     auto* page = new PrintOptionsPage(
-        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFSettings::self()->printScaleMode(), 0, 2)));
+        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFNGSettings::self()->printScaleMode(), 0, 2)));
     connect(page, &PrintOptionsPage::scaleModeChanged, this, [](PrintScaleMode mode) {
-        MuPDFSettings::self()->setPrintScaleMode(static_cast<quint32>(mode));
-        MuPDFSettings::self()->save();
+        MuPDFNGSettings::self()->setPrintScaleMode(static_cast<quint32>(mode));
+        MuPDFNGSettings::self()->save();
     });
     return page;
 }
