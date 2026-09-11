@@ -6,7 +6,7 @@ on:
 jobs:
   package-rpm-fedora-x64:
     name: Build Fedora 44 x86_64 RPM (Clang)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: fedora:44
 

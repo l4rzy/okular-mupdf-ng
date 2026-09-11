@@ -6,7 +6,7 @@ on:
 jobs:
   package-deb:
     name: Build Ubuntu 26.04 Package (Clang)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: ubuntu:26.04
 

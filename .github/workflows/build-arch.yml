@@ -6,7 +6,7 @@ on:
 jobs:
   package-arch:
     name: Build Arch Linux Package (GCC)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: archlinux:latest
       options: --privileged

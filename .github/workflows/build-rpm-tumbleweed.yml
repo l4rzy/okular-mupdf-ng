@@ -6,7 +6,7 @@ on:
 jobs:
   package-rpm-tumbleweed:
     name: Build openSUSE Tumbleweed RPM (Clang)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: opensuse/tumbleweed:latest
 
