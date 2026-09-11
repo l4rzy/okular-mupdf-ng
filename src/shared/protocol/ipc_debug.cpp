@@ -305,7 +305,6 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "page", value.page);
                 field(out, "dpi", value.dpi);
                 field(out, "language", value.language);
-                field(out, "async", value.asynchronous);
             } else if constexpr (std::is_same_v<T, Model::OcrResultRequest>) {
                 out << "ocr-result";
                 field(out, "job", value.jobId);

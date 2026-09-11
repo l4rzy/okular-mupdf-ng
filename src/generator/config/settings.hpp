@@ -50,7 +50,6 @@ struct OcrSettings {
     bool force = false;
     bool autoTrigger = true;
     unsigned triggerThreshold = 20;
-    bool asynchronous = true;
     bool notify = false;
     /// Scroll-settle delay in milliseconds before OCR fires (hidden setting).
     int debounceMs = 250;

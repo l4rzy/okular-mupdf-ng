@@ -64,7 +64,7 @@ private slots:
         QVERIFY(::Mu::IPC::ZppCodec::decode(*cancelBytes, &output, &error));
         QVERIFY(std::holds_alternative<Model::CancelOcrJobsRequest>(output.payload));
 
-        const Model::RequestMessage ocr { 45, Model::OcrPageRequest { { 17 }, 3, 225, "eng", true } };
+        const Model::RequestMessage ocr { 45, Model::OcrPageRequest { { 17 }, 3, 225, "eng" } };
         const auto ocrBytes = ::Mu::IPC::ZppCodec::encode(ocr, &error);
         QVERIFY(ocrBytes);
         QVERIFY(::Mu::IPC::ZppCodec::decode(*ocrBytes, &output, &error));
@@ -429,8 +429,8 @@ private slots:
 
         QVERIFY(isValidTextBoxesRequest({ 0, 72, 144, false }, &reason));
         QVERIFY(!isValidTextBoxesRequest({ 0, 0, 144, false }, &reason));
-        QVERIFY(isValidOcrPageRequest({ { 1 }, 0, 225, "eng", false }, &reason));
-        QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng", false }, &reason));
+        QVERIFY(isValidOcrPageRequest({ { 1 }, 0, 225, "eng" }, &reason));
+        QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng" }, &reason));
 
         DocumentSettings validSettings;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));

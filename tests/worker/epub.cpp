@@ -587,7 +587,7 @@ private slots:
         QVERIFY(ocrFd >= 0);
         QVERIFY(sender.send(7, ocrFd, &error));
         ::close(ocrFd);
-        const auto response = service.dispatch({ 1, ::Mu::Model::OcrPageRequest { { 7 }, 0, 225, "eng", false } });
+        const auto response = service.dispatch({ 1, ::Mu::Model::OcrPageRequest { { 7 }, 0, 225, "eng" } });
         QVERIFY(response.error);
         QCOMPARE(response.error->code, ::Mu::Model::ErrorCode::Unavailable);
         QVERIFY(response.error->message.find("PDF") != std::string::npos);

@@ -454,15 +454,8 @@
             </item>
            </layout>
           </item>
-          <item>
-           <widget class="QCheckBox" name="kcfg_OcrAsync">
-            <property name="text">
-             <string>Run OCR asynchronously (non-blocking page display)</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QCheckBox" name="kcfg_OcrNotify">
+           <item>
+            <widget class="QCheckBox" name="kcfg_OcrNotify">
             <property name="text">
              <string>Show notifications on OCR status</string>
             </property>

@@ -75,7 +75,6 @@ public:
     bool close();
     QImage render(int page, int width, int height, const QRect& rect);
     std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false);
-    Model::OcrResult ocrPage(int page, const QString& language, int dpi, bool async);
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);
     Model::OcrResult ocrResult(quint64 id);
     bool cancelOcrJobs();
@@ -176,7 +175,7 @@ private:
                                bool useEpubAcceleratorCache);
     // A request may receive asynchronous notifications while its response is
     // pending; call() serializes that exchange and handles both message kinds.
-    std::optional<Model::ResponseMessage> requestOcr(int page, const QString& language, int dpi, bool async);
+    std::optional<Model::ResponseMessage> requestOcr(int page, const QString& language, int dpi);
     std::optional<Model::ResponseMessage> call(Model::RequestPayload payload);
     void processIncomingNotifications();
     bool handleNotification(const Model::NotificationMessage& notification, std::string* error = nullptr);

@@ -129,11 +129,6 @@ std::vector<TextBox> WorkerClient::getTextBoxesForPage(int p, qreal x, qreal y, 
     return sync([&](WorkerTransport* transport) { return transport->getTextBoxesForPage(p, x, y, skipAnnots); });
 }
 
-OcrResult WorkerClient::ocrPage(int p, const QString& l, int d, bool a) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->ocrPage(p, l, d, a); });
-}
-
 std::optional<quint64> WorkerClient::startOcrPage(int p, const QString& l, int d) const
 {
     return sync([&](WorkerTransport* transport) { return transport->startOcrPage(p, l, d); });

@@ -68,7 +68,6 @@ public:
     QImage render(int page, int width, int height, const QRect& tile = { });
     std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false) const;
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys = { }) const;
-    Model::OcrResult ocrPage(int page, const QString& language, int dpi, bool asynchronous) const;
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi) const;
     Model::OcrResult ocrResult(quint64 jobId) const;
     bool cancelOcrJobs() const;

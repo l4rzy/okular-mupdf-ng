@@ -83,9 +83,6 @@
         <choice name="Always" />
       </choices>
     </entry>
-    <entry key="OcrAsync" type="Bool">
-      <default>true</default>
-    </entry>
     <entry key="OcrQuality" type="Enum">
       <default>Balanced</default>
       <choices>

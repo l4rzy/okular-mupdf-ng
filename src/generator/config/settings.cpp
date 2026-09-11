@@ -152,7 +152,6 @@ OcrSettings readOcrSettings()
     if (language == QStringLiteral("-") || language.isEmpty() || !language.endsWith(QStringLiteral(".traineddata"))) {
         settings.language = QStringLiteral("-");
         settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
-        settings.asynchronous = MuPDFSettings::ocrAsync();
         settings.notify = MuPDFSettings::ocrNotify();
         settings.force = false;
         settings.autoTrigger = false;
@@ -161,7 +160,6 @@ OcrSettings readOcrSettings()
     }
     settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(language);
     settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
-    settings.asynchronous = MuPDFSettings::ocrAsync();
     settings.notify = MuPDFSettings::ocrNotify();
     settings.debounceMs = ocrDebounceMsForConfig(MuPDFSettings::ocrDebounceMs());
 

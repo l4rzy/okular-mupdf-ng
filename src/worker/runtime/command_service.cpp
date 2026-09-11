@@ -15,7 +15,6 @@
 #include <unistd.h>
 
 #include "engine/epub/document.hpp"
-#include "engine/ocr/ocr.hpp"
 #include "engine/pdf/document.hpp"
 #include "engine/signer.hpp"
 #include "shared/compat.hpp"
@@ -61,7 +60,6 @@ using ::Mu::IPC::framePixelData;
 using ::Mu::Worker::Engine::CmsResult;
 using ::Mu::Worker::Engine::DocumentBase;
 using ::Mu::Worker::Engine::OcrJobs;
-using ::Mu::Worker::Engine::runOcr;
 using ::Mu::Worker::Sys::createMemfd;
 using ::Mu::Worker::Sys::Mapping;
 
@@ -965,18 +963,13 @@ ResponseMessage CommandService::ocrPage(const RequestMessage& r, const OcrPageRe
         return failure(r.id, ErrorCode::InvalidRequest, "ocr_page", "invalid page");
 
     auto language = o.language.empty() ? std::string("eng") : o.language;
-    if (o.asynchronous) {
-        // Enqueue task into background worker thread pool
-        auto job = m_ocrJobs.submit(ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi));
-        if (!job) {
-            return failure(r.id, ErrorCode::ResourceLimit, "ocr_page", "too many jobs");
-        }
-        return success(r.id, JobResponse { *job });
+    // Recognition always runs in the background pool; the host collects the
+    // result with a follow-up request once its completion notification arrives.
+    auto job = m_ocrJobs.submit(ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi));
+    if (!job) {
+        return failure(r.id, ErrorCode::ResourceLimit, "ocr_page", "too many jobs");
     }
-
-    // Synchronous execution path
-    return makeOcrResponse(r.id,
-                           runOcr(ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi)));
+    return success(r.id, JobResponse { *job });
 }
 
 ResponseMessage CommandService::ocrResult(const RequestMessage& r, const OcrResultRequest& o)

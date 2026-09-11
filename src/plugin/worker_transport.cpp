@@ -565,12 +565,12 @@ bool WorkerTransport::sendOcrInput(QFile& input, std::uint64_t& transfer)
     return m_fd.send(transfer, input.handle(), &error);
 }
 
-std::optional<ResponseMessage> WorkerTransport::requestOcr(int page, const QString& language, int dpi, bool async)
+std::optional<ResponseMessage> WorkerTransport::requestOcr(int page, const QString& language, int dpi)
 {
     // The request must be known valid before sendOcrInput transfers the
     // document descriptor: the worker pre-validates this payload and would
     // reject it before reading the FD, stranding it on the channel.
-    OcrPageRequest request { { m_nextTransfer }, page, dpi, language.toStdString(), async };
+    OcrPageRequest request { { m_nextTransfer }, page, dpi, language.toStdString() };
     if (!isValidOcrPageRequest(request))
         return std::nullopt;
 
@@ -584,22 +584,9 @@ std::optional<ResponseMessage> WorkerTransport::requestOcr(int page, const QStri
     return call(std::move(request));
 }
 
-OcrResult WorkerTransport::ocrPage(int page, const QString& language, int dpi, bool async)
-{
-    auto response = requestOcr(page, language, dpi, async);
-    if (!response || response->error)
-        return { };
-    if (auto* result = std::get_if<OcrResponse>(&response->payload))
-        return result->result;
-    if (std::holds_alternative<JobResponse>(response->payload)) {
-        return { OcrStatus::Success, { } };
-    }
-    return { };
-}
-
 std::optional<quint64> WorkerTransport::startOcrPage(int page, const QString& language, int dpi)
 {
-    auto response = requestOcr(page, language, dpi, true);
+    auto response = requestOcr(page, language, dpi);
     if (!response || response->error)
         return std::nullopt;
     if (auto* job = std::get_if<JobResponse>(&response->payload))

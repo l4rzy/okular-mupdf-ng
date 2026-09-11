@@ -217,7 +217,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                 Q_EMIT signalTextGenerationDone(m_okularPages.at(page), textPage);
                 if (Config::readOcrSettings().notify
                     && source == Plugin::OCR::Controller::CompletionSource::OcrCompleted) {
-                    Q_EMIT notice(i18n("OCR complete for page %1", page + 1), 1500);
+                    Q_EMIT notice(i18n("OCR completed for page %1", page + 1), 1500);
                 }
             });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::started, this, [this](int page) {
@@ -792,9 +792,9 @@ void Main::observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount)
     if (m_document.type == Model::DocumentType::Epub)
         return;
     const Okular::Document* doc = document();
-    const Config::OcrSettings ocrSettings = Config::readOcrSettings();
-    if (!ocrSettings.asynchronous || !doc)
+    if (!doc)
         return;
+    const Config::OcrSettings ocrSettings = Config::readOcrSettings();
     QList<Plugin::OCR::VisiblePage> visiblePages;
     for (const Okular::VisiblePageRect* visible : doc->visiblePageRects()) {
         const Okular::Page* page = visible ? doc->page(visible->pageNumber) : nullptr;
@@ -1150,9 +1150,9 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         return Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height());
     }
 
-    // Async OCR emits a TextPage, but the controller retains the result until
-    // this request consumes it for hosts that do not immediately handle that
-    // signal.
+    // Text extraction never blocks on recognition: when OCR is wanted the page
+    // is queued and its TextPage arrives later through signalTextGenerationDone,
+    // while the retained result serves hosts that request the page again.
     if (const auto ready = m_ocrController->takeReady(pageNum))
         return Conversion::ocrTextPage(*ready);
     if (workerReady()) {
@@ -1164,32 +1164,12 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             ocrTarget, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings);
         const bool useOcr = Plugin::OCR::Controller::shouldTrigger(
             ocrConfig.force, ocrConfig.autoTrigger, ocrConfig.triggerThreshold, workerBoxes.size());
-        if (ocrSettings.asynchronous) {
-            QMetaObject::invokeMethod(
-                this,
-                [this, pageNum, nativeTextBoxCount = workerBoxes.size()] {
-                    observeOcrFocus(pageNum, nativeTextBoxCount);
-                },
-                Qt::QueuedConnection);
-            if (useOcr)
-                return nullptr;
-        }
-        if (useOcr) {
-            const auto key =
-                Plugin::Caching::OCR::Cache::normalizeKey(ocrTarget.documentHash, ocrTarget.language, ocrTarget.dpi);
-            if (!key)
-                return nullptr;
-            const auto cached = Plugin::Caching::OCR::Cache::load(*key, pageNum);
-            if (cached.present)
-                return Conversion::ocrTextPage(cached.items);
-            const Model::OcrResult ocrResult = m_worker.ocrPage(pageNum, key->language, key->dpi, false);
-            if (ocrResult.status != Model::OcrStatus::Success)
-                return nullptr;
-            const QVector<Plugin::Caching::OCR::CacheItem> items =
-                Plugin::Caching::OCR::Cache::convertToCacheItems(ocrResult.boxes);
-            Plugin::Caching::OCR::Cache::save(*key, pageNum, items);
-            return Conversion::ocrTextPage(items);
-        }
+        QMetaObject::invokeMethod(
+            this,
+            [this, pageNum, nativeTextBoxCount = workerBoxes.size()] { observeOcrFocus(pageNum, nativeTextBoxCount); },
+            Qt::QueuedConnection);
+        if (useOcr)
+            return nullptr;
         return Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height());
     }
     return nullptr;

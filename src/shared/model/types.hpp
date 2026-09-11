@@ -714,12 +714,12 @@ struct TextBoxesRequest {
     bool skipAnnots = false;
 };
 
-/// Requests OCR for a transferred document page.
+/// Requests OCR for a transferred document page. Recognition always runs in
+/// the background; the result is collected with a separate request.
 struct OcrPageRequest {
     FileTransfer file;
     std::int32_t page = -1, dpi = 225;
     std::string language;
-    bool asynchronous = false;
 };
 
 /// Requests the result of a previously submitted OCR job.
