@@ -697,28 +697,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QComboBox" name="kcfg_EpubPageSize">
-              <item>
-               <property name="text">
-                <string>B5 (176 × 250 mm)</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>A5 (148 × 210 mm)</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>6×9 (152 × 229 mm)</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>Letter (216 × 279 mm)</string>
-               </property>
-              </item>
-             </widget>
+             <widget class="QComboBox" name="kcfg_EpubPageSize"/>
             </item>
            </layout>
           </item>

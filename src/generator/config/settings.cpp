@@ -150,6 +150,9 @@ OcrSettings readOcrSettings()
     // that is not a model filename is malformed (only hand-edited config can
     // reach it) and must not silently flip OCR to English: degrade to off.
     OcrSettings settings;
+    settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFNGSettings::ocrQuality()));
+    settings.notify = MuPDFNGSettings::ocrNotify();
+    settings.debounceMs = ocrDebounceMsForConfig(MuPDFNGSettings::ocrDebounceMs());
     QString language = MuPDFNGSettings::ocrLanguage();
     // An unset language follows the installed models, including the configured
     // extra tessdata directories: a usable model enables OCR without requiring
@@ -158,17 +161,11 @@ OcrSettings readOcrSettings()
         language = autoSelectOcrModel(installedOcrModels());
     if (language == QStringLiteral("-") || language.isEmpty() || !language.endsWith(QStringLiteral(".traineddata"))) {
         settings.language = QStringLiteral("-");
-        settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFNGSettings::ocrQuality()));
-        settings.notify = MuPDFNGSettings::ocrNotify();
         settings.force = false;
         settings.autoTrigger = false;
-        settings.debounceMs = ocrDebounceMsForConfig(MuPDFNGSettings::ocrDebounceMs());
         return settings;
     }
     settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(language);
-    settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFNGSettings::ocrQuality()));
-    settings.notify = MuPDFNGSettings::ocrNotify();
-    settings.debounceMs = ocrDebounceMsForConfig(MuPDFNGSettings::ocrDebounceMs());
 
     switch (MuPDFNGSettings::ocrTriggerMode()) {
     case MuPDFNGSettings::EnumOcrTriggerMode::Five:
