@@ -9,6 +9,7 @@
 
 #include "mupdfngsettings.h"
 #include "plugin/caching/ocr_cache.hpp"
+#include "shared/model/validation.hpp"
 
 namespace Mu::Generator::Config {
 
@@ -91,6 +92,25 @@ int ocrDebounceMsForConfig(int value) noexcept
     return std::clamp(value, 100, 2000);
 }
 
+int epubPageSizeForConfig(int value) noexcept
+{
+    // The generated KCfg order (A5, SixByNine, B5, Letter) differs from the
+    // model order (B5, A5, SixByNine, Letter); map through the generated
+    // constants so a reordered choice cannot silently flip the page size.
+    switch (value) {
+    case MuPDFNGSettings::EnumEpubPageSize::A5:
+        return static_cast<int>(Model::EpubPageSize::A5);
+    case MuPDFNGSettings::EnumEpubPageSize::SixByNine:
+        return static_cast<int>(Model::EpubPageSize::SixByNine);
+    case MuPDFNGSettings::EnumEpubPageSize::B5:
+        return static_cast<int>(Model::EpubPageSize::B5);
+    case MuPDFNGSettings::EnumEpubPageSize::Letter:
+        return static_cast<int>(Model::EpubPageSize::Letter);
+    default:
+        return static_cast<int>(Model::EpubPageSize::A5);
+    }
+}
+
 } // namespace
 
 void reloadSettings()
@@ -119,18 +139,21 @@ bool readDegradedSandboxNotificationEnabled()
 
 EpubSettings readEpubSettings()
 {
-    // Keep custom CSS encoded exactly as stored; CssEditor owns the UI form.
+    // Map the page size to model order (see epubPageSizeForConfig). Drop
+    // invalid or oversize custom CSS so the worker never receives a payload
+    // its validator would reject; empty CSS renders the default EPUB style.
+    const QString customCss = MuPDFNGSettings::epubCustomCss();
     return { MuPDFNGSettings::epubFontSize(),
              MuPDFNGSettings::epubFontFamily(),
-             MuPDFNGSettings::epubPageSize(),
-             MuPDFNGSettings::epubCustomCss() };
+             epubPageSizeForConfig(MuPDFNGSettings::epubPageSize()),
+             Model::isValidEpubCustomCssBase64(customCss.toStdString()) ? customCss : QString() };
 }
 
 WorkerSettings readWorkerSettings()
 {
     // One reader keeps the session-scope pair coherent: rendering values are
-    // normalized into worker-facing units; EPUB values stay encoded exactly
-    // as stored (CssEditor owns the UI form).
+    // normalized into worker-facing units; EPUB values come from
+    // readEpubSettings() (page size in model order, CSS sanitized).
     return {
         { graphicsAntialiasingBitsForConfig(MuPDFNGSettings::graphicsAntialiasingBits()),
           textAntialiasingBitsForConfig(MuPDFNGSettings::textAntialiasingBits()),
@@ -201,7 +224,7 @@ QStringList installedOcrModels(const QStringList& directories)
     QStringList models;
     for (const QString& directory : directories) {
         QDir dir(directory);
-        const QStringList files = dir.entryList({ QStringLiteral("*.traineddata") }, QDir::Files, QDir::Name);
+        const QStringList files = dir.entryList({ QStringLiteral("*.traineddata") }, QDir::Files);
         for (const QString& file : files) {
             if (file == QStringLiteral("equ.traineddata") || file == QStringLiteral("osd.traineddata"))
                 continue;
@@ -235,13 +258,23 @@ QString autoSelectOcrModel(const QStringList& usableFiles)
 
 QStringList normalizeTessDataDirectories(const QStringList& directories)
 {
-    // Landlock receives canonical absolute read roots; reject relative paths
-    // and preserve order while removing duplicates.
+    // Landlock receives canonical absolute read roots; reject relative paths,
+    // the filesystem root (it would expose everything as a read root) and
+    // non-existent directories, and cap the entry count so a hand-edited
+    // config cannot exhaust the sandbox rule budget. Order is preserved
+    // while duplicates are removed.
+    constexpr qsizetype MaxTessDataDirectories = 32;
     QStringList normalized;
     for (const QString& directory : directories) {
+        if (normalized.size() >= MaxTessDataDirectories)
+            break;
         if (!directory.startsWith(QLatin1Char('/')))
             continue;
         const QString absolutePath = QDir::cleanPath(directory);
+        if (absolutePath == QStringLiteral("/"))
+            continue;
+        if (!QDir(absolutePath).exists())
+            continue;
         if (!normalized.contains(absolutePath))
             normalized.append(absolutePath);
     }
@@ -258,6 +291,19 @@ QString readCertificateDatabasePath(const QString& defaultPath)
 bool usesDefaultCertificateDatabase()
 {
     return MuPDFNGSettings::useDefaultCertDB();
+}
+
+std::uint32_t readPrintScaleMode()
+{
+    // Hand-edited configs can exceed the kcfg UInt range; clamp to the
+    // PrintScaleMode order (FitToPrintableArea..None) at the boundary.
+    return std::clamp(MuPDFNGSettings::printScaleMode(), 0u, 2u);
+}
+
+void writePrintScaleMode(std::uint32_t mode)
+{
+    MuPDFNGSettings::self()->setPrintScaleMode(std::clamp(mode, 0u, 2u));
+    MuPDFNGSettings::self()->save();
 }
 
 } // namespace Mu::Generator::Config

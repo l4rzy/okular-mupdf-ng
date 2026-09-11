@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <array>
+#include <cstdint>
 #include <string_view>
 
 #include "generator/config/settings.hpp"
@@ -237,21 +238,38 @@ private slots:
         MuPDFNGSettings::setUseDefaultCertDB(original);
     }
 
+    void clampsPrintScaleMode()
+    {
+        const unsigned original = MuPDFNGSettings::printScaleMode();
+        MuPDFNGSettings::setPrintScaleMode(0);
+        QCOMPARE(::Mu::Generator::Config::readPrintScaleMode(), static_cast<std::uint32_t>(0));
+        MuPDFNGSettings::setPrintScaleMode(2);
+        QCOMPARE(::Mu::Generator::Config::readPrintScaleMode(), static_cast<std::uint32_t>(2));
+        MuPDFNGSettings::setPrintScaleMode(99);
+        QCOMPARE(::Mu::Generator::Config::readPrintScaleMode(), static_cast<std::uint32_t>(2));
+        MuPDFNGSettings::setPrintScaleMode(original);
+    }
+
     void normalizesTessdataDirectories()
     {
+        QTemporaryDir first;
+        QTemporaryDir second;
+        QVERIFY(first.isValid());
+        QVERIFY(second.isValid());
+        const QString firstPath = QDir::cleanPath(first.path());
+        const QString secondPath = QDir::cleanPath(second.path());
+
         const QStringList input {
             QStringLiteral("relative"),
-            QStringLiteral("/usr/share/tessdata/"),
-            QStringLiteral("/tmp/../cache/tessdata"),
-            QStringLiteral("/usr/share/tessdata"),
+            firstPath + QStringLiteral("/"),
+            secondPath + QStringLiteral("/tmp/../"),
+            firstPath,
             QStringLiteral("~/tessdata"),
             QStringLiteral("/"),
+            QStringLiteral("/nonexistent-mupdf-ng-tessdata"),
         };
 
-        QCOMPARE(
-            ::Mu::Generator::Config::normalizeTessDataDirectories(input),
-            QStringList(
-                { QStringLiteral("/usr/share/tessdata"), QStringLiteral("/cache/tessdata"), QStringLiteral("/") }));
+        QCOMPARE(::Mu::Generator::Config::normalizeTessDataDirectories(input), QStringList({ firstPath, secondPath }));
     }
 };
 

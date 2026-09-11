@@ -258,7 +258,7 @@ bool Main::reparseConfig()
 {
     Config::reloadSettings();
     const Config::WorkerSettings settings = Config::readWorkerSettings();
-    updateSettingRestartState();
+    updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
     const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
@@ -314,21 +314,20 @@ void Main::addPages(KConfigDialog* dialog)
                     i18n("MuPDF-NG Configuration"));
     w->updateCustomCssButtonText();
     connect(dialog, &KConfigDialog::settingsChanged, this, [this, w] {
-        updateSettingRestartState();
+        updateSettingRestartState(Config::readEpubSettings());
         if (!m_restartState.required)
             return;
         QMessageBox::information(w, i18n("Restart needed"), i18n("You need to restart Okular after this change."));
     });
 }
 
-void Main::updateSettingRestartState()
+void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
 {
     // Worker process lifetime settings must not be applied to a running worker.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
     // The defaulted identity is fixed at generator construction, so a first
     // launch needs no restart.
-    m_restartState.required =
-        Config::readEpubSettings() != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
+    m_restartState.required = freshEpub != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
 }
 
 // Converts worker page information into Okular pages and page metadata.
@@ -1358,8 +1357,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
 
     // Scale mode: None keeps the original size; both fit modes rely on the
     // printer's fit-to-page handling (poppler maps them identically).
-    const auto scaleMode =
-        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFNGSettings::self()->printScaleMode(), 0, 2));
+    const auto scaleMode = static_cast<PrintScaleMode>(Config::readPrintScaleMode());
     const auto filePrinterScaleMode = scaleMode == PrintScaleMode::None
         ? Okular::FilePrinter::ScaleMode::NoScaling
         : Okular::FilePrinter::ScaleMode::FitToPrintArea;
@@ -1382,11 +1380,9 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
 // changes are persisted immediately so print() can read the current value.
 QWidget* Main::printConfigurationWidget() const
 {
-    auto* page = new PrintOptionsPage(
-        static_cast<PrintScaleMode>(std::clamp<quint32>(MuPDFNGSettings::self()->printScaleMode(), 0, 2)));
+    auto* page = new PrintOptionsPage(static_cast<PrintScaleMode>(Config::readPrintScaleMode()));
     connect(page, &PrintOptionsPage::scaleModeChanged, this, [](PrintScaleMode mode) {
-        MuPDFNGSettings::self()->setPrintScaleMode(static_cast<quint32>(mode));
-        MuPDFNGSettings::self()->save();
+        Config::writePrintScaleMode(static_cast<std::uint32_t>(mode));
     });
     return page;
 }

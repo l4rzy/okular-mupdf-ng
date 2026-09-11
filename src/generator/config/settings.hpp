@@ -33,7 +33,9 @@ struct RenderingSettings {
 struct EpubSettings {
     int fontSize = 11;
     int fontFamily = 0;
-    int pageSize = 1;
+    // Page size in Model::EpubPageSize order, not the KCfg index (see
+    // epubPageSizeForConfig); the default matches the KCfg default of A5.
+    int pageSize = static_cast<int>(Model::EpubPageSize::A5);
     QString customCssBase64;
 
     bool operator==(const EpubSettings& other) const = default;
@@ -142,7 +144,10 @@ WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();
 /// Lists usable Tesseract language models (*.traineddata in the given
 /// directories, excluding the non-language equ/osd data files) as a deduplicated,
-/// name-sorted union. Missing directories contribute nothing.
+/// name-sorted union. Missing directories contribute nothing. Matching is
+/// case-sensitive; a basename present in several directories is listed once,
+/// shadowing the later locations for single-model detection. Symlinks are
+/// followed per QDir::entryList semantics.
 QStringList installedOcrModels(const QStringList& directories);
 /// The same union for the effective configuration: the built-in tessdata
 /// directory plus the configured extra TessDataDirectories.
@@ -160,6 +165,11 @@ QString readCertificateDatabasePath(const QString& defaultPath);
 // readCertificateDatabasePath(), the defaulted selection hands NSS the empty
 // path so the missing database directory is created on first use.
 bool usesDefaultCertificateDatabase();
+// Print scale mode as a clamped integer (0..2, matching PrintScaleMode order).
+// Kept as an integer so this layer stays free of Okular widget types; the
+// caller static_casts to PrintScaleMode.
+std::uint32_t readPrintScaleMode();
+void writePrintScaleMode(std::uint32_t mode);
 
 } // namespace Mu::Generator::Config
 

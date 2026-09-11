@@ -139,8 +139,9 @@ private:
     // Refreshes restart-required state: fresh EPUB settings are compared
     // against the frozen startup set; the NSS database is the runtime-checked
     // half — initialization is one-way per process, so a changed database
-    // path only applies after an Okular restart.
-    void updateSettingRestartState();
+    // path only applies after an Okular restart. The caller supplies the
+    // fresh EPUB settings so a single KCfg read can be reused.
+    void updateSettingRestartState(const Config::EpubSettings& freshEpub);
     // Reports xref-repair state to the user, mirroring the poppler generator's
     // xrefReconstructionHandler.
     void warnIfRepairedDocument(const Model::DocumentMetadata& info);
