@@ -19,14 +19,17 @@ find_package(ECM 6.3.0 CONFIG REQUIRED)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${ECM_MODULE_PATH})
 include(FeatureSummary)
 include(KDEInstallDirs)
-include(ECMEnableSanitizers)
-include(KDECMakeSettings)
 
+# ECM_ENABLE_SANITIZERS must be populated before ECMEnableSanitizers runs: the
+# module appends the -fsanitize flags to CMAKE_CXX_FLAGS at include time.
 option(ENABLE_SANITIZERS "Enable Address/Undefined/LeakSanitizer instrumentation" OFF)
 if(ENABLE_SANITIZERS)
     set(ECM_ENABLE_SANITIZERS "address;leak;undefined" CACHE STRING
         "ECM sanitizer set for the release test build" FORCE)
 endif()
+
+include(ECMEnableSanitizers)
+include(KDECMakeSettings)
 
 # Only the exact Debug configuration enables verbose diagnostics. None is used
 # by Arch packaging so that makepkg owns the compiler flags; it must still

@@ -1,12 +1,17 @@
 #include "engine/mupdf_helpers.hpp"
 #include "engine/pdf/document.hpp"
+#include "genpdf.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QScopeGuard>
+#include <QTemporaryFile>
 #include <QTest>
 
+#include <array>
+#include <cstdint>
+#include <string>
 #include <unistd.h>
 
 #ifndef TEST_SIGNATURE_PDF_DIR
@@ -112,6 +117,58 @@ private slots:
         QCOMPARE(QString::fromStdString(formatSignatureDate(1'788'804'840)), QStringLiteral("Sep 7, 2026 13:14 CDT"));
         // Epoch 0: two-digit day must not be stripped.
         QCOMPARE(QString::fromStdString(formatSignatureDate(0)), QStringLiteral("Dec 31, 1969 18:00 CST"));
+    }
+
+    void failingCmsCleansUpAppearanceState()
+    {
+        // A CMS callback failure throws after the worker has built the
+        // signature appearance text; the owning strings must be destroyed on
+        // that longjmp path (LeakSanitizer catches a regression here).
+        QTemporaryFile sourceFile;
+        QVERIFY(sourceFile.open());
+        const QString sourcePath = sourceFile.fileName();
+        sourceFile.close();
+        fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        createSignaturePDF(context, sourcePath);
+        fz_drop_context(context);
+
+        QFile source(sourcePath);
+        Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(openDocument(document, source, sourcePath, error), error.c_str());
+
+        const auto details = document.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(details.signatures.size(), size_t(1));
+        QVERIFY(!details.signatures.front().signedField);
+
+        const auto failingCms = [](const std::array<std::uint8_t, 32>&, const std::string&) {
+            return ::Mu::Worker::Engine::CmsResult { ::Mu::Model::SigningResult::GenericError,
+                                                     "rejected by test",
+                                                     { } };
+        };
+
+        QTemporaryFile output;
+        QVERIFY(output.open());
+        ::Mu::Model::SigningResult signingResult;
+        const bool signedPdf = document.signFd(
+            ::Mu::Model::SignRequest {
+                .file = { },
+                .page = 0,
+                .rectangle = { .1, .1, .5, .2 },
+                .certificateNickname = "okular-mupdf-test",
+                .certificateSubjectCommonName = "Okular MuPDF Test Signer",
+                .existingFieldObjectNumber = details.signatures.front().objectNumber,
+                .appearance = { },
+            },
+            failingCms,
+            ::dup(output.handle()),
+            &signingResult,
+            &error);
+        QVERIFY2(!signedPdf, "signing must fail when the CMS callback is rejected");
+        QCOMPARE(signingResult, ::Mu::Model::SigningResult::GenericError);
+        QVERIFY(!error.empty());
     }
 };
 

@@ -297,6 +297,16 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     }
 
     std::array<unsigned char, 65536> copyBuffer { };
+
+    // Hoisted above the MuPDF error domain: fz_try/fz_catch is setjmp/longjmp,
+    // which would bypass these destructors on the error path.
+    const std::int64_t signingTime = request.appearance.signingEpochSeconds > 0
+        ? request.appearance.signingEpochSeconds
+        : static_cast<std::int64_t>(::time(nullptr));
+    std::string displayDate = !request.appearance.signingDisplayDate.empty() ? request.appearance.signingDisplayDate
+                                                                             : formatSignatureDate(signingTime);
+    std::string signatureText;
+
     fz_var(nativePage);
     fz_var(widget);
     fz_var(graphic);
@@ -408,16 +418,10 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         // pdf_sign_signature so the element set and the date format can follow
         // the shared SignatureAppearance; MuPDF's built-in text hardcodes an
         // ISO-8601 timestamp and always renders every element.
-        const std::int64_t signingTime = request.appearance.signingEpochSeconds > 0
-            ? request.appearance.signingEpochSeconds
-            : static_cast<std::int64_t>(::time(nullptr));
         const char* reason = request.appearance.reason.empty() ? nullptr : request.appearance.reason.c_str();
         const char* location = request.appearance.location.empty() ? nullptr : request.appearance.location.c_str();
         const char* signerCn =
             request.certificateSubjectCommonName.empty() ? nullptr : request.certificateSubjectCommonName.c_str();
-        const std::string displayDate = !request.appearance.signingDisplayDate.empty()
-            ? request.appearance.signingDisplayDate
-            : formatSignatureDate(signingTime);
 
         fz_try(m_context)
         {
@@ -438,13 +442,13 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                     location,
                     -1,
                     hasElement(request.appearance.elements, SignatureElement::Labels) ? 1 : 0);
-                std::string text = info ? info : "";
+                signatureText = info ? info : "";
                 if (hasElement(request.appearance.elements, SignatureElement::Date) && !displayDate.empty()) {
-                    if (!text.empty())
-                        text += '\n';
+                    if (!signatureText.empty())
+                        signatureText += '\n';
                     if (hasElement(request.appearance.elements, SignatureElement::Labels))
-                        text += "Date: ";
-                    text += displayDate;
+                        signatureText += "Date: ";
+                    signatureText += displayDate;
                 }
 
                 const fz_rect rect = pdf_annot_rect(m_context, widget);
@@ -453,7 +457,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                     hasElement(request.appearance.elements, SignatureElement::Logo) ? PDF_SIGNATURE_SHOW_LOGO : 0;
                 // Null (not empty) when nothing is rendered: pdf_signature_appearance_signed
                 // treats a non-null right_text as present and would reserve half the box for it.
-                const char* appearanceText = text.empty() ? nullptr : text.c_str();
+                const char* appearanceText = signatureText.empty() ? nullptr : signatureText.c_str();
                 if (graphic)
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, graphic, nullptr, appearanceText, logo);
