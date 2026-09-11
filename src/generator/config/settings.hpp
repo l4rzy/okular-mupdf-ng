@@ -69,13 +69,6 @@ enum class SandboxEnforcement {
     Strict,
 };
 
-inline Model::DocumentType documentTypeForMime(const QString& mime)
-{
-    // Keep MIME-to-model mapping in shared code so file and data detection
-    // produce identical document types.
-    return Model::documentTypeFromMime(mime.toStdString());
-}
-
 inline Model::DocumentSettings
 documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub, std::uint32_t paperColorRgb)
 {
@@ -161,8 +154,6 @@ QString readCertificateDatabasePath(const QString& defaultPath);
 // readCertificateDatabasePath(), the defaulted selection hands NSS the empty
 // path so the missing database directory is created on first use.
 bool usesDefaultCertificateDatabase();
-Model::DocumentType documentTypeForFile(const QString& fileName);
-Model::DocumentType documentTypeForData(const QByteArray& data);
 
 } // namespace Mu::Generator::Config
 

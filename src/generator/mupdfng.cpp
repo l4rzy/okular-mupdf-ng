@@ -46,6 +46,7 @@
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/ocr/ocr.hpp"
+#include "plugin/util/document_type.hpp"
 #include "plugin/util/render_image.hpp"
 #include "plugin/util/signature_image.hpp"
 #include "plugin/util/temp_dir.hpp"
@@ -473,8 +474,10 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 Okular::Document::OpenResult
 Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& pages, const QString& password)
 {
-    if (!m_worker.isConnected())
+    if (!m_worker.isConnected()) {
+        MU_LOG(warning, "Mu::Generator::Main", "worker is not connected; cannot open document");
         return Okular::Document::OpenError;
+    }
 
     // Retained before the gate check so both the withheld placeholder path and
     // a later Okular reopen cycle can restore the document without asking again.
@@ -482,16 +485,20 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
     if (sandboxGated())
         return loadBlockedPlaceholderDocument(pages);
 
-    const auto docType = Config::documentTypeForFile(fileName);
-    if (docType == Model::DocumentType::Unknown)
+    const auto docType = Plugin::Util::documentTypeForFile(fileName);
+    if (docType == Model::DocumentType::Unknown) {
+        MU_LOG(warning, "Mu::Generator::Main", std::string("unsupported document type: ") + fileName.toStdString());
         return Okular::Document::OpenError;
+    }
 
     // Push render settings before the open round trip; the paper color is the
     // only swapped value, refreshed immediately before the settings are built.
     refreshPaperColor();
     QList<Plugin::WorkerClient::PageInfo> workerPages;
-    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
+    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+        MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
         return Okular::Document::OpenError;
+    }
 
     // Metadata and page geometry return in the same open round trip.
     const auto openStatus = m_worker.open(fileName, password, workerPages, docType);
@@ -513,8 +520,10 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
                                                                     QVector<Okular::Page*>& pages,
                                                                     const QString& password)
 {
-    if (!m_worker.isConnected())
+    if (!m_worker.isConnected()) {
+        MU_LOG(warning, "Mu::Generator::Main", "worker is not connected; cannot open document data");
         return Okular::Document::OpenError;
+    }
 
     // Retained before the gate check so both the withheld placeholder path and
     // a later Okular reopen cycle can restore the document without asking again.
@@ -522,14 +531,18 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     if (sandboxGated())
         return loadBlockedPlaceholderDocument(pages);
 
-    const auto docType = Config::documentTypeForData(fileData);
-    if (docType == Model::DocumentType::Unknown)
+    const auto docType = Plugin::Util::documentTypeForData(fileData);
+    if (docType == Model::DocumentType::Unknown) {
+        MU_LOG(warning, "Mu::Generator::Main", "unsupported document data");
         return Okular::Document::OpenError;
+    }
 
     refreshPaperColor();
     QList<Plugin::WorkerClient::PageInfo> workerPages;
-    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
+    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+        MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
         return Okular::Document::OpenError;
+    }
 
     const auto openStatus = m_worker.openData(fileData, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)

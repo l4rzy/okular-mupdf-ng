@@ -4,7 +4,6 @@
 #include "generator/config/settings.hpp"
 
 #include <QDir>
-#include <QMimeDatabase>
 
 #include "mupdfngsettings.h"
 #include "plugin/caching/ocr_cache.hpp"
@@ -217,21 +216,6 @@ QString readCertificateDatabasePath(const QString& defaultPath)
 bool usesDefaultCertificateDatabase()
 {
     return MuPDFSettings::useDefaultCertDB();
-}
-
-Model::DocumentType documentTypeForFile(const QString& fileName)
-{
-    // MatchContent handles files whose extension is missing or misleading.
-    const auto mime = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase::MatchContent);
-    return documentTypeForMime(mime.name());
-}
-
-Model::DocumentType documentTypeForData(const QByteArray& data)
-{
-    // Content sniffing is the only available source of type information for
-    // documents opened from memory.
-    const auto mime = QMimeDatabase().mimeTypeForData(data);
-    return documentTypeForMime(mime.name());
 }
 
 } // namespace Mu::Generator::Config
