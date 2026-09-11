@@ -4,7 +4,7 @@
 #include <QTest>
 
 #include "plugin/ocr/controller.hpp"
-#include "plugin/ocr/scheduler.hpp"
+#include "plugin/ocr/policy.hpp"
 
 using Mu::Plugin::OCR::Controller;
 using Mu::Plugin::OCR::VisiblePage;

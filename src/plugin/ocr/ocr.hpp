@@ -11,5 +11,5 @@
 #include "plugin/ocr/config.hpp"
 #include "plugin/ocr/constants.hpp"
 #include "plugin/ocr/controller.hpp"
-#include "plugin/ocr/scheduler.hpp"
+#include "plugin/ocr/policy.hpp"
 #endif // MU_PLUGIN_OCR_OCR_HPP

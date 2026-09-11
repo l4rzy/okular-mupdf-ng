@@ -13,10 +13,16 @@ namespace Mu::Plugin::OCR {
 Controller::Controller(WorkerClient* backend, QObject* parent)
     : QObject(parent)
     , m_backend(backend)
+    , m_retry(Constant::MAX_ATTEMPTS)
 {
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(Constant::DEBOUNCE_MS);
     connect(&m_debounce, &QTimer::timeout, this, &Controller::settle);
+
+    m_retryTimer.setSingleShot(true);
+    m_retryTimer.setInterval(Constant::RETRY_MS);
+    connect(&m_retryTimer, &QTimer::timeout, this, &Controller::startNext);
+
     connect(m_backend, &WorkerClient::ocrDone, this, &Controller::finish);
     connect(&m_cacheWatcher,
             &QFutureWatcher<Caching::OCR::CacheLoadResult>::finished,
@@ -58,18 +64,8 @@ void Controller::observe(int page, Config config, std::optional<NativeTextObserv
                 return;
             const bool configChanged = (m_config != config);
             m_config = config;
-            if (configChanged) {
-                // A new document/configuration invalidates both queued work
-                // and results from an older asynchronous cache operation.
-                m_cacheWatcher.cancel();
-                m_pendingCache.reset();
-                m_queue.clear();
-                if (m_activeJob) {
-                    m_backend->cancelOcrJobs();
-                    m_activeJob.reset();
-                }
-                m_nativeTextBoxCounts.clear();
-            }
+            if (configChanged)
+                invalidate();
             if (nativeText && nativeText->page >= 0 && nativeText->page < config.pageCount)
                 m_nativeTextBoxCounts.insert(nativeText->page, nativeText->boxCount);
             // Apply the configured settle delay before (re)arming, only when it
@@ -77,7 +73,7 @@ void Controller::observe(int page, Config config, std::optional<NativeTextObserv
             // observations must not extend an in-flight debounce.
             if (m_debounce.interval() != config.debounceMs)
                 m_debounce.setInterval(config.debounceMs);
-            if (m_scheduler.observe(page, config.pageCount) || configChanged)
+            if (m_focus.noteFocus(page, config.pageCount) || configChanged)
                 m_debounce.start();
         },
         Qt::QueuedConnection);
@@ -99,18 +95,39 @@ void Controller::reset()
     // Reset is the document-lifecycle boundary. The future may finish later,
     // but its pending request is discarded before any result is consumed.
     ++m_generation;
-    m_cacheWatcher.cancel();
     m_debounce.stop();
-    m_scheduler.reset();
-    m_queue.clear();
-    m_activeJob.reset();
-    m_pendingCache.reset();
-    m_nativeTextBoxCounts.clear();
+    m_retryTimer.stop();
+    m_focus.reset();
     m_lastFocusPage = -1;
+    invalidate();
     {
         QMutexLocker locker(&m_readyMutex);
         m_readyResults.clear();
     }
+}
+
+void Controller::invalidate()
+{
+    // A new document/configuration invalidates queued work, retry state, and
+    // results from an older asynchronous cache operation.
+    m_cacheWatcher.cancel();
+    m_pendingCache.reset();
+    m_queue.clear();
+    m_retry.clear();
+    if (m_activeJob) {
+        m_backend->cancelOcrJobs();
+        m_activeJob.reset();
+    }
+    m_nativeTextBoxCounts.clear();
+}
+
+void Controller::deliver(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source)
+{
+    {
+        QMutexLocker locker(&m_readyMutex);
+        m_readyResults.insert(page, boxes);
+    }
+    Q_EMIT completed(page, std::move(boxes), source);
 }
 
 bool Controller::shouldRun(int page)
@@ -135,49 +152,41 @@ bool Controller::shouldRun(int page)
 
 void Controller::settle()
 {
-    // Replace stale prefetch work with the current focus window after the
-    // debounce period has confirmed that scrolling has settled.
-    const QList<int> pages = m_scheduler.settle();
-    if (pages.isEmpty())
+    // Rebuild the prefetch window after the debounce has confirmed that
+    // scrolling settled. Worker OCR is limited to the focus page; neighbours
+    // are queued so their caches can be probed cheaply.
+    const QList<int> candidates = m_focus.prefetchWindow();
+    if (candidates.isEmpty())
         return;
 
-    m_queue.clear();
-    for (int page : pages) {
+    QList<int> wanted;
+    for (int page : candidates) {
         if (shouldRun(page))
-            m_queue.append(page);
+            wanted.append(page);
     }
-    cancelObsoleteWork();
+    m_queue.refresh(m_focus.focus(), wanted, Constant::STALE_RADIUS, Constant::MAX_QUEUED_PAGES);
     startNext();
-}
-
-void Controller::cancelObsoleteWork()
-{
-    if (m_activeJob && m_scheduler.shouldCancelRunning(m_activeJob->page)) {
-        m_backend->cancelOcrJobs();
-        m_activeJob.reset();
-    }
-    if (m_activeJob)
-        m_queue.removeAll(m_activeJob->page);
-    if (m_pendingCache && !m_queue.contains(m_pendingCache->page)) {
-        // QtConcurrent cannot reliably stop filesystem work, so cancellation
-        // here means suppressing delivery and any subsequent OCR dispatch.
-        m_cacheWatcher.cancel();
-        m_pendingCache.reset();
-    }
 }
 
 void Controller::startNext()
 {
-    // At most one cache load or worker OCR job is active. This keeps ordering
-    // deterministic and prevents background prefetch from starving focus.
-    if (m_activeJob || m_pendingCache || m_cacheWatcher.isRunning() || m_queue.isEmpty())
+    // One operation at a time keeps ordering deterministic and, because worker
+    // OCR cannot be interrupted, prevents a stale page from holding the worker.
+    if (m_activeJob || m_pendingCache || m_cacheWatcher.isRunning())
         return;
+
+    const auto page = m_queue.takeNext(m_focus.focus(), Constant::STALE_RADIUS);
+    if (!page)
+        return;
+
     const auto key = Caching::OCR::Cache::normalizeKey(m_config.documentHash, m_config.language, m_config.dpi);
-    if (!key)
+    if (!key) {
+        m_queue.pushFront(*page, m_focus.focus(), Constant::STALE_RADIUS);
         return;
-    const int page = m_queue.takeFirst();
-    m_pendingCache = PendingCache { page, *key };
-    m_cacheWatcher.setFuture(QtConcurrent::run([page, key = *key] { return Caching::OCR::Cache::load(key, page); }));
+    }
+    m_pendingCache = PendingCache { *page, *key };
+    m_cacheWatcher.setFuture(
+        QtConcurrent::run([page = *page, key = *key] { return Caching::OCR::Cache::load(key, page); }));
 }
 
 void Controller::cacheLoadFinished()
@@ -194,22 +203,28 @@ void Controller::cacheLoadFinished()
     m_pendingCache.reset();
     const auto cached = m_cacheWatcher.result();
     if (cached.present) {
-        {
-            QMutexLocker locker(&m_readyMutex);
-            m_readyResults.insert(pending.page, cached.items);
-        }
-        Q_EMIT completed(pending.page, cached.items, CompletionSource::CacheLoaded);
+        m_retry.clear(pending.page);
+        deliver(pending.page, cached.items, CompletionSource::CacheLoaded);
         startNext();
         return;
     }
 
-    const auto job = m_backend->startOcrPage(pending.page, pending.key.language, pending.key.dpi);
-    if (!job) {
-        MU_LOG(warning, "Mu::Plugin::OCR", "failed to dispatch OCR job; waiting for a later observation");
+    // A cache miss only justifies worker OCR for the current focus page. A
+    // prefetched neighbour is dropped and reconsidered if the user moves there.
+    if (pending.page != m_focus.focus()) {
+        startNext();
         return;
     }
-    m_activeJob = ActiveJob { *job, pending.page, pending.key };
-    Q_EMIT started(pending.page);
+
+    if (const auto job = m_backend->startOcrPage(pending.page, pending.key.language, pending.key.dpi)) {
+        m_activeJob = ActiveJob { *job, pending.page, pending.key };
+        Q_EMIT started(pending.page);
+        return;
+    }
+
+    // The worker did not accept the job; retry on a later timer while the page
+    // is still the focus, otherwise report the failure.
+    handleFailure(pending.page);
 }
 
 void Controller::finish(quint64 jobId, int page)
@@ -220,21 +235,29 @@ void Controller::finish(quint64 jobId, int page)
     const ActiveJob active = std::move(*m_activeJob);
     m_activeJob.reset();
     const auto result = m_backend->ocrResult(jobId);
-    if (result.status == Model::OcrStatus::Success) {
-        QVector<Caching::OCR::CacheItem> boxes = Caching::OCR::Cache::convertToCacheItems(result.boxes);
-        Caching::OCR::Cache::save(active.cacheKey, page, boxes);
-        {
-            QMutexLocker locker(&m_readyMutex);
-            m_readyResults.insert(page, boxes);
-        }
-        Q_EMIT completed(page, std::move(boxes), CompletionSource::OcrCompleted);
-    } else {
-        MU_LOG(warning,
-               "Mu::Plugin::OCR",
-               "OCR job failed for page " + std::to_string(page)
-                   + " status=" + std::to_string(static_cast<int>(result.status)));
+    if (result.status != Model::OcrStatus::Success) {
+        handleFailure(page);
+        return;
     }
+
+    m_retry.clear(page);
+    QVector<Caching::OCR::CacheItem> boxes = Caching::OCR::Cache::convertToCacheItems(result.boxes);
+    Caching::OCR::Cache::save(active.cacheKey, page, boxes);
+    deliver(page, std::move(boxes), CompletionSource::OcrCompleted);
     startNext();
+}
+
+void Controller::handleFailure(int page)
+{
+    if (m_retry.onFailure(page)) {
+        m_queue.pushFront(page, m_focus.focus(), Constant::STALE_RADIUS);
+        m_retryTimer.start();
+        return;
+    }
+
+    m_retry.clear(page);
+    MU_LOG(warning, "Mu::Plugin::OCR", "OCR failed repeatedly for page " + std::to_string(page));
+    Q_EMIT failed(page);
 }
 
 } // namespace Mu::Plugin::OCR

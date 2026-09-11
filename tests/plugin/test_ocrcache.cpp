@@ -13,7 +13,7 @@
 #include "plugin/caching/ocr_cache.hpp"
 #include "plugin/caching/ocr_constants.hpp"
 #include "plugin/ocr/constants.hpp"
-#include "plugin/ocr/scheduler.hpp"
+#include "plugin/ocr/policy.hpp"
 
 class TestOCRCache : public QObject {
     Q_OBJECT
@@ -250,47 +250,91 @@ private slots:
         QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("deu"), 150).present);
     }
 
-    void schedulerUsesSettledPageAndDirection()
+    void focusPolicyTracksDirectionAndWindow()
     {
-        ::Mu::Plugin::OCR::Scheduler scheduler;
-        QVERIFY(scheduler.observe(10, 100));
-        QVERIFY(!scheduler.observe(10, 100));
-        QVERIFY(scheduler.observe(52, 100));
-        QCOMPARE(scheduler.settle(), QList<int>({ 52, 53, 51 }));
+        ::Mu::Plugin::OCR::FocusPolicy focus;
+        QVERIFY(focus.noteFocus(10, 100));
+        QVERIFY(!focus.noteFocus(10, 100));
+        QCOMPARE(focus.prefetchWindow(), QList<int>({ 10, 11, 9 }));
 
-        scheduler.observe(10, 100);
-        QCOMPARE(scheduler.settle(), QList<int>({ 10, 9, 11 }));
+        QVERIFY(focus.noteFocus(52, 100));
+        QCOMPARE(focus.prefetchWindow(), QList<int>({ 52, 53, 51 }));
+
+        QVERIFY(focus.noteFocus(10, 100));
+        QCOMPARE(focus.prefetchWindow(), QList<int>({ 10, 9, 11 }));
     }
 
-    void schedulerHandlesDocumentEdges()
+    void focusPolicyHandlesDocumentEdges()
     {
-        ::Mu::Plugin::OCR::Scheduler scheduler;
-        scheduler.observe(0, 2);
-        QCOMPARE(scheduler.settle(), QList<int>({ 0, 1 }));
-        scheduler.observe(1, 2);
-        QCOMPARE(scheduler.settle(), QList<int>({ 1, 0 }));
+        ::Mu::Plugin::OCR::FocusPolicy focus;
+        focus.noteFocus(0, 2);
+        QCOMPARE(focus.prefetchWindow(), QList<int>({ 0, 1 }));
+        focus.noteFocus(1, 2);
+        QCOMPARE(focus.prefetchWindow(), QList<int>({ 1, 0 }));
 
-        scheduler.reset();
-        scheduler.observe(0, 1);
-        QCOMPARE(scheduler.settle(), QList<int>({ 0 }));
+        focus.reset();
+        focus.noteFocus(0, 1);
+        QCOMPARE(focus.prefetchWindow(), QList<int>({ 0 }));
     }
 
-    void schedulerDebouncesRapidScrollingAndCancelsOldWork()
+    void pageQueuePrioritizesByFocusAndEvictsStale()
     {
-        ::Mu::Plugin::OCR::Scheduler scheduler;
-        scheduler.observe(10, 100);
-        QCOMPARE(scheduler.settle(), QList<int>({ 10, 11, 9 }));
+        ::Mu::Plugin::OCR::PageQueue queue;
+        queue.refresh(50, { 50, 51, 49 }, 2, 5);
+        QCOMPARE(queue.pages(), QList<int>({ 50, 51, 49 }));
 
-        // No work is scheduled while the view is still moving.  This models
-        // the controller's debounce timer receiving a rapid stream of pages.
-        for (int i = 0; i < 1000; ++i)
-            QVERIFY(scheduler.observe(11 + i % 41, 100));
-        QVERIFY(scheduler.observe(52, 100));
+        // A far jump discards queued work that is now outside the radius.
+        queue.refresh(55, { 55, 56, 54 }, 2, 5);
+        QCOMPARE(queue.pages(), QList<int>({ 55, 56, 54 }));
+        QVERIFY(!queue.contains(50));
+        QVERIFY(queue.contains(54));
+        QVERIFY(queue.contains(56));
+    }
 
-        const auto pages = scheduler.settle();
-        QCOMPARE(pages, QList<int>({ 52, 53, 51 }));
-        QVERIFY(scheduler.shouldCancelRunning(10));
-        QVERIFY(!scheduler.shouldCancelRunning(52));
+    void pageQueueTakeNextRevalidatesAgainstFocus()
+    {
+        ::Mu::Plugin::OCR::PageQueue queue;
+        queue.refresh(10, { 10, 11, 9 }, 2, 5);
+
+        // Focus moved far away before dispatch: the stale head is dropped.
+        QVERIFY(!queue.takeNext(30, 2).has_value());
+        QVERIFY(queue.isEmpty());
+
+        queue.refresh(30, { 30, 31, 29 }, 2, 5);
+        const auto next = queue.takeNext(30, 2);
+        QVERIFY(next.has_value());
+        QCOMPARE(*next, 30);
+        QCOMPARE(queue.pages(), QList<int>({ 31, 29 }));
+    }
+
+    void pageQueuePushFrontKeepsRetry()
+    {
+        ::Mu::Plugin::OCR::PageQueue queue;
+        queue.refresh(40, { 40, 41, 39 }, 2, 5);
+        const auto next = queue.takeNext(40, 2);
+        QVERIFY(next.has_value());
+        QCOMPARE(*next, 40);
+
+        queue.pushFront(40, 40, 2);
+        QCOMPARE(queue.pages().constFirst(), 40);
+
+        // A retried page outside the window is not resurrected.
+        queue.pushFront(99, 40, 2);
+        QVERIFY(!queue.contains(99));
+    }
+
+    void retryPolicyBoundsAttempts()
+    {
+        ::Mu::Plugin::OCR::RetryPolicy retry(3);
+        QVERIFY(!retry.exhausted(7));
+        QVERIFY(retry.onFailure(7));
+        QVERIFY(retry.onFailure(7));
+        QVERIFY(!retry.onFailure(7));
+        QVERIFY(retry.exhausted(7));
+
+        retry.clear(7);
+        QVERIFY(!retry.exhausted(7));
+        QVERIFY(retry.onFailure(7));
     }
 
     void dominantPageUsesVisibleArea()

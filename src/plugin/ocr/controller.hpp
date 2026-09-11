@@ -16,7 +16,7 @@
 
 #include "plugin/caching/ocr_cache.hpp"
 #include "plugin/ocr/config.hpp"
-#include "plugin/ocr/scheduler.hpp"
+#include "plugin/ocr/policy.hpp"
 #include "plugin/worker_client.hpp"
 
 namespace Mu::Plugin::OCR {
@@ -26,6 +26,10 @@ struct NativeTextObservation {
     std::size_t boxCount = 0;
 };
 
+// Owns the OCR scheduling state for one document. Worker OCR is dispatched
+// only for the settled focus page: a worker job cannot be interrupted, so a
+// page the user has left must never be allowed to occupy the single worker
+// slot. Neighbouring pages are cache-probed only.
 class Controller final : public QObject {
     Q_OBJECT
 
@@ -51,16 +55,24 @@ public:
 signals:
     void started(int page);
     void completed(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source);
+    // Emitted after a page exhausts its retries so the UI can report the
+    // failure instead of leaving an unexplained empty selection.
+    void failed(int page);
 
 private:
     // Scheduling, cache loading, and worker calls all run on this QObject's
     // thread. The future only performs filesystem/decompression work off it.
     bool shouldRun(int page);
     void settle();
-    void cancelObsoleteWork();
     void startNext();
     void cacheLoadFinished();
     void finish(quint64 jobId, int page);
+    void handleFailure(int page);
+    // Drops queued, pending, retry, and in-flight work when the document or
+    // configuration changes.
+    void invalidate();
+    // Retains a result for takeReady() and announces it.
+    void deliver(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source);
 
     struct ActiveJob {
         quint64 jobId = 0;
@@ -68,7 +80,6 @@ private:
         Caching::OCR::CacheKey cacheKey;
     };
 
-    // Reset invalidates queued observations and all in-flight document work.
     struct PendingCache {
         int page = -1;
         Caching::OCR::CacheKey key;
@@ -76,10 +87,12 @@ private:
 
     WorkerClient* m_backend;
     QTimer m_debounce;
+    QTimer m_retryTimer;
     QFutureWatcher<Caching::OCR::CacheLoadResult> m_cacheWatcher;
-    Scheduler m_scheduler;
+    FocusPolicy m_focus;
+    PageQueue m_queue;
+    RetryPolicy m_retry;
     Config m_config;
-    QList<int> m_queue;
     std::optional<ActiveJob> m_activeJob;
     std::optional<PendingCache> m_pendingCache;
     // Native text counts are enough for OCR threshold decisions. The cache is

@@ -215,16 +215,18 @@ Main::Main(QObject* parent, const QVariantList& args)
                 for (const auto& box : boxes)
                     textPage->append(box.ch, Okular::NormalizedRect(box.l, box.t, box.r, box.b));
                 Q_EMIT signalTextGenerationDone(m_okularPages.at(page), textPage);
-                if (Config::readOcrSettings().notify) {
-                    const QString message = source == Plugin::OCR::Controller::CompletionSource::CacheLoaded
-                        ? i18n("OCR cache loaded for page %1", page + 1)
-                        : i18n("OCR complete for page %1", page + 1);
-                    Q_EMIT notice(message, 1500);
+                if (Config::readOcrSettings().notify
+                    && source == Plugin::OCR::Controller::CompletionSource::OcrCompleted) {
+                    Q_EMIT notice(i18n("OCR complete for page %1", page + 1), 1500);
                 }
             });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::started, this, [this](int page) {
         if (Config::readOcrSettings().notify)
             Q_EMIT notice(i18n("Running OCR on page %1...", page + 1), 2000);
+    });
+    connect(m_ocrController.get(), &Plugin::OCR::Controller::failed, this, [this](int page) {
+        MU_LOG(warning, "Mu::Generator::Main", std::string("OCR failed for page ") + std::to_string(page + 1));
+        Q_EMIT warning(i18n("OCR failed for page %1", page + 1), 5000);
     });
 }
 
