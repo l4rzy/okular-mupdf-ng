@@ -415,27 +415,25 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
                                                        int outputFd,
                                                        int inputFd)
 {
-    // Both descriptors are consumed on every path: ExportJobs::submit closes
-    // them on rejection, and a started job transfers them to the engine.
-    if (!hasOpenDocument()) {
-        ::close(outputFd);
-        ::close(inputFd);
+    // Own both descriptors for every early return; ownership transfers only when
+    // ExportJobs::submit adopts them. This keeps the eventfd-rejection path below
+    // from stranding the descriptors queued by the plugin.
+    Sys::FileDescriptor output(outputFd);
+    Sys::FileDescriptor input(inputFd);
+
+    if (!hasOpenDocument())
         return failure(r.id, ErrorCode::NotOpen, "export_pdf_async", "no document is open");
-    }
     // The background job re-opens the source file with the session's fixed
     // EPUB settings, which reproduce the live document's layout exactly.
-    if (!dynamic_cast<Engine::EpubDocument*>(m_document.get())) {
-        ::close(outputFd);
-        ::close(inputFd);
+    if (!dynamic_cast<Engine::EpubDocument*>(m_document.get()))
         return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an EPUB document");
-    }
 
     // A dead completion eventfd would strand the job silently, so reject the
     // request with an accurate diagnostic instead of the busy-slot message.
     if (m_exportJobs.eventFd() < 0)
         return failure(r.id, ErrorCode::Internal, "export_pdf_async", "export completion channel is unavailable");
 
-    auto job = m_exportJobs.submit(inputFd, outputFd, m_settings, payload.pages);
+    auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages);
     if (!job)
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
     return success(r.id, JobResponse { *job });

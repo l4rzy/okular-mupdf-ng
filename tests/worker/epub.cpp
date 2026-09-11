@@ -785,6 +785,32 @@ private slots:
         file.close();
     }
 
+    void testExportPdfAsyncRejectionClosesDescriptors()
+    {
+        // Every rejection path in exportPdfAsyncResponse must consume both
+        // offered descriptors; the eventfd-rejection branch previously leaked
+        // them when a dead completion channel was reported.
+        ::Mu::Worker::Runtime::CommandService service({ });
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const int outFd = ::open(
+            directory.filePath(QStringLiteral("rejected.pdf")).toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outFd >= 0);
+        const int inFd = ::open("/dev/null", O_RDONLY);
+        QVERIFY(inFd >= 0);
+
+        const auto response =
+            service.exportPdfAsyncResponse({ 1, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } } },
+                                           ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } },
+                                           outFd,
+                                           inFd);
+        QVERIFY2(response.error, "export without a document must be rejected");
+
+        QVERIFY(::fcntl(outFd, F_GETFD) == -1 && errno == EBADF);
+        QVERIFY(::fcntl(inFd, F_GETFD) == -1 && errno == EBADF);
+    }
+
     void testExportJobsBackgroundCompletion()
     {
         ::Mu::Worker::Engine::ExportJobs jobs;
