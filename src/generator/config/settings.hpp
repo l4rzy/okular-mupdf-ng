@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <string_view>
 
 #include "plugin/ocr/config.hpp"
 #include "shared/model/types.hpp"
@@ -39,9 +38,6 @@ struct EpubSettings {
 
     bool operator==(const EpubSettings& other) const = default;
 };
-
-/// Sentinel shown in the OCR language dropdown when no traineddata models exist.
-inline constexpr std::string_view NoOcrModel = "-";
 
 /// OCR policy read from the generator settings page.
 struct OcrSettings {
@@ -144,6 +140,17 @@ void reloadSettings();
 EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();
+/// Lists usable Tesseract language models (*.traineddata in the given
+/// directories, excluding the non-language equ/osd data files) as a deduplicated,
+/// name-sorted union. Missing directories contribute nothing.
+QStringList installedOcrModels(const QStringList& directories);
+/// The same union for the effective configuration: the built-in tessdata
+/// directory plus the configured extra TessDataDirectories.
+QStringList installedOcrModels();
+/// Picks the effective OCR model from a usable list: empty stays off ("-"), a
+/// single model wins whatever its language, several prefer "eng.traineddata"
+/// and stay off when no English model exists.
+QString autoSelectOcrModel(const QStringList& usableFiles);
 SandboxEnforcement readSandboxEnforcement();
 bool readDegradedSandboxNotificationEnabled();
 QStringList readTessDataDirectories();

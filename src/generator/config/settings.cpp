@@ -5,6 +5,8 @@
 
 #include <QDir>
 
+#include <algorithm>
+
 #include "mupdfngsettings.h"
 #include "plugin/caching/ocr_cache.hpp"
 
@@ -148,7 +150,12 @@ OcrSettings readOcrSettings()
     // that is not a model filename is malformed (only hand-edited config can
     // reach it) and must not silently flip OCR to English: degrade to off.
     OcrSettings settings;
-    const QString language = MuPDFSettings::ocrLanguage();
+    QString language = MuPDFSettings::ocrLanguage();
+    // An unset language follows the installed models, including the configured
+    // extra tessdata directories: a usable model enables OCR without requiring
+    // a settings visit first.
+    if (language.isEmpty() || language == QStringLiteral("-"))
+        language = autoSelectOcrModel(installedOcrModels());
     if (language == QStringLiteral("-") || language.isEmpty() || !language.endsWith(QStringLiteral(".traineddata"))) {
         settings.language = QStringLiteral("-");
         settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFSettings::ocrQuality()));
@@ -187,6 +194,46 @@ QStringList readTessDataDirectories()
 {
     // Apply the same path filtering used by the worker sandbox setup.
     return normalizeTessDataDirectories(MuPDFSettings::tessDataDirectories());
+}
+
+QStringList installedOcrModels(const QStringList& directories)
+{
+    // Only language models are selectable: equ/osd are Tesseract support
+    // files, not OCR languages. A model present in several directories is
+    // listed once so single-model detection stays exact.
+    QStringList models;
+    for (const QString& directory : directories) {
+        QDir dir(directory);
+        const QStringList files = dir.entryList({ QStringLiteral("*.traineddata") }, QDir::Files, QDir::Name);
+        for (const QString& file : files) {
+            if (file == QStringLiteral("equ.traineddata") || file == QStringLiteral("osd.traineddata"))
+                continue;
+            if (!models.contains(file))
+                models.append(file);
+        }
+    }
+    std::sort(models.begin(), models.end());
+    return models;
+}
+
+QStringList installedOcrModels()
+{
+    QStringList directories { QStringLiteral(TESSDATA_DIR) };
+    directories.append(readTessDataDirectories());
+    return installedOcrModels(directories);
+}
+
+QString autoSelectOcrModel(const QStringList& usableFiles)
+{
+    if (usableFiles.isEmpty())
+        return QStringLiteral("-");
+    if (usableFiles.size() == 1)
+        return usableFiles.constFirst();
+    // With several models installed, English is the default; a non-English
+    // setup stays off rather than guessing a language for the user.
+    if (usableFiles.contains(QStringLiteral("eng.traineddata")))
+        return QStringLiteral("eng.traineddata");
+    return QStringLiteral("-");
 }
 
 QStringList normalizeTessDataDirectories(const QStringList& directories)

@@ -4,10 +4,11 @@
 #include "generator/config/settingswidget.hpp"
 
 #include <KLocalizedString>
-#include <QDir>
+#include <QTimer>
 
 #include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/certmanager/manager_dialog.hpp"
+#include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "ui_settingswidget.h"
@@ -88,26 +89,29 @@ MuPDFSettingsWidget::MuPDFSettingsWidget(QWidget* parent)
     ocrLang->setEditable(false);
     ocrLang->setProperty("kcfg_property", QByteArrayLiteral("currentText"));
 
-    const QString tessDir = QStringLiteral(TESSDATA_DIR);
-    QDir dir(tessDir);
-    const QStringList files = dir.entryList({ QStringLiteral("*.traineddata") }, QDir::Files, QDir::Name);
+    const QStringList models = Config::installedOcrModels();
 
-    if (!files.isEmpty()) {
-        // Keep the "-" no-OCR sentinel selectable whenever models exist; the
-        // stored default is "-", so without this entry the combo would display
-        // the first model and persist it on dialog accept, silently enabling OCR.
-        ocrLang->addItem(QStringLiteral("-"), QStringLiteral("-"));
-        for (const QString& file : files) {
-            if (file == QStringLiteral("equ.traineddata") || file == QStringLiteral("osd.traineddata")) {
-                continue;
-            }
-            ocrLang->addItem(file, file);
-        }
-    } else {
-        // No models installed: show an honest placeholder instead of a phantom default.
-        ocrLang->addItem(QStringLiteral("-"), QStringLiteral("-"));
-    }
+    // Keep the "-" no-OCR sentinel selectable whenever models exist; the
+    // stored default is "-", so without this entry the combo would display
+    // the first model and persist it on dialog accept, silently enabling OCR.
+    ocrLang->addItem(QStringLiteral("-"), QStringLiteral("-"));
+    for (const QString& file : models)
+        ocrLang->addItem(file, file);
 
+    // Preselect an installed model when nothing usable is stored yet. KConfigXT
+    // applies the stored value during dialog setup after this constructor, so
+    // the selection is deferred to the event loop to survive that load. This
+    // only changes the display: Cancel still writes nothing, Accept persists
+    // the visible choice through the existing currentText binding.
+    QTimer::singleShot(0, this, [this, models] {
+        auto* ocrLang = m_mupdfsw->kcfg_OcrLanguage;
+        const QString stored = MuPDFSettings::ocrLanguage();
+        if (!stored.isEmpty() && stored != QStringLiteral("-") && ocrLang->findData(stored) >= 0)
+            return;
+        const int index = ocrLang->findData(Config::autoSelectOcrModel(models));
+        if (index >= 0)
+            ocrLang->setCurrentIndex(index);
+    });
     auto* ocrQuality = m_mupdfsw->kcfg_OcrQuality;
     ocrQuality->clear();
     ocrQuality->addItem(i18n("Speed (150dpi)"), MuPDFSettings::EnumOcrQuality::Speed);

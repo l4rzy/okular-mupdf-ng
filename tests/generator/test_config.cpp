@@ -3,6 +3,9 @@
 
 #include <QTest>
 
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <array>
 #include <string_view>
 
@@ -147,9 +150,65 @@ private slots:
         MuPDFSettings::setOcrLanguage(originalLanguage);
         MuPDFSettings::setOcrTriggerMode(originalTriggerMode);
 
-        QCOMPARE(settings.language, QStringLiteral("-"));
-        QVERIFY(!settings.force);
-        QVERIFY(!settings.autoTrigger);
+        // An unset language follows the installed models, so either nothing
+        // usable exists and OCR stays off, or a model was auto-picked (stored
+        // stripped of its .traineddata suffix) and the trigger mode applies.
+        if (settings.language == QStringLiteral("-")) {
+            QVERIFY(!settings.force);
+            QVERIFY(!settings.autoTrigger);
+        } else {
+            QVERIFY(settings.force);
+            QVERIFY(!settings.language.isEmpty());
+        }
+    }
+
+    void selectsInstalledOcrModel()
+    {
+        using ::Mu::Generator::Config::autoSelectOcrModel;
+
+        QCOMPARE(autoSelectOcrModel({ }), QStringLiteral("-"));
+        QCOMPARE(autoSelectOcrModel({ QStringLiteral("deu.traineddata") }), QStringLiteral("deu.traineddata"));
+        QCOMPARE(autoSelectOcrModel({ QStringLiteral("eng.traineddata") }), QStringLiteral("eng.traineddata"));
+        QCOMPARE(autoSelectOcrModel({ QStringLiteral("fra.traineddata"),
+                                      QStringLiteral("eng.traineddata"),
+                                      QStringLiteral("deu.traineddata") }),
+                 QStringLiteral("eng.traineddata"));
+        QCOMPARE(autoSelectOcrModel({ QStringLiteral("deu.traineddata"), QStringLiteral("fra.traineddata") }),
+                 QStringLiteral("-"));
+    }
+
+    void listsInstalledOcrModels()
+    {
+        QTemporaryDir first;
+        QTemporaryDir second;
+        QVERIFY(first.isValid());
+        QVERIFY(second.isValid());
+        for (const QString& file : { QStringLiteral("eng.traineddata"),
+                                     QStringLiteral("deu.traineddata"),
+                                     QStringLiteral("equ.traineddata"),
+                                     QStringLiteral("readme.txt") }) {
+            QFile entry(first.filePath(file));
+            QVERIFY(entry.open(QIODevice::WriteOnly));
+        }
+        for (const QString& file : { QStringLiteral("deu.traineddata"),
+                                     QStringLiteral("fra.traineddata"),
+                                     QStringLiteral("osd.traineddata") }) {
+            QFile entry(second.filePath(file));
+            QVERIFY(entry.open(QIODevice::WriteOnly));
+        }
+        QVERIFY(QDir(first.path()).mkdir(QStringLiteral("sub")));
+        QFile nested(first.filePath(QStringLiteral("sub/ita.traineddata")));
+        QVERIFY(nested.open(QIODevice::WriteOnly));
+
+        // Directories merge into one deduplicated, name-sorted list; support
+        // files, notes, nested directories, and missing directories contribute
+        // nothing.
+        QCOMPARE(::Mu::Generator::Config::installedOcrModels({ first.path(), second.path() }),
+                 QStringList({ QStringLiteral("deu.traineddata"),
+                               QStringLiteral("eng.traineddata"),
+                               QStringLiteral("fra.traineddata") }));
+        QCOMPARE(::Mu::Generator::Config::installedOcrModels({ first.filePath(QStringLiteral("missing")) }),
+                 QStringList());
     }
 
     void disablesOcrWhenLanguageIsNotAModelFilename()

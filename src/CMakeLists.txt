@@ -207,6 +207,7 @@ set_target_properties(mupdf_generator_settings PROPERTIES POSITION_INDEPENDENT_C
 if(MU_DEBUG_BUILD)
     target_compile_definitions(mupdf_generator_settings PRIVATE MU_DEBUG_ENABLED)
 endif()
+target_compile_definitions(mupdf_generator_settings PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
 target_include_directories(mupdf_generator_settings PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
