@@ -4,6 +4,7 @@
 #include "engine/ocr/jobs.hpp"
 
 #include <chrono>
+#include <exception>
 
 #include "engine/ocr/ocr.hpp"
 #include "shared/logging.hpp"
@@ -50,7 +51,10 @@ int OcrJobs::eventFd() const noexcept
 std::optional<std::uint64_t>
 OcrJobs::submit(int inputFd, std::string password, int page, std::string language, float dpi)
 {
-    if (inputFd < 0)
+    // Owns the descriptor on every return/throw path; ownership transfers to the
+    // worker thread only once it has started.
+    Sys::FileDescriptor ownedInput(inputFd);
+    if (!ownedInput)
         return std::nullopt;
 
     std::uint64_t id = 0;
@@ -58,7 +62,6 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
     {
         std::lock_guard lock(m_state->mutex);
         if (m_state->event.get() < 0 || m_state->activeJobs.size() + m_state->completedResults.size() >= m_limit) {
-            ::close(inputFd);
             return std::nullopt;
         }
 
@@ -68,61 +71,77 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
     }
 
     auto state = m_state;
-    std::thread([state,
-                 cookie,
-                 id,
-                 page,
-                 inputFd,
-                 password = std::move(password),
-                 language = std::move(language),
-                 dpi]() mutable {
-        // Transition to Running if not cancelled before thread startup
-        {
-            std::lock_guard lock(state->mutex);
-            auto it = state->activeJobs.find(id);
-            if (it == state->activeJobs.end() || it->second.status == JobStatus::Cancelled || cookie->isCancelled()) {
-                if (it != state->activeJobs.end())
-                    state->activeJobs.erase(it);
-                ::close(inputFd);
-                return;
+    std::thread worker;
+    try {
+        worker = std::thread([state,
+                              cookie,
+                              id,
+                              page,
+                              inputFd = ownedInput.get(),
+                              password = std::move(password),
+                              language = std::move(language),
+                              dpi]() mutable {
+            // Transition to Running if not cancelled before thread startup
+            {
+                std::lock_guard lock(state->mutex);
+                auto it = state->activeJobs.find(id);
+                if (it == state->activeJobs.end() || it->second.status == JobStatus::Cancelled
+                    || cookie->isCancelled()) {
+                    if (it != state->activeJobs.end())
+                        state->activeJobs.erase(it);
+                    ::close(inputFd);
+                    return;
+                }
+                it->second.status = JobStatus::Running;
             }
-            it->second.status = JobStatus::Running;
-        }
 
-        // 60-second watchdog timer: bounds OCR work even when a malformed page
-        // makes MuPDF/Tesseract spend unusually long in a device callback.
-        std::jthread deadline([cookie](std::stop_token watchdogStop) {
-            for (int tick = 0; tick < 600 && !watchdogStop.stop_requested(); ++tick)
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            if (!watchdogStop.stop_requested())
-                cookie->cancel();
-        });
+            // 60-second watchdog timer: bounds OCR work even when a malformed
+            // page makes MuPDF/Tesseract spend unusually long in a device
+            // callback.
+            std::jthread deadline([cookie](std::stop_token watchdogStop) {
+                for (int tick = 0; tick < 600 && !watchdogStop.stop_requested(); ++tick)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if (!watchdogStop.stop_requested())
+                    cookie->cancel();
+            });
 
-        // Run isolated synchronous OCR page recognition (adopts and closes inputFd)
-        auto result = runOcr(inputFd, password, page, language, dpi, cookie.get());
-        deadline.request_stop();
+            // Run isolated synchronous OCR page recognition (adopts and closes
+            // inputFd)
+            auto result = runOcr(inputFd, password, page, language, dpi, cookie.get());
+            deadline.request_stop();
 
-        // Atomically remove the active entry, store a non-cancelled result, and
-        // queue its eventfd notification under the same mutex.
-        {
-            std::lock_guard lock(state->mutex);
-            auto it = state->activeJobs.find(id);
-            if (it != state->activeJobs.end()) {
-                const bool cancelled = it->second.status == JobStatus::Cancelled || cookie->isCancelled()
-                    || result.status == Model::OcrStatus::Cancelled;
-                const int completedPage = it->second.page;
-                state->activeJobs.erase(it);
-                if (!cancelled) {
-                    state->completedResults.emplace(id, std::move(result));
-                    state->notifications.push_back({ id, completedPage });
-                    if (state->event.get() >= 0) {
-                        (void)::eventfd_write(state->event.get(), 1);
+            // Atomically remove the active entry, store a non-cancelled result,
+            // and queue its eventfd notification under the same mutex.
+            {
+                std::lock_guard lock(state->mutex);
+                auto it = state->activeJobs.find(id);
+                if (it != state->activeJobs.end()) {
+                    const bool cancelled = it->second.status == JobStatus::Cancelled || cookie->isCancelled()
+                        || result.status == Model::OcrStatus::Cancelled;
+                    const int completedPage = it->second.page;
+                    state->activeJobs.erase(it);
+                    if (!cancelled) {
+                        state->completedResults.emplace(id, std::move(result));
+                        state->notifications.push_back({ id, completedPage });
+                        if (state->event.get() >= 0) {
+                            (void)::eventfd_write(state->event.get(), 1);
+                        }
                     }
                 }
             }
-        }
-    }).detach();
+        });
+    } catch (const std::exception& e) {
+        // Thread creation failed before the job ran: release the reserved slot
+        // and let the RAII owner close the input descriptor.
+        MU_LOG(warning, "Mu::Worker::Ocr", std::string("could not start OCR thread: ") + e.what());
+        std::lock_guard lock(m_state->mutex);
+        m_state->activeJobs.erase(id);
+        return std::nullopt;
+    }
+    worker.detach();
 
+    // The running thread now owns the input descriptor.
+    (void)ownedInput.release();
     return id;
 }
 
