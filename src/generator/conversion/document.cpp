@@ -60,7 +60,26 @@ std::unique_ptr<Okular::EmbeddedFile> embeddedFile(const Model::EmbeddedFile& fi
                                                  toBytes(file.data));
 }
 
-namespace {
+bool isAllowedExternalUri(const QString& uri)
+{
+    // Worker URIs are verbatim document content: MuPDF marks anything with a
+    // `scheme:` prefix external, including javascript:/data:/file:. Only
+    // scheme-less (relative, cannot invoke a handler) and explicitly
+    // allow-listed schemes reach Okular. QUrl lowercases schemes, so
+    // JAVASCRIPT: variants are covered; trim first so leading whitespace
+    // cannot smuggle a scheme past the check.
+    const QString trimmed = uri.trimmed();
+    if (trimmed.isEmpty())
+        return false;
+    const QUrl url(trimmed);
+    if (!url.isValid())
+        return false;
+    if (url.isRelative())
+        return true;
+    const QString scheme = url.scheme().toLower();
+    return scheme == QStringLiteral("http") || scheme == QStringLiteral("https") || scheme == QStringLiteral("mailto")
+        || scheme == QStringLiteral("ftp") || scheme == QStringLiteral("ftps");
+}
 
 Okular::DocumentViewport viewportFromModel(const Model::Viewport& modelViewport)
 {
@@ -77,7 +96,7 @@ Okular::DocumentViewport viewportFromModel(const Model::Viewport& modelViewport)
 Okular::ObjectRect* objectRect(const Model::Link& link)
 {
     std::unique_ptr<Okular::Action> action;
-    if (link.target.external) {
+    if (link.target.external && isAllowedExternalUri(QString::fromStdString(link.target.uri))) {
         action = std::make_unique<Okular::BrowseAction>(QUrl(QString::fromStdString(link.target.uri)));
     } else if (link.target.valid && link.target.viewport.page >= 0) {
         action = std::make_unique<Okular::GotoAction>(QString(), viewportFromModel(link.target.viewport));
@@ -87,8 +106,6 @@ Okular::ObjectRect* objectRect(const Model::Link& link)
     return new Okular::ObjectRect(
         link.left, link.top, link.right, link.bottom, false, Okular::ObjectRect::Action, action.release());
 }
-
-} // namespace
 
 QList<Okular::ObjectRect*> objectRects(const std::vector<Model::Link>& links)
 {
@@ -119,7 +136,9 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
                 element.setAttribute(QStringLiteral("Open"), QStringLiteral("true"));
             if (node.link.valid) {
                 if (node.link.external) {
-                    element.setAttribute(QStringLiteral("URL"), QString::fromStdString(node.link.uri));
+                    const QString uri = QString::fromStdString(node.link.uri);
+                    if (isAllowedExternalUri(uri))
+                        element.setAttribute(QStringLiteral("URL"), uri);
                 } else {
                     element.setAttribute(QStringLiteral("Viewport"), viewportFromModel(node.link.viewport).toString());
                 }
