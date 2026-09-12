@@ -41,7 +41,6 @@ jobs:
             kf6-kcoreaddons-devel \
             kf6-ki18n-devel \
             kf6-kio-devel \
-            leptonica-devel \
             libjpeg-turbo-devel \
             libseccomp-devel \
             make \

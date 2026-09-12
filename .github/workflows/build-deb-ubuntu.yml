@@ -32,7 +32,6 @@ jobs:
             libharfbuzz-dev \
             libjbig2dec0-dev \
             libjpeg-dev \
-            libleptonica-dev \
             libnss3-dev \
             libnss3-tools \
             libopenjp2-7-dev \

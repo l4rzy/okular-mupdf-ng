@@ -34,7 +34,6 @@ jobs:
             kf6-kcoreaddons-devel \
             kf6-ki18n-devel \
             kf6-kio-devel \
-            leptonica-devel \
             libbrotli-devel \
             libjpeg8-devel \
             libseccomp-devel \

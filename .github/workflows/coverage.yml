@@ -57,8 +57,7 @@ jobs:
             libseccomp \
             zlib \
             tesseract \
-            tesseract-data-eng \
-            leptonica
+            tesseract-data-eng
 
       - name: Download bundled MuPDF source
         run: python3 ./scripts/download-mupdf.py

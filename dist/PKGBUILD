@@ -13,16 +13,18 @@ license=('GPL-3.0-or-later')
 # the two large static archives much faster than lld and is a hard requirement
 # so packaging stays deterministic.
 makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
-             'gcc' 'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq' 'leptonica'
+             'gcc' 'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq'
              'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'openjpeg2' 'pkgconf'
              'python' 'qt6-tools')
 # The bundled-MuPDF build links MuPDF's third-party libraries from the system
 # (USE_SYSTEM_LIBS=yes), so they remain direct runtime dependencies of the
-# static package. Global depends serves the pre-build dependency check; each
-# package function overrides depends for its own link variant.
+# static package; Leptonica is the exception, bundled alongside Tesseract to
+# keep the OCR pair on matching versions. Global depends serves the pre-build
+# dependency check; each package function overrides depends for its own link
+# variant.
 _common_depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp')
 depends=("${_common_depends[@]}"
-         'brotli' 'freetype2' 'harfbuzz' 'jbig2dec' 'leptonica'
+         'brotli' 'freetype2' 'harfbuzz' 'jbig2dec'
          'libjpeg-turbo' 'openjpeg2' 'zlib')
 optdepends=(
   'emoji-font: display sandbox enforcement status'

@@ -67,7 +67,6 @@ else()
         message(FATAL_ERROR "nproc did not return a valid CPU count")
     endif()
 
-    pkg_check_modules(MUPDF_LEPTONICA REQUIRED IMPORTED_TARGET lept)
     pkg_check_modules(MUPDF_FREETYPE REQUIRED IMPORTED_TARGET freetype2)
     pkg_check_modules(MUPDF_HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
     pkg_check_modules(MUPDF_JPEG REQUIRED IMPORTED_TARGET libjpeg)
@@ -169,7 +168,7 @@ else()
             USE_SYSTEM_LIBS=yes
             USE_SYSTEM_GUMBO=${MUPDF_USE_SYSTEM_GUMBO}
             USE_SYSTEM_TESSERACT=no
-            USE_SYSTEM_LEPTONICA=yes
+            USE_SYSTEM_LEPTONICA=no
             USE_SYSTEM_CURL=no
             USE_SYSTEM_LCMS2=no
             USE_CMARK_GFM=no
@@ -199,7 +198,6 @@ else()
         "${MUPDF_THIRD_LIBRARY}"
         "${MUPDF_THREADS_LIBRARY}"
         "-Wl,--end-group"
-        PkgConfig::MUPDF_LEPTONICA
         PkgConfig::MUPDF_FREETYPE)
     if(USE_SYSTEM_GUMBO)
         list(APPEND MUPDF_ENGINE_LINK_LIBRARIES PkgConfig::MUPDF_GUMBO)

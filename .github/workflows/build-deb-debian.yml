@@ -38,7 +38,6 @@ jobs:
             libkf6i18n-dev \
             libkf6kio-dev \
             libkf6xmlgui-dev \
-            libleptonica-dev \
             libnss3-dev \
             libnss3-tools \
             libopenjp2-7-dev \
