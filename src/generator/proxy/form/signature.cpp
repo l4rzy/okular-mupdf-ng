@@ -25,11 +25,7 @@ Signature::Signature(int id, Model::SignatureField data, Plugin::WorkerClient* b
 {
 }
 
-Signature::~Signature()
-{
-    const std::lock_guard<std::mutex> lock(m_subscriptionMutex);
-    m_subscriptions.clear();
-}
+Signature::~Signature() = default;
 
 Okular::NormalizedRect Signature::rect() const
 {
@@ -176,14 +172,14 @@ Okular::SignatureInfo Signature::signatureInfo() const
     info.setSignature(QByteArray(reinterpret_cast<const char*>(m_data.cmsSignature.data()),
                                  static_cast<qsizetype>(m_data.cmsSignature.size())));
     QList<qint64> rangeBounds;
+    // The worker only emits an empty or 4-element range, but the model crosses
+    // a trust boundary: any other size is discarded rather than forwarded to
+    // Okular's signature viewer.
     if (m_data.byteRange.size() == 4) {
         const bool valid = appendRangeBounds(rangeBounds, m_data.byteRange[0], m_data.byteRange[1])
             && appendRangeBounds(rangeBounds, m_data.byteRange[2], m_data.byteRange[3]);
         if (!valid)
             rangeBounds.clear();
-    } else {
-        for (const std::int64_t value : m_data.byteRange)
-            rangeBounds.append(value);
     }
     info.setSignedRangeBounds(rangeBounds);
     info.setHashAlgorithm(hashAlgorithm(m_data.hashAlgorithm));
@@ -251,26 +247,14 @@ bool Signature::sign(const Okular::NewSignatureData& data, const QString& newPat
 }
 #endif
 
-Signature::SubscriptionHandle Signature::subscribeUpdates(const std::function<void()>& callback) const
+Signature::SubscriptionHandle Signature::subscribeUpdates(const std::function<void()>&) const
 {
-    if (!callback)
-        return 0;
-    // Allocate handles under the same lock used for removal/destruction.
-    const std::lock_guard<std::mutex> lock(m_subscriptionMutex);
-    SubscriptionHandle handle = m_nextSubscriptionHandle++;
-    m_subscriptions[handle] = callback;
-    return handle;
+    // Snapshots never change in place; refuse rather than promise updates.
+    return 0;
 }
 
-bool Signature::unsubscribeUpdates(const SubscriptionHandle& handle) const
+bool Signature::unsubscribeUpdates(const SubscriptionHandle&) const
 {
-    // Missing handles are harmless and report that no subscription was removed.
-    const std::lock_guard<std::mutex> lock(m_subscriptionMutex);
-    auto it = m_subscriptions.find(handle);
-    if (it != m_subscriptions.end()) {
-        m_subscriptions.erase(it);
-        return true;
-    }
     return false;
 }
 

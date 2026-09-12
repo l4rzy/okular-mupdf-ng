@@ -8,6 +8,7 @@
 
 #include <QtCore/qglobal.h>
 
+#include <cmath>
 #include <utility>
 
 #include "generator/conversion/annotation.hpp"
@@ -58,17 +59,29 @@ bool Annotation::supports(Capability capability) const
 
 void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 {
-    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation)
+    // The worker owns page ranges; reject only what is locally known bad so a
+    // corrupt Okular page index never becomes a blocking worker IPC.
+    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation || page < 0)
         return;
     if (auto* signature = dynamic_cast<Okular::SignatureAnnotation*>(annotation)) {
         signature->setPage(page);
-        const Okular::NormalizedRect bounds = signature->boundingRectangle();
         Plugin::WorkerClient* const backend = m_backend;
+        // Bounds are read live at signing time: Okular lets the user move or
+        // resize the widget after notifyAddition, and signature edits never
+        // reach the worker (toModel rejects SignatureAnnotation), so a
+        // captured rect would sign stale coordinates.
         const auto sign =
-            [backend, page, bounds, signature](const Okular::NewSignatureData& data,
-                                               const QString& fileName) -> std::pair<Okular::SigningResult, QString> {
+            [backend, page, signature](const Okular::NewSignatureData& data,
+                                       const QString& fileName) -> std::pair<Okular::SigningResult, QString> {
+            // Only the backend state can change between registration and
+            // invocation: page was validated on addition and the lambda dies
+            // with its owning signature object.
             if (!backend || !backend->isConnected())
                 return std::make_pair(Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable"));
+            const Okular::NormalizedRect bounds = signature->boundingRectangle();
+            if (!std::isfinite(bounds.left) || !std::isfinite(bounds.top) || !std::isfinite(bounds.right)
+                || !std::isfinite(bounds.bottom) || bounds.width() <= 0 || bounds.height() <= 0)
+                return std::make_pair(Okular::GenericSigningError, QStringLiteral("Signature bounds are invalid"));
             const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
             if (commonName.isEmpty())
                 return std::make_pair(Okular::KeyMissing, QStringLiteral("Signing certificate was not found"));
@@ -99,10 +112,10 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
     const auto model = Conversion::toModel(annotation);
     if (!model)
         return;
-    if (m_mutationCallback)
-        m_mutationCallback();
     const auto result = m_backend->addAnnotation(page, *model);
     if (result) {
+        if (m_mutationCallback)
+            m_mutationCallback();
         const QString id = QString::fromStdString(result->value);
         annotation->setNativeId(id);
         // The worker, rather than Okular's overlay, draws native PDF
@@ -113,7 +126,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 
 void Annotation::notifyModification(const Okular::Annotation* annotation, int page, bool appearanceChanged)
 {
-    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation)
+    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation || page < 0)
         return;
     const auto model = Conversion::toModel(annotation);
     if (!model)
@@ -121,22 +134,24 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
     const QVariant id = annotation->nativeId();
     if (!id.isValid() || id.toString().isEmpty())
         return;
-    if (m_mutationCallback)
-        m_mutationCallback();
-    m_backend->modifyAnnotation(page, id.toString(), *model, appearanceChanged);
+    if (m_backend->modifyAnnotation(page, id.toString(), *model, appearanceChanged)) {
+        if (m_mutationCallback)
+            m_mutationCallback();
+    }
 }
 
 void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
 {
-    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation)
+    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation || page < 0)
         return;
     const QVariant id = annotation->nativeId();
     if (!id.isValid() || id.toString().isEmpty())
         return;
-    if (m_mutationCallback)
-        m_mutationCallback();
-    if (m_backend->removeAnnotation(page, id.toString()))
+    if (m_backend->removeAnnotation(page, id.toString())) {
+        if (m_mutationCallback)
+            m_mutationCallback();
         annotation->setNativeId(QVariant());
+    }
 }
 
 } // namespace Mu::Generator::Proxy

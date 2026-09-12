@@ -14,6 +14,12 @@ RadioButton::RadioButton(int id, Model::FormField data, Coordinator* coordinator
 {
 }
 
+RadioButton::~RadioButton()
+{
+    if (m_coordinator)
+        m_coordinator->unregisterField(m_data.handle, this);
+}
+
 Okular::NormalizedRect RadioButton::rect() const
 {
     return Okular::NormalizedRect(
@@ -80,13 +86,15 @@ void RadioButton::setState(bool state)
         static_cast<void>(m_coordinator->updateField(m_data.handle, Model::FormCheckValue { state }));
 }
 
-bool RadioButton::applyCanonicalValue(const Model::FormValue& value)
+ApplyResult RadioButton::applyCanonicalValue(const Model::FormValue& value)
 {
     if (const auto* cv = std::get_if<Model::FormCheckValue>(&value)) {
+        if (m_data.checked == cv->checked)
+            return ApplyResult::Unchanged;
         m_data.checked = cv->checked;
-        return true;
+        return ApplyResult::Changed;
     }
-    return false;
+    return ApplyResult::Rejected;
 }
 
 QList<int> RadioButton::siblings() const

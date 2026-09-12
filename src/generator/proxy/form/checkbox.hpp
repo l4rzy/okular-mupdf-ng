@@ -15,7 +15,7 @@ namespace Mu::Generator::Proxy::Form {
 class CheckBox final : public Okular::FormFieldButton, public IField {
 public:
     CheckBox(int id, Model::FormField data, Coordinator* coordinator);
-    ~CheckBox() override = default;
+    ~CheckBox() override;
 
     Okular::NormalizedRect rect() const override;
     QString name() const override;
@@ -36,7 +36,7 @@ public:
 
     // Applies the worker's canonical value after a local edit or dependency
     // update; the proxy does not optimistically mutate checked state.
-    bool applyCanonicalValue(const Model::FormValue& value) override;
+    ApplyResult applyCanonicalValue(const Model::FormValue& value) override;
 
     Okular::FormField* formField() override { return this; }
 

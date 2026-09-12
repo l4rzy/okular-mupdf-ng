@@ -12,6 +12,12 @@ PushButton::PushButton(int id, Model::FormField data, Coordinator* coordinator)
 {
 }
 
+PushButton::~PushButton()
+{
+    if (m_coordinator)
+        m_coordinator->unregisterField(m_data.handle, this);
+}
+
 Okular::NormalizedRect PushButton::rect() const
 {
     return Okular::NormalizedRect(

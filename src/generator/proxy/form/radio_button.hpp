@@ -15,7 +15,7 @@ namespace Mu::Generator::Proxy::Form {
 class RadioButton final : public Okular::FormFieldButton, public IField {
 public:
     RadioButton(int id, Model::FormField data, Coordinator* coordinator);
-    ~RadioButton() override = default;
+    ~RadioButton() override;
 
     Okular::NormalizedRect rect() const override;
     QString name() const override;
@@ -36,7 +36,7 @@ public:
     void setSiblings(const QList<int>& siblings);
 
     // Applies the worker's checked state after radio-group canonicalization.
-    bool applyCanonicalValue(const Model::FormValue& value) override;
+    ApplyResult applyCanonicalValue(const Model::FormValue& value) override;
 
     Okular::FormField* formField() override { return this; }
 

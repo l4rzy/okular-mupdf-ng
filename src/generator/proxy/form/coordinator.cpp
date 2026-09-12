@@ -54,6 +54,15 @@ void Coordinator::clear()
     m_fields.clear();
 }
 
+void Coordinator::unregisterField(const std::string& handle, const IField* field)
+{
+    if (handle.empty() || !field)
+        return;
+    const auto it = m_fields.find(handle);
+    if (it != m_fields.end() && it->second == field)
+        m_fields.erase(it);
+}
+
 bool Coordinator::updateField(const std::string& handle, const Model::FormValue& value)
 {
     // Availability is controlled by the generator around document/restart
@@ -84,37 +93,53 @@ void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
 {
     std::vector<Okular::FormField*> changedFields;
     std::vector<int> affectedPages;
+    bool changed = false;
     for (const auto& field : fields) {
         const auto value = formValue(field);
         const auto it = m_fields.find(field.handle);
-        if (!value || it == m_fields.end() || !it->second || !it->second->applyCanonicalValue(*value))
+        if (!value || it == m_fields.end() || !it->second)
+            continue;
+        const auto result = it->second->applyCanonicalValue(*value);
+        if (result == ApplyResult::Rejected)
             continue;
 
         changedFields.push_back(it->second->formField());
+        if (result == ApplyResult::Changed)
+            changed = true;
         if (std::find(affectedPages.begin(), affectedPages.end(), field.page) == affectedPages.end())
             affectedPages.push_back(field.page);
     }
 
     if (m_refreshCallback)
-        m_refreshCallback(changedFields, affectedPages);
+        m_refreshCallback(changedFields, affectedPages, changed);
 }
 
 bool Coordinator::applyResponse(const Model::FormUpdateResponse& response)
 {
     // The worker may canonicalize the requested value and update dependent
     // fields, so consume every affected field rather than only the origin.
+    // Every accepted value refreshes its widget (the widget may show text the
+    // worker canonicalized away), but only changed snapshots dirty the
+    // document (see Main::m_formsDirty).
     std::vector<Okular::FormField*> changedFields;
     changedFields.reserve(response.affectedFields.size());
+    bool changed = false;
     for (const auto& fieldState : response.affectedFields) {
         auto it = m_fields.find(fieldState.handle);
-        if (it != m_fields.end() && it->second && it->second->applyCanonicalValue(fieldState.value))
-            changedFields.push_back(it->second->formField());
+        if (it == m_fields.end() || !it->second)
+            continue;
+        const auto result = it->second->applyCanonicalValue(fieldState.value);
+        if (result == ApplyResult::Rejected)
+            continue;
+        changedFields.push_back(it->second->formField());
+        if (result == ApplyResult::Changed)
+            changed = true;
     }
 
     if (m_refreshCallback)
-        m_refreshCallback(changedFields, response.affectedPages);
+        m_refreshCallback(changedFields, response.affectedPages, changed);
 
-    return true;
+    return changed;
 }
 
 } // namespace Mu::Generator::Proxy::Form

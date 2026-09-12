@@ -86,10 +86,12 @@ Main::Main(QObject* parent, const QVariantList& args)
     (void)Plugin::Crypto::initializeNss(Config::usesDefaultCertificateDatabase() ? QString { } : certDbPath);
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
-        &m_worker, [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages) {
+        &m_worker,
+        [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages, bool changed) {
             // Recovery applies clean values while the coordinator is
-            // unavailable; those must not re-dirty the document.
-            if (m_formCoordinator && m_formCoordinator->isAvailable())
+            // unavailable; those must not re-dirty the document. Accepted but
+            // unchanged responses refresh their widget without dirtying it.
+            if (m_formCoordinator && m_formCoordinator->isAvailable() && changed)
                 m_formsDirty = true;
             // Form mutations happen in the worker. Ask Okular to refresh the
             // affected widgets and page pixmaps after the proxy state changes.

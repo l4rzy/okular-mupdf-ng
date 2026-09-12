@@ -36,6 +36,12 @@ Choice::Choice(int id, Model::FormField data, Coordinator* coordinator)
     setExportValues(exportValueMap(m_data));
 }
 
+Choice::~Choice()
+{
+    if (m_coordinator)
+        m_coordinator->unregisterField(m_data.handle, this);
+}
+
 Okular::NormalizedRect Choice::rect() const
 {
     return Okular::NormalizedRect(
@@ -143,19 +149,27 @@ void Choice::setAppearanceChoiceText(const QString& text)
     m_data.text = text.toStdString();
 }
 
-bool Choice::applyCanonicalValue(const Model::FormValue& value)
+ApplyResult Choice::applyCanonicalValue(const Model::FormValue& value)
 {
-    // Selection and custom text are mutually exclusive canonical states.
+    // Selection and custom text are mutually exclusive canonical states. Text
+    // is display state for a nonempty selection, but the field's custom value
+    // for an empty one. Applying a selection always clears it so Okular's
+    // editable-combo refresh cannot overlay an export value on the chosen
+    // label; only a logical change dirties the document.
     if (const auto* sel = std::get_if<Model::FormChoiceSelection>(&value)) {
+        const bool selectionChanged = m_data.currentChoices != sel->selectedIndices;
+        const bool clearedCustomText = sel->selectedIndices.empty() && !m_data.text.empty();
         m_data.currentChoices = sel->selectedIndices;
         m_data.text.clear();
-        return true;
+        return (selectionChanged || clearedCustomText) ? ApplyResult::Changed : ApplyResult::Unchanged;
     } else if (const auto* cust = std::get_if<Model::FormChoiceCustomText>(&value)) {
+        if (m_data.currentChoices.empty() && m_data.text == cust->text)
+            return ApplyResult::Unchanged;
         m_data.text = cust->text;
         m_data.currentChoices.clear();
-        return true;
+        return ApplyResult::Changed;
     }
-    return false;
+    return ApplyResult::Rejected;
 }
 
 } // namespace Mu::Generator::Proxy::Form

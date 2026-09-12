@@ -15,7 +15,7 @@ namespace Mu::Generator::Proxy::Form {
 class PushButton final : public Okular::FormFieldButton, public IField {
 public:
     PushButton(int id, Model::FormField data, Coordinator* coordinator);
-    ~PushButton() override = default;
+    ~PushButton() override;
 
     Okular::NormalizedRect rect() const override;
     QString name() const override;
@@ -35,7 +35,7 @@ public:
     QList<int> siblings() const override { return { }; }
 
     // Push buttons have no persistent value to apply from an update response.
-    bool applyCanonicalValue(const Model::FormValue&) override { return false; }
+    ApplyResult applyCanonicalValue(const Model::FormValue&) override { return ApplyResult::Rejected; }
 
     Okular::FormField* formField() override { return this; }
 

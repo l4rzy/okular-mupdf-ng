@@ -15,7 +15,7 @@ namespace Mu::Generator::Proxy::Form {
 class Choice final : public Okular::FormFieldChoice, public IField {
 public:
     Choice(int id, Model::FormField data, Coordinator* coordinator);
-    ~Choice() override = default;
+    ~Choice() override;
 
     Okular::NormalizedRect rect() const override;
     QString name() const override;
@@ -37,7 +37,7 @@ public:
     void setEditChoice(const QString& text) override;
     void setAppearanceChoiceText(const QString& text) override;
     // Applies either the worker's selected indices or canonical custom text.
-    bool applyCanonicalValue(const Model::FormValue& value) override;
+    ApplyResult applyCanonicalValue(const Model::FormValue& value) override;
 
     Okular::FormField* formField() override { return this; }
 

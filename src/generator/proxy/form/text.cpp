@@ -11,6 +11,14 @@ Text::Text(int id, Model::FormField data, Coordinator* coordinator)
 {
 }
 
+Text::~Text()
+{
+    // Drop the registration so a proxy destroyed without a full clear()
+    // never leaves a dangling entry behind.
+    if (m_coordinator)
+        m_coordinator->unregisterField(m_data.handle, this);
+}
+
 Okular::NormalizedRect Text::rect() const
 {
     return Okular::NormalizedRect(
@@ -73,13 +81,15 @@ void Text::setAppearanceText(const QString& text)
     m_data.text = text.toStdString();
 }
 
-bool Text::applyCanonicalValue(const Model::FormValue& value)
+ApplyResult Text::applyCanonicalValue(const Model::FormValue& value)
 {
     if (const auto* tv = std::get_if<Model::FormTextValue>(&value)) {
+        if (m_data.text == tv->text)
+            return ApplyResult::Unchanged;
         m_data.text = tv->text;
-        return true;
+        return ApplyResult::Changed;
     }
-    return false;
+    return ApplyResult::Rejected;
 }
 
 bool Text::isPassword() const

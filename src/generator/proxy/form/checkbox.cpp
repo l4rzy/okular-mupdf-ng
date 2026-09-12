@@ -14,6 +14,12 @@ CheckBox::CheckBox(int id, Model::FormField data, Coordinator* coordinator)
 {
 }
 
+CheckBox::~CheckBox()
+{
+    if (m_coordinator)
+        m_coordinator->unregisterField(m_data.handle, this);
+}
+
 Okular::NormalizedRect CheckBox::rect() const
 {
     return Okular::NormalizedRect(
@@ -76,13 +82,15 @@ void CheckBox::setState(bool state)
         static_cast<void>(m_coordinator->updateField(m_data.handle, Model::FormCheckValue { state }));
 }
 
-bool CheckBox::applyCanonicalValue(const Model::FormValue& value)
+ApplyResult CheckBox::applyCanonicalValue(const Model::FormValue& value)
 {
     if (const auto* cv = std::get_if<Model::FormCheckValue>(&value)) {
+        if (m_data.checked == cv->checked)
+            return ApplyResult::Unchanged;
         m_data.checked = cv->checked;
-        return true;
+        return ApplyResult::Changed;
     }
-    return false;
+    return ApplyResult::Rejected;
 }
 
 } // namespace Mu::Generator::Proxy::Form

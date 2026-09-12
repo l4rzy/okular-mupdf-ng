@@ -531,7 +531,7 @@ private slots:
         std::vector<Okular::FormField*> refreshedFields;
         std::vector<int> refreshedPages;
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages, bool) {
                 refreshedFields = fields;
                 refreshedPages = pages;
             });
@@ -584,7 +584,7 @@ private slots:
         std::vector<Okular::FormField*> refreshedFields;
         std::vector<int> refreshedPages;
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages) {
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>& pages, bool) {
                 refreshedFields = fields;
                 refreshedPages = pages;
             });
@@ -651,8 +651,9 @@ private slots:
         auto* dummyBackend = &::Mu::Plugin::s_formBackend;
         std::vector<Okular::FormField*> refreshedFields;
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyBackend,
-            [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&) { refreshedFields = fields; });
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&, bool) {
+                refreshedFields = fields;
+            });
 
         ::Mu::Model::FormField field;
         field.handle = "h-text-incompatible";
@@ -673,6 +674,257 @@ private slots:
         QCOMPARE(textProxy.text(), QStringLiteral("OriginalText"));
         QVERIFY(refreshedFields.empty());
         ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
+    void coordinatorUpdateFieldReportsWhetherAnyProxyChanged()
+    {
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyBackend);
+
+        ::Mu::Model::FormField field;
+        field.handle = "h-text-status";
+        field.type = ::Mu::Model::FormFieldType::Text;
+        field.text = "OriginalText";
+        ::Mu::Generator::Proxy::Form::Text textProxy(204, field, &coordinator);
+        coordinator.registerField(field.handle, &textProxy);
+
+        // Applied canonical value reports success.
+        ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
+        QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Applied" }));
+        QCOMPARE(textProxy.text(), QStringLiteral("Applied"));
+
+        // Incompatible canonical value applies to nothing: no dirty, false.
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            ::Mu::Model::FormUpdateResponse response;
+            response.affectedFields = { { "h-text-status", ::Mu::Model::FormCheckValue { true } } };
+            return response;
+        };
+        QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
+        QCOMPARE(textProxy.text(), QStringLiteral("Applied"));
+
+        // Unknown handle applies to nothing: false.
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            ::Mu::Model::FormUpdateResponse response;
+            response.affectedFields = { { "h-unknown", ::Mu::Model::FormTextValue { "Other" } } };
+            return response;
+        };
+        QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
+
+        // Empty response applies to nothing: false.
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            return ::Mu::Model::FormUpdateResponse { };
+        };
+        QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
+
+        // Transport failure stays false.
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            return std::nullopt;
+        };
+        QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
+
+        ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
+    void coordinatorIgnoresUnchangedCanonicalValues()
+    {
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
+        std::vector<Okular::FormField*> refreshedFields;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&, bool) {
+                refreshedFields = fields;
+            });
+
+        ::Mu::Model::FormField textField;
+        textField.handle = "h-text-same";
+        textField.type = ::Mu::Model::FormFieldType::Text;
+        textField.text = "Same";
+        ::Mu::Generator::Proxy::Form::Text textProxy(207, textField, &coordinator);
+        coordinator.registerField(textField.handle, &textProxy);
+
+        ::Mu::Model::FormField checkField;
+        checkField.handle = "h-check-same";
+        checkField.type = ::Mu::Model::FormFieldType::CheckBox;
+        checkField.checked = true;
+        ::Mu::Generator::Proxy::Form::CheckBox checkProxy(208, checkField, &coordinator);
+        coordinator.registerField(checkField.handle, &checkProxy);
+
+        ::Mu::Model::FormField choiceField;
+        choiceField.handle = "h-choice-same";
+        choiceField.type = ::Mu::Model::FormFieldType::ComboBox;
+        choiceField.choices = { "A", "B" };
+        choiceField.currentChoices = { 1 };
+        // Mirror worker extraction: a selected choice also carries display text.
+        choiceField.text = "B";
+        ::Mu::Generator::Proxy::Form::Choice choiceProxy(209, choiceField, &coordinator);
+        coordinator.registerField(choiceField.handle, &choiceProxy);
+
+        // The worker echoes every field back, including unchanged ones: the
+        // identical values refresh their widget but report no change.
+        ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
+        QVERIFY(!coordinator.updateField(textField.handle, ::Mu::Model::FormTextValue { "Same" }));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy }));
+        QVERIFY(!coordinator.updateField(checkField.handle, ::Mu::Model::FormCheckValue { true }));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &checkProxy }));
+        QVERIFY(!coordinator.updateField(choiceField.handle, ::Mu::Model::FormChoiceSelection { { 1 } }));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &choiceProxy }));
+        QCOMPARE(textProxy.text(), QStringLiteral("Same"));
+        QVERIFY(checkProxy.state());
+        QCOMPARE(choiceProxy.currentChoices(), QList<int>({ 1 }));
+
+        // A reset that returns the already-stored values (the
+        // already-default-form case) reports no change.
+        ::Mu::Plugin::s_mockResetForm =
+            [](const ::Mu::Model::FormResetRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            ::Mu::Model::FormUpdateResponse response;
+            response.affectedFields = { { "h-text-same", ::Mu::Model::FormTextValue { "Same" } },
+                                        { "h-check-same", ::Mu::Model::FormCheckValue { true } },
+                                        { "h-choice-same", ::Mu::Model::FormChoiceSelection { { 1 } } } };
+            return response;
+        };
+        QVERIFY(!coordinator.resetForm(textField.handle));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy, &checkProxy, &choiceProxy }));
+
+        // One real change among identical echoes still reports true; every
+        // accepted proxy refreshes, only the changed value dirties.
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest& req) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            ::Mu::Model::FormUpdateResponse response;
+            response.affectedFields = { { "h-text-same", ::Mu::Model::FormTextValue { "Same" } },
+                                        { req.handle, req.value } };
+            return response;
+        };
+        QVERIFY(coordinator.updateField(checkField.handle, ::Mu::Model::FormCheckValue { false }));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy, &checkProxy }));
+        QVERIFY(!checkProxy.state());
+
+        ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
+    void canonicalSelectionClearsExportTextOverride()
+    {
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
+        std::vector<Okular::FormField*> refreshedFields;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&, bool) {
+                refreshedFields = fields;
+            });
+
+        // Loaded shape for an export-value combo: the worker stores the /V
+        // export string while the selection holds the display index.
+        ::Mu::Model::FormField field;
+        field.handle = "h-choice-export";
+        field.type = ::Mu::Model::FormFieldType::ComboBox;
+        field.choices = { "Germany", "France" };
+        field.exportValues = { "DE", "FR" };
+        field.currentChoices = { 1 };
+        field.editableCombo = true;
+        field.text = "FR";
+        ::Mu::Generator::Proxy::Form::Choice choiceProxy(210, field, &coordinator);
+        coordinator.registerField(field.handle, &choiceProxy);
+
+        // Echoing the same selection clears the export override so Okular's
+        // editable-combo refresh cannot overlay "FR" on the "France" label,
+        // while reporting no logical change.
+        ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
+        QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormChoiceSelection { { 1 } }));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &choiceProxy }));
+        QCOMPARE(choiceProxy.currentChoices(), QList<int>({ 1 }));
+        QVERIFY(choiceProxy.editChoice().isEmpty());
+
+        // Clearing custom text through an empty canonical selection is a real
+        // change: the view genuinely mutates.
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            ::Mu::Model::FormUpdateResponse response;
+            response.affectedFields = { { "h-choice-export", ::Mu::Model::FormChoiceCustomText { "Custom" } } };
+            return response;
+        };
+        QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormChoiceCustomText { "Custom" }));
+        QCOMPARE(choiceProxy.editChoice(), QStringLiteral("Custom"));
+        QVERIFY(choiceProxy.currentChoices().isEmpty());
+
+        ::Mu::Plugin::s_mockUpdateForm =
+            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
+            ::Mu::Model::FormUpdateResponse response;
+            response.affectedFields = { { "h-choice-export", ::Mu::Model::FormChoiceSelection { } } };
+            return response;
+        };
+        QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormChoiceSelection { }));
+        QVERIFY(choiceProxy.editChoice().isEmpty());
+        QVERIFY(choiceProxy.currentChoices().isEmpty());
+
+        ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
+    void coordinatorUnregisterDropsStaleEntries()
+    {
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
+
+        {
+            ::Mu::Model::FormField field;
+            field.handle = "h-text-stale";
+            field.type = ::Mu::Model::FormFieldType::Text;
+            field.text = "Live";
+            ::Mu::Generator::Proxy::Form::Text textProxy(205, field, &coordinator);
+            coordinator.registerField(field.handle, &textProxy);
+            // textProxy destroyed here without a full clear().
+        }
+
+        // A worker response for the dead handle applies to nothing.
+        ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
+        QVERIFY(!coordinator.updateField("h-text-stale", ::Mu::Model::FormTextValue { "Stale" }));
+
+        // Recovery over the dead handle is a safe no-op.
+        ::Mu::Model::FormField reopened;
+        reopened.handle = "h-text-stale";
+        reopened.type = ::Mu::Model::FormFieldType::Text;
+        reopened.text = "Clean";
+        coordinator.resetFields({ reopened });
+
+        // Re-registering the handle afterwards works: a stale destructor must
+        // not remove a live proxy that reused the handle.
+        ::Mu::Model::FormField field;
+        field.handle = "h-text-stale";
+        field.type = ::Mu::Model::FormFieldType::Text;
+        field.text = "Fresh";
+        ::Mu::Generator::Proxy::Form::Text freshProxy(206, field, &coordinator);
+        coordinator.registerField(field.handle, &freshProxy);
+        QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Updated" }));
+        QCOMPARE(freshProxy.text(), QStringLiteral("Updated"));
+
+        ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
+    void signatureInfoRejectsUnexpectedByteRangeSizes()
+    {
+        // Table-driven: only empty and validated 4-element ranges surface.
+        const std::vector<std::vector<std::int64_t>> cases = {
+            { }, { 0 }, { 0, 128 }, { 0, 128, 512, 256, 1024, 64 }, { 0, -1, 512, 256 }, { -8, 1, 2, 3 },
+        };
+        for (const auto& byteRange : cases) {
+            ::Mu::Model::SignatureField source;
+            source.byteRange = byteRange;
+            ::Mu::Generator::Proxy::Form::Signature proxy(7, source);
+            QVERIFY2(proxy.signatureInfo().signedRangeBounds().isEmpty(), "non-surfaceable byteRange leaked");
+        }
+
+        ::Mu::Model::SignatureField valid;
+        valid.byteRange = { 0, 128, 512, 256 };
+        ::Mu::Generator::Proxy::Form::Signature validProxy(7, valid);
+        QCOMPARE(validProxy.signatureInfo().signedRangeBounds(), QList<qint64>({ 0, 128, 512, 768 }));
+    }
+
+    void signatureSubscriptionsAreRefused()
+    {
+        ::Mu::Model::SignatureField source;
+        ::Mu::Generator::Proxy::Form::Signature proxy(9, source);
+        // Snapshots never change in place: no live updates to subscribe to.
+        QVERIFY(proxy.subscribeUpdates([] { }) == 0);
+        QVERIFY(!proxy.unsubscribeUpdates(1));
     }
 
     void coordinatorRejectionPreservesPriorState()

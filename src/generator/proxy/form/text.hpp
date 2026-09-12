@@ -15,7 +15,7 @@ namespace Mu::Generator::Proxy::Form {
 class Text final : public Okular::FormFieldText, public IField {
 public:
     Text(int id, Model::FormField data, Coordinator* coordinator);
-    ~Text() override = default;
+    ~Text() override;
 
     Okular::NormalizedRect rect() const override;
     QString name() const override;
@@ -36,7 +36,7 @@ public:
     int maximumLength() const override;
 
     // Applies the worker's canonical text after a submitted edit.
-    bool applyCanonicalValue(const Model::FormValue& value) override;
+    ApplyResult applyCanonicalValue(const Model::FormValue& value) override;
 
     Okular::FormField* formField() override { return this; }
 

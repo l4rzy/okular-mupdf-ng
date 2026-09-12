@@ -9,8 +9,6 @@
 
 #include <QtCore/qglobal.h>
 
-#include <map>
-#include <mutex>
 #include <utility>
 
 #include "shared/model/types.hpp"
@@ -25,8 +23,10 @@ namespace Mu::Generator::Proxy::Form {
 
 /// Okular signature field backed by worker-provided verification data.
 ///
-/// Optional remote signing uses the worker backend; subscription bookkeeping is
-/// kept local so Okular can observe updates without owning the backend.
+/// Verification data is a per-document-load snapshot: proxies are rebuilt on
+/// reload, so there are no live updates to subscribe to. Subscription requests
+/// are therefore honestly refused (0 / false) instead of handing out handles
+/// that would never fire.
 class Signature final : public Okular::FormFieldSignature {
 public:
     Signature(int id, Model::SignatureField data, Plugin::WorkerClient* backend = nullptr);
@@ -61,10 +61,6 @@ private:
     Model::SignatureField m_data;
     // Non-owning worker used only when remote signing support is enabled.
     [[maybe_unused]] Plugin::WorkerClient* m_backend;
-    // Protects callbacks because Okular may subscribe/unsubscribe from workers.
-    mutable std::mutex m_subscriptionMutex;
-    mutable std::map<SubscriptionHandle, std::function<void()>> m_subscriptions;
-    mutable SubscriptionHandle m_nextSubscriptionHandle = 1;
 };
 
 } // namespace Mu::Generator::Proxy::Form
