@@ -612,6 +612,53 @@ private slots:
         QCOMPARE(refreshedPages, (std::vector<int> { 2 }));
     }
 
+    void coordinatorRekeysHandlesAfterWorkerRestart()
+    {
+        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyBackend);
+
+        // Production constructs each proxy with its widget object number as id.
+        ::Mu::Model::FormField field;
+        field.handle = "g2-f0-o42";
+        field.page = 0;
+        field.pdfObjectNumber = 42;
+        field.type = ::Mu::Model::FormFieldType::Text;
+        field.text = "Saved";
+        ::Mu::Generator::Proxy::Form::Text textProxy(field.pdfObjectNumber, field, &coordinator);
+        coordinator.registerField(field.handle, &textProxy);
+
+        // The restarted worker resets its handle generation, so the reopened
+        // document reports the same widget under a different handle. Recovery
+        // must re-key the surviving proxy and apply the clean value even when
+        // that value is unchanged.
+        ::Mu::Model::FormField reopened = field;
+        reopened.handle = "g1-f0-o42";
+        reopened.text = "Saved";
+        coordinator.resetFields({ reopened });
+        QCOMPARE(textProxy.text(), QStringLiteral("Saved"));
+
+        ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
+        QVERIFY(coordinator.updateField("g1-f0-o42", ::Mu::Model::FormTextValue { "Edited" }));
+        QVERIFY(!coordinator.updateField("g2-f0-o42", ::Mu::Model::FormTextValue { "Stale" }));
+        QCOMPARE(textProxy.text(), QStringLiteral("Edited"));
+
+        // A registration whose widget is absent from the reopened document is
+        // left untouched rather than mis-mapped onto another field.
+        ::Mu::Model::FormField unmatchedField;
+        unmatchedField.handle = "g2-f0-o77";
+        unmatchedField.page = 0;
+        unmatchedField.pdfObjectNumber = 77;
+        unmatchedField.type = ::Mu::Model::FormFieldType::Text;
+        unmatchedField.text = "Keep";
+        ::Mu::Generator::Proxy::Form::Text unmatchedProxy(unmatchedField.pdfObjectNumber, unmatchedField, &coordinator);
+        coordinator.registerField(unmatchedField.handle, &unmatchedProxy);
+        coordinator.resetFields({ reopened });
+        QVERIFY(coordinator.updateField("g2-f0-o77", ::Mu::Model::FormTextValue { "Keep2" }));
+        QCOMPARE(unmatchedProxy.text(), QStringLiteral("Keep2"));
+
+        ::Mu::Plugin::s_mockUpdateForm = nullptr;
+    }
+
     void rebuildPageAnnotationsDiscardsDirtyState()
     {
         Okular::Page page(0, 100, 100, Okular::Rotation0);

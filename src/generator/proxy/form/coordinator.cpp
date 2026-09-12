@@ -3,6 +3,8 @@
 
 #include "generator/proxy/form/coordinator.hpp"
 
+#include <okular/core/form.h>
+
 #include <algorithm>
 #include <optional>
 
@@ -91,6 +93,29 @@ bool Coordinator::resetForm(const std::string& handle)
 
 void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
 {
+    // Worker handles embed a per-open generation that resets when the worker
+    // process restarts. Match surviving proxies by their stable widget object
+    // number so later edits use the reopened document's handles.
+    std::unordered_map<std::string, IField*> rekeyed;
+    rekeyed.reserve(m_fields.size());
+    for (const auto& [oldHandle, proxy] : m_fields) {
+        if (!proxy) {
+            rekeyed.emplace(oldHandle, nullptr);
+            continue;
+        }
+        const int widgetId = proxy->formField()->id();
+        const auto match = std::find_if(fields.begin(), fields.end(), [widgetId](const Model::FormField& field) {
+            return field.pdfObjectNumber == widgetId;
+        });
+        if (match == fields.end()) {
+            rekeyed.emplace(oldHandle, proxy);
+            continue;
+        }
+        proxy->setHandle(match->handle);
+        rekeyed.emplace(match->handle, proxy);
+    }
+    m_fields.swap(rekeyed);
+
     std::vector<Okular::FormField*> changedFields;
     std::vector<int> affectedPages;
     bool changed = false;

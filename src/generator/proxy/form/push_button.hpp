@@ -39,6 +39,8 @@ public:
 
     Okular::FormField* formField() override { return this; }
 
+    void setHandle(const std::string& handle) override { m_data.handle = handle; }
+
     const Model::FormField& model() const noexcept { return m_data; }
 
 private:

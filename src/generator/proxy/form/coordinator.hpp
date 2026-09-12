@@ -35,6 +35,8 @@ public:
     // does not count as a change.
     virtual ApplyResult applyCanonicalValue(const Model::FormValue& value) = 0;
     virtual Okular::FormField* formField() = 0;
+    // Updates the opaque worker handle when recovery re-keys a proxy.
+    virtual void setHandle(const std::string& handle) = 0;
 };
 
 /// Minimal bridge between Okular form proxies and worker-side canonical state.
