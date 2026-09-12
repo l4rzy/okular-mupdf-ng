@@ -41,6 +41,20 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(MU_IS_DEBUG_BUILD ON)
 endif()
 
+# CJK fallback policy for the bundled MuPDF engine. Source Han Serif has the
+# best fidelity (~24 MiB) while the Droid fonts trade per-locale coverage for a
+# much smaller worker. Ignored when USE_SYSTEM_MUPDF=ON, since the system
+# library decides its own embedded fonts. Changing this in an existing build
+# directory requires removing build/mupdf/<profile> so the archives rebuild.
+set(MUPDF_CJK_FALLBACK "droidfull" CACHE STRING
+    "Bundled MuPDF CJK fallback: sourcehan | droidfull | droid | none")
+set_property(CACHE MUPDF_CJK_FALLBACK PROPERTY STRINGS sourcehan droidfull droid none)
+string(TOLOWER "${MUPDF_CJK_FALLBACK}" _mupdf_cjk_fallback)
+if(NOT _mupdf_cjk_fallback MATCHES "^(sourcehan|droidfull|droid|none)$")
+    message(FATAL_ERROR
+        "Invalid MUPDF_CJK_FALLBACK='${MUPDF_CJK_FALLBACK}' (expected sourcehan | droidfull | droid | none)")
+endif()
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mupdf.cmake")
 
 set(TESSDATA_DIR "/usr/share/tessdata" CACHE PATH "Path to tesseract tessdata directory")
@@ -98,6 +112,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "MuPDF build profile: ${MUPDF_BUILD_PROFILE}")
+message(STATUS "MuPDF CJK fallback: ${MUPDF_CJK_FALLBACK}")
 message(STATUS "Mu debug diagnostics: ${MU_DEBUG_BUILD}")
 message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
 message(STATUS "Build-tree worker: ${ENABLE_BUILD_TREE_WORKER}")

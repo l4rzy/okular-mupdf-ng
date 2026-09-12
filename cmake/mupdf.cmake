@@ -138,6 +138,15 @@ else()
         "-DFZ_ENABLE_MD=0"
         "-DFZ_ENABLE_DOCX_OUTPUT=0"
         "-DFZ_ENABLE_ODT_OUTPUT=0")
+    # CJK fallback maps to MuPDF's TOFU font-selection flags; the make build
+    # reads XCFLAGS to filter the embedded font objects (Makefile FONT_BIN).
+    if(_mupdf_cjk_fallback STREQUAL "droidfull")
+        list(APPEND _mupdf_xcflags "-DTOFU_CJK_LANG")
+    elseif(_mupdf_cjk_fallback STREQUAL "droid")
+        list(APPEND _mupdf_xcflags "-DTOFU_CJK_EXT")
+    elseif(_mupdf_cjk_fallback STREQUAL "none")
+        list(APPEND _mupdf_xcflags "-DTOFU_CJK")
+    endif()
     if(_mupdf_c_flags)
         list(APPEND _mupdf_xcflags "${_mupdf_c_flags}")
     endif()
