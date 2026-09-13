@@ -49,6 +49,7 @@ target_include_directories(mupdf_plugin_cache PUBLIC
     ${MU_GENERATED_INCLUDE_DIR}
 )
 target_link_libraries(mupdf_plugin_cache PUBLIC Qt6::Core mupdf_shared ZLIB::ZLIB)
+target_link_libraries(mupdf_plugin_cache PRIVATE mupdf_plugin_util)
 
 add_library(mupdf_plugin_crypto STATIC
   plugin/crypto/nss.cpp
@@ -96,6 +97,7 @@ target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache
 
 add_library(mupdf_plugin_util STATIC
   plugin/util/document_type.cpp
+  plugin/util/ocr_options.cpp
   plugin/util/signature_image.cpp
   plugin/util/render_image.cpp
   plugin/util/signing_timestamp.cpp)
@@ -210,7 +212,7 @@ target_include_directories(mupdf_generator_settings PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(mupdf_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets mupdf_plugin_cache)
+target_link_libraries(mupdf_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets mupdf_plugin_util)
 
 add_custom_target(mupdf_generator_settings_codegen
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mupdfngsettings.cpp

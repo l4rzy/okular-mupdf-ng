@@ -213,9 +213,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                 QMutexLocker locker(userMutex());
                 if (page < 0 || page >= m_okularPages.size())
                     return;
-                auto* textPage = new Okular::TextPage();
-                for (const auto& box : boxes)
-                    textPage->append(box.ch, Okular::NormalizedRect(box.l, box.t, box.r, box.b));
+                auto* textPage = Conversion::ocrTextPage(boxes);
                 Q_EMIT signalTextGenerationDone(m_okularPages.at(page), textPage);
                 if (Config::readOcrSettings().notify
                     && source == Plugin::OCR::Controller::CompletionSource::OcrCompleted) {

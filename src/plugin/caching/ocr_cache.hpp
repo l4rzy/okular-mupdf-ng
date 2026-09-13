@@ -75,12 +75,6 @@ public:
         return save(docHash, pageNum, lang, 0, items);
     }
 
-    /// Removes the `.traineddata` suffix from a language identifier.
-    static QString stripLangSuffix(const QString& lang);
-
-    /// Maps the configured OCR quality level to its target DPI.
-    static float qualityToDpi(int quality);
-
     /// Converts worker text boxes into the cache representation.
     static QVector<CacheItem> convertToCacheItems(const std::vector<Model::TextBox>& boxes);
 };

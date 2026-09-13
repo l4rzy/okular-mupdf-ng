@@ -14,6 +14,7 @@
 #include <zlib.h>
 
 #include "plugin/caching/ocr_constants.hpp"
+#include "plugin/util/ocr_options.hpp"
 #include "shared/logging.hpp"
 
 namespace Mu::Plugin::Caching::OCR {
@@ -98,7 +99,7 @@ std::optional<CacheKey> Cache::normalizeKey(const QString& docHash, const QStrin
     if (safeHash.isEmpty())
         return std::nullopt;
 
-    const QString rawLang = sanitizeFilenamePart(stripLangSuffix(lang).toLower());
+    const QString rawLang = sanitizeFilenamePart(::Mu::Plugin::Util::stripLangSuffix(lang).toLower());
     if (rawLang.isEmpty())
         return std::nullopt;
 
@@ -359,28 +360,6 @@ bool Cache::save(const QString& docHash, int pageNum, const QString& lang, int d
 {
     const auto key = normalizeKey(docHash, lang, dpi);
     return key ? save(*key, pageNum, items) : false;
-}
-
-QString Cache::stripLangSuffix(const QString& lang)
-{
-    QString clean = lang;
-    if (clean.endsWith(QLatin1String(".traineddata")))
-        clean.chop(12);
-    return clean;
-}
-
-float Cache::qualityToDpi(int quality)
-{
-    // Quality values come from the generator settings; unknown values use the
-    // balanced default so they do not accidentally request the slowest mode.
-    switch (quality) {
-    case 0: // Speed
-        return OcrConstant::DPI_FAST;
-    case 2: // Accuracy
-        return OcrConstant::DPI_ACCURACY;
-    default:
-        return OcrConstant::DPI_BALANCED;
-    }
 }
 
 QVector<CacheItem> Cache::convertToCacheItems(const std::vector<Model::TextBox>& boxes)

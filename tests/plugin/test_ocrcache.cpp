@@ -353,26 +353,6 @@ private slots:
         QCOMPARE(::Mu::Plugin::OCR::dominantPage(tied, 5), 5);
     }
 
-    void stripsLanguageSuffix()
-    {
-        using ::Mu::Plugin::Caching::OCR::Cache;
-        QCOMPARE(Cache::stripLangSuffix(QStringLiteral("eng.traineddata")), QStringLiteral("eng"));
-        QCOMPARE(Cache::stripLangSuffix(QStringLiteral("eng")), QStringLiteral("eng"));
-        QCOMPARE(Cache::stripLangSuffix(QStringLiteral("deu_300dpi")), QStringLiteral("deu_300dpi"));
-        QCOMPARE(Cache::stripLangSuffix(QString()), QString());
-    }
-
-    void mapsQualityToDpi()
-    {
-        using ::Mu::Plugin::Caching::OCR::Cache;
-        // Unknown quality values fall back to Balanced, never the slowest mode.
-        QCOMPARE(Cache::qualityToDpi(0), 150.0f);
-        QCOMPARE(Cache::qualityToDpi(1), 225.0f);
-        QCOMPARE(Cache::qualityToDpi(2), 300.0f);
-        QCOMPARE(Cache::qualityToDpi(-1), 225.0f);
-        QCOMPARE(Cache::qualityToDpi(99), 225.0f);
-    }
-
     void convertsCacheItems()
     {
         using ::Mu::Plugin::Caching::OCR::Cache;

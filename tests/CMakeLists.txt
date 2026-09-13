@@ -70,6 +70,10 @@ add_layer_test(test_plugin_ocrcache plugin/test_ocrcache.cpp plugin)
 target_include_directories(test_plugin_ocrcache PRIVATE ../src)
 target_link_libraries(test_plugin_ocrcache PRIVATE mupdf_plugin_cache)
 
+add_layer_test(test_plugin_ocroptions plugin/test_ocr_options.cpp plugin)
+target_include_directories(test_plugin_ocroptions PRIVATE ../src)
+target_link_libraries(test_plugin_ocroptions PRIVATE mupdf_plugin_util)
+
 add_layer_test(test_plugin_epubcache plugin/test_epubcache.cpp plugin)
 target_include_directories(test_plugin_epubcache PRIVATE ../src)
 target_link_libraries(test_plugin_epubcache PRIVATE Qt6::Core mupdf_plugin_cache)

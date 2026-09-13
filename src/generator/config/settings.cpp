@@ -8,7 +8,7 @@
 #include <algorithm>
 
 #include "mupdfngsettings.h"
-#include "plugin/caching/ocr_cache.hpp"
+#include "plugin/util/ocr_options.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Generator::Config {
@@ -173,7 +173,7 @@ OcrSettings readOcrSettings()
     // that is not a model filename is malformed (only hand-edited config can
     // reach it) and must not silently flip OCR to English: degrade to off.
     OcrSettings settings;
-    settings.dpi = static_cast<int>(Plugin::Caching::OCR::Cache::qualityToDpi(MuPDFNGSettings::ocrQuality()));
+    settings.dpi = static_cast<int>(Plugin::Util::qualityToDpi(MuPDFNGSettings::ocrQuality()));
     settings.notify = MuPDFNGSettings::ocrNotify();
     settings.debounceMs = ocrDebounceMsForConfig(MuPDFNGSettings::ocrDebounceMs());
     QString language = MuPDFNGSettings::ocrLanguage();
@@ -188,7 +188,7 @@ OcrSettings readOcrSettings()
         settings.autoTrigger = false;
         return settings;
     }
-    settings.language = Plugin::Caching::OCR::Cache::stripLangSuffix(language);
+    settings.language = Plugin::Util::stripLangSuffix(language);
 
     switch (MuPDFNGSettings::ocrTriggerMode()) {
     case MuPDFNGSettings::EnumOcrTriggerMode::Five:
