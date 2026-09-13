@@ -98,17 +98,22 @@ private slots:
         QVERIFY2(document.openFd(::dup(sourceFile.handle()), "source.pdf", &error), error.c_str());
         sourceFile.close();
 
+        ::Mu::Model::Annotation unsupported;
+        unsupported.subtype = ::Mu::Model::AnnotationType::Unknown;
+        std::int32_t unsupportedObject = -1;
+        QVERIFY(!document.addAnnotation(0, unsupported, &unsupportedObject, &error));
+
         const auto before = renderPdfPage(document, 0, 612, 792, &error);
         QVERIFY2(!before.empty(), error.c_str());
         ::Mu::Model::Annotation annotation;
-        annotation.subtype = PDF_ANNOT_HIGHLIGHT;
+        annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
         annotation.uuid = "highlight-round-trip";
         annotation.x0 = .1;
         annotation.y0 = .3;
         annotation.x1 = .4;
         annotation.y1 = .35;
         annotation.color = 0xffffff00U;
-        annotation.flags = PDF_ANNOT_IS_PRINT;
+        annotation.flags = ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Print);
         annotation.extras.quads.push_back({ { .1, .3 }, { .4, .3 }, { .4, .35 }, { .1, .35 } });
         std::int32_t object = -1;
         QVERIFY2(document.addAnnotation(0, annotation, &object, &error), error.c_str());
@@ -167,14 +172,14 @@ private slots:
             const double x0 = .03 + .095 * (i % 10);
             const double y0 = .03 + .08 * (i / 10);
             ::Mu::Model::Annotation annotation;
-            annotation.subtype = PDF_ANNOT_HIGHLIGHT;
+            annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
             annotation.uuid = "stress-" + std::to_string(i);
             annotation.x0 = x0;
             annotation.y0 = y0;
             annotation.x1 = x0 + .07;
             annotation.y1 = y0 + .03;
             annotation.color = i % 2 ? 0xffffff00U : 0xff00ff00U;
-            annotation.flags = PDF_ANNOT_IS_PRINT;
+            annotation.flags = ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Print);
             annotation.extras.quads.push_back(
                 { { x0, y0 }, { annotation.x1, y0 }, { annotation.x1, annotation.y1 }, { x0, annotation.y1 } });
             std::int32_t object = -1;
@@ -261,7 +266,7 @@ private slots:
         QVERIFY2(!opened.error, opened.error ? opened.error->message.c_str() : "");
 
         ::Mu::Model::Annotation annotation;
-        annotation.subtype = PDF_ANNOT_HIGHLIGHT;
+        annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
         annotation.x0 = -10.0;
         annotation.y0 = 2.0;
         annotation.x1 = 10.0;

@@ -157,7 +157,7 @@ private:
     [[nodiscard]] std::vector<Link> extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error) const;
 
     /// Returns true if an annotation type is supported for editing.
-    [[nodiscard]] static constexpr bool isEditableAnnotation(std::int32_t type) noexcept;
+    [[nodiscard]] static constexpr bool isEditableAnnotation(Model::AnnotationType type) noexcept;
 
     /// Applies properties to a MuPDF target annotation.
     static void applyAnnotation(fz_context* context,

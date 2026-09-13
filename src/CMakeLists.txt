@@ -133,7 +133,6 @@ target_link_libraries(mupdf_generator_adapters PUBLIC
     Qt6::Widgets
     Qt6::Xml
     KF6::I18n
-    MuPDF::Headers
     mupdf_plugin_crypto
     mupdf_plugin_util
 )
@@ -151,7 +150,6 @@ target_link_libraries(mupdf_generator_signature PUBLIC
     Okular::Core
     Qt6::Core
     Qt6::Gui
-    MuPDF::Headers
     mupdf_plugin_crypto
     mupdf_plugin_util
     mupdf_plugin_worker
@@ -258,7 +256,6 @@ target_link_libraries(okularGenerator_mupdfng
     Qt6::Network
     Qt6::Xml
     ZLIB::ZLIB
-    MuPDF::Headers
     ${NSS_LIBRARIES}
 )
 target_compile_definitions(okularGenerator_mupdfng PRIVATE

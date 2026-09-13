@@ -8,10 +8,6 @@
 
 #include <limits>
 
-extern "C" {
-#include <mupdf/pdf.h>
-}
-
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
 
@@ -248,7 +244,7 @@ private slots:
     void annotationConversionPreservesOpacityAndCaretSymbol()
     {
         ::Mu::Model::Annotation source;
-        source.subtype = PDF_ANNOT_CARET;
+        source.subtype = ::Mu::Model::AnnotationType::Caret;
         source.color = 0x80402010;
         source.extras.caretSymbolP = true;
 
@@ -267,10 +263,63 @@ private slots:
         QVERIFY(roundTripped->extras.caretSymbolP);
     }
 
+    void annotationConversionRoundTripsProtocolSubtypes()
+    {
+        const ::Mu::Model::AnnotationType supported[] = {
+            ::Mu::Model::AnnotationType::Text,      ::Mu::Model::AnnotationType::FreeText,
+            ::Mu::Model::AnnotationType::Line,      ::Mu::Model::AnnotationType::Polygon,
+            ::Mu::Model::AnnotationType::PolyLine,  ::Mu::Model::AnnotationType::Square,
+            ::Mu::Model::AnnotationType::Circle,    ::Mu::Model::AnnotationType::Highlight,
+            ::Mu::Model::AnnotationType::Underline, ::Mu::Model::AnnotationType::Squiggly,
+            ::Mu::Model::AnnotationType::StrikeOut, ::Mu::Model::AnnotationType::Ink,
+            ::Mu::Model::AnnotationType::Stamp,     ::Mu::Model::AnnotationType::Caret,
+        };
+        for (const auto subtype : supported) {
+            ::Mu::Model::Annotation source;
+            source.subtype = subtype;
+            if (subtype == ::Mu::Model::AnnotationType::Polygon || subtype == ::Mu::Model::AnnotationType::PolyLine) {
+                source.extras.points = { { .1, .1 }, { .5, .5 }, { .8, .2 } };
+                source.extras.style.closed = subtype == ::Mu::Model::AnnotationType::Polygon;
+            }
+            const auto annotation = ::Mu::Generator::Conversion::fromModel(source);
+            QVERIFY2(annotation != nullptr, "supported protocol subtype was rejected by generator conversion");
+            const auto roundTripped = ::Mu::Generator::Conversion::toModel(annotation.get());
+            QVERIFY2(roundTripped.has_value(), "converted annotation could not be converted back to model");
+            QCOMPARE(roundTripped->subtype, subtype);
+        }
+    }
+
+    void annotationConversionUsesProtocolFlagsAndStyleValues()
+    {
+        Okular::LineAnnotation source;
+        source.setFlags(Okular::Annotation::Hidden | Okular::Annotation::FixedSize | Okular::Annotation::FixedRotation
+                        | Okular::Annotation::DenyWrite | Okular::Annotation::DenyDelete
+                        | Okular::Annotation::ToggleHidingOnMouse);
+        source.setLinePoints({ { .1, .1 }, { .8, .8 } });
+        source.setLineStartStyle(Okular::LineAnnotation::Slash);
+        source.setLineEndStyle(Okular::LineAnnotation::ClosedArrow);
+        source.setLineIntent(Okular::LineAnnotation::Arrow);
+
+        const auto model = ::Mu::Generator::Conversion::toModel(&source);
+        QVERIFY(model.has_value());
+        QCOMPARE(model->subtype, ::Mu::Model::AnnotationType::Line);
+        const int expectedFlags = ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Hidden)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Print)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::NoZoom)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::NoRotate)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::ReadOnly)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Locked)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::ToggleNoView);
+        QCOMPARE(model->flags, expectedFlags);
+        QCOMPARE(*model->extras.style.firstLineEnding, ::Mu::Model::AnnotationLineEnding::Slash);
+        QCOMPARE(*model->extras.style.lastLineEnding, ::Mu::Model::AnnotationLineEnding::ClosedArrow);
+        QCOMPARE(*model->extras.style.intent, ::Mu::Model::AnnotationIntent::LineArrow);
+    }
+
     void annotationConversionRejectsFileAttachmentsWithoutPayload()
     {
         ::Mu::Model::Annotation source;
-        source.subtype = PDF_ANNOT_FILE_ATTACHMENT;
+        source.subtype = ::Mu::Model::AnnotationType::FileAttachment;
         QVERIFY(!::Mu::Generator::Conversion::fromModel(source));
 
         Okular::FileAttachmentAnnotation annotation;
@@ -669,7 +718,7 @@ private slots:
         QCOMPARE(page.annotations().size(), 1);
 
         ::Mu::Model::Annotation clean;
-        clean.subtype = PDF_ANNOT_TEXT;
+        clean.subtype = ::Mu::Model::AnnotationType::Text;
         clean.uuid = "clean-uuid";
         clean.handle = "clean-handle";
         clean.contents = "Saved";
@@ -686,7 +735,7 @@ private slots:
         QCOMPARE(annotations.front()->nativeId().toString(), QStringLiteral("clean-handle"));
 
         ::Mu::Model::Annotation unsupported;
-        unsupported.subtype = -1;
+        unsupported.subtype = ::Mu::Model::AnnotationType::Unknown;
         ::Mu::Generator::Conversion::rebuildPageAnnotations(&page, { unsupported });
         QVERIFY(page.annotations().isEmpty());
 

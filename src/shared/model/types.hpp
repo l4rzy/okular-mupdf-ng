@@ -99,6 +99,60 @@ struct Quad {
     Point upperLeft, upperRight, lowerRight, lowerLeft;
 };
 
+/// Stable annotation subtype values exchanged across the worker boundary.
+enum class AnnotationType : std::int32_t {
+    Text = 0,
+    Link = 1,
+    FreeText = 2,
+    Line = 3,
+    Square = 4,
+    Circle = 5,
+    Polygon = 6,
+    PolyLine = 7,
+    Highlight = 8,
+    Underline = 9,
+    Squiggly = 10,
+    StrikeOut = 11,
+    Redact = 12,
+    Stamp = 13,
+    Caret = 14,
+    Ink = 15,
+    Popup = 16,
+    FileAttachment = 17,
+    Sound = 18,
+    Movie = 19,
+    RichMedia = 20,
+    Widget = 21,
+    Screen = 22,
+    PrinterMark = 23,
+    TrapNet = 24,
+    Watermark = 25,
+    ThreeD = 26,
+    Projection = 27,
+    Unknown = -1,
+};
+
+/// Stable annotation flag bits exchanged across the worker boundary.
+enum class AnnotationFlag : std::int32_t {
+    Invisible = 1 << 0,
+    Hidden = 1 << 1,
+    Print = 1 << 2,
+    NoZoom = 1 << 3,
+    NoRotate = 1 << 4,
+    NoView = 1 << 5,
+    ReadOnly = 1 << 6,
+    Locked = 1 << 7,
+    ToggleNoView = 1 << 8,
+    LockedContents = 1 << 9,
+};
+
+/// Returns the wire bit represented by an annotation flag.
+[[nodiscard]]
+inline constexpr std::int32_t annotationFlagValue(AnnotationFlag flag) noexcept
+{
+    return static_cast<std::int32_t>(flag);
+}
+
 /// Optional visual properties for text and stamp annotations.
 struct AnnotationAppearance {
     std::string icon;
@@ -123,12 +177,27 @@ enum class AnnotationLineEnding : std::int32_t {
     Slash = 9,
 };
 
+/// Stable annotation intent values exchanged across the worker boundary.
+enum class AnnotationIntent : std::int32_t {
+    Default = 0,
+    FreeTextCallout = 1,
+    FreeTextTypewriter = 2,
+    LineArrow = 3,
+    LineDimension = 4,
+    PolyLineDimension = 5,
+    PolygonCloud = 6,
+    PolygonDimension = 7,
+    StampImage = 8,
+    StampSnapshot = 9,
+    Unknown = 255,
+};
+
 /// Optional annotation style overrides supplied by the caller.
 struct AnnotationStyle {
     std::optional<AnnotationAppearance> appearance;
     std::optional<double> borderWidth;
     std::optional<std::uint32_t> interiorColor;
-    std::optional<std::int32_t> intent;
+    std::optional<AnnotationIntent> intent;
     std::optional<AnnotationLineEnding> firstLineEnding;
     std::optional<AnnotationLineEnding> lastLineEnding;
     std::optional<bool> closed;
@@ -147,7 +216,7 @@ struct AnnotationExtras {
 
 /// Annotation data exchanged between the plugin and worker.
 struct Annotation {
-    std::int32_t subtype = 0;
+    AnnotationType subtype = AnnotationType::Text;
     std::string uuid;
     /// Normalized page bounds in the inclusive [0, 1] range.
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;

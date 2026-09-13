@@ -168,7 +168,7 @@ inline void value(std::ostringstream& out, const Model::Value& input, std::size_
 
 inline void annotation(std::ostringstream& out, const Model::Annotation& input)
 {
-    out << "{subtype=" << input.subtype;
+    out << "{subtype=" << static_cast<std::int32_t>(input.subtype);
     field(out, "uuid", input.uuid);
     rect(out, "rect", input.x0, input.y0, input.x1, input.y1);
     field(out, "contents", input.contents);

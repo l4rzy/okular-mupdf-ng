@@ -113,6 +113,290 @@ constexpr bool isMarkupAnnotation(enum pdf_annot_type type) noexcept
         || type == PDF_ANNOT_STRIKE_OUT;
 }
 
+constexpr AnnotationType modelAnnotationType(enum pdf_annot_type type) noexcept
+{
+    switch (type) {
+    case PDF_ANNOT_TEXT:
+        return AnnotationType::Text;
+    case PDF_ANNOT_LINK:
+        return AnnotationType::Link;
+    case PDF_ANNOT_FREE_TEXT:
+        return AnnotationType::FreeText;
+    case PDF_ANNOT_LINE:
+        return AnnotationType::Line;
+    case PDF_ANNOT_SQUARE:
+        return AnnotationType::Square;
+    case PDF_ANNOT_CIRCLE:
+        return AnnotationType::Circle;
+    case PDF_ANNOT_POLYGON:
+        return AnnotationType::Polygon;
+    case PDF_ANNOT_POLY_LINE:
+        return AnnotationType::PolyLine;
+    case PDF_ANNOT_HIGHLIGHT:
+        return AnnotationType::Highlight;
+    case PDF_ANNOT_UNDERLINE:
+        return AnnotationType::Underline;
+    case PDF_ANNOT_SQUIGGLY:
+        return AnnotationType::Squiggly;
+    case PDF_ANNOT_STRIKE_OUT:
+        return AnnotationType::StrikeOut;
+    case PDF_ANNOT_REDACT:
+        return AnnotationType::Redact;
+    case PDF_ANNOT_STAMP:
+        return AnnotationType::Stamp;
+    case PDF_ANNOT_CARET:
+        return AnnotationType::Caret;
+    case PDF_ANNOT_INK:
+        return AnnotationType::Ink;
+    case PDF_ANNOT_POPUP:
+        return AnnotationType::Popup;
+    case PDF_ANNOT_FILE_ATTACHMENT:
+        return AnnotationType::FileAttachment;
+    case PDF_ANNOT_SOUND:
+        return AnnotationType::Sound;
+    case PDF_ANNOT_MOVIE:
+        return AnnotationType::Movie;
+    case PDF_ANNOT_RICH_MEDIA:
+        return AnnotationType::RichMedia;
+    case PDF_ANNOT_WIDGET:
+        return AnnotationType::Widget;
+    case PDF_ANNOT_SCREEN:
+        return AnnotationType::Screen;
+    case PDF_ANNOT_PRINTER_MARK:
+        return AnnotationType::PrinterMark;
+    case PDF_ANNOT_TRAP_NET:
+        return AnnotationType::TrapNet;
+    case PDF_ANNOT_WATERMARK:
+        return AnnotationType::Watermark;
+    case PDF_ANNOT_3D:
+        return AnnotationType::ThreeD;
+    case PDF_ANNOT_PROJECTION:
+        return AnnotationType::Projection;
+    default:
+        return AnnotationType::Unknown;
+    }
+}
+
+constexpr enum pdf_annot_type pdfAnnotationType(AnnotationType type) noexcept
+{
+    switch (type) {
+    case AnnotationType::Text:
+        return PDF_ANNOT_TEXT;
+    case AnnotationType::Link:
+        return PDF_ANNOT_LINK;
+    case AnnotationType::FreeText:
+        return PDF_ANNOT_FREE_TEXT;
+    case AnnotationType::Line:
+        return PDF_ANNOT_LINE;
+    case AnnotationType::Square:
+        return PDF_ANNOT_SQUARE;
+    case AnnotationType::Circle:
+        return PDF_ANNOT_CIRCLE;
+    case AnnotationType::Polygon:
+        return PDF_ANNOT_POLYGON;
+    case AnnotationType::PolyLine:
+        return PDF_ANNOT_POLY_LINE;
+    case AnnotationType::Highlight:
+        return PDF_ANNOT_HIGHLIGHT;
+    case AnnotationType::Underline:
+        return PDF_ANNOT_UNDERLINE;
+    case AnnotationType::Squiggly:
+        return PDF_ANNOT_SQUIGGLY;
+    case AnnotationType::StrikeOut:
+        return PDF_ANNOT_STRIKE_OUT;
+    case AnnotationType::Redact:
+        return PDF_ANNOT_REDACT;
+    case AnnotationType::Stamp:
+        return PDF_ANNOT_STAMP;
+    case AnnotationType::Caret:
+        return PDF_ANNOT_CARET;
+    case AnnotationType::Ink:
+        return PDF_ANNOT_INK;
+    case AnnotationType::Popup:
+        return PDF_ANNOT_POPUP;
+    case AnnotationType::FileAttachment:
+        return PDF_ANNOT_FILE_ATTACHMENT;
+    case AnnotationType::Sound:
+        return PDF_ANNOT_SOUND;
+    case AnnotationType::Movie:
+        return PDF_ANNOT_MOVIE;
+    case AnnotationType::RichMedia:
+        return PDF_ANNOT_RICH_MEDIA;
+    case AnnotationType::Widget:
+        return PDF_ANNOT_WIDGET;
+    case AnnotationType::Screen:
+        return PDF_ANNOT_SCREEN;
+    case AnnotationType::PrinterMark:
+        return PDF_ANNOT_PRINTER_MARK;
+    case AnnotationType::TrapNet:
+        return PDF_ANNOT_TRAP_NET;
+    case AnnotationType::Watermark:
+        return PDF_ANNOT_WATERMARK;
+    case AnnotationType::ThreeD:
+        return PDF_ANNOT_3D;
+    case AnnotationType::Projection:
+        return PDF_ANNOT_PROJECTION;
+    default:
+        return PDF_ANNOT_UNKNOWN;
+    }
+}
+
+constexpr int modelAnnotationFlags(int flags) noexcept
+{
+    int result = 0;
+    const auto copy = [&result, flags](int pdfFlag, AnnotationFlag modelFlag) {
+        if (flags & pdfFlag)
+            result |= annotationFlagValue(modelFlag);
+    };
+    copy(PDF_ANNOT_IS_INVISIBLE, AnnotationFlag::Invisible);
+    copy(PDF_ANNOT_IS_HIDDEN, AnnotationFlag::Hidden);
+    copy(PDF_ANNOT_IS_PRINT, AnnotationFlag::Print);
+    copy(PDF_ANNOT_IS_NO_ZOOM, AnnotationFlag::NoZoom);
+    copy(PDF_ANNOT_IS_NO_ROTATE, AnnotationFlag::NoRotate);
+    copy(PDF_ANNOT_IS_NO_VIEW, AnnotationFlag::NoView);
+    copy(PDF_ANNOT_IS_READ_ONLY, AnnotationFlag::ReadOnly);
+    copy(PDF_ANNOT_IS_LOCKED, AnnotationFlag::Locked);
+    copy(PDF_ANNOT_IS_TOGGLE_NO_VIEW, AnnotationFlag::ToggleNoView);
+    copy(PDF_ANNOT_IS_LOCKED_CONTENTS, AnnotationFlag::LockedContents);
+    return result;
+}
+
+constexpr int pdfAnnotationFlags(int flags) noexcept
+{
+    int result = 0;
+    const auto copy = [&result, flags](AnnotationFlag modelFlag, int pdfFlag) {
+        if (flags & annotationFlagValue(modelFlag))
+            result |= pdfFlag;
+    };
+    copy(AnnotationFlag::Invisible, PDF_ANNOT_IS_INVISIBLE);
+    copy(AnnotationFlag::Hidden, PDF_ANNOT_IS_HIDDEN);
+    copy(AnnotationFlag::Print, PDF_ANNOT_IS_PRINT);
+    copy(AnnotationFlag::NoZoom, PDF_ANNOT_IS_NO_ZOOM);
+    copy(AnnotationFlag::NoRotate, PDF_ANNOT_IS_NO_ROTATE);
+    copy(AnnotationFlag::NoView, PDF_ANNOT_IS_NO_VIEW);
+    copy(AnnotationFlag::ReadOnly, PDF_ANNOT_IS_READ_ONLY);
+    copy(AnnotationFlag::Locked, PDF_ANNOT_IS_LOCKED);
+    copy(AnnotationFlag::ToggleNoView, PDF_ANNOT_IS_TOGGLE_NO_VIEW);
+    copy(AnnotationFlag::LockedContents, PDF_ANNOT_IS_LOCKED_CONTENTS);
+    return result;
+}
+
+constexpr AnnotationLineEnding modelLineEnding(enum pdf_line_ending value) noexcept
+{
+    switch (value) {
+    case PDF_ANNOT_LE_NONE:
+        return AnnotationLineEnding::None;
+    case PDF_ANNOT_LE_SQUARE:
+        return AnnotationLineEnding::Square;
+    case PDF_ANNOT_LE_CIRCLE:
+        return AnnotationLineEnding::Circle;
+    case PDF_ANNOT_LE_DIAMOND:
+        return AnnotationLineEnding::Diamond;
+    case PDF_ANNOT_LE_OPEN_ARROW:
+        return AnnotationLineEnding::OpenArrow;
+    case PDF_ANNOT_LE_CLOSED_ARROW:
+        return AnnotationLineEnding::ClosedArrow;
+    case PDF_ANNOT_LE_BUTT:
+        return AnnotationLineEnding::Butt;
+    case PDF_ANNOT_LE_R_OPEN_ARROW:
+        return AnnotationLineEnding::ROpenArrow;
+    case PDF_ANNOT_LE_R_CLOSED_ARROW:
+        return AnnotationLineEnding::RClosedArrow;
+    case PDF_ANNOT_LE_SLASH:
+        return AnnotationLineEnding::Slash;
+    default:
+        return AnnotationLineEnding::None;
+    }
+}
+
+constexpr enum pdf_line_ending pdfLineEnding(AnnotationLineEnding value) noexcept
+{
+    switch (value) {
+    case AnnotationLineEnding::None:
+        return PDF_ANNOT_LE_NONE;
+    case AnnotationLineEnding::Square:
+        return PDF_ANNOT_LE_SQUARE;
+    case AnnotationLineEnding::Circle:
+        return PDF_ANNOT_LE_CIRCLE;
+    case AnnotationLineEnding::Diamond:
+        return PDF_ANNOT_LE_DIAMOND;
+    case AnnotationLineEnding::OpenArrow:
+        return PDF_ANNOT_LE_OPEN_ARROW;
+    case AnnotationLineEnding::ClosedArrow:
+        return PDF_ANNOT_LE_CLOSED_ARROW;
+    case AnnotationLineEnding::Butt:
+        return PDF_ANNOT_LE_BUTT;
+    case AnnotationLineEnding::ROpenArrow:
+        return PDF_ANNOT_LE_R_OPEN_ARROW;
+    case AnnotationLineEnding::RClosedArrow:
+        return PDF_ANNOT_LE_R_CLOSED_ARROW;
+    case AnnotationLineEnding::Slash:
+        return PDF_ANNOT_LE_SLASH;
+    default:
+        return PDF_ANNOT_LE_NONE;
+    }
+}
+
+constexpr AnnotationIntent modelAnnotationIntent(enum pdf_intent value) noexcept
+{
+    switch (value) {
+    case PDF_ANNOT_IT_DEFAULT:
+        return AnnotationIntent::Default;
+    case PDF_ANNOT_IT_FREETEXT_CALLOUT:
+        return AnnotationIntent::FreeTextCallout;
+    case PDF_ANNOT_IT_FREETEXT_TYPEWRITER:
+        return AnnotationIntent::FreeTextTypewriter;
+    case PDF_ANNOT_IT_LINE_ARROW:
+        return AnnotationIntent::LineArrow;
+    case PDF_ANNOT_IT_LINE_DIMENSION:
+        return AnnotationIntent::LineDimension;
+    case PDF_ANNOT_IT_POLYLINE_DIMENSION:
+        return AnnotationIntent::PolyLineDimension;
+    case PDF_ANNOT_IT_POLYGON_CLOUD:
+        return AnnotationIntent::PolygonCloud;
+    case PDF_ANNOT_IT_POLYGON_DIMENSION:
+        return AnnotationIntent::PolygonDimension;
+    case PDF_ANNOT_IT_STAMP_IMAGE:
+        return AnnotationIntent::StampImage;
+    case PDF_ANNOT_IT_STAMP_SNAPSHOT:
+        return AnnotationIntent::StampSnapshot;
+    case PDF_ANNOT_IT_UNKNOWN:
+        return AnnotationIntent::Unknown;
+    default:
+        return AnnotationIntent::Unknown;
+    }
+}
+
+constexpr enum pdf_intent pdfAnnotationIntent(AnnotationIntent value) noexcept
+{
+    switch (value) {
+    case AnnotationIntent::Default:
+        return PDF_ANNOT_IT_DEFAULT;
+    case AnnotationIntent::FreeTextCallout:
+        return PDF_ANNOT_IT_FREETEXT_CALLOUT;
+    case AnnotationIntent::FreeTextTypewriter:
+        return PDF_ANNOT_IT_FREETEXT_TYPEWRITER;
+    case AnnotationIntent::LineArrow:
+        return PDF_ANNOT_IT_LINE_ARROW;
+    case AnnotationIntent::LineDimension:
+        return PDF_ANNOT_IT_LINE_DIMENSION;
+    case AnnotationIntent::PolyLineDimension:
+        return PDF_ANNOT_IT_POLYLINE_DIMENSION;
+    case AnnotationIntent::PolygonCloud:
+        return PDF_ANNOT_IT_POLYGON_CLOUD;
+    case AnnotationIntent::PolygonDimension:
+        return PDF_ANNOT_IT_POLYGON_DIMENSION;
+    case AnnotationIntent::StampImage:
+        return PDF_ANNOT_IT_STAMP_IMAGE;
+    case AnnotationIntent::StampSnapshot:
+        return PDF_ANNOT_IT_STAMP_SNAPSHOT;
+    case AnnotationIntent::Unknown:
+        return PDF_ANNOT_IT_UNKNOWN;
+    default:
+        return PDF_ANNOT_IT_UNKNOWN;
+    }
+}
+
 /// Converts PDF float color components [0.0, 1.0] and opacity to 32-bit ARGB integer.
 std::uint32_t pdfColorToArgb(int components, const float values[4], float opacity)
 {
@@ -201,7 +485,7 @@ bool PdfDocument::addAnnotation(int page, const Annotation& annotation, std::int
         if (!pdfPage || !isEditableAnnotation(annotation.subtype))
             fz_throw(m_context, FZ_ERROR_ARGUMENT, "annotation type is not editable");
 
-        created = pdf_create_annot(m_context, pdfPage, static_cast<enum pdf_annot_type>(annotation.subtype));
+        created = pdf_create_annot(m_context, pdfPage, pdfAnnotationType(annotation.subtype));
 
         applyAnnotation(m_context, created, normalized, fz_bound_page(m_context, nativePage), true);
 
@@ -249,8 +533,8 @@ bool PdfDocument::modifyAnnotation(
     Annotation normalized = annotation;
     normalizeAnnotationForWrite(normalized);
     return withAnnotation(page, objectNumber, error, [&](pdf_page* pdfPage, pdf_annot* target) {
-        if (!isEditableAnnotation(pdf_annot_type(m_context, target))
-            || annotation.subtype != pdf_annot_type(m_context, target))
+        const AnnotationType targetType = modelAnnotationType(pdf_annot_type(m_context, target));
+        if (!isEditableAnnotation(targetType) || annotation.subtype != targetType)
             fz_throw(m_context, FZ_ERROR_ARGUMENT, "annotation type mismatch");
 
         applyAnnotation(
@@ -297,10 +581,10 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 if (type == PDF_ANNOT_WIDGET)
                     continue;
 
-                value.subtype = static_cast<std::int32_t>(type);
+                value.subtype = modelAnnotationType(type);
                 value.nativeIndex = index;
                 value.pdfObjectNumber = pdf_to_num(m_context, pdf_annot_obj(m_context, annotation));
-                value.flags = pdf_annot_flags(m_context, annotation);
+                value.flags = modelAnnotationFlags(pdf_annot_flags(m_context, annotation));
 
                 if (const char* text = pdf_annot_name(m_context, annotation))
                     value.uuid = text;
@@ -347,7 +631,7 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                     }
                 }
                 if (pdf_annot_has_intent(m_context, annotation))
-                    value.extras.style.intent = static_cast<std::int32_t>(pdf_annot_intent(m_context, annotation));
+                    value.extras.style.intent = modelAnnotationIntent(pdf_annot_intent(m_context, annotation));
                 if (type == PDF_ANNOT_CARET) {
                     value.extras.caretSymbolP = pdf_name_eq(
                         m_context, pdf_dict_gets(m_context, pdf_annot_obj(m_context, annotation), "Sy"), PDF_NAME(P));
@@ -394,9 +678,9 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                     // Lines use two endpoints; polygons and polylines use a vertex list.
                     if (pdf_annot_has_line_ending_styles(m_context, annotation)) {
                         value.extras.style.firstLineEnding =
-                            static_cast<AnnotationLineEnding>(pdf_annot_line_start_style(m_context, annotation));
+                            modelLineEnding(pdf_annot_line_start_style(m_context, annotation));
                         value.extras.style.lastLineEnding =
-                            static_cast<AnnotationLineEnding>(pdf_annot_line_end_style(m_context, annotation));
+                            modelLineEnding(pdf_annot_line_end_style(m_context, annotation));
                     }
                     value.extras.style.closed = (type == PDF_ANNOT_POLYGON);
                     if (type == PDF_ANNOT_LINE) {
@@ -464,23 +748,23 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
 // Annotation Type Validation
 // =============================================================================
 
-constexpr bool PdfDocument::isEditableAnnotation(std::int32_t type) noexcept
+constexpr bool PdfDocument::isEditableAnnotation(AnnotationType type) noexcept
 {
     switch (type) {
-    case PDF_ANNOT_TEXT:
-    case PDF_ANNOT_FREE_TEXT:
-    case PDF_ANNOT_LINE:
-    case PDF_ANNOT_SQUARE:
-    case PDF_ANNOT_CIRCLE:
-    case PDF_ANNOT_POLYGON:
-    case PDF_ANNOT_POLY_LINE:
-    case PDF_ANNOT_HIGHLIGHT:
-    case PDF_ANNOT_UNDERLINE:
-    case PDF_ANNOT_SQUIGGLY:
-    case PDF_ANNOT_STRIKE_OUT:
-    case PDF_ANNOT_STAMP:
-    case PDF_ANNOT_CARET:
-    case PDF_ANNOT_INK:
+    case AnnotationType::Text:
+    case AnnotationType::FreeText:
+    case AnnotationType::Line:
+    case AnnotationType::Square:
+    case AnnotationType::Circle:
+    case AnnotationType::Polygon:
+    case AnnotationType::PolyLine:
+    case AnnotationType::Highlight:
+    case AnnotationType::Underline:
+    case AnnotationType::Squiggly:
+    case AnnotationType::StrikeOut:
+    case AnnotationType::Stamp:
+    case AnnotationType::Caret:
+    case AnnotationType::Ink:
         return true;
     default:
         return false;
@@ -535,7 +819,7 @@ void PdfDocument::applyAnnotation(fz_context* context,
             pdf_set_annot_color(context, target, 3, color);
 
         pdf_set_annot_opacity(context, target, opacity);
-        pdf_set_annot_flags(context, target, annotation.flags);
+        pdf_set_annot_flags(context, target, pdfAnnotationFlags(annotation.flags));
 
         const auto type = pdf_annot_type(context, target);
         const bool markup = isMarkupAnnotation(type);
@@ -556,7 +840,7 @@ void PdfDocument::applyAnnotation(fz_context* context,
             pdf_set_annot_icon_name(context, target, annotation.extras.style.appearance->icon.c_str());
 
         if (annotation.extras.style.intent)
-            pdf_set_annot_intent(context, target, static_cast<enum pdf_intent>(*annotation.extras.style.intent));
+            pdf_set_annot_intent(context, target, pdfAnnotationIntent(*annotation.extras.style.intent));
 
         if (type == PDF_ANNOT_CARET) {
             pdf_obj* annotationObject = pdf_annot_obj(context, target);
@@ -573,11 +857,10 @@ void PdfDocument::applyAnnotation(fz_context* context,
         }
 
         if (annotation.extras.style.firstLineEnding && annotation.extras.style.lastLineEnding)
-            pdf_set_annot_line_ending_styles(
-                context,
-                target,
-                static_cast<enum pdf_line_ending>(*annotation.extras.style.firstLineEnding),
-                static_cast<enum pdf_line_ending>(*annotation.extras.style.lastLineEnding));
+            pdf_set_annot_line_ending_styles(context,
+                                             target,
+                                             pdfLineEnding(*annotation.extras.style.firstLineEnding),
+                                             pdfLineEnding(*annotation.extras.style.lastLineEnding));
 
         // PDF 1.7 Specification (Table 174): QuadPoints require 8 numbers per quad in the order:
         // top-left, top-right, bottom-left, bottom-right.
@@ -648,7 +931,7 @@ void PdfDocument::applyAnnotation(fz_context* context,
         }
 
         if (type == PDF_ANNOT_FREE_TEXT && !annotation.extras.callout.empty() && annotation.extras.style.intent
-            && *annotation.extras.style.intent == PDF_ANNOT_IT_FREETEXT_CALLOUT) {
+            && *annotation.extras.style.intent == AnnotationIntent::FreeTextCallout) {
             fz_point pts[3] { };
             const int n = std::min(static_cast<int>(annotation.extras.callout.size()), 3);
             for (int i = 0; i < n; ++i)

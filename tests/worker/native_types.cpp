@@ -356,6 +356,30 @@ private slots:
         QVERIFY(decodedAnnotation.extras.caretSymbolP);
     }
 
+    void annotationCodecPreservesProtocolValues()
+    {
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = ::Mu::Model::AnnotationType::Projection;
+        annotation.flags = ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Invisible)
+            | ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::LockedContents);
+        annotation.extras.style.intent = ::Mu::Model::AnnotationIntent::StampSnapshot;
+        annotation.extras.style.firstLineEnding = ::Mu::Model::AnnotationLineEnding::Slash;
+        annotation.extras.style.lastLineEnding = ::Mu::Model::AnnotationLineEnding::RClosedArrow;
+
+        std::string error;
+        const auto encoded = ::Mu::IPC::ZppCodec::encode(
+            ::Mu::Model::RequestMessage { 48, ::Mu::Model::AnnotationAddRequest { 0, annotation } }, &error);
+        QVERIFY2(encoded, error.c_str());
+        ::Mu::Model::RequestMessage decoded;
+        QVERIFY2(::Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
+        const auto& decodedAnnotation = std::get<::Mu::Model::AnnotationAddRequest>(decoded.payload).annotation;
+        QCOMPARE(decodedAnnotation.subtype, ::Mu::Model::AnnotationType::Projection);
+        QCOMPARE(decodedAnnotation.flags, annotation.flags);
+        QCOMPARE(*decodedAnnotation.extras.style.intent, ::Mu::Model::AnnotationIntent::StampSnapshot);
+        QCOMPARE(*decodedAnnotation.extras.style.firstLineEnding, ::Mu::Model::AnnotationLineEnding::Slash);
+        QCOMPARE(*decodedAnnotation.extras.style.lastLineEnding, ::Mu::Model::AnnotationLineEnding::RClosedArrow);
+    }
+
     void commandServiceDispatchesTypedPing()
     {
         ::Mu::Worker::Runtime::CommandService service({ });
