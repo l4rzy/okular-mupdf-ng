@@ -84,11 +84,11 @@ loadCmsSignerCertificate(NSSCMSSignedData* signedData, NSSCMSSignerInfo* signerI
 
     if (!signerInfo)
         return result;
-    // NSS returns a reference owned by the caller here. Keep that reference
-    // alive for the complete validation operation and release it exactly once.
+    // The returned certificate is owned by the signer info and released with the
+    // CMS message, so duplicate it to hold an independent caller-owned reference.
     CERTCertificate* signer = NSS_CMSSignerInfo_GetSigningCertificate(signerInfo, certdb);
     if (signer)
-        result.reset(signer);
+        result.reset(CERT_DupCertificate(signer));
     else
         MU_LOG(warning,
                "Mu::Plugin::Crypto",

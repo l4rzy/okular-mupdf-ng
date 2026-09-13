@@ -29,6 +29,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <utility>
 
 #include "plugin/crypto/certificate_info_internal.hpp"
 #include "plugin/crypto/nss.hpp"
@@ -302,10 +303,11 @@ SECStatus deleteCertificateInSlot(PK11SlotInfo* slot, CERTCertificate* certifica
 }
 
 // Attempts key cleanup after a failed import and returns a suffix describing
-// key material that could not be removed.
-QString keyRollbackSuffix(SECKEYPrivateKey* priv, SECKEYPublicKey* pub)
+// key material that could not be removed. Consumes both handles because the
+// PKCS #11 delete calls also destroy the key objects.
+QString keyRollbackSuffix(PrivateKeyHandle priv, PublicKeyHandle pub)
 {
-    if (::Mu::Plugin::Crypto::deleteTokenKeypair(priv, pub))
+    if (::Mu::Plugin::Crypto::deleteTokenKeypair(std::move(priv), std::move(pub)))
         return { };
     MU_LOG(warning,
            "Mu::Generator::CertificateManager",
@@ -406,10 +408,9 @@ bool generateRsaKeypair(SlotHandle& slot, PrivateKeyHandle* privateKey, PublicKe
     privateKey->reset(privKey);
     publicKey->reset(pubKey);
     if (!privKey || !pubKey) {
-        if (privKey)
-            PK11_DeleteTokenPrivateKey(privKey, PR_TRUE);
-        if (pubKey)
-            PK11_DeleteTokenPublicKey(pubKey);
+        // The helper consumes both handles; key generation already failed, so
+        // its cleanup status is intentionally not reported.
+        (void)::Mu::Plugin::Crypto::deleteTokenKeypair(std::move(*privateKey), std::move(*publicKey));
         setError(error, QStringLiteral("Could not generate the RSA signing key"));
         return false;
     }
@@ -478,7 +479,7 @@ bool encodeSignAndImport(SlotHandle& slot,
             == SECSuccess;
     const QString importError = imported ? QString { } : nssError();
     if (!imported) {
-        const QString keySuffix = keyRollbackSuffix(privateKey.get(), publicKey.get());
+        const QString keySuffix = keyRollbackSuffix(std::move(privateKey), std::move(publicKey));
         const QString action = certificate ? QStringLiteral("store the self-signed certificate in the NSS database")
                                            : QStringLiteral("decode the generated self-signed certificate");
         setError(error, QStringLiteral("Could not %1: %2%3").arg(action, importError, keySuffix));
@@ -714,13 +715,13 @@ bool createSelfSignedCertificate(const QString& databasePath,
         ? CERT_CreateCertificate(QRandomGenerator::global()->generate() | 1U, subject, validity.get(), request.get())
         : nullptr;
     if (!unsignedCertificate) {
-        const QString keySuffix = keyRollbackSuffix(privateKeyHandle.get(), publicKeyHandle.get());
+        const QString keySuffix = keyRollbackSuffix(std::move(privateKeyHandle), std::move(publicKeyHandle));
         setError(error, QStringLiteral("Could not construct the self-signed certificate") + keySuffix);
         return false;
     }
     CertificateHandle unsignedHandle(unsignedCertificate);
     if (!addSelfSignedExtensions(unsignedHandle.get(), error)) {
-        const QString keySuffix = keyRollbackSuffix(privateKeyHandle.get(), publicKeyHandle.get());
+        const QString keySuffix = keyRollbackSuffix(std::move(privateKeyHandle), std::move(publicKeyHandle));
         if (error)
             error->append(keySuffix);
         return false;

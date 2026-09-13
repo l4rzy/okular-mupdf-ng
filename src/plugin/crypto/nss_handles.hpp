@@ -178,13 +178,18 @@ inline NssCertificate findCertificateByNickname(CERTCertDBHandle* certdb, const 
     return NssCertificate(CERT_FindCertByNickname(certdb, name.constData()));
 }
 
-/// Deletes persistent private and public key objects; returns false when any
-/// deletion fails so callers can report the partial rollback.
+/// Deletes persistent private and public key objects; the handles are consumed on
+/// all paths because the PKCS #11 delete calls also destroy the key objects.
+/// Returns false when any deletion fails so callers can report the partial rollback.
 [[nodiscard]]
-inline bool deleteTokenKeypair(SECKEYPrivateKey* priv, SECKEYPublicKey* pub)
+inline bool deleteTokenKeypair(NssPrivateKey priv, NssPublicKey pub)
 {
-    const bool deletedPrivate = !priv || PK11_DeleteTokenPrivateKey(priv, PR_TRUE) == SECSuccess;
-    const bool deletedPublic = !pub || PK11_DeleteTokenPublicKey(pub) == SECSuccess;
+    bool deletedPrivate = true;
+    bool deletedPublic = true;
+    if (priv)
+        deletedPrivate = PK11_DeleteTokenPrivateKey(priv.release(), PR_TRUE) == SECSuccess;
+    if (pub)
+        deletedPublic = PK11_DeleteTokenPublicKey(pub.release()) == SECSuccess;
     return deletedPrivate && deletedPublic;
 }
 
