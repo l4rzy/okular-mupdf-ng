@@ -39,6 +39,9 @@ endif()
 
 add_subdirectory(worker)
 
+# In-process host libraries: consumed by the worker bridge AND directly by the
+# generator for local work (NSS, caches, helpers). Only WorkerClient crosses
+# the process boundary; nothing here may depend on generator/Okular types.
 add_library(mupdf_plugin_cache STATIC
   plugin/caching/cache_file.cpp
   plugin/caching/epub_cache.cpp

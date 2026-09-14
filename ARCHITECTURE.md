@@ -44,7 +44,13 @@ Configuration-to-model translation also lives here.
 `src/plugin/` is a pure-Qt host bridge: it has no Okular or generator type
 dependency. It starts and supervises the worker, owns the IPC client and frame
 mapping, manages OCR scheduling and persistent caches, and hosts NSS-backed
-certificate and signing support.
+certificate and signing support. The dependency also runs generator-to-plugin:
+`crypto`/`util`/`caching` are in-process libraries with two consumers — the
+bridge and the generator (in-process NSS work, cert dialogs, pure helpers) —
+while out-of-process work always goes through the `WorkerClient` facade (e.g.
+`Signature` holds a `WorkerClient*` backend). Do not "fix" the
+generator-to-plugin link edges; the boundary that must stay clean is
+plugin-to-generator/Okular (enforced by `test_plugin_boundary`).
 
 ### Shared layer
 

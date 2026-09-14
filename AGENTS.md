@@ -30,7 +30,7 @@ ctest --test-dir build -LE slow --output-on-failure            # Run all tests e
 
 # Architecture Map
 - `src/generator/`: Okular Generator UI plugin & settings (KDE / KF6 / Okular SDK).
-- `src/plugin/`: Pure-Qt intermediary host bridge (IPC client, NSS crypto, OCR scheduler, utilities).
+- `src/plugin/`: Pure-Qt host layer: worker bridge (IPC client, OCR scheduler) plus in-process libraries (NSS crypto, caching, utilities) shared with the generator.
 - `src/worker/`: Out-of-process sandboxed worker engine (MuPDF, OpenSSL, native C++, POSIX; no Qt/GUI).
 - `src/shared/`: Cross-layer data models, binary zpp::bits serialization, and transport abstractions.
 - `tests/`: Layered test suites corresponding to each layer (`generator/`, `plugin/`, `worker/`, `security/`, `integration/`, `corpus/`, `benchmark/`).
