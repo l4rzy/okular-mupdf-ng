@@ -27,6 +27,7 @@
 
 #include "plugin/caching/epub_cache.hpp"
 #include "plugin/crypto/nss.hpp"
+#include "plugin/util/process_memory.hpp"
 #include "plugin/util/temp_dir.hpp"
 #include "shared/compat.hpp"
 #include "shared/logging.hpp"
@@ -327,6 +328,15 @@ void WorkerTransport::abort()
 bool WorkerTransport::isConnected() const
 {
     return m_ctrl.valid() && m_process.state() == QProcess::Running;
+}
+
+std::optional<quint64> WorkerTransport::workerMemoryBytes() const
+{
+    // Recheck the process state here: the caller observes connectedness
+    // through a separate call, so the worker may have exited in between.
+    if (m_process.state() != QProcess::Running)
+        return std::nullopt;
+    return Util::processResidentBytes(m_process.processId());
 }
 
 OpenStatus

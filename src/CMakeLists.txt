@@ -101,6 +101,7 @@ target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache
 add_library(mupdf_plugin_util STATIC
   plugin/util/document_type.cpp
   plugin/util/ocr_options.cpp
+  plugin/util/process_memory.cpp
   plugin/util/signature_image.cpp
   plugin/util/render_image.cpp
   plugin/util/signing_timestamp.cpp)

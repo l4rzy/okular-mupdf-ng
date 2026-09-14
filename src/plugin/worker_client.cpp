@@ -103,6 +103,11 @@ bool WorkerClient::isConnected() const
     return sync([&](WorkerTransport* transport) { return transport->isConnected(); });
 }
 
+std::optional<quint64> WorkerClient::workerMemoryBytes() const
+{
+    return sync([&](WorkerTransport* transport) { return transport->workerMemoryBytes(); });
+}
+
 OpenStatus WorkerClient::open(const QString& p, const QString& w, QList<PageInfo>& pages, DocumentType type)
 {
     return sync([&](WorkerTransport* transport) { return transport->open(p, w, &pages, type); }, OpenStatus::Failed);

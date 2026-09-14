@@ -626,6 +626,13 @@ QString Main::generatorExtraDescription() const
         result += QStringLiteral("\n") + i18n("Worker is unconfined 🔴");
     }
 
+    if (m_worker.isConnected()) {
+        const std::optional<quint64> workerMemory = m_worker.workerMemoryBytes();
+        const QString memoryText =
+            workerMemory ? QLocale().formattedDataSize(static_cast<qint64>(*workerMemory)) : i18n("unknown");
+        result += QStringLiteral("\n") + i18n("Worker is using %1", memoryText);
+    }
+
     return result;
 }
 

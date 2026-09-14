@@ -62,6 +62,9 @@ public:
     bool start(const QString& hint, const QStringList& tessDataDirectories, Model::PingResponse* workerInfo);
     void stop();
     bool isConnected() const;
+    /// Resident memory of the worker process in bytes; nullopt unless the
+    /// process is running and its status is readable.
+    std::optional<quint64> workerMemoryBytes() const;
     Model::OpenStatus open(const QString& path,
                            const QString& password,
                            QList<Model::PageInfo>* pages,

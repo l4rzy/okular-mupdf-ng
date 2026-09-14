@@ -47,6 +47,8 @@ public:
     bool start(const QString& binaryPath, const QStringList& tessDataDirectories = { });
     void stop();
     bool isConnected() const;
+    /// Resident memory of the worker process in bytes; nullopt when unavailable.
+    std::optional<quint64> workerMemoryBytes() const;
 
     [[nodiscard]] State state() const noexcept { return m_lifecycle.current(); }
 
