@@ -67,7 +67,6 @@ else()
     endif()
 
     pkg_check_modules(MUPDF_FREETYPE REQUIRED IMPORTED_TARGET freetype2)
-    pkg_check_modules(MUPDF_HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
     pkg_check_modules(MUPDF_JPEG REQUIRED IMPORTED_TARGET libjpeg)
     pkg_check_modules(MUPDF_JBIG2DEC REQUIRED IMPORTED_TARGET jbig2dec)
     pkg_check_modules(MUPDF_OPENJPEG REQUIRED IMPORTED_TARGET libopenjp2)
@@ -174,6 +173,7 @@ else()
             archive=no
             barcode=no
             USE_SYSTEM_LIBS=yes
+            USE_SYSTEM_HARFBUZZ=no
             USE_SYSTEM_GUMBO=${MUPDF_USE_SYSTEM_GUMBO}
             USE_SYSTEM_TESSERACT=no
             USE_SYSTEM_LEPTONICA=no
@@ -211,7 +211,6 @@ else()
         list(APPEND MUPDF_ENGINE_LINK_LIBRARIES PkgConfig::MUPDF_GUMBO)
     endif()
     list(APPEND MUPDF_ENGINE_LINK_LIBRARIES
-        PkgConfig::MUPDF_HARFBUZZ
         PkgConfig::MUPDF_JPEG
         PkgConfig::MUPDF_JBIG2DEC
         PkgConfig::MUPDF_OPENJPEG
