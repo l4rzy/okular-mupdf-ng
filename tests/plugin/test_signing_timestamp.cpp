@@ -33,6 +33,16 @@ private slots:
         QVERIFY(epoch.secsTo(QDateTime::currentDateTime()) < 60);
         QVERIFY(!timestamp.displayDate.isEmpty());
     }
+
+    void currentUtcRendersUtcSuffix()
+    {
+        const auto timestamp = SigningTimestamp::current(true);
+        QVERIFY(timestamp.epochSeconds > 0);
+        // The display date describes the captured instant in UTC.
+        const QDateTime utc = QDateTime::fromSecsSinceEpoch(timestamp.epochSeconds, QTimeZone::UTC);
+        QCOMPARE(timestamp.displayDate, SigningTimestamp::displayDate(utc));
+        QVERIFY(timestamp.displayDate.endsWith(QStringLiteral("UTC")));
+    }
 };
 
 #include "test_signing_timestamp.moc"

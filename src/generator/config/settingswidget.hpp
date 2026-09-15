@@ -18,6 +18,9 @@ public:
 
 private:
     void updateManageCertificatesButton();
+    /// Refreshes the signature preview from the widgets' pending state so it
+    /// tracks unapplied changes.
+    void updateSignaturePreview();
 
     Ui_MuPDFNGSettingsWidgetBase* m_mupdfsw;
 };

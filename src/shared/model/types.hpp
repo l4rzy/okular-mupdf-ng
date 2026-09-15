@@ -879,6 +879,11 @@ inline constexpr std::uint8_t SignatureElementDefault = static_cast<std::uint8_t
     | static_cast<std::uint8_t>(SignatureElement::TextName) | static_cast<std::uint8_t>(SignatureElement::GraphicName)
     | static_cast<std::uint8_t>(SignatureElement::Logo);
 
+/// Simple profile: signer name, reason, and time only. Reason renders
+/// unconditionally in the worker; location must be cleared by the caller.
+inline constexpr std::uint8_t SignatureElementSimple =
+    static_cast<std::uint8_t>(SignatureElement::TextName) | static_cast<std::uint8_t>(SignatureElement::Date);
+
 /// Visual signature content configured by the caller and rendered by the worker.
 struct SignatureAppearance {
     /// Bitmask of SignatureElement values included in the appearance stream.

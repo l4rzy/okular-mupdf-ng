@@ -24,7 +24,7 @@ private slots:
         data.setReason("unit test reason");
         data.setLocation("unit test location");
 
-        const auto appearance = toModelSignatureAppearance(data);
+        const auto appearance = toModelSignatureAppearance(data, { });
 
         // Every element is rendered by default (parity with the previous
         // hardcoded MuPDF default appearance).
@@ -37,6 +37,43 @@ private slots:
         const QDateTime epoch = QDateTime::fromSecsSinceEpoch(appearance.signingEpochSeconds);
         QCOMPARE(QString::fromStdString(appearance.signingDisplayDate),
                  Mu::Plugin::Util::SigningTimestamp::displayDate(epoch));
+    }
+
+    void buildsSimpleAppearanceFromSignatureData()
+    {
+        Okular::NewSignatureData data;
+        data.setCertNickname("test-cert");
+        data.setCertSubjectCommonName("Test Signer");
+        data.setReason("unit test reason");
+        data.setLocation("unit test location");
+
+        const auto appearance = toModelSignatureAppearance(data, { true, false });
+
+        // Simple renders name, reason, and time only: no labels, DN, graphic
+        // name, or logo, and location is cleared (the worker renders it
+        // unconditionally when present).
+        QCOMPARE(appearance.elements, Mu::Model::SignatureElementSimple);
+        QCOMPARE(appearance.reason, std::string("unit test reason"));
+        QVERIFY(appearance.location.empty());
+        QVERIFY(appearance.signingEpochSeconds > 0);
+        const QDateTime epoch = QDateTime::fromSecsSinceEpoch(appearance.signingEpochSeconds);
+        QCOMPARE(QString::fromStdString(appearance.signingDisplayDate),
+                 Mu::Plugin::Util::SigningTimestamp::displayDate(epoch));
+    }
+
+    void rendersAppearanceTimestampInUtc()
+    {
+        Okular::NewSignatureData data;
+        data.setCertNickname("test-cert");
+        data.setCertSubjectCommonName("Test Signer");
+
+        const auto appearance = toModelSignatureAppearance(data, { false, true });
+
+        QVERIFY(appearance.signingEpochSeconds > 0);
+        const QDateTime utc = QDateTime::fromSecsSinceEpoch(appearance.signingEpochSeconds, QTimeZone::UTC);
+        QCOMPARE(QString::fromStdString(appearance.signingDisplayDate),
+                 Mu::Plugin::Util::SigningTimestamp::displayDate(utc));
+        QVERIFY(QString::fromStdString(appearance.signingDisplayDate).endsWith(QStringLiteral("UTC")));
     }
 
     void roundTripsCertificateInfo()

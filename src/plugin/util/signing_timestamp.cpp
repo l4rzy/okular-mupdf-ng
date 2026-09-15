@@ -12,9 +12,9 @@ QString displayDate(const QDateTime& when)
     return QLocale::c().toString(when, QStringLiteral("MMM d, yyyy HH:mm t"));
 }
 
-Timestamp current()
+Timestamp current(bool useUtc)
 {
-    const QDateTime now = QDateTime::currentDateTime();
+    const QDateTime now = useUtc ? QDateTime::currentDateTimeUtc() : QDateTime::currentDateTime();
     return { now.toSecsSinceEpoch(), displayDate(now) };
 }
 

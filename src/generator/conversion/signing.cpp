@@ -8,13 +8,15 @@
 
 namespace Mu::Generator::Conversion {
 
-Model::SignatureAppearance toModelSignatureAppearance(const Okular::NewSignatureData& data)
+Model::SignatureAppearance toModelSignatureAppearance(const Okular::NewSignatureData& data,
+                                                      const Config::SignatureAppearanceOptions& options)
 {
     Model::SignatureAppearance appearance;
-    appearance.elements = Model::SignatureElementDefault;
+    appearance.elements = options.simple ? Model::SignatureElementSimple : Model::SignatureElementDefault;
     appearance.reason = data.reason().toStdString();
-    appearance.location = data.location().toStdString();
-    const auto timestamp = Plugin::Util::SigningTimestamp::current();
+    if (!options.simple)
+        appearance.location = data.location().toStdString();
+    const auto timestamp = Plugin::Util::SigningTimestamp::current(options.useUtc);
     appearance.signingEpochSeconds = timestamp.epochSeconds;
     appearance.signingDisplayDate = timestamp.displayDate.toStdString();
     return appearance;

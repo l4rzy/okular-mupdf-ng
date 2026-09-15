@@ -163,6 +163,21 @@ private slots:
         }
     }
 
+    void readsSignatureAppearanceOptions()
+    {
+        const int originalProfile = MuPDFNGSettings::signatureProfile();
+        const bool originalUseUtc = MuPDFNGSettings::signatureUseUtc();
+        MuPDFNGSettings::setSignatureProfile(MuPDFNGSettings::EnumSignatureProfile::Simple);
+        MuPDFNGSettings::setSignatureUseUtc(true);
+
+        const auto options = ::Mu::Generator::Config::readSignatureAppearance();
+        MuPDFNGSettings::setSignatureProfile(originalProfile);
+        MuPDFNGSettings::setSignatureUseUtc(originalUseUtc);
+
+        QVERIFY(options.simple);
+        QVERIFY(options.useUtc);
+    }
+
     void selectsInstalledOcrModel()
     {
         using ::Mu::Generator::Config::autoSelectOcrModel;

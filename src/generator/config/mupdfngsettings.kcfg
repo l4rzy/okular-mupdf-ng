@@ -105,6 +105,16 @@
     <entry key="UseOcsp" type="Bool">
       <default>false</default>
     </entry>
+    <entry key="SignatureProfile" type="Enum">
+      <default>Complete</default>
+      <choices>
+        <choice name="Complete" />
+        <choice name="Simple" />
+      </choices>
+    </entry>
+    <entry key="SignatureUseUtc" type="Bool">
+      <default>false</default>
+    </entry>
   </group>
   <group name="EPUB">
     <entry key="EpubFontSize" type="Int">

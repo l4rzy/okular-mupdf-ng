@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>481</width>
-    <height>541</height>
+    <height>554</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -324,7 +324,7 @@
          <property name="sizeHint" stdset="0">
           <size>
            <width>20</width>
-           <height>40</height>
+           <height>20</height>
           </size>
          </property>
         </spacer>
@@ -454,8 +454,8 @@
             </item>
            </layout>
           </item>
-           <item>
-            <widget class="QCheckBox" name="kcfg_OcrNotify">
+          <item>
+           <widget class="QCheckBox" name="kcfg_OcrNotify">
             <property name="text">
              <string>Show notifications on OCR status</string>
             </property>
@@ -548,6 +548,74 @@
             </property>
             <property name="text">
              <string>Check certificate revocation via OCSP (requires network)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="signatureAppearanceBox">
+         <property name="title">
+          <string>Signature</string>
+         </property>
+         <layout class="QVBoxLayout" name="signatureVerticalLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="signaturePreviewLabel">
+            <property name="frameShape">
+             <enum>QFrame::Shape::NoFrame</enum>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="signatureProfileLayout">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelSignatureProfile">
+              <property name="text">
+               <string>Signature profile:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="line_signatureProfile">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <horstretch>1</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Shape::HLine</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Shadow::Plain</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="kcfg_SignatureProfile"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="kcfg_SignatureUseUtc">
+            <property name="toolTip">
+             <string>Render the signature appearance timestamp in UTC instead of local time.</string>
+            </property>
+            <property name="text">
+             <string>Use UTC time for signatures</string>
             </property>
            </widget>
           </item>

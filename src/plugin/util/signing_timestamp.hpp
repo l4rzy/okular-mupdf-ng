@@ -24,9 +24,10 @@ struct Timestamp {
 [[nodiscard]] QString displayDate(const QDateTime& when);
 
 /**
- * Captures the current instant for a signing operation.
+ * Captures the current instant for a signing operation. Pass true to render
+ * the display date in UTC instead of local time.
  */
-[[nodiscard]] Timestamp current();
+[[nodiscard]] Timestamp current(bool useUtc = false);
 
 } // namespace Mu::Plugin::Util::SigningTimestamp
 

@@ -128,6 +128,10 @@ add_layer_test(test_generator_config generator/test_config.cpp generator)
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(test_generator_config PRIVATE Qt6::Gui mupdf_generator_settings)
 
+add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
+target_include_directories(test_generator_signaturepreview PRIVATE ../src)
+target_link_libraries(test_generator_signaturepreview PRIVATE Qt6::Gui mupdf_generator_settings)
+
 # Generator adapters are the only unit tests linked to Okular proxy classes.
 add_layer_test(test_generator_proxies generator/test_proxies.cpp generator)
 target_include_directories(test_generator_proxies PRIVATE ../src)

@@ -9,6 +9,7 @@
 
 #include "mupdfngsettings.h"
 #include "plugin/util/ocr_options.hpp"
+#include "plugin/util/signing_timestamp.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Generator::Config {
@@ -208,6 +209,14 @@ OcrSettings readOcrSettings()
         break;
     }
     return settings;
+}
+
+SignatureAppearanceOptions readSignatureAppearance()
+{
+    SignatureAppearanceOptions options;
+    options.simple = MuPDFNGSettings::signatureProfile() == MuPDFNGSettings::EnumSignatureProfile::Simple;
+    options.useUtc = MuPDFNGSettings::signatureUseUtc();
+    return options;
 }
 
 QStringList readTessDataDirectories()

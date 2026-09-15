@@ -139,6 +139,7 @@ target_link_libraries(mupdf_generator_adapters PUBLIC
     Qt6::Widgets
     Qt6::Xml
     KF6::I18n
+    mupdf_generator_settings
     mupdf_plugin_crypto
     mupdf_plugin_util
 )
@@ -156,6 +157,7 @@ target_link_libraries(mupdf_generator_signature PUBLIC
     Okular::Core
     Qt6::Core
     Qt6::Gui
+    mupdf_generator_settings
     mupdf_plugin_crypto
     mupdf_plugin_util
     mupdf_plugin_worker
@@ -201,7 +203,7 @@ ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
    generator/config/settingswidget.ui
 )
 
-set(mupdf_generator_settings_SRCS generator/config/settings.cpp)
+set(mupdf_generator_settings_SRCS generator/config/settings.cpp generator/config/signature_preview.cpp)
 kconfig_add_kcfg_files(mupdf_generator_settings_SRCS
    GENERATE_MOC generator/config/mupdfngsettings.kcfgc
 )

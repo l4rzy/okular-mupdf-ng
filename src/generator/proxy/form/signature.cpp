@@ -7,6 +7,7 @@
 
 #include <limits>
 
+#include "generator/config/settings.hpp"
 #include "generator/conversion/certificate.hpp"
 #include "generator/conversion/signing.hpp"
 
@@ -203,7 +204,7 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
     if (!m_backend || !m_backend->isConnected()) {
         return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
     }
-    auto appearance = Conversion::toModelSignatureAppearance(data);
+    auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
     appearance.backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
         data.backgroundImagePath(), rect().width(), rect().height());
     const auto result = m_backend->sign({ { },

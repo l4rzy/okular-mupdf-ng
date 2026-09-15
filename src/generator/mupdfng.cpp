@@ -1407,7 +1407,7 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
         const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
         if (commonName.isEmpty())
             return { Okular::KeyMissing, QStringLiteral("Signing certificate was not found") };
-        auto appearance = Conversion::toModelSignatureAppearance(data);
+        auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
         appearance.backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
             data.backgroundImagePath(), rect.width(), rect.height());
         const auto result = m_worker.sign({ { },

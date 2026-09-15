@@ -11,6 +11,7 @@
 #include <cmath>
 #include <utility>
 
+#include "generator/config/settings.hpp"
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/signing.hpp"
 #include "plugin/crypto/nss.hpp"
@@ -87,7 +88,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                 return std::make_pair(Okular::KeyMissing, QStringLiteral("Signing certificate was not found"));
             const QString imagePath =
                 !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
-            auto appearance = Conversion::toModelSignatureAppearance(data);
+            auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
             appearance.backgroundImage =
                 Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
             return signingResult(backend->sign({ { },

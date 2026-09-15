@@ -9,6 +9,7 @@
 #include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/config/settings.hpp"
+#include "generator/config/signature_preview.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "ui_settingswidget.h"
@@ -132,6 +133,17 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
 
     m_mupdfsw->defaultLabel->setText(Plugin::Crypto::defaultSystemNssDbPath());
 
+    auto* signatureProfile = m_mupdfsw->kcfg_SignatureProfile;
+    signatureProfile->clear();
+    signatureProfile->addItem(i18n("Complete"), MuPDFNGSettings::EnumSignatureProfile::Complete);
+    signatureProfile->addItem(i18n("Simple"), MuPDFNGSettings::EnumSignatureProfile::Simple);
+    connect(signatureProfile,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,
+            &MuPDFNGSettingsWidget::updateSignaturePreview);
+    connect(m_mupdfsw->kcfg_SignatureUseUtc, &QCheckBox::toggled, this, &MuPDFNGSettingsWidget::updateSignaturePreview);
+    updateSignaturePreview();
+
     connect(
         m_mupdfsw->customRadioButton, &QRadioButton::toggled, m_mupdfsw->kcfg_dBCertificatePath, &QWidget::setEnabled);
     if (MuPDFNGSettings::useDefaultCertDB()) {
@@ -160,6 +172,19 @@ void MuPDFNGSettingsWidget::updateManageCertificatesButton()
     const QString databaseLabel = databasePath.isEmpty() ? i18n("NSS database unavailable")
                                                          : CertificateManager::displayDatabasePath(databasePath);
     m_mupdfsw->manageCertificatesButton->setText(i18n("Manage Certificates - %1", databaseLabel));
+}
+
+void MuPDFNGSettingsWidget::updateSignaturePreview()
+{
+    const bool simple =
+        m_mupdfsw->kcfg_SignatureProfile->currentData().toInt() == MuPDFNGSettings::EnumSignatureProfile::Simple;
+    const bool useUtc = m_mupdfsw->kcfg_SignatureUseUtc->isChecked();
+    QLabel* preview = m_mupdfsw->signaturePreviewLabel;
+    const QImage image =
+        Config::renderSignaturePreview(Config::buildSignaturePreview(simple, useUtc, QDateTime::currentDateTime()),
+                                       preview->font(),
+                                       preview->devicePixelRatioF());
+    preview->setPixmap(QPixmap::fromImage(image));
 }
 
 MuPDFNGSettingsWidget::~MuPDFNGSettingsWidget()

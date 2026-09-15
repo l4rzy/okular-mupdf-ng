@@ -60,6 +60,14 @@ struct OcrTarget {
     int dpi = 225;
 };
 
+/// Signature appearance policy read from the generator settings page.
+struct SignatureAppearanceOptions {
+    /// Simple profile renders only name, reason, and time.
+    bool simple = false;
+    /// Render the appearance timestamp in UTC instead of local time.
+    bool useUtc = false;
+};
+
 /// Policy for running the worker when its sandbox is not fully hardened.
 enum class SandboxEnforcement {
     Relaxed,
@@ -142,6 +150,7 @@ void reloadSettings();
 EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();
+SignatureAppearanceOptions readSignatureAppearance();
 /// Lists usable Tesseract language models (*.traineddata in the given
 /// directories, excluding the non-language equ/osd data files) as a deduplicated,
 /// name-sorted union. Missing directories contribute nothing. Matching is
