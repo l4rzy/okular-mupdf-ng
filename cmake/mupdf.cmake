@@ -126,6 +126,14 @@ else()
         set(${_mupdf_flags_variable} "${_mupdf_filtered_flags}")
     endforeach()
 
+    # Makefile:25 places XCFLAGS at the front of CFLAGS, so this bundled
+    # HarfBuzz include wins over the system HarfBuzz include that FreeType's
+    # freetype2.pc (Requires.private: harfbuzz) injects via SYS_FREETYPE_CFLAGS
+    # into THIRD_CFLAGS. Without it, core html-layout.o compiles against the
+    # un-renamed system hb.h while the bundled HarfBuzz defines fzhb_*, which
+    # breaks the link.
+    set(_mupdf_cxx_flags "-I${MUPDF_SOURCE_DIR}/thirdparty/harfbuzz/src ${_mupdf_cxx_flags}")
+
     set(_mupdf_xcflags
         "-DFZ_ENABLE_CBZ=0"
         "-DFZ_ENABLE_IMG=0"
@@ -148,6 +156,7 @@ else()
     if(_mupdf_c_flags)
         list(APPEND _mupdf_xcflags "${_mupdf_c_flags}")
     endif()
+    list(PREPEND _mupdf_xcflags "-I${MUPDF_SOURCE_DIR}/thirdparty/harfbuzz/src")
     string(JOIN " " _mupdf_xcflags ${_mupdf_xcflags})
 
     add_custom_command(
