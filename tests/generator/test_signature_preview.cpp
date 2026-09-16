@@ -63,7 +63,7 @@ private slots:
         int textWidth = 0;
         for (const QString& line : lines)
             textWidth = std::max(textWidth, metrics.horizontalAdvance(line));
-        QCOMPARE(image.size(), QSize(textWidth + 22, metrics.lineSpacing() * lines.size() + 22));
+        QCOMPARE(image.size(), QSize(textWidth + 22, metrics.lineSpacing() * static_cast<int>(lines.size()) + 22));
         // White document background in the corners, grey 1px border on top.
         QCOMPARE(image.pixelColor(0, 0), QColor(0x9a, 0x9a, 0x9a));
         QCOMPARE(image.pixelColor(5, 5), QColor(Qt::white));
