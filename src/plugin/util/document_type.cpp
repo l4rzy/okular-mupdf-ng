@@ -30,21 +30,29 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
     const Model::DocumentType fromContent = documentTypeForMime(contentMime);
     if (fromContent != Model::DocumentType::Unknown)
         return fromContent;
+
     // Only generic containers may fall back to the suffix: a definitive
     // non-document type (for example image/png named .epub) must not be sent
     // to the worker as if it were a document.
-    if (!isGenericContainerMime(contentMime))
-        MU_LOG(critical, "Plugin::Util", "Unsupported MIME type; aborting");
-    return Model::DocumentType::Unknown;
+    if (!isGenericContainerMime(contentMime)) {
+        MU_LOG(critical, "Plugin::Util", "Unsupported common container type; aborting");
+        return Model::DocumentType::Unknown;
+    }
+
     // EPUBs written without the required stored-first mimetype entry sniff as
     // application/zip or application/java-archive; the extension is the only
     // remaining signal.
-    if (suffixLower == QStringLiteral("epub"))
+    if (suffixLower == QStringLiteral("epub")) {
         MU_LOG(warning, "Plugin::Util", "Falling back to epub suffix");
-    return Model::DocumentType::Epub;
-    if (suffixLower == QStringLiteral("pdf"))
+        return Model::DocumentType::Epub;
+    }
+
+    if (suffixLower == QStringLiteral("pdf")) {
         MU_LOG(warning, "Plugin::Util", "Falling back to pdf suffix");
-    return Model::DocumentType::Pdf;
+        return Model::DocumentType::Pdf;
+    }
+
+    MU_LOG(critical, "Plugin::Util", "Unsupported MIME type; aborting");
     return Model::DocumentType::Unknown;
 }
 
