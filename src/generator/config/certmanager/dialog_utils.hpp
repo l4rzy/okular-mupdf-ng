@@ -6,6 +6,8 @@
 
 #include <QString>
 
+#include "shared/model/types.hpp"
+
 namespace Mu::Generator::CertificateManager {
 
 // Keep long NSS paths readable in titles while retaining the default marker.
@@ -22,6 +24,33 @@ inline QString displayDatabasePath(const QString& databasePath)
 inline QString dialogTitle(const QString& title, const QString& databasePath)
 {
     return title + QStringLiteral(" — ") + displayDatabasePath(databasePath);
+}
+
+// Human-readable public-key algorithm for the certificate table. An unknown
+// type yields an empty string so callers can localize the fallback.
+inline QString formatKeyAlgorithm(const Model::Certificate& certificate)
+{
+    QString name;
+    switch (static_cast<Model::PublicKeyAlgorithm>(certificate.publicKeyType)) {
+    case Model::PublicKeyAlgorithm::Rsa:
+        name = QStringLiteral("RSA");
+        break;
+    case Model::PublicKeyAlgorithm::Dsa:
+        name = QStringLiteral("DSA");
+        break;
+    case Model::PublicKeyAlgorithm::Ec:
+        name = QStringLiteral("EC");
+        break;
+    case Model::PublicKeyAlgorithm::Unknown:
+        return { };
+    default:
+        // The model field is an unconstrained int32 that can also arrive over
+        // IPC, so out-of-range values must not fall off the end.
+        return { };
+    }
+    if (certificate.publicKeyStrength > 0)
+        return name + QLatin1Char(' ') + QString::number(certificate.publicKeyStrength);
+    return name;
 }
 
 } // namespace Mu::Generator::CertificateManager

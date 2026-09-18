@@ -389,6 +389,15 @@ struct OutlineNode {
     std::vector<OutlineNode> children;
 };
 
+/// Public-key algorithm of a certificate. The numeric values deliberately match
+/// Okular's CertificateInfo::PublicKeyType so conversion stays a plain cast.
+enum class PublicKeyAlgorithm : std::int32_t {
+    Rsa = 0,
+    Dsa = 1,
+    Ec = 2,
+    Unknown = 3,
+};
+
 /// Certificate data and trust-independent cryptographic metadata.
 struct Certificate {
     /// True when no certificate was available.

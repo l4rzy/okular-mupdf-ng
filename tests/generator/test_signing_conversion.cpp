@@ -95,7 +95,7 @@ private slots:
         source.validityEnd = { true, 1730000000000 };
         source.keyUsage = 0xa0;
         source.publicKey = { 0x04, 0x05 };
-        source.publicKeyType = 1;
+        source.publicKeyType = static_cast<std::int32_t>(Mu::Model::PublicKeyAlgorithm::Dsa);
         source.publicKeyStrength = 2048;
         source.selfSigned = true;
         source.der = { 0x30, 0x82 };
@@ -129,7 +129,7 @@ private slots:
         QVERIFY(info.isSelfSigned());
         QCOMPARE(static_cast<std::uint32_t>(info.keyUsageExtensions()), 0xa0u);
         QCOMPARE(info.publicKey(), QByteArray("\x04\x05", 2));
-        QCOMPARE(static_cast<int>(info.publicKeyType()), 1);
+        QCOMPARE(info.publicKeyType(), Okular::CertificateInfo::DsaKey);
         QCOMPARE(info.publicKeyStrength(), 2048);
         QCOMPARE(info.certificateData(), QByteArray("\x30\x82", 2));
     }

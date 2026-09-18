@@ -95,16 +95,16 @@ Certificate describeCertificate(CERTCertificate* cert)
     if (publicKey) {
         switch (publicKey->keyType) {
         case rsaKey:
-            result.publicKeyType = 0;
+            result.publicKeyType = static_cast<int>(PublicKeyAlgorithm::Rsa);
             break;
         case dsaKey:
-            result.publicKeyType = 1;
+            result.publicKeyType = static_cast<int>(PublicKeyAlgorithm::Dsa);
             break;
         case ecKey:
-            result.publicKeyType = 2;
+            result.publicKeyType = static_cast<int>(PublicKeyAlgorithm::Ec);
             break;
         default:
-            result.publicKeyType = 3;
+            result.publicKeyType = static_cast<int>(PublicKeyAlgorithm::Unknown);
             break;
         }
         result.publicKeyStrength = static_cast<int>(SECKEY_PublicKeyStrengthInBits(publicKey.get()));

@@ -56,9 +56,9 @@ CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget
     setWindowTitle(CertificateManager::dialogTitle(tr("Manage NSS Certificates"), m_databasePath));
     resize(760, 420);
 
-    m_table->setColumnCount(5);
+    m_table->setColumnCount(6);
     m_table->setHorizontalHeaderLabels(
-        { tr("Nickname"), tr("Subject"), tr("Issuer"), tr("Valid From"), tr("Valid Until") });
+        { tr("Nickname"), tr("Subject"), tr("Issuer"), tr("Algorithm"), tr("Valid From"), tr("Valid Until") });
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -107,9 +107,11 @@ void CertificateManagerDialog::refreshCertificates()
     m_table->setRowCount(static_cast<int>(m_certificates.size()));
     for (int row = 0; row < static_cast<int>(m_certificates.size()); ++row) {
         const auto& certificate = m_certificates.at(row).certificate;
+        const QString algorithm = CertificateManager::formatKeyAlgorithm(certificate);
         const QStringList values { certificateName(certificate),
                                    QString::fromStdString(certificate.subjectCommonName),
                                    QString::fromStdString(certificate.issuerCommonName),
+                                   algorithm.isEmpty() ? tr("Unknown") : algorithm,
                                    formatDate(certificate.validityStart),
                                    formatDate(certificate.validityEnd) };
         for (int column = 0; column < values.size(); ++column)

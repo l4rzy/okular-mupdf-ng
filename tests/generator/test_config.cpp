@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
 #include "shared/model/validation.hpp"
@@ -18,6 +19,38 @@ class TestGeneratorConfig : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void formatsCertificateKeyAlgorithm()
+    {
+        const auto keyType = [](::Mu::Model::PublicKeyAlgorithm algorithm) {
+            return static_cast<std::int32_t>(algorithm);
+        };
+        ::Mu::Model::Certificate certificate;
+        certificate.publicKeyType = keyType(::Mu::Model::PublicKeyAlgorithm::Rsa);
+        certificate.publicKeyStrength = 2048;
+        QCOMPARE(::Mu::Generator::CertificateManager::formatKeyAlgorithm(certificate), QStringLiteral("RSA 2048"));
+
+        certificate.publicKeyType = keyType(::Mu::Model::PublicKeyAlgorithm::Ec);
+        certificate.publicKeyStrength = 256;
+        QCOMPARE(::Mu::Generator::CertificateManager::formatKeyAlgorithm(certificate), QStringLiteral("EC 256"));
+
+        certificate.publicKeyType = keyType(::Mu::Model::PublicKeyAlgorithm::Dsa);
+        certificate.publicKeyStrength = 1024;
+        QCOMPARE(::Mu::Generator::CertificateManager::formatKeyAlgorithm(certificate), QStringLiteral("DSA 1024"));
+
+        // Missing strength keeps the bare algorithm name; unknown types are empty
+        // so the dialog can present a localized fallback.
+        certificate.publicKeyType = keyType(::Mu::Model::PublicKeyAlgorithm::Rsa);
+        certificate.publicKeyStrength = 0;
+        QCOMPARE(::Mu::Generator::CertificateManager::formatKeyAlgorithm(certificate), QStringLiteral("RSA"));
+
+        certificate.publicKeyType = keyType(::Mu::Model::PublicKeyAlgorithm::Unknown);
+        QVERIFY(::Mu::Generator::CertificateManager::formatKeyAlgorithm(certificate).isEmpty());
+
+        // Out-of-range values from IPC must not fall through the switch.
+        certificate.publicKeyType = 99;
+        QVERIFY(::Mu::Generator::CertificateManager::formatKeyAlgorithm(certificate).isEmpty());
+    }
 
     void buildsDocumentSettings()
     {
