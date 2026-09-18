@@ -91,6 +91,11 @@ public:
     /// Default is a no-op; engines override with their MuPDF context.
     virtual void trimMemoryForIdle() noexcept { }
 
+    /// Discards cached link-destination resolutions. Default is a no-op;
+    /// engines that cache resolutions override to scope the cache to one
+    /// incremental link aggregation.
+    virtual void discardResolvedLinkCache() noexcept { }
+
     /// Returns true if a document file is currently loaded and valid.
     [[nodiscard]] virtual bool isOpen() const noexcept = 0;
 

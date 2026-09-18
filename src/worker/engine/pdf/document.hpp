@@ -82,7 +82,7 @@ public:
     void setSettings(const DocumentSettings& settings) noexcept override;
     [[nodiscard]] ResolvedLink resolveLink(const std::string& uri, std::string* error = nullptr) const override;
     /// Discards the temporary link resolution cache used during incremental page-link aggregation.
-    void discardResolvedLinkCache() noexcept;
+    void discardResolvedLinkCache() noexcept override;
     [[nodiscard]] std::vector<Link> extractLinks(int page, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<OutlineNode> outline(std::string* error = nullptr) const override;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,

@@ -231,6 +231,7 @@ bool EpubDocument::openFdWithAccelerator(int fd,
         return fail(error, fz_caught_message(m_context));
     }
     m_displayName = std::move(displayName);
+    m_resolvedLinkCacheEnabled = true;
     return true;
 }
 
@@ -311,8 +312,20 @@ void EpubDocument::close() noexcept
     m_layoutHeight = 0;
     m_layoutEm = 0;
     m_displayName.clear();
+    m_resolvedLinks.clear();
+    m_resolvedLinkKeyBytes = 0;
+    m_resolvedLinkCacheEnabled = false;
 
     trimProcessMemory(m_context);
+}
+
+void EpubDocument::discardResolvedLinkCache() noexcept
+{
+    // This cache is scoped to one incremental link aggregation and must not keep
+    // resolved destinations or URI-key storage alive after that operation ends.
+    m_resolvedLinks.clear();
+    m_resolvedLinkKeyBytes = 0;
+    m_resolvedLinkCacheEnabled = false;
 }
 
 void EpubDocument::trimMemoryForIdle() noexcept

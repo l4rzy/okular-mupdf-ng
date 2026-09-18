@@ -97,6 +97,14 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
             fail(error, "document is unavailable");
         return result;
     }
+    // Check the temporary cache populated while the worker incrementally
+    // resolves page links after the initial document response has been sent.
+    // Repeated navigation URIs (headers, footers, TOC) otherwise pay a spine
+    // scan plus a fragment box-tree walk on every page.
+    if (m_resolvedLinkCacheEnabled) {
+        if (const auto cached = m_resolvedLinks.find(uri); cached != m_resolvedLinks.end())
+            return cached->second;
+    }
     // Snapshot the MuPDF outcome into PODs only; the C++ result is built
     // after fz_catch so no std::string lives across the longjmp.
     bool isExternal = false;
@@ -129,6 +137,15 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
     } else if (found) {
         result.viewport.page = pageNum;
         result.valid = true;
+    }
+    // Cache only internal destinations: external URLs do not require page
+    // coordinate resolution and the cache is discarded after aggregation.
+    if (m_resolvedLinkCacheEnabled && result.valid && !result.external
+        && m_resolvedLinks.size() < Constant::MaxResolvedLinkCacheEntries
+        && uri.size() <= Constant::MaxResolvedLinkCacheKeyBytes - m_resolvedLinkKeyBytes) {
+        const auto [_, inserted] = m_resolvedLinks.emplace(uri, result);
+        if (inserted)
+            m_resolvedLinkKeyBytes += uri.size();
     }
     return result;
 }

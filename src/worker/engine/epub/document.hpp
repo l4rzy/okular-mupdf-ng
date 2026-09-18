@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 extern "C" {
@@ -85,6 +86,7 @@ public:
     void setSettings(const DocumentSettings& settings) noexcept override;
     [[nodiscard]] ResolvedLink resolveLink(const std::string& uri, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Link> extractLinks(int page, std::string* error = nullptr) const override;
+    void discardResolvedLinkCache() noexcept override;
     [[nodiscard]] std::vector<OutlineNode> outline(std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Font> fonts(const std::vector<int>& pages, std::string* error = nullptr) const override;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
@@ -133,6 +135,10 @@ private:
     mutable fz_archive* m_archive = nullptr;
     mutable std::optional<std::vector<Font>> m_fonts;
     DocumentSettings m_settings;
+
+    mutable std::unordered_map<std::string, ResolvedLink> m_resolvedLinks;
+    mutable std::size_t m_resolvedLinkKeyBytes = 0;
+    bool m_resolvedLinkCacheEnabled = true;
 };
 
 } // namespace Mu::Worker::Engine

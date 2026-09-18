@@ -940,8 +940,8 @@ void CommandService::cancelPageLinks() noexcept
     m_pendingPageLinks.reset();
     // Link destinations are cached only while constructing this aggregate. Keeping
     // them after cancellation or delivery would retain document-specific metadata.
-    if (auto* pdfDocument = dynamic_cast<Engine::PdfDocument*>(m_document.get()))
-        pdfDocument->discardResolvedLinkCache();
+    if (m_document)
+        m_document->discardResolvedLinkCache();
 }
 
 std::optional<OcrResult> CommandService::takeOcrResult(std::uint64_t id)
