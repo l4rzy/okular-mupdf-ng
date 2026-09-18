@@ -216,6 +216,7 @@ SignatureAppearanceOptions readSignatureAppearance()
     SignatureAppearanceOptions options;
     options.simple = MuPDFNGSettings::signatureProfile() == MuPDFNGSettings::EnumSignatureProfile::Simple;
     options.useUtc = MuPDFNGSettings::signatureUseUtc();
+    options.drawBorder = MuPDFNGSettings::signatureDrawBorder();
     return options;
 }
 

@@ -14,6 +14,7 @@ Model::SignatureAppearance toModelSignatureAppearance(const Okular::NewSignature
     Model::SignatureAppearance appearance;
     appearance.elements = options.simple ? Model::SignatureElementSimple : Model::SignatureElementDefault;
     appearance.reason = data.reason().toStdString();
+    appearance.drawBorder = options.drawBorder;
     if (!options.simple)
         appearance.location = data.location().toStdString();
     const auto timestamp = Plugin::Util::SigningTimestamp::current(options.useUtc);

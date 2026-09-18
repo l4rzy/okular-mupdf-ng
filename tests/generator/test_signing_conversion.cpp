@@ -76,6 +76,19 @@ private slots:
         QVERIFY(QString::fromStdString(appearance.signingDisplayDate).endsWith(QStringLiteral("UTC")));
     }
 
+    void passesDrawBorderOptionToAppearance()
+    {
+        Okular::NewSignatureData data;
+        data.setCertNickname("test-cert");
+        data.setCertSubjectCommonName("Test Signer");
+
+        const auto bordered = toModelSignatureAppearance(data, { false, false, true });
+        QVERIFY(bordered.drawBorder);
+
+        const auto plain = toModelSignatureAppearance(data, { });
+        QVERIFY(!plain.drawBorder);
+    }
+
     void roundTripsCertificateInfo()
     {
         Mu::Model::Certificate source;

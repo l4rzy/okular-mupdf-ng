@@ -66,6 +66,8 @@ struct SignatureAppearanceOptions {
     bool simple = false;
     /// Render the appearance timestamp in UTC instead of local time.
     bool useUtc = false;
+    /// Draw a 1px border around the signed signature appearance.
+    bool drawBorder = false;
 };
 
 /// Policy for running the worker when its sandbox is not fully hardened.

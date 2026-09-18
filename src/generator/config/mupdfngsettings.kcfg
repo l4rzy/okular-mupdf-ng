@@ -115,6 +115,9 @@
     <entry key="SignatureUseUtc" type="Bool">
       <default>false</default>
     </entry>
+    <entry key="SignatureDrawBorder" type="Bool">
+      <default>false</default>
+    </entry>
   </group>
   <group name="EPUB">
     <entry key="EpubFontSize" type="Int">

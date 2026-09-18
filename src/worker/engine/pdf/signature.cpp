@@ -468,6 +468,58 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, nullptr, nullptr, appearanceText, logo);
 
+                if (request.appearance.drawBorder) {
+                    // Decorative 1pt grey border stroked inside the signature
+                    // box. Runs in its own error domain so a border failure
+                    // keeps the original appearance instead of failing the
+                    // signing itself.
+                    fz_display_list* bordered = nullptr;
+                    fz_device* borderDevice = nullptr;
+                    fz_path* borderPath = nullptr;
+                    fz_stroke_state* borderStroke = nullptr;
+                    fz_var(bordered);
+                    fz_var(borderDevice);
+                    fz_var(borderPath);
+                    fz_var(borderStroke);
+                    fz_try(m_context)
+                    {
+                        bordered = fz_new_display_list(m_context, rect);
+                        borderDevice = fz_new_list_device(m_context, bordered);
+                        fz_run_display_list(m_context, dlist, borderDevice, fz_identity, rect, nullptr);
+                        borderPath = fz_new_path(m_context);
+                        fz_rectto(
+                            m_context, borderPath, rect.x0 + 0.5f, rect.y0 + 0.5f, rect.x1 - 0.5f, rect.y1 - 0.5f);
+                        borderStroke = fz_new_stroke_state(m_context);
+                        borderStroke->linewidth = 1;
+                        const float grey[3] = { 0x9a / 255.0f, 0x9a / 255.0f, 0x9a / 255.0f };
+                        fz_stroke_path(m_context,
+                                       borderDevice,
+                                       borderPath,
+                                       borderStroke,
+                                       fz_identity,
+                                       fz_device_rgb(m_context),
+                                       grey,
+                                       1.0f,
+                                       fz_default_color_params);
+                        fz_close_device(m_context, borderDevice);
+                        fz_drop_device(m_context, borderDevice);
+                        borderDevice = nullptr;
+                        fz_drop_display_list(m_context, dlist);
+                        dlist = bordered;
+                        bordered = nullptr;
+                    }
+                    fz_always(m_context)
+                    {
+                        fz_drop_device(m_context, borderDevice);
+                        fz_drop_path(m_context, borderPath);
+                        fz_drop_stroke_state(m_context, borderStroke);
+                    }
+                    fz_catch(m_context)
+                    {
+                        fz_drop_display_list(m_context, bordered);
+                    }
+                }
+
                 // The same epoch drives /M, keeping the dictionary and the appearance consistent.
                 pdf_sign_signature_with_appearance(m_context, widget, signer, signingTime, dlist);
             }

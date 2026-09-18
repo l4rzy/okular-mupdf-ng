@@ -905,6 +905,8 @@ struct SignatureAppearance {
     std::string signingDisplayDate;
     /// Background image PNG bytes; empty = no graphic.
     std::vector<std::uint8_t> backgroundImage;
+    /// Draw a 1px border around the signature box.
+    bool drawBorder = false;
 };
 
 /// Creates or updates a PDF signature widget and requests CMS signing.

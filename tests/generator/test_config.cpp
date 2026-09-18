@@ -200,15 +200,19 @@ private slots:
     {
         const int originalProfile = MuPDFNGSettings::signatureProfile();
         const bool originalUseUtc = MuPDFNGSettings::signatureUseUtc();
+        const bool originalDrawBorder = MuPDFNGSettings::signatureDrawBorder();
         MuPDFNGSettings::setSignatureProfile(MuPDFNGSettings::EnumSignatureProfile::Simple);
         MuPDFNGSettings::setSignatureUseUtc(true);
+        MuPDFNGSettings::setSignatureDrawBorder(true);
 
         const auto options = ::Mu::Generator::Config::readSignatureAppearance();
         MuPDFNGSettings::setSignatureProfile(originalProfile);
         MuPDFNGSettings::setSignatureUseUtc(originalUseUtc);
+        MuPDFNGSettings::setSignatureDrawBorder(originalDrawBorder);
 
         QVERIFY(options.simple);
         QVERIFY(options.useUtc);
+        QVERIFY(options.drawBorder);
     }
 
     void selectsInstalledOcrModel()
