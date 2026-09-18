@@ -135,6 +135,7 @@ target_link_libraries(test_generator_signaturepreview PRIVATE Qt6::Gui mupdf_gen
 # Generator adapters are the only unit tests linked to Okular proxy classes.
 add_layer_test(test_generator_proxies generator/test_proxies.cpp generator)
 target_include_directories(test_generator_proxies PRIVATE ../src)
+target_compile_definitions(test_generator_proxies PRIVATE HAVE_NEW_SIGNATURE_API=1)
 target_link_libraries(test_generator_proxies PRIVATE
     mupdf_generator_adapters
     mupdf_generator_signature

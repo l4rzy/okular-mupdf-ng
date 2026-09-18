@@ -1137,6 +1137,11 @@ QImage Main::image(Okular::PixmapRequest* request)
                    "normalized render frame from " + std::to_string(sourceSize.width()) + "x"
                        + std::to_string(sourceSize.height()) + " to " + std::to_string(img.width()) + "x"
                        + std::to_string(img.height()));
+        // A pending signature is display-only and owned by the generator; the
+        // worker is only told about it when the user finishes signing.
+        const Okular::NormalizedRect renderedRegion =
+            request->isTile() ? request->normalizedRect() : Okular::NormalizedRect(0, 0, 1, 1);
+        m_annotationProxy.paintPendingSignature(img, pageNum, renderedRegion);
         return shouldAbort() ? QImage { } : img;
     }
     return { };

@@ -8,6 +8,13 @@
 
 #include <QtCore/qglobal.h>
 
+#include <KLocalizedString>
+
+#include <QFont>
+#include <QMutexLocker>
+#include <QPainter>
+
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -42,6 +49,27 @@ std::pair<Okular::SigningResult, QString> signingResult(const Model::SignRespons
     }
 }
 
+// Draws the pending signature snippet inside @p rect. Text uses raster pixel
+// sizes because the target is a device-space page image, not a widget.
+void drawSignaturePreview(QPainter& painter, const QRectF& rect)
+{
+    painter.fillRect(rect, Qt::white);
+    painter.setPen(QColor(0x9a, 0x9a, 0x9a));
+    painter.drawRect(rect.adjusted(0, 0, -1, -1));
+
+    const QRectF inner = rect.adjusted(2, 2, -2, -2);
+    if (inner.width() <= 0 || inner.height() <= 0)
+        return;
+
+    QFont font = painter.font();
+    font.setBold(true);
+    font.setPixelSize(
+        std::clamp(static_cast<int>(inner.height() * 0.15), 5, std::max(5, static_cast<int>(inner.height() / 2))));
+    painter.setFont(font);
+    painter.setPen(Qt::black);
+    painter.drawText(inner, Qt::AlignCenter, i18n("Signature\nPlaceholder"));
+}
+
 } // namespace
 
 Annotation::Annotation(Plugin::WorkerClient* backend, MutationCallback mutationCallback)
@@ -51,6 +79,13 @@ Annotation::Annotation(Plugin::WorkerClient* backend, MutationCallback mutationC
 }
 
 Annotation::~Annotation() = default;
+
+void Annotation::setAvailable(bool available) noexcept
+{
+    m_available = available;
+    if (!available)
+        clearPendingSignature();
+}
 
 bool Annotation::supports(Capability capability) const
 {
@@ -62,15 +97,16 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 {
     // The worker owns page ranges; reject only what is locally known bad so a
     // corrupt Okular page index never becomes a blocking worker IPC.
-    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation || page < 0)
+    if (!m_available || !annotation || page < 0)
         return;
     if (auto* signature = dynamic_cast<Okular::SignatureAnnotation*>(annotation)) {
         signature->setPage(page);
-        Plugin::WorkerClient* const backend = m_backend;
+        beginPendingSignature(signature, page);
+
         // Bounds are read live at signing time: Okular lets the user move or
-        // resize the widget after notifyAddition, and signature edits never
-        // reach the worker (toModel rejects SignatureAnnotation), so a
-        // captured rect would sign stale coordinates.
+        // resize the widget after notifyAddition. The worker is only contacted
+        // here on Finish Signing, when the final rectangle is known.
+        Plugin::WorkerClient* const backend = m_backend;
         const auto sign =
             [backend, page, signature](const Okular::NewSignatureData& data,
                                        const QString& fileName) -> std::pair<Okular::SigningResult, QString> {
@@ -108,8 +144,14 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
             return sign(data, fileName).first;
         });
 #endif
+        // The preview is drawn by the generator, but the annotation must still
+        // be marked externally drawn so Document refreshes the page raster on
+        // every move or resize.
+        signature->setFlags(signature->flags() | Okular::Annotation::ExternallyDrawn);
         return;
     }
+    if (!m_backend || !m_backend->isConnected())
+        return;
     const auto model = Conversion::toModel(annotation);
     if (!model)
         return;
@@ -127,7 +169,13 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 
 void Annotation::notifyModification(const Okular::Annotation* annotation, int page, bool appearanceChanged)
 {
-    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation || page < 0)
+    if (!m_available || !annotation || page < 0)
+        return;
+    if (const auto* signature = dynamic_cast<const Okular::SignatureAnnotation*>(annotation)) {
+        updatePendingSignature(signature);
+        return;
+    }
+    if (!m_backend || !m_backend->isConnected())
         return;
     const auto model = Conversion::toModel(annotation);
     if (!model)
@@ -143,7 +191,13 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
 
 void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
 {
-    if (!m_available || !m_backend || !m_backend->isConnected() || !annotation || page < 0)
+    if (!m_available || !annotation || page < 0)
+        return;
+    if (dynamic_cast<const Okular::SignatureAnnotation*>(annotation)) {
+        clearPendingSignature();
+        return;
+    }
+    if (!m_backend || !m_backend->isConnected())
         return;
     const QVariant id = annotation->nativeId();
     if (!id.isValid() || id.toString().isEmpty())
@@ -153,6 +207,65 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
             m_mutationCallback();
         annotation->setNativeId(QVariant());
     }
+}
+
+bool Annotation::paintPendingSignature(QImage& image, int page, const Okular::NormalizedRect& pageRegion) const
+{
+    PendingSignature pending;
+    {
+        QMutexLocker locker(&m_pendingMutex);
+        if (!m_pending || m_pendingPage != page || m_pending->hidden)
+            return false;
+        pending = *m_pending;
+    }
+    if (image.isNull() || pageRegion.width() <= 0 || pageRegion.height() <= 0)
+        return false;
+
+    // Normalized page coordinates to device pixels of the requested region.
+    const QRectF rect((pending.bounds.left - pageRegion.left) / pageRegion.width() * image.width(),
+                      (pending.bounds.top - pageRegion.top) / pageRegion.height() * image.height(),
+                      pending.bounds.width() / pageRegion.width() * image.width(),
+                      pending.bounds.height() / pageRegion.height() * image.height());
+    if (!rect.intersects(QRectF(image.rect())))
+        return false;
+
+    // The worker frame may reference read-only shared memory, so detach before
+    // painting. Only images that actually contain the signature are copied.
+    image = image.copy();
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    drawSignaturePreview(painter, rect);
+    return true;
+}
+
+void Annotation::beginPendingSignature(const Okular::SignatureAnnotation* signature, int page)
+{
+    PendingSignature pending;
+    pending.bounds = signature->boundingRectangle();
+
+    QMutexLocker locker(&m_pendingMutex);
+    m_pending = std::move(pending);
+    m_pendingPage = page;
+}
+
+void Annotation::updatePendingSignature(const Okular::SignatureAnnotation* signature)
+{
+    QMutexLocker locker(&m_pendingMutex);
+    if (!m_pending)
+        return;
+    m_pending->bounds = signature->boundingRectangle();
+    // Okular only refreshes the page raster once during a drag, so hide the
+    // preview while moving or resizing and reveal it again at the final spot.
+    m_pending->hidden = (signature->flags() & (Okular::Annotation::BeingMoved | Okular::Annotation::BeingResized)) != 0;
+}
+
+void Annotation::clearPendingSignature() noexcept
+{
+    QMutexLocker locker(&m_pendingMutex);
+    m_pending.reset();
+    m_pendingPage = -1;
 }
 
 } // namespace Mu::Generator::Proxy

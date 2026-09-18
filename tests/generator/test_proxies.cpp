@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QColor>
 #include <QDateTime>
+#include <QImage>
 #include <QSignalSpy>
 #include <QTest>
 #include <QTimeZone>
@@ -10,6 +12,7 @@
 
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
+#include "generator/proxy/annotation.hpp"
 
 #include "generator/conversion/text.hpp"
 #include "generator/printing.hpp"
@@ -71,6 +74,51 @@ private slots:
     {
         ::Mu::Plugin::s_mockUpdateForm = nullptr;
         ::Mu::Plugin::s_mockResetForm = nullptr;
+    }
+
+    void pendingSignaturePreviewPaintsAndHides()
+    {
+        ::Mu::Generator::Proxy::Annotation proxy;
+        proxy.setAvailable(true);
+
+        Okular::SignatureAnnotation signature;
+        signature.setBoundingRectangle(Okular::NormalizedRect(0.25, 0.25, 0.75, 0.5));
+        signature.setLeftText(QStringLiteral("Jane Doe"));
+        signature.setText(QStringLiteral("Signed by: Jane Doe\nDate: Sep 7, 2026"));
+        proxy.notifyAddition(&signature, 0);
+
+        const auto freshImage = [] {
+            QImage image(100, 100, QImage::Format_RGB32);
+            image.fill(Qt::blue);
+            return image;
+        };
+
+        QImage painted = freshImage();
+        const QImage original = painted;
+        QVERIFY(proxy.paintPendingSignature(painted, 0, Okular::NormalizedRect(0, 0, 1, 1)));
+        QVERIFY(painted != original);
+        // Inside the normalized bounds the preview paints a white box; outside
+        // the page content is untouched.
+        QCOMPARE(painted.pixelColor(28, 28), QColor(Qt::white));
+        QCOMPARE(painted.pixelColor(5, 5), QColor(Qt::blue));
+
+        // Other pages and hidden previews are never composited.
+        QImage otherPage = freshImage();
+        QVERIFY(!proxy.paintPendingSignature(otherPage, 1, Okular::NormalizedRect(0, 0, 1, 1)));
+
+        signature.setFlags(Okular::Annotation::BeingMoved);
+        proxy.notifyModification(&signature, 0, true);
+        QImage moving = freshImage();
+        QVERIFY(!proxy.paintPendingSignature(moving, 0, Okular::NormalizedRect(0, 0, 1, 1)));
+
+        signature.setFlags(signature.flags() & ~Okular::Annotation::BeingMoved);
+        proxy.notifyModification(&signature, 0, true);
+        QImage placed = freshImage();
+        QVERIFY(proxy.paintPendingSignature(placed, 0, Okular::NormalizedRect(0, 0, 1, 1)));
+
+        proxy.notifyRemoval(&signature, 0);
+        QImage removed = freshImage();
+        QVERIFY(!proxy.paintPendingSignature(removed, 0, Okular::NormalizedRect(0, 0, 1, 1)));
     }
 
     void signatureFieldReconstructsBoundaryData()
