@@ -14,6 +14,10 @@ inline constexpr std::uint32_t MaxControlMessageBytes = 64U * 1024U * 1024U;
 
 // --- Shared-Memory Render Frame Limits ---
 inline constexpr std::uint32_t MaxSharedFrameBytes = 128U * 1024U * 1024U;
+// Upper bound on concurrently live render-frame slots. The worker never creates
+// more than this per session; the plugin refuses to cache beyond it, so a
+// hostile worker cannot grow host memory. Keep both sides on this one value.
+inline constexpr std::size_t MaxFrameSlotCount = 8;
 
 // --- Serialization & Protocol Decoding Limits ---
 inline constexpr std::uint64_t MaxString = 1U * 1024U * 1024U;

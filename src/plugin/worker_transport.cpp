@@ -520,6 +520,8 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
         } else {
             if (!render->frame.transferId)
                 return rejectSlot();
+            if (m_frameSlots.size() >= ::Mu::Limit::MaxFrameSlotCount)
+                return rejectSlot();
             std::string error;
             const auto frame = receiveRenderFrame(m_fd, render->frame.transferId, "render slot", &error);
             if (!frame)

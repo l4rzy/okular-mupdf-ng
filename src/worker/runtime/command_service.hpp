@@ -72,7 +72,7 @@ constexpr std::size_t MaxEmbeddedFileBytes = 32U * 1024U * 1024U;
 constexpr std::size_t MaxEmbeddedFileCount = 1'024;
 constexpr std::size_t MaxOutlineResponseNodes = 50'000;
 constexpr std::uint64_t FramePoolBytes = ::Mu::Limit::MaxSharedFrameBytes;
-constexpr std::size_t MaxFramePoolSlots = 8;
+constexpr std::size_t MaxFramePoolSlots = ::Mu::Limit::MaxFrameSlotCount;
 
 // Deferred request queue limits during synchronous nested IPC loops
 constexpr std::size_t MaxDeferredFrames = 1024;

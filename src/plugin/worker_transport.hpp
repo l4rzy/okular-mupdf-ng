@@ -28,6 +28,7 @@
 
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
+#include "shared/protocol/limits.hpp"
 #include "shared/transport/ctrl_channel.hpp"
 #include "shared/transport/fd_channel.hpp"
 
