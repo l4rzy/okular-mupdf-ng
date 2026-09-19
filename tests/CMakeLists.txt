@@ -65,6 +65,11 @@ set_tests_properties(test_mupdf PROPERTIES
     TIMEOUT 300
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# mupdfng-cli argument parsing: pure decision logic, no worker needed.
+add_layer_test(test_tools_cliargs tools/test_cli_args.cpp tools ../src/tools/cli/cli_args.cpp)
+target_include_directories(test_tools_cliargs PRIVATE ../src ${MU_GENERATED_INCLUDE_DIR})
+target_link_libraries(test_tools_cliargs PRIVATE Qt6::Core)
+
 # Plugin behaviour owns persistent cache state and uses a per-test root.
 add_layer_test(test_plugin_ocrcache plugin/test_ocrcache.cpp plugin)
 target_include_directories(test_plugin_ocrcache PRIVATE ../src)

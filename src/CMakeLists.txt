@@ -39,6 +39,30 @@ endif()
 
 add_subdirectory(worker)
 
+# mupdfng-cli: thin command-line adapter over the plugin worker bridge
+# (WorkerClient). Only WorkerClient crosses the process boundary here.
+add_executable(mupdfng-cli
+    tools/cli/main.cpp
+    tools/cli/cli_args.cpp
+)
+target_include_directories(mupdfng-cli PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(mupdfng-cli PRIVATE
+    mupdf_plugin_worker
+    mupdf_plugin_util
+    Qt6::Core
+)
+target_compile_definitions(mupdfng-cli PRIVATE
+    TESSDATA_DIR="${TESSDATA_DIR}"
+)
+if(MU_DEBUG_BUILD)
+    target_compile_definitions(mupdfng-cli PRIVATE MU_DEBUG_ENABLED)
+endif()
+install(TARGETS mupdfng-cli
+    DESTINATION "${CMAKE_INSTALL_BINDIR}"
+)
+
 # In-process host libraries: consumed by the worker bridge AND directly by the
 # generator for local work (NSS, caches, helpers). Only WorkerClient crosses
 # the process boundary; nothing here may depend on generator/Okular types.
