@@ -72,7 +72,6 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(TextExtraction);
     setFeature(ReadRawData);
     setFeature(FontInfo);
-    setFeature(PrintPostscript);
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
