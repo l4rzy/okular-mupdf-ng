@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-10 23:47-0500\n"
+"POT-Creation-Date: 2026-09-20 23:37-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,141 +18,141 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: src/generator/config/settingswidget.cpp:25
-#: src/generator/config/settingswidget.cpp:33
-msgid "Disabled"
-msgstr ""
-
-#: src/generator/config/settingswidget.cpp:26
-#: src/generator/config/settingswidget.cpp:34
-msgid "Minimum"
-msgstr ""
-
 #: src/generator/config/settingswidget.cpp:27
 #: src/generator/config/settingswidget.cpp:35
-msgid "Low"
+msgid "Disabled"
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:28
 #: src/generator/config/settingswidget.cpp:36
-msgid "Medium"
+msgid "Minimum"
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:29
 #: src/generator/config/settingswidget.cpp:37
+msgid "Low"
+msgstr ""
+
+#: src/generator/config/settingswidget.cpp:30
+#: src/generator/config/settingswidget.cpp:38
+msgid "Medium"
+msgstr ""
+
+#: src/generator/config/settingswidget.cpp:31
+#: src/generator/config/settingswidget.cpp:39
 msgid "High"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:41
+#: src/generator/config/settingswidget.cpp:43
 msgid "Speed"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:42
-#: src/generator/config/settingswidget.cpp:56
+#: src/generator/config/settingswidget.cpp:44
+#: src/generator/config/settingswidget.cpp:58
 msgid "Balanced"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:43
+#: src/generator/config/settingswidget.cpp:45
 msgid "Quality"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:47
+#: src/generator/config/settingswidget.cpp:49
 msgid "32 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:48
+#: src/generator/config/settingswidget.cpp:50
 msgid "64 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:49
+#: src/generator/config/settingswidget.cpp:51
 msgid "128 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:50
+#: src/generator/config/settingswidget.cpp:52
 msgid "256 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:54
+#: src/generator/config/settingswidget.cpp:56
 msgid "Off"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:55
+#: src/generator/config/settingswidget.cpp:57
 msgid "Conservative"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:57
+#: src/generator/config/settingswidget.cpp:59
 msgid "Aggressive"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:61
+#: src/generator/config/settingswidget.cpp:63
 msgid "Relaxed"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:62
+#: src/generator/config/settingswidget.cpp:64
 msgid "Strict"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:66 rc.cpp:37
+#: src/generator/config/settingswidget.cpp:68
 msgid "A5 (148 × 210 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:67 rc.cpp:38
+#: src/generator/config/settingswidget.cpp:69
 msgid "6×9 (152 × 229 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:68 rc.cpp:36
+#: src/generator/config/settingswidget.cpp:70
 msgid "B5 (176 × 250 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:69 rc.cpp:39
+#: src/generator/config/settingswidget.cpp:71
 msgid "Letter (216 × 279 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:73
+#: src/generator/config/settingswidget.cpp:75
 msgid "Default"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:74
+#: src/generator/config/settingswidget.cpp:76
 msgid "Serif"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:75
+#: src/generator/config/settingswidget.cpp:77
 msgid "Sans-serif"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:76
+#: src/generator/config/settingswidget.cpp:78
 msgid "Monospace"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:113
+#: src/generator/config/settingswidget.cpp:118
 msgid "Speed (150dpi)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:114
+#: src/generator/config/settingswidget.cpp:119
 msgid "Balanced (225dpi)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:115
+#: src/generator/config/settingswidget.cpp:120
 msgid "Accuracy (300dpi)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:119
+#: src/generator/config/settingswidget.cpp:124
 msgid "0 (Never)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:120
+#: src/generator/config/settingswidget.cpp:125
 msgid "5 characters"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:121
+#: src/generator/config/settingswidget.cpp:126
 msgid "20 characters"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:122
+#: src/generator/config/settingswidget.cpp:127
 msgid "∞ (Always)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:124
+#: src/generator/config/settingswidget.cpp:129
 msgid ""
 "Automatically run OCR when the page contains fewer extracted characters than "
 "the selected threshold.\n"
@@ -160,71 +160,79 @@ msgid ""
 "page."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:150
+#: src/generator/config/settingswidget.cpp:138
+msgid "Complete"
+msgstr ""
+
+#: src/generator/config/settingswidget.cpp:139
+msgid "Simple"
+msgstr ""
+
+#: src/generator/config/settingswidget.cpp:166
 msgid "Custom CSS (configured)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:150 rc.cpp:40
+#: src/generator/config/settingswidget.cpp:166 rc.cpp:42
 msgid "Custom CSS"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:156
+#: src/generator/config/settingswidget.cpp:172
 msgid "NSS database unavailable"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:158
+#: src/generator/config/settingswidget.cpp:174
 msgid "Manage Certificates - %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:124
+#: src/generator/mupdfng.cpp:125
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:128
+#: src/generator/mupdfng.cpp:129
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:129
+#: src/generator/mupdfng.cpp:130
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:153
+#: src/generator/mupdfng.cpp:154
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:164
+#: src/generator/mupdfng.cpp:165
 msgid "The document renderer stopped responding. Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:198
+#: src/generator/mupdfng.cpp:199
 msgid "Export to PDF failed: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:201
+#: src/generator/mupdfng.cpp:202
 msgid "Export to PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:220
+#: src/generator/mupdfng.cpp:219
 msgid "OCR completed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:225
+#: src/generator/mupdfng.cpp:224
 msgid "Running OCR on page %1..."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:229
+#: src/generator/mupdfng.cpp:228
 msgid "OCR failed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:289
+#: src/generator/mupdfng.cpp:288
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
@@ -234,126 +242,135 @@ msgstr ""
 msgid "MuPDF-NG"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:311
+#: src/generator/mupdfng.cpp:313
 msgid "MuPDF-NG Configuration"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:317
+#: src/generator/mupdfng.cpp:319
 msgid "Restart needed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:317
+#: src/generator/mupdfng.cpp:319
 msgid "You need to restart Okular after this change."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:572
+#: src/generator/mupdfng.cpp:573
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:585
+#: src/generator/mupdfng.cpp:586
 msgid ""
-"🟡 The MuPDF worker is partially hardened: Okular's protection is limited."
+"[WARN] The MuPDF worker is partially hardened: Okular's protection is "
+"limited."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:587
+#: src/generator/mupdfng.cpp:588
 msgid ""
-"🔴 The MuPDF worker is unconfined: Okular will not be able to protect you "
+"[X] The MuPDF worker is unconfined: Okular will not be able to protect you "
 "from malicious documents."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:609
+#: src/generator/mupdfng.cpp:610
 msgid "Pinned against MuPDF %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:611
+#: src/generator/mupdfng.cpp:612
 msgid "Using MuPDF %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:613
+#: src/generator/mupdfng.cpp:614
 msgid ""
 "Using MuPDF %1\n"
 "Pinned against MuPDF %2"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:620
-msgid "Worker is fully hardened 🟢"
+#: src/generator/mupdfng.cpp:621
+msgid "Worker is fully hardened [OK]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:622
-msgid "Worker is partially hardened 🟡"
+#: src/generator/mupdfng.cpp:623
+msgid "Worker is partially hardened [WARN]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:624
-msgid "Worker is unconfined 🔴"
+#: src/generator/mupdfng.cpp:625
+msgid "Worker is unconfined [X]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:650
+#: src/generator/mupdfng.cpp:631
+msgid "unknown"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:632
+msgid "Worker is using %1"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:658
 msgid ""
-"⚠️ The worker sandbox is not fully hardened and sandbox enforcement is "
+"[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
 "To open this document, switch Sandbox Enforcement to Relaxed. This will "
 "reduce security protections.\n"
 "Error: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:735
+#: src/generator/mupdfng.cpp:743
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:765
+#: src/generator/mupdfng.cpp:773
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1010
+#: src/generator/mupdfng.cpp:1018
 msgid "Format"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1013 rc.cpp:12
+#: src/generator/mupdfng.cpp:1021 rc.cpp:12
 msgid "Security"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1015
+#: src/generator/mupdfng.cpp:1023
 msgid "Yes"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1015
+#: src/generator/mupdfng.cpp:1023
 msgid "No"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1016
+#: src/generator/mupdfng.cpp:1024
 msgid "Optimized"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1019
+#: src/generator/mupdfng.cpp:1027
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/generator/mupdfng.cpp:1019
+#: src/generator/mupdfng.cpp:1027
 msgid "Not Signed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1020
+#: src/generator/mupdfng.cpp:1028
 msgid "Digital Signatures"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1240
+#: src/generator/mupdfng.cpp:1251
 msgid "Strict sandbox enforcement blocks this document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1241 src/generator/mupdfng.cpp:1252
+#: src/generator/mupdfng.cpp:1252 src/generator/mupdfng.cpp:1263
 msgid "MuPDF worker is unavailable."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1248
+#: src/generator/mupdfng.cpp:1259
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1277
+#: src/generator/mupdfng.cpp:1288
 msgid "Starting to export to PDF."
 msgstr ""
 
@@ -379,6 +396,12 @@ msgstr ""
 
 #: src/generator/printing.cpp:33
 msgid "Scale mode:"
+msgstr ""
+
+#: src/generator/proxy/annotation.cpp:70
+msgid ""
+"Signature\n"
+"Placeholder"
 msgstr ""
 
 #: rc.cpp:1
@@ -493,25 +516,49 @@ msgid "Check certificate revocation via OCSP (requires network)"
 msgstr ""
 
 #: rc.cpp:30
-msgid "ePUB"
+msgid "Signature"
 msgstr ""
 
 #: rc.cpp:31
-msgid "Page Layout"
+msgid "Signature profile:"
 msgstr ""
 
 #: rc.cpp:32
-msgid "Font Size"
+msgid "Render the signature appearance timestamp in UTC instead of local time."
 msgstr ""
 
 #: rc.cpp:33
-msgid " pt"
+msgid "Use UTC time for signatures"
 msgstr ""
 
 #: rc.cpp:34
-msgid "Font Family"
+msgid "Draw a 1px border around the signed signature appearance."
 msgstr ""
 
 #: rc.cpp:35
+msgid "Draw signature border"
+msgstr ""
+
+#: rc.cpp:36
+msgid "ePUB"
+msgstr ""
+
+#: rc.cpp:37
+msgid "Page Layout"
+msgstr ""
+
+#: rc.cpp:38
+msgid "Font Size"
+msgstr ""
+
+#: rc.cpp:39
+msgid " pt"
+msgstr ""
+
+#: rc.cpp:40
+msgid "Font Family"
+msgstr ""
+
+#: rc.cpp:41
 msgid "Page Size"
 msgstr ""

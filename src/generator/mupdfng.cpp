@@ -583,9 +583,9 @@ void Main::notifyDegradedSandbox()
 
     auto warningMessage = [sandboxStatus]() {
         if (sandboxStatus.isPartiallyActive())
-            return i18n("🟡 The MuPDF worker is partially hardened: Okular's protection is limited.");
+            return i18n("[WARN] The MuPDF worker is partially hardened: Okular's protection is limited.");
         return i18n(
-            "🔴 The MuPDF worker is unconfined: Okular will not be able to protect you from malicious documents.");
+            "[X] The MuPDF worker is unconfined: Okular will not be able to protect you from malicious documents.");
     };
 
     if (Config::readDegradedSandboxNotificationEnabled() && !sandboxStatus.isFullyHardened())
@@ -618,11 +618,11 @@ QString Main::generatorExtraDescription() const
 
     const Model::SandboxStatus status = m_worker.sandboxStatus();
     if (status.isFullyHardened()) {
-        result += QStringLiteral("\n") + i18n("Worker is fully hardened 🟢");
+        result += QStringLiteral("\n") + i18n("Worker is fully hardened [OK]");
     } else if (status.isPartiallyActive()) {
-        result += QStringLiteral("\n") + i18n("Worker is partially hardened 🟡");
+        result += QStringLiteral("\n") + i18n("Worker is partially hardened [WARN]");
     } else {
-        result += QStringLiteral("\n") + i18n("Worker is unconfined 🔴");
+        result += QStringLiteral("\n") + i18n("Worker is unconfined [X]");
     }
 
     if (m_worker.isConnected()) {
@@ -655,7 +655,7 @@ bool Main::workerReady() const
 QString Main::sandboxGateMessage() const
 {
     const QString reason = QString::fromStdString(m_worker.sandboxStatus().reason);
-    return i18n("⚠️ The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
+    return i18n("[WARN] The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
                 "To open this document, switch Sandbox Enforcement to Relaxed. This will reduce security "
                 "protections.\nError: %1",
                 reason.isEmpty() ? QString() : QStringLiteral("[%1]").arg(reason));
