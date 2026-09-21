@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "plugin/caching/epub_cache.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
@@ -172,6 +173,9 @@ private:
     }
 
     bool sendOcrInput(QFile& input, std::uint64_t& transfer);
+    /// Memoized EPUB cache path for a source; recomputed only when the source
+    /// or the EPUB layout settings change.
+    QString epubCachePath(const QString& sourcePath);
     Model::OpenStatus openFile(const QString& path,
                                const QString& password,
                                QList<Model::PageInfo>* pages,
@@ -197,6 +201,10 @@ private:
     QString m_socketPath, m_fdSocketPath, m_tempPath, m_sourcePath;
     QString m_activeSignPassword;
     Model::DocumentSettings m_settings;
+    // Memoized EPUB cache path and the identity it was derived from.
+    std::optional<QString> m_epubCachePath;
+    std::optional<QByteArray> m_epubCacheLayoutKey;
+    QString m_epubCacheSource;
     std::optional<PendingExport> m_export;
     std::unique_ptr<QTimer> m_exportTimer;
     std::unordered_map<std::uint64_t, std::shared_ptr<FrameSlotMapping>> m_frameSlots;

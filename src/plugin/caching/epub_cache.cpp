@@ -37,10 +37,11 @@ constexpr quint32 OutlineSection = 2;
 constexpr std::size_t MaxOutlineDepth = 64;
 constexpr std::size_t MaxOutlineNodes = 50'000;
 
+// Only settings that affect EPUB pagination or styling belong in the cache
+// key. The fingerprint is exposed as Cache::layoutKey so callers that memoize
+// the derived cache path can detect layout changes without re-hashing.
 QByteArray layoutFingerprint(const Model::DocumentSettings& settings)
 {
-    // Only settings that affect EPUB pagination or styling belong in this key.
-    // Hash the CSS rather than embedding its potentially large contents.
     QByteArray encoded;
     QDataStream stream(&encoded, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_6_0);
@@ -376,28 +377,49 @@ QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings&
         + QStringLiteral(".bin");
 }
 
-std::optional<CacheEntry> Cache::load(const QString& path, const Model::DocumentSettings& settings)
+QByteArray Cache::layoutKey(const Model::DocumentSettings& settings)
 {
-    const QString cachePath = cacheFilePath(path, settings);
+    return layoutFingerprint(settings);
+}
+
+std::optional<CacheEntry> Cache::loadAt(const QString& cachePath)
+{
     if (cachePath.isEmpty())
         return std::nullopt;
     return loadEntry(cachePath);
 }
 
-bool Cache::saveAccelerator(const QString& path, const Model::DocumentSettings& settings, const QByteArray& bytes)
+bool Cache::saveAcceleratorAt(const QString& cachePath, const QByteArray& bytes)
 {
     // Empty and oversized accelerators are never useful cache entries.
-    if (bytes.isEmpty() || bytes.size() > MaxAcceleratorBytes)
+    if (cachePath.isEmpty() || bytes.isEmpty() || bytes.size() > MaxAcceleratorBytes)
         return false;
-    return updateEntry(cacheFilePath(path, settings), [&bytes](CacheEntry& entry) { entry.accelerator = bytes; });
+    return updateEntry(cachePath, [&bytes](CacheEntry& entry) { entry.accelerator = bytes; });
+}
+
+bool Cache::saveOutlineAt(const QString& cachePath, const std::vector<Model::OutlineNode>& outline)
+{
+    // Outline serialization performs its own size, depth, and node-count checks.
+    if (cachePath.isEmpty())
+        return false;
+    return updateEntry(cachePath, [&outline](CacheEntry& entry) { entry.outline = outline; });
+}
+
+std::optional<CacheEntry> Cache::load(const QString& path, const Model::DocumentSettings& settings)
+{
+    return loadAt(cacheFilePath(path, settings));
+}
+
+bool Cache::saveAccelerator(const QString& path, const Model::DocumentSettings& settings, const QByteArray& bytes)
+{
+    return saveAcceleratorAt(cacheFilePath(path, settings), bytes);
 }
 
 bool Cache::saveOutline(const QString& path,
                         const Model::DocumentSettings& settings,
                         const std::vector<Model::OutlineNode>& outline)
 {
-    // Outline serialization performs its own size, depth, and node-count checks.
-    return updateEntry(cacheFilePath(path, settings), [&outline](CacheEntry& entry) { entry.outline = outline; });
+    return saveOutlineAt(cacheFilePath(path, settings), outline);
 }
 
 } // namespace Mu::Plugin::Caching::EPUB

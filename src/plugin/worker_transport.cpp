@@ -303,6 +303,9 @@ void WorkerTransport::cleanupSession()
     }
     m_sourcePath.clear();
     m_useEpubCache = false;
+    m_epubCachePath.reset();
+    m_epubCacheLayoutKey.reset();
+    m_epubCacheSource.clear();
     m_activeSignPassword.fill(u'\0');
     m_activeSignPassword.clear();
     m_inFlight = false;
@@ -339,6 +342,26 @@ std::optional<quint64> WorkerTransport::workerMemoryBytes() const
     return Util::processResidentBytes(m_process.processId());
 }
 
+QString WorkerTransport::epubCachePath(const QString& sourcePath)
+{
+    // The cache path binds the source bytes and the EPUB layout settings. The
+    // fingerprint recomputation costs a 128 KiB source probe plus a SHA-256, so
+    // memoize it for the session and only recompute when either input changes.
+    const QByteArray layoutKey = Caching::EPUB::Cache::layoutKey(m_settings);
+    if (m_epubCachePath && m_epubCacheSource == sourcePath && m_epubCacheLayoutKey
+        && *m_epubCacheLayoutKey == layoutKey)
+        return *m_epubCachePath;
+
+    const QString cachePath = Caching::EPUB::Cache::cacheFilePath(sourcePath, m_settings);
+    if (cachePath.isEmpty())
+        return { };
+
+    m_epubCachePath = cachePath;
+    m_epubCacheSource = sourcePath;
+    m_epubCacheLayoutKey = layoutKey;
+    return cachePath;
+}
+
 OpenStatus
 WorkerTransport::open(const QString& path, const QString& password, QList<PageInfo>* pages, DocumentType type)
 {
@@ -363,7 +386,7 @@ OpenStatus WorkerTransport::openFile(const QString& path,
         return OpenStatus::Failed;
     std::optional<Caching::EPUB::CacheEntry> cached;
     if (useEpubAcceleratorCache && type == DocumentType::Epub) {
-        cached = Caching::EPUB::Cache::load(path, m_settings);
+        cached = Caching::EPUB::Cache::loadAt(epubCachePath(path));
     }
     std::vector<std::uint8_t> accelerator;
     if (cached && cached->accelerator)
@@ -389,7 +412,7 @@ OpenStatus WorkerTransport::openFile(const QString& path,
     if (useEpubAcceleratorCache && type == DocumentType::Epub && !opened->epubAccelerator.empty()) {
         const QByteArray produced(reinterpret_cast<const char*>(opened->epubAccelerator.data()),
                                   static_cast<qsizetype>(opened->epubAccelerator.size()));
-        (void)Caching::EPUB::Cache::saveAccelerator(path, m_settings, produced);
+        (void)Caching::EPUB::Cache::saveAcceleratorAt(epubCachePath(path), produced);
     }
     m_linkGeneration = opened->linkGeneration;
 #ifdef MU_DEBUG_ENABLED
@@ -453,6 +476,9 @@ bool WorkerTransport::close()
     }
     m_sourcePath.clear();
     m_useEpubCache = false;
+    m_epubCachePath.reset();
+    m_epubCacheLayoutKey.reset();
+    m_epubCacheSource.clear();
     m_linkGeneration = 0;
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt.reset();
@@ -645,7 +671,7 @@ std::vector<EmbeddedFile> WorkerTransport::embeddedFiles()
 std::vector<OutlineNode> WorkerTransport::synopsis()
 {
     if (m_useEpubCache && !m_sourcePath.isEmpty()) {
-        if (const auto cached = Caching::EPUB::Cache::load(m_sourcePath, m_settings); cached && cached->outline) {
+        if (const auto cached = Caching::EPUB::Cache::loadAt(epubCachePath(m_sourcePath)); cached && cached->outline) {
             return *cached->outline;
         }
     }
@@ -654,7 +680,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis()
         return { };
     if (auto* value = std::get_if<OutlineResponse>(&response->payload)) {
         if (m_useEpubCache && !m_sourcePath.isEmpty())
-            (void)Caching::EPUB::Cache::saveOutline(m_sourcePath, m_settings, value->nodes);
+            (void)Caching::EPUB::Cache::saveOutlineAt(epubCachePath(m_sourcePath), value->nodes);
         return std::move(value->nodes);
     }
     return { };

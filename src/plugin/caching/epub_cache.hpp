@@ -37,9 +37,18 @@ public:
                                           const Model::DocumentSettings& settings,
                                           const std::vector<Model::OutlineNode>& outline);
 
-private:
-    /// Derives a stable cache filename from the canonical source and EPUB layout.
+    /// Settings-aware stable cache filename for the canonical source.
     [[nodiscard]] static QString cacheFilePath(const QString& path, const Model::DocumentSettings& settings);
+
+    /// The EPUB layout fingerprint that participates in the cache filename.
+    /// Callers that memoize the cache path compare this key instead of the
+    /// whole settings struct.
+    [[nodiscard]] static QByteArray layoutKey(const Model::DocumentSettings& settings);
+
+    /// Path-keyed variants for callers that memoize the derived cache path.
+    [[nodiscard]] static std::optional<CacheEntry> loadAt(const QString& cachePath);
+    [[nodiscard]] static bool saveAcceleratorAt(const QString& cachePath, const QByteArray& bytes);
+    [[nodiscard]] static bool saveOutlineAt(const QString& cachePath, const std::vector<Model::OutlineNode>& outline);
 };
 
 } // namespace Mu::Plugin::Caching::EPUB
