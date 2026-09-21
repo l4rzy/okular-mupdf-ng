@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://l4rzy.github.io/okular-mupdf-ng/sitemap.xml
