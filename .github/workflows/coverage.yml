@@ -1,11 +1,11 @@
 name: Coverage
 
-# Post-merge coverage signal only. This workflow is intentionally standalone:
+# Tagged-release coverage signal. This workflow is intentionally standalone:
 # it is not wired into the release chain in ci.yml, so packaging and releases
 # never wait on it.
 on:
   push:
-    branches: [main]
+    tags: [ 'v*' ]
 
 concurrency:
   group: coverage-${{ github.ref }}
@@ -98,7 +98,7 @@ jobs:
           totals=$(awk '/^TOTAL/ {print $4, $7, $10, $13}' build-coverage/report.txt)
           read -r regions funcs lines branches <<< "$totals"
           {
-            echo "## Coverage (llvm-cov, this push to main)"
+            echo "## Coverage (llvm-cov, ${{ github.ref_name }})"
             echo
             echo "| Metric | Rate |"
             echo "| --- | --- |"
