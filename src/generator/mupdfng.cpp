@@ -316,7 +316,7 @@ void Main::addPages(KConfigDialog* dialog)
         updateSettingRestartState(Config::readEpubSettings());
         if (!m_restartState.required)
             return;
-        QMessageBox::information(w, i18n("Restart needed"), i18n("You need to restart Okular after this change."));
+        QMessageBox::information(w, i18n("Restart needed"), i18n("You need to restart Okular to apply this change."));
     });
 }
 
@@ -585,7 +585,7 @@ void Main::notifyDegradedSandbox()
         if (sandboxStatus.isPartiallyActive())
             return i18n("[WARN] The MuPDF worker is partially hardened: Okular's protection is limited.");
         return i18n(
-            "[X] The MuPDF worker is unconfined: Okular will not be able to protect you from malicious documents.");
+            "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect you from malicious documents.");
     };
 
     if (Config::readDegradedSandboxNotificationEnabled() && !sandboxStatus.isFullyHardened())
@@ -622,7 +622,7 @@ QString Main::generatorExtraDescription() const
     } else if (status.isPartiallyActive()) {
         result += QStringLiteral("\n") + i18n("Worker is partially hardened [WARN]");
     } else {
-        result += QStringLiteral("\n") + i18n("Worker is unconfined [X]");
+        result += QStringLiteral("\n") + i18n("Worker is unconfined [CRIT]");
     }
 
     if (m_worker.isConnected()) {

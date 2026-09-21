@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-20 23:37-0500\n"
+"POT-Creation-Date: 2026-09-21 18:36-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -251,7 +251,7 @@ msgid "Restart needed"
 msgstr ""
 
 #: src/generator/mupdfng.cpp:319
-msgid "You need to restart Okular after this change."
+msgid "You need to restart Okular to apply this change."
 msgstr ""
 
 #: src/generator/mupdfng.cpp:573
@@ -268,8 +268,8 @@ msgstr ""
 
 #: src/generator/mupdfng.cpp:588
 msgid ""
-"[X] The MuPDF worker is unconfined: Okular will not be able to protect you "
-"from malicious documents."
+"[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
+"you from malicious documents."
 msgstr ""
 
 #: src/generator/mupdfng.cpp:610
@@ -295,7 +295,7 @@ msgid "Worker is partially hardened [WARN]"
 msgstr ""
 
 #: src/generator/mupdfng.cpp:625
-msgid "Worker is unconfined [X]"
+msgid "Worker is unconfined [CRIT]"
 msgstr ""
 
 #: src/generator/mupdfng.cpp:631
