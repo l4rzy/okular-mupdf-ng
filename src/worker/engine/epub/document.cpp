@@ -273,6 +273,9 @@ bool EpubDocument::unlock(const std::string&, std::string* error)
 
 void EpubDocument::close() noexcept
 {
+    // Release the cached pages before dropping the document they belong to.
+    clearPageCache();
+
     if (m_document && m_context) {
         fz_try(m_context)
         {
@@ -394,17 +397,27 @@ fz_page* EpubDocument::loadPage(int page, std::string* error) const
         fail(error, "page is unavailable");
         return nullptr;
     }
+
+    if (fz_page* cached = m_pageCache.acquire(m_context, page))
+        return cached;
+
     fz_page* result = nullptr;
     fz_var(result);
     fz_try(m_context)
     {
         result = fz_load_page(m_context, m_document, page);
+        m_pageCache.store(m_context, page, result);
     }
     fz_catch(m_context)
     {
         fail(error, fz_caught_message(m_context));
     }
     return result;
+}
+
+void EpubDocument::clearPageCache() const noexcept
+{
+    m_pageCache.clear(m_context);
 }
 
 fz_page* EpubDocument::loadPageWithBounds(int page, fz_rect* bounds, std::string* error) const

@@ -89,6 +89,10 @@ bool PdfDocument::saveFd(int fd, std::string* error)
         return fail(error, "document cannot be saved");
     }
 
+    // Drop the cached pages before pdf_update_open_pages()/serialization so the
+    // write sees the same open-page set it would without the render cache.
+    clearPageCache();
+
     FILE* file = ::fdopen(fd, "wb");
     if (!file) {
         ::close(fd);

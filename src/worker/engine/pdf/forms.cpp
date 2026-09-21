@@ -561,6 +561,9 @@ bool PdfDocument::updateFormField(int page,
         if (newValue)
             pdf_drop_obj(m_context, newValue);
         fz_drop_page(m_context, nativePage);
+        // updateAllPages refreshed widgets through separate page handles, so the
+        // page cache can no longer be trusted.
+        clearPageCache();
     }
     fz_catch(m_context)
     {
@@ -632,6 +635,9 @@ bool PdfDocument::resetForm(int page,
     fz_always(m_context)
     {
         fz_drop_page(m_context, nativePage);
+        // updateAllPages refreshed widgets through separate page handles, so the
+        // page cache can no longer be trusted.
+        clearPageCache();
     }
     fz_catch(m_context)
     {

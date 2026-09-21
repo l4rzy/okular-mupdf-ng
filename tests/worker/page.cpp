@@ -121,6 +121,113 @@ private slots:
                  QCryptographicHash::hash(secondBytes, QCryptographicHash::Sha256));
     }
 
+    void testPageCacheReuseAndEviction()
+    {
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, m_multiPagePath));
+        QVERIFY(!document.isPageCached(0));
+
+        std::vector<std::uint8_t> buffer(40 * 60 * 4);
+        std::string error;
+        const auto render = [&](int page) {
+            return document.renderToBuffer({ page, 40, 60, std::nullopt }, buffer.data(), 40 * 4, &error);
+        };
+
+        QVERIFY2(render(0), error.c_str());
+        QVERIFY(document.isPageCached(0));
+
+        // A second render of the same page reuses the cached handle.
+        QVERIFY2(render(0), error.c_str());
+        QVERIFY(document.isPageCached(0));
+
+        // The cache holds three pages: earlier entries survive new loads.
+        QVERIFY2(render(1), error.c_str());
+        QVERIFY(document.isPageCached(0));
+        QVERIFY(document.isPageCached(1));
+        QVERIFY2(render(2), error.c_str());
+        QVERIFY(document.isPageCached(0));
+        QVERIFY(document.isPageCached(1));
+        QVERIFY(document.isPageCached(2));
+
+        // Touching page 0 makes it most recently used, so loading page 3
+        // evicts page 1, the least recently used entry.
+        QVERIFY2(render(0), error.c_str());
+        QVERIFY2(render(3), error.c_str());
+        QVERIFY(document.isPageCached(0));
+        QVERIFY(document.isPageCached(2));
+        QVERIFY(document.isPageCached(3));
+        QVERIFY(!document.isPageCached(1));
+
+        document.close();
+        QVERIFY(!document.isPageCached(0));
+        QVERIFY(!document.isPageCached(2));
+        QVERIFY(!document.isPageCached(3));
+    }
+
+    void testAnnotationWriteKeepsCachedRenderCurrent()
+    {
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, m_textPath));
+
+        const auto render = [&document](std::vector<std::uint8_t>& pixels) {
+            std::string error;
+            pixels.resize(120 * 160 * 4);
+            return document.renderToBuffer({ 0, 120, 160, std::nullopt }, pixels.data(), 120 * 4, &error);
+        };
+
+        std::vector<std::uint8_t> before;
+        QVERIFY(render(before));
+        QVERIFY(document.isPageCached(0));
+
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
+        annotation.uuid = "cache-invalidation";
+        annotation.x0 = .1;
+        annotation.y0 = .2;
+        annotation.x1 = .5;
+        annotation.y1 = .3;
+        annotation.color = 0xffff0000U;
+        annotation.extras.quads.push_back({ { .1, .2 }, { .5, .2 }, { .5, .3 }, { .1, .3 } });
+        std::int32_t object = -1;
+        std::string error;
+        QVERIFY2(document.addAnnotation(0, annotation, &object, &error), error.c_str());
+        QVERIFY(object > 0);
+        // The annotation is created on the cached page handle, so it stays valid.
+        QVERIFY(document.isPageCached(0));
+
+        std::vector<std::uint8_t> after;
+        QVERIFY(render(after));
+        QVERIFY(before != after);
+
+        QVERIFY2(document.removeAnnotation(0, object, &error), error.c_str());
+        QVERIFY(document.isPageCached(0));
+        std::vector<std::uint8_t> restored;
+        QVERIFY(render(restored));
+        QCOMPARE(restored, before);
+    }
+
+    void testSaveClearsPageCache()
+    {
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, m_multiPagePath));
+
+        std::vector<std::uint8_t> buffer(40 * 60 * 4);
+        std::string error;
+        for (int page = 0; page < 3; ++page) {
+            QVERIFY2(document.renderToBuffer({ page, 40, 60, std::nullopt }, buffer.data(), 40 * 4, &error),
+                     error.c_str());
+            QVERIFY(document.isPageCached(page));
+        }
+
+        const QString saved = m_tempDir.filePath("cache-save.pdf");
+        QFile savedFile(saved);
+        QVERIFY(savedFile.open(QIODevice::WriteOnly));
+        QVERIFY2(document.saveFd(savedFile.handle(), &error), error.c_str());
+        savedFile.close();
+        for (int page = 0; page < 3; ++page)
+            QVERIFY(!document.isPageCached(page));
+    }
+
     void testTextBoxesAndLinks()
     {
         Mu::Worker::Engine::PdfDocument document;

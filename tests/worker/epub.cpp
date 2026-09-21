@@ -248,6 +248,34 @@ private slots:
         QCOMPARE(pixels[lastPixel + 3], 0xFF);
     }
 
+    void testPageCacheReuseAndLifecycle()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "sample.epub", &error), error.c_str());
+        QVERIFY(!document.isPageCached(0));
+
+        std::vector<std::uint8_t> first(400U * 300U * 4U);
+        std::vector<std::uint8_t> second(400U * 300U * 4U);
+        const ::Mu::Worker::Engine::DocumentBase::RenderRequest request { 0, 400, 300, std::nullopt };
+        QVERIFY2(document.renderToBuffer(request, first.data(), 400U * 4U, &error), error.c_str());
+        QVERIFY(document.isPageCached(0));
+        QVERIFY2(document.renderToBuffer(request, second.data(), 400U * 4U, &error), error.c_str());
+        QVERIFY(document.isPageCached(0));
+        QCOMPARE(second, first);
+
+        // Rendering settings changes must not evict the parsed page.
+        ::Mu::Model::DocumentSettings settings;
+        settings.paperColorRgb = 0x112233;
+        document.setSettings(settings);
+        QVERIFY(document.isPageCached(0));
+
+        document.close();
+        QVERIFY(!document.isPageCached(0));
+    }
+
     void testInvalidAcceleratorFallsBackToColdOpen()
     {
         QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));

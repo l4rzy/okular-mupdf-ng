@@ -269,6 +269,10 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         return fail(error, "document cannot be saved incrementally");
     }
 
+    // Drop the cached pages before pdf_update_open_pages() and the post-save
+    // widget rollback, which mutate pages through separate handles.
+    clearPageCache();
+
     // MuPDF must seek back and read the serialized PDF to calculate the
     // signature byte ranges before invoking the CMS callback.
     // Adopt the caller-owned descriptor exactly once. From this point, every

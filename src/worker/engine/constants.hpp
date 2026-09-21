@@ -12,6 +12,10 @@ namespace Mu::Worker::Engine::Constant {
 // --- Document Cache & Store Limits ---
 inline constexpr std::size_t DefaultStoreSize = 64ULL * 1024ULL * 1024ULL;
 
+// --- Page Cache ---
+/// Number of parsed page handles kept for reuse across renders.
+inline constexpr std::size_t PageCacheSize = 3;
+
 // --- Rendering Constants ---
 inline constexpr int TileBleed = 1;
 

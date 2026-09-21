@@ -125,6 +125,9 @@ bool PdfDocument::unlock(const std::string& password, std::string* error)
 
 void PdfDocument::close() noexcept
 {
+    // Release the cached pages before dropping the document they belong to.
+    clearPageCache();
+
     // fz_open_file_ptr_no_close leaves FILE* ownership here. Drop MuPDF objects
     // first, then close the stream and its underlying descriptor exactly once.
     if (m_document && m_context) {
@@ -230,11 +233,16 @@ fz_page* PdfDocument::loadPage(int page, std::string* error) const
         return nullptr;
     }
 
+    if (fz_page* cached = m_pageCache.acquire(m_context, page)) {
+        return cached;
+    }
+
     fz_page* result = nullptr;
     fz_var(result);
     fz_try(m_context)
     {
         result = fz_load_page(m_context, m_document, page);
+        m_pageCache.store(m_context, page, result);
     }
     fz_catch(m_context)
     {
@@ -242,6 +250,11 @@ fz_page* PdfDocument::loadPage(int page, std::string* error) const
     }
 
     return result;
+}
+
+void PdfDocument::clearPageCache() const noexcept
+{
+    m_pageCache.clear(m_context);
 }
 
 } // namespace Mu::Worker::Engine

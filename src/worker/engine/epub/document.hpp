@@ -20,6 +20,7 @@ extern "C" {
 #include "engine/constants.hpp"
 #include "engine/document_base.hpp"
 #include "engine/mupdf_helpers.hpp"
+#include "engine/page_cache.hpp"
 #include "shared/model/types.hpp"
 
 namespace Mu::Worker::Engine {
@@ -59,6 +60,9 @@ public:
     [[nodiscard]] bool isOpen() const noexcept override;
     [[nodiscard]] bool isLocked() const noexcept override;
     [[nodiscard]] int pageCount() const noexcept override;
+
+    /// Test/diagnostic accessor for the parsed page cache.
+    [[nodiscard]] bool isPageCached(int page) const noexcept { return m_pageCache.contains(page); }
 
     [[nodiscard]] fz_context* context() const noexcept { return m_context; }
 
@@ -110,6 +114,9 @@ private:
     /// Loads an EPUB page handle for given index.
     [[nodiscard]] fz_page* loadPage(int page, std::string* error) const;
 
+    /// Drops all cached page handles.
+    void clearPageCache() const noexcept;
+
     /// Loads a page and obtains its bounds. The caller owns a non-null result
     /// and must drop it in the operation's fz_always cleanup block.
     [[nodiscard]] fz_page* loadPageWithBounds(int page, fz_rect* bounds, std::string* error) const;
@@ -139,6 +146,9 @@ private:
     mutable std::unordered_map<std::string, ResolvedLink> m_resolvedLinks;
     mutable std::size_t m_resolvedLinkKeyBytes = 0;
     bool m_resolvedLinkCacheEnabled = true;
+
+    // Parsed pages kept for reuse across renders (tiled rendering, zoom, pan).
+    PageCache m_pageCache;
 };
 
 } // namespace Mu::Worker::Engine
