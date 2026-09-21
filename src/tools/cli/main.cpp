@@ -145,7 +145,9 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& optio
         }
         pages.push_back(page);
     }
-    if (!client.savePdfToFile(QString::fromStdString(options.output), pages)) {
+    // withReferences=true selects the EPUB export path (metadata, links, TOC),
+    // matching Main::exportTo in the generator; false would be a plain page copy.
+    if (!client.savePdfToFile(QString::fromStdString(options.output), pages, /*withReferences=*/true)) {
         err() << "mupdfng-cli: export failed\n";
         return ExitJobFailed;
     }
