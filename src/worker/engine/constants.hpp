@@ -40,7 +40,7 @@ inline constexpr float DestinationTopMarginPoints = 16.0f;
 inline constexpr std::size_t MaxEmbeddedBytes = 16U * 1024U * 1024U;
 
 // --- PDF Annotations & Signatures ---
-inline constexpr int MaxAnnotationGeometryPoints = 10'000;
+inline constexpr int MaxAnnotationGeometryPoints = 4'096;
 inline constexpr std::size_t MaxPageAnnotations = 100'000;
 inline constexpr std::size_t MaxPageSignatures = 100'000;
 inline constexpr std::size_t MaxSignatureCmsBytes = 16U * 1024U * 1024U;
