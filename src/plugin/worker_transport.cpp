@@ -819,8 +819,8 @@ bool WorkerTransport::finalizeTempFile(QTemporaryFile& file, const QString& targ
     };
     if (!file.flush())
         return fail(file.errorString());
-    // Signing is the only caller that needs the bytes durably on disk before
-    // the destination name is published.
+    // Flush and fsync before publishing the destination name; a crash
+    // between write and rename must not lose the previous good file.
     if (syncToDisk && ::fsync(file.handle()) != 0)
         return fail(QString::fromStdString(std::strerror(errno)));
     file.setAutoRemove(false);
@@ -842,7 +842,7 @@ void WorkerTransport::completePdfExport(bool success, QString error)
         // rename it into place only after the worker completed, so a failed
         // export cannot leave a partial destination.
         QString finalizeError;
-        delivered = finalizeTempFile(*m_export->file, m_export->target, /*syncToDisk=*/false, &finalizeError);
+        delivered = finalizeTempFile(*m_export->file, m_export->target, /*syncToDisk=*/true, &finalizeError);
         if (!delivered)
             MU_LOG(warning,
                    "Mu::Plugin",

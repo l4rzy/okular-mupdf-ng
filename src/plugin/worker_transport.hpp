@@ -163,7 +163,7 @@ private:
             return false;
         }
         QString error;
-        if (!finalizeTempFile(file, target, /*syncToDisk=*/false, &error)) {
+        if (!finalizeTempFile(file, target, /*syncToDisk=*/true, &error)) {
             MU_LOG(warning,
                    "Mu::Plugin",
                    "could not finalize output for " + target.toStdString() + ": " + error.toStdString());

@@ -114,10 +114,10 @@ bool PdfDocument::saveFd(int fd, std::string* error)
             if (copyFileContents(m_input, file)) {
                 options.do_incremental = 1;
             } else {
-                // Fall back to full rewrite if copying source stream fails
-                ::fflush(file);
-                if (::ftruncate(::fileno(file), 0) == 0)
-                    (void)::fseek(file, 0, SEEK_SET);
+                // Fail closed: the staged prefix may be partial, so a full
+                // rewrite over it could publish a corrupt file. The plugin
+                // discards its temp file and the destination stays untouched.
+                fz_throw(m_context, FZ_ERROR_GENERIC, "could not stage source for incremental save");
             }
         }
 
