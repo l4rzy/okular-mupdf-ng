@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "mupdfngsettings.h"
+#include "plugin/caching/vacuum.hpp"
 #include "plugin/util/ocr_options.hpp"
 #include "plugin/util/signing_timestamp.hpp"
 #include "shared/model/validation.hpp"
@@ -313,6 +314,20 @@ std::uint32_t readPrintScaleMode()
 void writePrintScaleMode(std::uint32_t mode)
 {
     MuPDFNGSettings::self()->setPrintScaleMode(std::clamp(mode, 0u, 2u));
+    MuPDFNGSettings::self()->save();
+}
+
+QDateTime readCacheLastVacuum()
+{
+    // Empty or hand-edited values decode to an invalid time, which the
+    // vacuum throttle treats as "never vacuumed".
+    return Plugin::Caching::Vacuum::parseLastVacuum(MuPDFNGSettings::cacheLastVacuum());
+}
+
+void writeCacheLastVacuum(const QDateTime& time)
+{
+    MuPDFNGSettings::self()->setCacheLastVacuum(time.isValid() ? Plugin::Caching::Vacuum::formatLastVacuum(time)
+                                                               : QString());
     MuPDFNGSettings::self()->save();
 }
 

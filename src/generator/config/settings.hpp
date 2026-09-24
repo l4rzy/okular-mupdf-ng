@@ -5,6 +5,7 @@
 #define MU_GENERATOR_CONFIG_SETTINGS_HPP
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QString>
 #include <QStringList>
 
@@ -181,6 +182,10 @@ bool usesDefaultCertificateDatabase();
 // caller static_casts to PrintScaleMode.
 std::uint32_t readPrintScaleMode();
 void writePrintScaleMode(std::uint32_t mode);
+// Last cache vacuum time from the hidden Advanced setting. Invalid when the
+// vacuum never ran or the stored value is malformed.
+QDateTime readCacheLastVacuum();
+void writeCacheLastVacuum(const QDateTime& time);
 
 } // namespace Mu::Generator::Config
 

@@ -3,9 +3,11 @@
 
 #include <QTest>
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QTimeZone>
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -322,6 +324,19 @@ private slots:
         };
 
         QCOMPARE(::Mu::Generator::Config::normalizeTessDataDirectories(input), QStringList({ firstPath, secondPath }));
+    }
+
+    void roundTripsCacheLastVacuum()
+    {
+        const QString original = MuPDFNGSettings::cacheLastVacuum();
+        MuPDFNGSettings::setCacheLastVacuum(QStringLiteral("not-a-time"));
+        QVERIFY(!::Mu::Generator::Config::readCacheLastVacuum().isValid());
+
+        const QDateTime moment(QDate(2026, 1, 2), QTime(3, 4, 5), QTimeZone::UTC);
+        ::Mu::Generator::Config::writeCacheLastVacuum(moment);
+        QCOMPARE(::Mu::Generator::Config::readCacheLastVacuum(), moment);
+
+        MuPDFNGSettings::setCacheLastVacuum(original);
     }
 };
 

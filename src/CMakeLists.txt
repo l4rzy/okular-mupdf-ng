@@ -70,6 +70,7 @@ add_library(mupdf_plugin_cache STATIC
   plugin/caching/cache_file.cpp
   plugin/caching/epub_cache.cpp
   plugin/caching/ocr_cache.cpp
+  plugin/caching/vacuum.cpp
 )
 target_include_directories(mupdf_plugin_cache PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -242,7 +243,7 @@ target_include_directories(mupdf_generator_settings PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(mupdf_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets mupdf_plugin_util)
+target_link_libraries(mupdf_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets mupdf_plugin_cache mupdf_plugin_util)
 
 add_custom_target(mupdf_generator_settings_codegen
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mupdfngsettings.cpp

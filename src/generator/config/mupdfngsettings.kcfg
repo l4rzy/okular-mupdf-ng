@@ -156,5 +156,8 @@
       <min>100</min>
       <max>2000</max>
     </entry>
+    <entry key="CacheLastVacuum" type="String" hidden="true">
+      <default></default>
+    </entry>
   </group>
 </kcfg>

@@ -14,6 +14,7 @@
 #include <KPluginFactory>
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFile>
 #include <QImage>
 #include <QLocale>
@@ -23,10 +24,15 @@
 #include <QMutexLocker>
 #include <QPageLayout>
 #include <QPainter>
+#include <QPointer>
 #include <QPrinter>
+#include <QRunnable>
 #include <QTemporaryFile>
 #include <QTextStream>
+#include <QThreadPool>
+#include <QTimer>
 #include <QUrl>
+#include <atomic>
 #include <unordered_map>
 
 #include "generator/config/settings.hpp"
@@ -44,6 +50,7 @@
 #include "generator/proxy/form/radio_grouping.hpp"
 #include "generator/proxy/form/text.hpp"
 #include "mupdfngsettings.h"
+#include "plugin/caching/vacuum.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/util/document_type.hpp"
@@ -226,6 +233,39 @@ Main::Main(QObject* parent, const QVariantList& args)
     connect(m_ocrController.get(), &Plugin::OCR::Controller::failed, this, [this](int page) {
         MU_LOG(warning, "Mu::Generator::Main", std::string("OCR failed for page ") + std::to_string(page + 1));
         Q_EMIT warning(i18n("OCR failed for page %1", page + 1), 5000);
+    });
+    MU_LOG(debug, "Main::Main", "Scheduling cache vacuum");
+    scheduleCacheVacuum();
+}
+
+// Removes cache files untouched for over three months on a background thread.
+// The hidden CacheLastVacuum setting throttles the scan; the timestamp is
+// refreshed on the generator thread so KConfig writes stay off the pool.
+void Main::scheduleCacheVacuum()
+{
+    namespace Vacuum = Plugin::Caching::Vacuum;
+    // One scan per process: Okular builds a Main per open document, and every
+    // instance reads the throttle timestamp before any of them writes it back.
+    static std::atomic_bool claimed = false;
+    if (claimed.exchange(true))
+        return;
+    if (!Vacuum::shouldVacuum(Config::readCacheLastVacuum(), QDateTime::currentDateTimeUtc()))
+        return;
+    // Deferred past construction so generator startup never blocks on cache
+    // I/O; bound to this so a torn-down generator cancels the pending start.
+    QTimer::singleShot(0, this, [this] {
+        const QPointer<Main> guard(this);
+        QThreadPool::globalInstance()->start(QRunnable::create([guard] {
+            const auto result = Vacuum::vacuumStaleCaches(QDateTime::currentDateTimeUtc());
+            MU_LOG(debug,
+                   "Mu::Generator::Main",
+                   std::string("cache vacuum removed ") + std::to_string(result.filesRemoved) + " files in "
+                       + std::to_string(result.dirsRemoved) + " directories");
+            if (!guard)
+                return;
+            QMetaObject::invokeMethod(
+                guard, [] { Config::writeCacheLastVacuum(QDateTime::currentDateTimeUtc()); }, Qt::QueuedConnection);
+        }));
     });
 }
 

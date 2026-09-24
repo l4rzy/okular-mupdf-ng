@@ -186,6 +186,9 @@ private:
     // members (type, hash, name) are derived here.
     Okular::Document::OpenResult initPages(QVector<Okular::Page*>& pages,
                                            QList<Plugin::WorkerClient::PageInfo>& pageInfos);
+    // Schedules a throttled background vacuum of stale cache files. The scan
+    // runs off the UI thread and records its timestamp when finished.
+    void scheduleCacheVacuum();
     // Must be called while userMutex() is held; releases cached embedded files.
     void clearEmbeddedFilesCache();
 
