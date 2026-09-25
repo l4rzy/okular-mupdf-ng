@@ -257,4 +257,9 @@ void PdfDocument::clearPageCache() const noexcept
     m_pageCache.clear(m_context);
 }
 
+void PdfDocument::setPageCacheSuspended(bool suspended) noexcept
+{
+    m_pageCache.setSuspended(suspended);
+}
+
 } // namespace Mu::Worker::Engine

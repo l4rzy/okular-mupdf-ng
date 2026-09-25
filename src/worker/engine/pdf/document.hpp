@@ -143,6 +143,9 @@ private:
     /// Drops all cached page handles.
     void clearPageCache() const noexcept;
 
+    /// Suspends caching of freshly loaded pages (see DocumentBase).
+    void setPageCacheSuspended(bool suspended) noexcept override;
+
     /// Updates the cached presence of the catalog AcroForm dictionary.
     void updateAcroFormPresence();
 

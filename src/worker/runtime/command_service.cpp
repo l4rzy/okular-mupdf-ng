@@ -317,6 +317,11 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
 
     // Step 4: Populate initial page descriptors, geometries, annotations, and signatures.
     // Links are resolved incrementally after the response is sent.
+    // The sweep visits every page exactly once, so suspend page caching:
+    // storing would only churn keeps and evictions for pages nobody views.
+    // The suspension lasts until the link walk completes (cancelPageLinks)
+    // or the document closes (closeDocument).
+    m_document->setPageCacheSuspended(true);
     for (int page = 0; page < m_document->pageCount(); ++page) {
         auto details = m_document->pageDetails(page, &error, false);
         if (!error.empty()) {
@@ -442,8 +447,12 @@ void CommandService::closeDocument() noexcept
     // Closing is a document boundary. No password, opaque handle, deferred link,
     // OCR result, or frame pool may be reused by the next open.
     m_pendingPageLinks.reset();
-    if (m_document)
+    if (m_document) {
+        // The open sweep suspends page caching until the link walk completes;
+        // a close in between must resume it so no flag outlives its document.
+        m_document->setPageCacheSuspended(false);
         m_document->close();
+    }
 
     m_frameSlots.clear();
     m_framePoolBytes = 0;
@@ -940,8 +949,12 @@ void CommandService::cancelPageLinks() noexcept
     m_pendingPageLinks.reset();
     // Link destinations are cached only while constructing this aggregate. Keeping
     // them after cancellation or delivery would retain document-specific metadata.
-    if (m_document)
+    if (m_document) {
+        // The link walk is the tail of the load phase, which suspends page
+        // caching in openFdResponse; its completion re-arms the cache.
+        m_document->setPageCacheSuspended(false);
         m_document->discardResolvedLinkCache();
+    }
 }
 
 std::optional<OcrResult> CommandService::takeOcrResult(std::uint64_t id)

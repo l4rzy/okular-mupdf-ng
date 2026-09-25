@@ -420,6 +420,11 @@ void EpubDocument::clearPageCache() const noexcept
     m_pageCache.clear(m_context);
 }
 
+void EpubDocument::setPageCacheSuspended(bool suspended) noexcept
+{
+    m_pageCache.setSuspended(suspended);
+}
+
 fz_page* EpubDocument::loadPageWithBounds(int page, fz_rect* bounds, std::string* error) const
 {
     if (!bounds) {

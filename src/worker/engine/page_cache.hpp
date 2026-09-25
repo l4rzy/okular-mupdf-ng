@@ -56,9 +56,11 @@ public:
     }
 
     /// Caches a kept reference to loadedPage at MRU, evicting the LRU slot.
+    /// No-op while suspended: the open sweep visits every page exactly once,
+    /// so caching it would only churn keeps, evictions, and log lines.
     void store(fz_context* context, int page, fz_page* loadedPage) const noexcept
     {
-        if (!loadedPage)
+        if (!loadedPage || m_suspended)
             return;
 
         dropEntry(context, m_entries.back());
@@ -66,6 +68,12 @@ public:
             m_entries[index] = m_entries[index - 1];
         m_entries[0] = Entry { page, fz_keep_page(context, loadedPage) };
     }
+
+    /// Suspends caching of freshly loaded pages; in-flight callers still
+    /// receive their own handle, only the store is skipped. Paired resume
+    /// lives at lifecycle points, not at the call site: cancelPageLinks
+    /// ends the load phase, closeDocument covers every earlier exit.
+    void setSuspended(bool suspended) const noexcept { m_suspended = suspended; }
 
     /// Drops every cached page handle and resets the cache.
     void clear(fz_context* context) const noexcept
@@ -91,11 +99,11 @@ private:
 
     void dropEntry(fz_context* context, Entry& entry) const noexcept
     {
+        if (!entry.page)
+            return;
         MU_LOG(debug,
                "Mu::Worker::Engine::PageCache",
                std::string("Cache evicted page: ") + std::to_string(entry.index + 1));
-        if (!entry.page)
-            return;
         if (context) {
             fz_try(context)
             {
@@ -109,6 +117,7 @@ private:
     }
 
     mutable std::array<Entry, Constant::PageCacheSize> m_entries { };
+    mutable bool m_suspended = false;
 };
 
 } // namespace Mu::Worker::Engine

@@ -117,6 +117,9 @@ private:
     /// Drops all cached page handles.
     void clearPageCache() const noexcept;
 
+    /// Suspends caching of freshly loaded pages (see DocumentBase).
+    void setPageCacheSuspended(bool suspended) noexcept override;
+
     /// Loads a page and obtains its bounds. The caller owns a non-null result
     /// and must drop it in the operation's fz_always cleanup block.
     [[nodiscard]] fz_page* loadPageWithBounds(int page, fz_rect* bounds, std::string* error) const;

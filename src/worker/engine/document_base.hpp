@@ -96,6 +96,12 @@ public:
     /// incremental link aggregation.
     virtual void discardResolvedLinkCache() noexcept { }
 
+    /// Suspends caching of freshly loaded pages (open sweep visits every page
+    /// exactly once, so storing them only churns the bounded cache).
+    /// Invariant: the cache is suspended from open until the link walk
+    /// completes (cancelPageLinks) or the document closes (closeDocument).
+    virtual void setPageCacheSuspended(bool suspended) noexcept = 0;
+
     /// Returns true if a document file is currently loaded and valid.
     [[nodiscard]] virtual bool isOpen() const noexcept = 0;
 
