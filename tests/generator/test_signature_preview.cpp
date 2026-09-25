@@ -91,6 +91,21 @@ private slots:
         QVERIFY(!image.isNull());
         QCOMPARE(image.pixelColor(5, 5), QColor(Qt::white));
     }
+
+    void highDpiRenderScalesPixelSize()
+    {
+        const QFont font;
+        const QStringList lines { QStringLiteral("Jane Doe"), QStringLiteral("Approved") };
+        const QImage single = renderSignaturePreview({ { }, lines }, font, 1.0);
+        const QImage scaled = renderSignaturePreview({ { }, lines }, font, 2.0);
+
+        QVERIFY(!scaled.isNull());
+        QCOMPARE(scaled.devicePixelRatio(), 2.0);
+        QCOMPARE(scaled.size(), single.size() * 2);
+        QCOMPARE(scaled.pixelColor(0, 0), QColor(0x9a, 0x9a, 0x9a));
+        // Device pixel (10,10) maps to logical (5,5): white interior in both.
+        QCOMPARE(scaled.pixelColor(10, 10), QColor(Qt::white));
+    }
 };
 
 QTEST_MAIN(TestGeneratorSignaturePreview)

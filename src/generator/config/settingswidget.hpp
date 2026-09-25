@@ -21,6 +21,9 @@ private:
     /// Refreshes the signature preview from the widgets' pending state so it
     /// tracks unapplied changes.
     void updateSignaturePreview();
+    /// Re-renders the preview once a real screen exists so the device pixel
+    /// ratio is current, and follows later screen changes.
+    void showEvent(QShowEvent* event) override;
 
     Ui_MuPDFNGSettingsWidgetBase* m_mupdfsw;
 };

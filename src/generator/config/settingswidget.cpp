@@ -4,7 +4,9 @@
 #include "generator/config/settingswidget.hpp"
 
 #include <KLocalizedString>
+#include <QApplication>
 #include <QTimer>
+#include <QWindow>
 
 #include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/certmanager/manager_dialog.hpp"
@@ -180,11 +182,29 @@ void MuPDFNGSettingsWidget::updateSignaturePreview()
         m_mupdfsw->kcfg_SignatureProfile->currentData().toInt() == MuPDFNGSettings::EnumSignatureProfile::Simple;
     const bool useUtc = m_mupdfsw->kcfg_SignatureUseUtc->isChecked();
     QLabel* preview = m_mupdfsw->signaturePreviewLabel;
+    // Point-size based application font: the preview text scales with the UI
+    // font size and stays crisp on high-DPI screens via the ratio below.
+    const QFont font = QApplication::font();
     const QImage image =
         Config::renderSignaturePreview(Config::buildSignaturePreview(simple, useUtc, QDateTime::currentDateTime()),
-                                       preview->font(),
+                                       font,
                                        preview->devicePixelRatioF());
     preview->setPixmap(QPixmap::fromImage(image));
+}
+
+void MuPDFNGSettingsWidget::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    // The constructor-time render may have sampled a 1.0 ratio before any
+    // screen existed; re-render now that the ratio is real, and follow later
+    // moves across screens with different scale factors.
+    updateSignaturePreview();
+    if (QWindow* window = windowHandle())
+        connect(window,
+                &QWindow::screenChanged,
+                this,
+                &MuPDFNGSettingsWidget::updateSignaturePreview,
+                Qt::UniqueConnection);
 }
 
 MuPDFNGSettingsWidget::~MuPDFNGSettingsWidget()
