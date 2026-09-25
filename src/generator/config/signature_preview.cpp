@@ -62,8 +62,7 @@ QImage renderSignaturePreview(const SignaturePreview& preview, const QFont& font
     image.fill(Qt::white);
     QPainter painter(&image);
     painter.setPen(QColor(0x9a, 0x9a, 0x9a));
-    painter.drawRect(0, 0, image.width() - 1, image.height() - 1);
-    painter.scale(ratio, ratio);
+    painter.drawRect(0, 0, logicalSize.width() - 1, logicalSize.height() - 1);
     painter.setPen(Qt::black);
     if (leftWidth > 0) {
         painter.setFont(leftFont);
