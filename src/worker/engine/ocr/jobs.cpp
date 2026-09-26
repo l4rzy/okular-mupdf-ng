@@ -6,6 +6,7 @@
 #include <chrono>
 #include <exception>
 
+#include "engine/constants.hpp"
 #include "engine/ocr/ocr.hpp"
 #include "shared/logging.hpp"
 #include "sys/sys.hpp"
@@ -99,8 +100,8 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
             // page makes MuPDF/Tesseract spend unusually long in a device
             // callback.
             std::jthread deadline([cookie](std::stop_token watchdogStop) {
-                for (int tick = 0; tick < 600 && !watchdogStop.stop_requested(); ++tick)
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                for (int tick = 0; tick < Constant::OcrWatchdogTicks && !watchdogStop.stop_requested(); ++tick)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(Constant::OcrWatchdogTickMs));
                 if (!watchdogStop.stop_requested())
                     cookie->cancel();
             });

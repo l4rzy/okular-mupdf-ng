@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <utility>
 
+#include "shared/logging.hpp"
+
 namespace Mu::Worker::Sys {
 
 // =============================================================================

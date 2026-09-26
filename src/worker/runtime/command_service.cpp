@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <limits>
 #include <mupdf/fitz/version.h>
 #include <string_view>

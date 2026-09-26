@@ -4,7 +4,6 @@
 #ifndef MU_WORKER_ENGINE_OCR_JOBS_HPP
 #define MU_WORKER_ENGINE_OCR_JOBS_HPP
 
-#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <map>

@@ -9,8 +9,6 @@
 #include <string_view>
 #include <sys/mman.h>
 
-#include "shared/logging.hpp"
-
 namespace Mu::Worker::Sys {
 
 /**

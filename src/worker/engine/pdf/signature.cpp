@@ -8,7 +8,6 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
-#include <format>
 #include <optional>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -195,7 +194,7 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
             if (raw.location)
                 value.location = raw.location;
             if (raw.signingSeconds > 0)
-                value.signingTime = { true, raw.signingSeconds * 1000 };
+                value.signingTime = { true, raw.signingSeconds * Constant::MillisecondsPerSecond };
             if (raw.subFilter)
                 value.subFilter = raw.subFilter;
 
@@ -300,7 +299,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         return fail(error, "could not create signer");
     }
 
-    std::array<unsigned char, 65536> copyBuffer { };
+    std::array<unsigned char, Constant::FileCopyChunkBytes> copyBuffer { };
 
     // Hoisted above the MuPDF error domain: fz_try/fz_catch is setjmp/longjmp,
     // which would bypass these destructors on the error path.
@@ -379,8 +378,8 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                 fz_throw(m_context, FZ_ERROR_GENERIC, "signature field is read-only");
         } else {
             // Create a new visual signature field widget with an O(1) 6-digit hex timestamp suffix
-            const auto suffix =
-                static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count()) & 0xFFFFFF;
+            const auto suffix = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count())
+                & Constant::SignatureNameSuffixMask;
             char sigName[64] { };
             std::snprintf(sigName, sizeof(sigName), "OkularMuPDFSignature_%06x", suffix);
             widget = pdf_create_signature_widget(m_context, nativePage, sigName);

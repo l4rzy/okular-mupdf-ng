@@ -596,9 +596,9 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 const auto creation = pdf_annot_creation_date(m_context, annotation);
                 const auto modification = pdf_annot_modification_date(m_context, annotation);
                 if (creation > 0)
-                    value.creationDate = { true, creation * 1000 };
+                    value.creationDate = { true, creation * Constant::MillisecondsPerSecond };
                 if (modification > 0)
-                    value.modificationDate = { true, modification * 1000 };
+                    value.modificationDate = { true, modification * Constant::MillisecondsPerSecond };
 
                 const fz_rect rectangle = pdf_bound_annot(m_context, annotation);
                 const Point topLeft = coordinates.fromPdfPoint({ rectangle.x0, rectangle.y0 });
@@ -805,9 +805,11 @@ void PdfDocument::applyAnnotation(fz_context* context,
         pdf_set_annot_author(context, target, annotation.author.c_str());
 
         if (annotation.creationDate.valid)
-            pdf_set_annot_creation_date(context, target, annotation.creationDate.unixMilliseconds / 1000);
+            pdf_set_annot_creation_date(
+                context, target, annotation.creationDate.unixMilliseconds / Constant::MillisecondsPerSecond);
         if (annotation.modificationDate.valid)
-            pdf_set_annot_modification_date(context, target, annotation.modificationDate.unixMilliseconds / 1000);
+            pdf_set_annot_modification_date(
+                context, target, annotation.modificationDate.unixMilliseconds / Constant::MillisecondsPerSecond);
 
         const float rawOpacity = argbChannel(annotation.color >> 24);
         const float opacity = rawOpacity > 0.0f ? rawOpacity : 1.0f;

@@ -26,6 +26,8 @@
 #include <limits>
 #include <string_view>
 
+#include "engine/constants.hpp"
+
 namespace Mu::Worker::Sandbox {
 
 #ifdef __linux__
@@ -246,8 +248,8 @@ bool applyResourceLimits(Status& status)
 
     // Cap virtual memory address space (RLIMIT_AS = 4 GB)
     // Guards against malicious or malformed documents triggering huge allocation rendering bombs.
-    constexpr rlim_t FourGigabytes = 4096ULL * 1024U * 1024U;
-    struct rlimit rlAs { FourGigabytes, FourGigabytes };
+    constexpr rlim_t AddressSpaceBytes = static_cast<rlim_t>(Engine::Constant::SandboxAddressSpaceBytes);
+    struct rlimit rlAs { AddressSpaceBytes, AddressSpaceBytes };
     if (::setrlimit(RLIMIT_AS, &rlAs) != 0) {
         recordErrno(status, "RLIMIT_AS");
         ok = false;
@@ -255,7 +257,7 @@ bool applyResourceLimits(Status& status)
 
     // Cap CPU execution time (RLIMIT_CPU = 60s soft / 120s hard)
     // Protects against infinite loop rendering bombs.
-    struct rlimit rlCpu { 60, 120 };
+    struct rlimit rlCpu { Engine::Constant::SandboxCpuSoftSeconds, Engine::Constant::SandboxCpuHardSeconds };
     if (::setrlimit(RLIMIT_CPU, &rlCpu) != 0) {
         recordErrno(status, "RLIMIT_CPU");
         ok = false;

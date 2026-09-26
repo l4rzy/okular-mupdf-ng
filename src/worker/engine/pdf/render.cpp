@@ -170,8 +170,9 @@ std::vector<TextBox> PdfDocument::textBoxes(
     fz_try(m_context)
     {
         const fz_rect bounds = fz_bound_page(m_context, nativePage);
-        const fz_matrix transform =
-            pageToDevice(bounds, static_cast<float>(dpiX / 72.0), static_cast<float>(dpiY / 72.0));
+        const fz_matrix transform = pageToDevice(bounds,
+                                                 static_cast<float>(dpiX / Constant::PointsPerInch),
+                                                 static_cast<float>(dpiY / Constant::PointsPerInch));
 
         fz_stext_options options { };
         options.flags = FZ_STEXT_CLIP;
@@ -203,8 +204,9 @@ std::vector<TextBox> PdfDocument::textBoxes(
                 bool hasText = false;
                 for (fz_stext_char* character = line->first_char; character; character = character->next) {
                     // Filter invalid Unicode code points and surrogates
-                    if (character->c < 0 || character->c > 0x10ffff
-                        || (character->c >= 0xd800 && character->c <= 0xdfff))
+                    if (character->c < 0 || character->c > Constant::UnicodeMaxCodePoint
+                        || (character->c >= Constant::UnicodeSurrogateMin
+                            && character->c <= Constant::UnicodeSurrogateMax))
                         continue;
 
                     // Clip to visible page boundaries

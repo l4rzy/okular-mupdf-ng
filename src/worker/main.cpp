@@ -24,6 +24,7 @@
 namespace {
 
 constexpr std::string_view DefaultTessDataDirectory = TESSDATA_DIR;
+constexpr unsigned char JsonControlCharLimit = 0x20;
 
 std::string makeAbsolutePath(std::string_view path)
 {
@@ -78,7 +79,7 @@ std::string escapeJsonString(const std::string& value)
             out += "\\t";
             break;
         default:
-            if (static_cast<unsigned char>(c) < 0x20) {
+            if (static_cast<unsigned char>(c) < JsonControlCharLimit) {
                 char buf[7];
                 std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
                 out += buf;

@@ -182,7 +182,8 @@ std::string tessdataLanguage(std::string language)
             textDevice = fz_new_stext_device(context, text, nullptr);
             ocrDevice = fz_new_ocr_device(context,
                                           textDevice,
-                                          fz_scale(dpi / 72.0f, dpi / 72.0f),
+                                          fz_scale(static_cast<float>(dpi / Constant::PointsPerInch),
+                                                   static_cast<float>(dpi / Constant::PointsPerInch)),
                                           { 0, 0, width, height },
                                           1,
                                           lang.c_str(),
@@ -195,7 +196,12 @@ std::string tessdataLanguage(std::string language)
             }
 
             // Step 4: Run page through OCR device to perform text recognition
-            fz_run_page(context, page, ocrDevice, fz_scale(dpi / 72.0f, dpi / 72.0f), activeCookie->get());
+            fz_run_page(context,
+                        page,
+                        ocrDevice,
+                        fz_scale(static_cast<float>(dpi / Constant::PointsPerInch),
+                                 static_cast<float>(dpi / Constant::PointsPerInch)),
+                        activeCookie->get());
             fz_close_device(context, ocrDevice);
             fz_close_device(context, textDevice);
 
@@ -205,7 +211,7 @@ std::string tessdataLanguage(std::string language)
                 failed = true;
             } else {
                 // Step 5: Extract recognized text characters and normalize coordinate quads
-                const double scale = dpi / 72.0;
+                const double scale = dpi / Constant::PointsPerInch;
                 const double originX = bounds.x0 * scale;
                 const double originY = bounds.y0 * scale;
 
@@ -236,8 +242,9 @@ std::string tessdataLanguage(std::string language)
                             if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right)
                                 || !std::isfinite(bottom))
                                 continue;
-                            if (character->c < 0 || character->c > 0x10ffff
-                                || (character->c >= 0xd800 && character->c <= 0xdfff))
+                            if (character->c < 0 || character->c > Constant::UnicodeMaxCodePoint
+                                || (character->c >= Constant::UnicodeSurrogateMin
+                                    && character->c <= Constant::UnicodeSurrogateMax))
                                 continue;
                             char utf8[4] { };
                             const int length = fz_runetochar(utf8, character->c);

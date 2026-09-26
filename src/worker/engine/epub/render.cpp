@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "engine/constants.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
@@ -170,8 +171,8 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
     fz_var(stext);
     fz_try(m_context)
     {
-        const double scaleX = dpiX / 72.0;
-        const double scaleY = dpiY / 72.0;
+        const double scaleX = dpiX / Constant::PointsPerInch;
+        const double scaleY = dpiY / Constant::PointsPerInch;
         fz_stext_options options { };
         options.flags = FZ_STEXT_CLIP;
         stext = fz_new_stext_page_from_page(m_context, pagePtr, &options);
@@ -186,7 +187,8 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
             for (fz_stext_line* line = block->u.t.first_line; line; line = line->next) {
                 bool hasText = false;
                 for (fz_stext_char* ch = line->first_char; ch; ch = ch->next) {
-                    if (ch->c < 0 || ch->c > 0x10ffff || (ch->c >= 0xd800 && ch->c <= 0xdfff))
+                    if (ch->c < 0 || ch->c > Constant::UnicodeMaxCodePoint
+                        || (ch->c >= Constant::UnicodeSurrogateMin && ch->c <= Constant::UnicodeSurrogateMax))
                         continue;
 
                     const fz_rect charBox = fz_rect_from_quad(ch->quad);
