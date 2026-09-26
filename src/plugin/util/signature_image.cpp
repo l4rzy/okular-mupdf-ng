@@ -24,13 +24,15 @@ prepareBackgroundImage(const QString& path, double rectWidth, double rectHeight,
         return { };
 
     // Calculate target image pixel dimensions based on page point dimensions
-    // and normalized bounding box extent (2x factor for retina/HiDPI rendering)
-    double width = (pageWidth > 0 ? pageWidth : 595.0) * (rectWidth > 0 ? rectWidth : 0.3) * 2.0;
-    double height = (pageHeight > 0 ? pageHeight : 842.0) * (rectHeight > 0 ? rectHeight : 0.1) * 2.0;
+    // and normalized bounding box extent (HiDPI factor for retina rendering)
+    const double width = (pageWidth > 0 ? pageWidth : Constant::DefaultPageWidthPt)
+        * (rectWidth > 0 ? rectWidth : Constant::DefaultRectWidth) * Constant::HiDpiScale;
+    const double height = (pageHeight > 0 ? pageHeight : Constant::DefaultPageHeightPt)
+        * (rectHeight > 0 ? rectHeight : Constant::DefaultRectHeight) * Constant::HiDpiScale;
 
     // Constrain to standard signature stamp pixel bounds to prevent PDF bloat
-    const int targetWidth = std::clamp(static_cast<int>(width), 64, 384);
-    const int targetHeight = std::clamp(static_cast<int>(height), 32, 256);
+    const int targetWidth = std::clamp(static_cast<int>(width), Constant::MinWidth, Constant::MaxWidth);
+    const int targetHeight = std::clamp(static_cast<int>(height), Constant::MinHeight, Constant::MaxHeight);
 
     QImageReader reader(path);
     const QSize imageSize = reader.size();
@@ -47,8 +49,7 @@ prepareBackgroundImage(const QString& path, double rectWidth, double rectHeight,
 
     QByteArray pngBytes;
     QBuffer buffer(&pngBytes);
-    // Use PNG compression quality 9 (maximum zlib compression)
-    if (!buffer.open(QIODevice::WriteOnly) || !scaled.save(&buffer, "PNG", 9))
+    if (!buffer.open(QIODevice::WriteOnly) || !scaled.save(&buffer, "PNG", Constant::PngCompressionQuality))
         return { };
 
     return std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t*>(pngBytes.constData()),

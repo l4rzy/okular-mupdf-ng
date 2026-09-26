@@ -44,6 +44,15 @@ namespace Timeout = ::Mu::IPC::Timeout;
 
 namespace {
 
+/// QProcess/timing budgets for worker lifecycle. Named so blocking waits stay
+/// auditable; all values are milliseconds unless noted.
+constexpr int StartTimeoutMs = 5000;
+constexpr int StopTimeoutMs = 3000;
+constexpr int KillTimeoutMs = 1000;
+/// Control-channel connect polling while the socket file appears.
+constexpr int ControlConnectAttempts = 60;
+constexpr int ControlConnectRetryMs = 50;
+
 struct MappedFrame {
     void* mapping = nullptr;
     std::size_t size = 0;
@@ -229,7 +238,7 @@ bool WorkerTransport::start(const QString& binaryPath,
             arguments << QStringLiteral("--tessdata-dir") << directory;
     }
     m_process.start(resolvedBinaryPath, arguments);
-    if (!m_process.waitForStarted(5000)) {
+    if (!m_process.waitForStarted(StartTimeoutMs)) {
         return failStart();
     }
 
@@ -241,10 +250,10 @@ bool WorkerTransport::start(const QString& binaryPath,
     if (!m_fd.accept(&e, m_process.processId())) {
         return failStart();
     }
-    for (int i = 0; i < 60 && !m_ctrl.valid(); ++i) {
+    for (int i = 0; i < ControlConnectAttempts && !m_ctrl.valid(); ++i) {
         if (m_ctrl.connect(m_socketPath.toStdString(), m_process.processId(), &e))
             break;
-        QThread::msleep(50);
+        QThread::msleep(static_cast<unsigned long>(ControlConnectRetryMs));
     }
     if (!m_ctrl.valid()) {
         return failStart();
@@ -264,7 +273,10 @@ bool WorkerTransport::start(const QString& binaryPath,
     }
     if (workerInfo)
         *workerInfo = *p;
-    m_notifier = std::make_unique<QSocketNotifier>(m_ctrl.fd(), QSocketNotifier::Type::Read, this);
+    // Sole ownership by m_notifier (no QObject parent): recreated per session
+    // because the watched control FD changes, and reset() in cleanupSession
+    // defines its lifetime explicitly.
+    m_notifier = std::make_unique<QSocketNotifier>(m_ctrl.fd(), QSocketNotifier::Type::Read, nullptr);
     connect(m_notifier.get(), &QSocketNotifier::activated, this, &WorkerTransport::processIncomingNotifications);
     return true;
 }
@@ -282,9 +294,9 @@ void WorkerTransport::cleanupSession()
     m_ctrl.close();
     if (m_process.state() != QProcess::NotRunning) {
         m_process.terminate();
-        if (!m_process.waitForFinished(3000)) {
+        if (!m_process.waitForFinished(StopTimeoutMs)) {
             m_process.kill();
-            m_process.waitForFinished(1000);
+            m_process.waitForFinished(KillTimeoutMs);
         }
     }
     m_fd.close();
@@ -798,7 +810,9 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     }
 
     if (!m_exportTimer) {
-        m_exportTimer = std::make_unique<QTimer>(this);
+        // Sole ownership by m_exportTimer (no QObject parent): created lazily
+        // once and stopped on every export completion/teardown path.
+        m_exportTimer = std::make_unique<QTimer>(nullptr);
         m_exportTimer->setSingleShot(true);
         connect(m_exportTimer.get(), &QTimer::timeout, this, [this] {
             completePdfExport(false, QStringLiteral("export timed out"));

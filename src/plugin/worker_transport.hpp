@@ -197,6 +197,8 @@ private:
     QProcess m_process;
     IPC::CtrlChannel m_ctrl;
     IPC::FdChannel m_fd;
+    // Sole-owner unique_ptrs (no QObject parent): m_notifier is recreated per
+    // session around the live control FD; m_exportTimer is created lazily once.
     std::unique_ptr<QSocketNotifier> m_notifier;
     QString m_socketPath, m_fdSocketPath, m_tempPath, m_sourcePath;
     QString m_activeSignPassword;

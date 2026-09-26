@@ -4,7 +4,6 @@
 #ifndef MU_PLUGIN_UTIL_TEMP_DIR_HPP
 #define MU_PLUGIN_UTIL_TEMP_DIR_HPP
 
-#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -12,6 +11,8 @@
 #include <cerrno>
 #include <csignal>
 #include <unistd.h>
+
+#include "shared/logging.hpp"
 
 namespace Mu::Plugin::Util {
 
@@ -27,11 +28,11 @@ inline QString tempDirectory()
     // reached by stale-file cleanup.
     const QString path = QDir::tempPath() + QStringLiteral("/okular-mupdf-ng-%1").arg(::getuid());
     if (!QDir().mkpath(path)) {
-        qWarning() << "okular-mupdf-ng: failed to create temp directory" << path;
+        MU_LOG(warning, "Mu::Plugin", "failed to create temp directory " + path.toStdString());
         return { };
     }
     if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
-        qWarning() << "okular-mupdf-ng: failed to lock down temp directory" << path;
+        MU_LOG(warning, "Mu::Plugin", "failed to lock down temp directory " + path.toStdString());
         return { };
     }
     return path;

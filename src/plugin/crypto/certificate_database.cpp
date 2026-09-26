@@ -309,9 +309,8 @@ QString keyRollbackSuffix(PrivateKeyHandle priv, PublicKeyHandle pub)
 {
     if (::Mu::Plugin::Crypto::deleteTokenKeypair(std::move(priv), std::move(pub)))
         return { };
-    MU_LOG(warning,
-           "Mu::Generator::CertificateManager",
-           std::string("Could not remove generated NSS key material: ") + nssError().toStdString());
+    MU_LOG(
+        warning, "Mu::Plugin", std::string("Could not remove generated NSS key material: ") + nssError().toStdString());
     return QStringLiteral(" The generated key material could not be removed: %1").arg(nssError());
 }
 
@@ -650,7 +649,7 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
                 if (!certificate || deleteCertificateInSlot(slot.get(), certificate.get()) != SECSuccess) {
                     ++rollbackFailures;
                     MU_LOG(warning,
-                           "Mu::Generator::CertificateManager",
+                           "Mu::Plugin",
                            std::string("Could not roll back imported certificate: ") + nssError().toStdString());
                 }
             }

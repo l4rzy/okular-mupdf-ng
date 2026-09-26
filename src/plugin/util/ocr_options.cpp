@@ -11,11 +11,18 @@ namespace Mu::Plugin::Util {
 
 namespace OcrConstant = ::Mu::Plugin::OCR::Constant;
 
+namespace {
+
+/// Length of the ".traineddata" language suffix stripped from identifiers.
+constexpr qsizetype TraineddataSuffixLength = 12;
+
+} // namespace
+
 QString stripLangSuffix(const QString& lang)
 {
     QString clean = lang;
     if (clean.endsWith(QLatin1String(".traineddata")))
-        clean.chop(12);
+        clean.chop(TraineddataSuffixLength);
     return clean;
 }
 
