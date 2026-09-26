@@ -46,6 +46,13 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
     // copied before the writer starts owning its output stream.
     if (fd < 0)
         return fail(error, "output FD is invalid");
+    // A selection longer than the page count must contain duplicates, which
+    // only multiply render work and output size. Reject it before copying.
+    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
+        ::close(fd);
+        return fail(error, "export page selection is too large");
+    }
+
     if (!m_document || !m_context) {
         ::close(fd);
         return fail(error, "document cannot be exported to PDF");
@@ -167,6 +174,13 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
 {
     if (fd < 0)
         return fail(error, "output FD is invalid");
+    // A selection longer than the page count must contain duplicates, which
+    // only multiply graft work and output size. Reject it before copying.
+    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
+        ::close(fd);
+        return fail(error, "export page selection is too large");
+    }
+
     if (!m_document || !m_context) {
         ::close(fd);
         return fail(error, "document cannot be exported to PDF");

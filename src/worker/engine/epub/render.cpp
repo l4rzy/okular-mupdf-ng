@@ -26,8 +26,8 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     // rendering handles until the fz_always cleanup below completes.
     if (!dstPixels)
         return fail(error, "destination buffer is null");
-    if (!m_document || request.width <= 0 || request.height <= 0)
-        return fail(error, "invalid render target dimensions");
+    if (!m_document || !isValidRenderDimensions(request.width, request.height, request.tile.has_value()))
+        return fail(error, "render dimensions are invalid");
 
     // Validate the tile before deriving the minimum row bytes from its width,
     // so an invalid tile reports the real problem instead of a stride error.

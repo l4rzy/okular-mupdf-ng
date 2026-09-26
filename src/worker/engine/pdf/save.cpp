@@ -156,6 +156,12 @@ bool PdfDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string* 
     // copied before entering the MuPDF writer boundary.
     if (fd < 0)
         return fail(error, "output FD is invalid");
+    // A selection longer than the page count must contain duplicates, which
+    // only multiply graft work and output size. Reject it before copying.
+    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
+        ::close(fd);
+        return fail(error, "export page selection is too large");
+    }
 
     pdf_document* srcDoc = pdf_specifics(m_context, m_document);
     if (!m_document || m_locked || !srcDoc) {
