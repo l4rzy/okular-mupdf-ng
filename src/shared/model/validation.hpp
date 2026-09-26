@@ -21,7 +21,7 @@ bool isValidRenderTile(int imageWidth, int imageHeight, int tileX, int tileY, in
 /// Validates finite, positive horizontal and vertical render resolution.
 bool isValidDpi(double dpiX, double dpiY) noexcept;
 
-/// Validates OCR resolution against the supported 72–600 DPI range.
+/// Validates OCR resolution against the supported DPI range (see Limit::MinDpi/MaxDpi).
 bool isValidOcrDpi(float dpi) noexcept;
 
 /// Validates a descriptor transfer identifier before it reaches the FD channel.

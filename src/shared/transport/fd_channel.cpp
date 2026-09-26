@@ -24,13 +24,13 @@ bool FdChannel::listen(const std::string& path, std::string* error)
 {
     close();
     if (path.empty() || path.size() >= sizeof(sockaddr_un::sun_path))
-        return fail(error, "FD socket path is too long");
+        return setError(error, "FD socket path is too long");
     // Remove only the requested stale endpoint before bind; close() handles the
     // channel's own path during later teardown.
     ::unlink(path.c_str());
     m_fd = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
     if (m_fd < 0)
-        return fail(error, std::strerror(errno));
+        return setError(error, std::strerror(errno));
     sockaddr_un address { };
     address.sun_family = AF_UNIX;
     std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
@@ -41,7 +41,7 @@ bool FdChannel::listen(const std::string& path, std::string* error)
         const std::string why = std::strerror(errno);
         close();
         ::unlink(path.c_str());
-        return fail(error, why);
+        return setError(error, why);
     }
     m_path = path;
     return true;
@@ -59,7 +59,7 @@ bool FdChannel::accept(std::string* error, std::int64_t expectedPeerPid, int tim
         if (fd < 0) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
                 continue;
-            return fail(error, std::strerror(errno));
+            return setError(error, std::strerror(errno));
         }
         ucred credentials { };
         socklen_t len = sizeof(credentials);
@@ -83,18 +83,18 @@ bool FdChannel::accept(std::string* error, std::int64_t expectedPeerPid, int tim
 bool FdChannel::connect(const std::string& path, std::string* error, std::int64_t expectedPeerPid)
 {
     if (path.empty() || path.size() >= sizeof(sockaddr_un::sun_path))
-        return fail(error, "FD socket path is too long");
+        return setError(error, "FD socket path is too long");
     close();
     const int fd = ::socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
     if (fd < 0)
-        return fail(error, std::strerror(errno));
+        return setError(error, std::strerror(errno));
     sockaddr_un address { };
     address.sun_family = AF_UNIX;
     std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
     if (::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
         const std::string why = std::strerror(errno);
         ::close(fd);
-        return fail(error, why);
+        return setError(error, why);
     }
     // Authenticate after connect because SO_PEERCRED is available on the
     // connected local socket; close() also clears the descriptor on failure.
@@ -104,7 +104,7 @@ bool FdChannel::connect(const std::string& path, std::string* error, std::int64_
     if (::getsockopt(m_fd, SOL_SOCKET, SO_PEERCRED, &credentials, &len) != 0 || credentials.uid != ::geteuid()
         || (expectedPeerPid >= 0 && credentials.pid != expectedPeerPid)) {
         close();
-        return fail(error, "FD socket peer identity did not match the expected process");
+        return setError(error, "FD socket peer identity did not match the expected process");
     }
     return true;
 }
@@ -112,7 +112,7 @@ bool FdChannel::connect(const std::string& path, std::string* error, std::int64_
 bool FdChannel::send(std::uint64_t transferId, int descriptor, std::string* error, int timeoutMs) const
 {
     if (m_fd < 0 || descriptor < 0)
-        return fail(error, "FD channel is not connected");
+        return setError(error, "FD channel is not connected");
     // The packet has exactly one fixed-size transfer ID plus one SCM_RIGHTS
     // control message. SOCK_SEQPACKET makes partial packet delivery invalid.
     char data[sizeof(transferId)];
@@ -138,14 +138,14 @@ bool FdChannel::send(std::uint64_t transferId, int descriptor, std::string* erro
             return true;
         if (written < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
-        return fail(error, written < 0 ? std::strerror(errno) : "FD channel sent a partial packet");
+        return setError(error, written < 0 ? std::strerror(errno) : "FD channel sent a partial packet");
     }
 }
 
 int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int timeoutMs) const
 {
     if (m_fd < 0) {
-        fail(error, "FD channel is not connected");
+        setError(error, "FD channel is not connected");
         return -1;
     }
     MonotonicDeadline deadline = MonotonicDeadline::fromMilliseconds(timeoutMs);
@@ -167,7 +167,7 @@ int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int
         if (read < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
         if (read < 0) {
-            fail(error, std::strerror(errno));
+            setError(error, std::strerror(errno));
             return -1;
         }
         const int descriptor = extractDescriptor(msg);
@@ -177,7 +177,7 @@ int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int
             read == ssize_t(sizeof(transferId)) && !(msg.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) && descriptor >= 0;
         if (!packetWellFormed) {
             closeDescriptors(msg);
-            fail(error, "invalid FD channel packet");
+            setError(error, "invalid FD channel packet");
             return -1;
         }
         if (transferId == expectedTransferId)
@@ -262,7 +262,7 @@ void FdChannel::closeDescriptors(msghdr& msg)
     }
 }
 
-bool FdChannel::fail(std::string* error, std::string_view message)
+bool FdChannel::setError(std::string* error, std::string_view message)
 {
     if (error)
         *error = message;

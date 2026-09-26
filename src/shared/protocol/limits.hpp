@@ -34,6 +34,12 @@ inline constexpr int MaxRenderDimension = 16'384;
 // tile bleed when calculating the bounding box.
 inline constexpr int MaxTiledRenderDimension = 65'534;
 
+// --- Resolution Limits ---
+/// Minimum DPI accepted for render and OCR requests (MuPDF default resolution).
+inline constexpr double MinDpi = 72.0;
+/// Maximum DPI accepted for render and OCR requests.
+inline constexpr double MaxDpi = 600.0;
+
 // --- Worker Settings Limits ---
 inline constexpr std::int32_t MaxDocumentAntialiasing = 8;
 inline constexpr std::int32_t MaxDocumentImageQuality = 2;

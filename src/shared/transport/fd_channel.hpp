@@ -86,8 +86,9 @@ public:
     static void closeDescriptors(msghdr& msg);
 
     /// Stores an operation error when the caller supplied an error destination.
-    static bool fail(std::string* error, std::string_view message);
+    static bool setError(std::string* error, std::string_view message);
 
+private:
     int m_fd = -1;
     std::string m_path;
 };

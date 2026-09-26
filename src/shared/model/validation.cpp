@@ -33,16 +33,17 @@ bool isValidRenderTile(int imageWidth, int imageHeight, int tileX, int tileY, in
 bool isValidDpi(double dpiX, double dpiY) noexcept
 {
     // isfinite also excludes NaN and infinities, which would otherwise bypass
-    // ordinary range comparisons. Cap at 600 DPI (same as OCR) to prevent
+    // ordinary range comparisons. Cap at MaxDpi (same as OCR) to prevent
     // widthPoints*dpi/72 overflow and huge stride allocations.
-    return std::isfinite(dpiX) && std::isfinite(dpiY) && dpiX > 0.0 && dpiY > 0.0 && dpiX <= 600.0 && dpiY <= 600.0;
+    return std::isfinite(dpiX) && std::isfinite(dpiY) && dpiX > 0.0 && dpiY > 0.0 && dpiX <= Limit::MaxDpi
+        && dpiY <= Limit::MaxDpi;
 }
 
 bool isValidOcrDpi(float dpi) noexcept
 {
     // OCR is intentionally narrower than general rendering because the
     // recognition backend supports a bounded practical resolution range.
-    return std::isfinite(dpi) && dpi >= 72.0f && dpi <= 600.0f;
+    return std::isfinite(dpi) && dpi >= static_cast<float>(Limit::MinDpi) && dpi <= static_cast<float>(Limit::MaxDpi);
 }
 
 namespace {

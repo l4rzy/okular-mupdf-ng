@@ -56,7 +56,7 @@ static_assert(sizeof(FrameBufferHeader) == 64, "FrameBufferHeader must be exactl
 inline std::optional<std::size_t> checkedFrameMappingSize(std::uint64_t mappedSize)
 {
     if (mappedSize < sizeof(FrameBufferHeader) || mappedSize > Limit::MaxSharedFrameBytes
-        || mappedSize > std::numeric_limits<std::size_t>::max())
+        || mappedSize > std::numeric_limits<std::size_t>::max()) // 32-bit only; always false on 64-bit
         return std::nullopt;
     return static_cast<std::size_t>(mappedSize);
 }

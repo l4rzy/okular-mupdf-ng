@@ -533,7 +533,7 @@ struct FormField {
     /// Stable handle used by later form update/reset requests.
     std::string handle;
     /// Page containing the widget.
-    int page = -1;
+    std::int32_t page = -1;
     /// PDF object number of the widget annotation.
     std::int32_t pdfObjectNumber = -1;
     /// PDF object number of the logical field object.
