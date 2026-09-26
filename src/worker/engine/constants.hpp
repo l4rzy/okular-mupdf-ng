@@ -38,6 +38,7 @@ inline constexpr float DestinationTopMarginPoints = 16.0f;
 
 // --- PDF Embedded Files ---
 inline constexpr std::size_t MaxEmbeddedBytes = 16U * 1024U * 1024U;
+inline constexpr int MaxEmbeddedTreeDepth = 32;
 
 // --- PDF Annotations & Signatures ---
 inline constexpr int MaxAnnotationGeometryPoints = 4'096;

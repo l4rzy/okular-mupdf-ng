@@ -56,16 +56,27 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
 
         collectEmbeddedTree(m_context, tree, result, 0, remainingBytes, remainingFiles, resourceLimit);
 
-        // Step 2: Collect page-level file attachment annotations across all pages
+        // Step 2: Collect page-level file attachment annotations across all pages.
+        // Skip the walk entirely when the name-tree phase already tripped the
+        // budget; the remaining budget is zero and partial results are kept.
         fz_page* nativePage = nullptr;
-        for (int page = 0; page < m_pageCount; ++page) {
+        for (int page = 0; page < m_pageCount && !(resourceLimit && *resourceLimit); ++page) {
             nativePage = fz_load_page(m_context, m_document, page);
             fz_var(nativePage);
+            std::size_t visitedAnnots = 0;
             fz_try(m_context)
             {
                 pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
                 for (pdf_annot* annotation = pdfPage ? pdf_first_annot(m_context, pdfPage) : nullptr; annotation;
                      annotation = pdf_next_annot(m_context, annotation)) {
+                    // Bound the walk itself: millions of non-attachment
+                    // annotations never consume the byte budget but each costs
+                    // dictionary reads. Same order as MaxPageAnnotations.
+                    if (++visitedAnnots > Constant::MaxPageAnnotations) {
+                        if (resourceLimit)
+                            *resourceLimit = true;
+                        return { };
+                    }
                     if (pdf_annot_type(m_context, annotation) != PDF_ANNOT_FILE_ATTACHMENT)
                         continue;
 
@@ -262,7 +273,8 @@ void PdfDocument::collectEmbeddedTree(fz_context* context,
                                       std::size_t& remainingFiles,
                                       bool* resourceLimit)
 {
-    if (!node || !pdf_is_dict(context, node) || depth > 32 || (resourceLimit && *resourceLimit))
+    if (!node || !pdf_is_dict(context, node) || depth > Constant::MaxEmbeddedTreeDepth
+        || (resourceLimit && *resourceLimit))
         return;
 
     // Process leaf Names array with [key1, value1, key2, value2, ...] pairs
@@ -285,10 +297,11 @@ void PdfDocument::collectEmbeddedTree(fz_context* context,
         }
     }
 
-    // Recursively process intermediate Kids nodes
+    // Recursively process intermediate Kids nodes. Stop promptly once a
+    // sibling trips the budget instead of resolving every remaining child.
     if (pdf_obj* kids = pdf_dict_gets(context, node, "Kids"); kids && pdf_is_array(context, kids)) {
         const int length = pdf_array_len(context, kids);
-        for (int index = 0; index < length; ++index)
+        for (int index = 0; index < length && !(resourceLimit && *resourceLimit); ++index)
             collectEmbeddedTree(context,
                                 pdf_array_get(context, kids, index),
                                 output,
