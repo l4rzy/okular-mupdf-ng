@@ -1,0 +1,66 @@
+name: Sanitizer
+
+# ASan/LSan/UBSan signal for the sandboxed worker and IPC layers. Tags-only
+# like the other workflows, so every release is memory-safety checked.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: sanitizer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  asan:
+    name: ASan/LSan/UBSan worker tests
+    runs-on: ubuntu-26.04
+    container:
+      image: ubuntu:26.04
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            ca-certificates \
+            clang \
+            cmake \
+            extra-cmake-modules \
+            git \
+            libbrotli-dev \
+            libfreetype-dev \
+            libharfbuzz-dev \
+            libjbig2dec0-dev \
+            libjpeg-dev \
+            libnss3-dev \
+            libopenjp2-7-dev \
+            libseccomp-dev \
+            ninja-build \
+            okular-dev \
+            pkg-config \
+            python3 \
+            qt6-base-dev \
+            tesseract-ocr-eng \
+            zlib1g-dev
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download bundled MuPDF source
+        run: python3 ./scripts/download-mupdf.py
+
+      - name: Build with sanitizers and run tests
+        run: |
+          ./scripts/build.sh asan
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1
