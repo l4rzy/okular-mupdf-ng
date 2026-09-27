@@ -12,6 +12,7 @@
 
 #include "plugin/util/document_type.hpp"
 #include "plugin/worker_client.hpp"
+#include "shared/compat.hpp"
 #include "tools/cli/cli_args.hpp"
 
 #ifndef TESSDATA_DIR
@@ -45,6 +46,37 @@ int failUsage(const Command& command)
 int showHelp(const Command& command)
 {
     out() << helpTextFor(command.kind);
+    out().flush();
+    return ExitOk;
+}
+
+QString buildTimeMupdfVersion()
+{
+    return QString::fromUtf8(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()));
+}
+
+/// Queries the worker handshake for the runtime MuPDF engine version. Returns an
+/// empty string when the worker cannot be started.
+QString workerEngineVersion()
+{
+    Mu::Plugin::WorkerClient client;
+    if (!client.start(QString()))
+        return { };
+    const QString version = QString::fromStdString(client.engineVersion());
+    client.stop();
+    return version;
+}
+
+int runVersion()
+{
+    const QString version = workerEngineVersion();
+    if (!version.isEmpty()) {
+        out() << versionText(version, QStringLiteral("Worker"));
+        out().flush();
+        return ExitOk;
+    }
+    err() << "mupdfng-cli: could not start the worker; showing build-time version\n";
+    out() << versionText(buildTimeMupdfVersion(), QString());
     out().flush();
     return ExitOk;
 }
@@ -158,17 +190,14 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& optio
 
 int run(const Command& command)
 {
+    QCoreApplication::setApplicationName(QStringLiteral("mupdfng-cli"));
     if (!command.error.empty())
         return failUsage(command);
     if (command.kind == Command::Kind::Help)
         return showHelp(command);
-    if (command.kind == Command::Kind::Version) {
-        out() << versionText();
-        out().flush();
-        return ExitOk;
-    }
+    if (command.kind == Command::Kind::Version)
+        return runVersion();
 
-    QCoreApplication::setApplicationName(QStringLiteral("mupdfng-cli"));
     Mu::Plugin::WorkerClient client;
     const SharedOptions& shared = command.kind == Command::Kind::Ocr ? command.ocr.shared : command.exportPdf.shared;
     QStringList tessDirs;

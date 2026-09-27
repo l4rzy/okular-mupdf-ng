@@ -223,11 +223,12 @@ QString helpTextFor(Command::Kind kind)
                           "run 'mupdfng-cli <command> --help' for command options.\n");
 }
 
-QString versionText()
+QString versionText(const QString& mupdfVersion, const QString& source)
 {
-    return QStringLiteral("mupdfng-cli %1\nMuPDF %2\n")
-        .arg(QString::fromUtf8(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size())))
-        .arg(QString::fromUtf8(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size())));
+    const QString engine = source.isEmpty() ? QStringLiteral("MuPDF %1").arg(mupdfVersion)
+                                            : QStringLiteral("%1: MuPDF %2").arg(source, mupdfVersion);
+    return QStringLiteral("mupdfng-cli %1\n%2\n")
+        .arg(QString::fromUtf8(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size())), engine);
 }
 
 } // namespace Mu::Tools::Cli

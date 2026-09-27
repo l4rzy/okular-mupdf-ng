@@ -108,12 +108,13 @@ private slots:
             QCOMPARE(command.kind, Cli::Command::Kind::Version);
             QVERIFY(command.error.empty());
         }
-        // Tracks the manifest and MuPDF pins without hardcoding them.
-        const QString text = Cli::versionText();
+        // Tracks the manifest and the supplied engine version without hardcoding them.
+        const QString engineVersion = QString::fromUtf8(::Mu::MUPDF_VERSION.data());
+        const QString text = Cli::versionText(engineVersion, QStringLiteral("Worker"));
         QVERIFY(text.startsWith(QStringLiteral("mupdfng-cli ")));
         QVERIFY(text.contains(QString::fromUtf8(::Mu::IPC::COMPAT.data())));
-        QVERIFY(text.contains(QStringLiteral("MuPDF")));
-        QVERIFY(text.contains(QString::fromUtf8(::Mu::MUPDF_VERSION.data())));
+        QVERIFY(text.contains(QStringLiteral("Worker: MuPDF")));
+        QVERIFY(text.contains(engineVersion));
     }
 
     void parsesPageLists()

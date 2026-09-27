@@ -58,9 +58,11 @@ struct Command {
 /// Help text for one command, or the full overview for Kind::Help.
 [[nodiscard]] QString helpTextFor(Command::Kind kind);
 
-/// Multi-line version string ("mupdfng-cli <compat>\nMuPDF <version>"),
-/// mirroring the worker --version format. Pure for unit testing.
-[[nodiscard]] QString versionText();
+/// Multi-line version string ("mupdfng-cli <compat>\nWorker: MuPDF <mupdfVersion>"),
+/// mirroring the worker --version format. The caller supplies the runtime engine
+/// version and its source label; an empty label omits the "Source: " prefix.
+/// Pure for unit testing.
+[[nodiscard]] QString versionText(const QString& mupdfVersion, const QString& source);
 
 /// Parses "0,2,5" and "1-3,5" page selections. Empty means all pages.
 [[nodiscard]] bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error);
