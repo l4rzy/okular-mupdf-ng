@@ -117,6 +117,12 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/allura/OFL.txt"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME Allura-OFL.txt)
+# MuPDF is AGPL-3.0-or-later; ship its license text alongside the plugin. Only
+# MuPDF's own license is redistributed here, not its bundled sub-dependencies.
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/mupdf-COPYING"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
+    RENAME MuPDF-COPYING)
 
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

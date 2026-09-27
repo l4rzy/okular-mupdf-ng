@@ -39,4 +39,9 @@ check() {
 
 package() {
   DESTDIR="$pkgdir" cmake --install "build"
+  # The signature appearance depends on the bundled font; fail the package
+  # rather than silently shipping a build whose install rule dropped it.
+  test -f "$pkgdir/usr/share/okular-mupdf-ng/Allura-Regular.ttf"
+  test -f "$pkgdir/usr/share/doc/okular-mupdf-ng/Allura-OFL.txt"
+  test -f "$pkgdir/usr/share/doc/okular-mupdf-ng/MuPDF-COPYING"
 }
