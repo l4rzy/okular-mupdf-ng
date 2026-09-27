@@ -41,6 +41,7 @@ jobs:
             libnss3-dev \
             libopenjp2-7-dev \
             libseccomp-dev \
+            make \
             ninja-build \
             okular-dev \
             pkg-config \
