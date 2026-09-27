@@ -1,156 +1,153 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Vietnamese translations for okular-mupdf-ng.
+# This file is distributed under the same license as okular-mupdf-ng.
 #
-#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-09-27 00:02-0500\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2026-09-27 00:02-0500\n"
+"Last-Translator: \n"
+"Language-Team: Vietnamese\n"
+"Language: vi\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
 #: src/generator/config/settingswidget.cpp:29
 #: src/generator/config/settingswidget.cpp:37
 msgid "Disabled"
-msgstr ""
+msgstr "Tắt"
 
 #: src/generator/config/settingswidget.cpp:30
 #: src/generator/config/settingswidget.cpp:38
 msgid "Minimum"
-msgstr ""
+msgstr "Tối thiểu"
 
 #: src/generator/config/settingswidget.cpp:31
 #: src/generator/config/settingswidget.cpp:39
 msgid "Low"
-msgstr ""
+msgstr "Thấp"
 
 #: src/generator/config/settingswidget.cpp:32
 #: src/generator/config/settingswidget.cpp:40
 msgid "Medium"
-msgstr ""
+msgstr "Trung bình"
 
 #: src/generator/config/settingswidget.cpp:33
 #: src/generator/config/settingswidget.cpp:41
 msgid "High"
-msgstr ""
+msgstr "Cao"
 
 #: src/generator/config/settingswidget.cpp:45
 msgid "Speed"
-msgstr ""
+msgstr "Tốc độ"
 
 #: src/generator/config/settingswidget.cpp:46
 #: src/generator/config/settingswidget.cpp:60
 msgid "Balanced"
-msgstr ""
+msgstr "Cân bằng"
 
 #: src/generator/config/settingswidget.cpp:47
 msgid "Quality"
-msgstr ""
+msgstr "Chất lượng"
 
 #: src/generator/config/settingswidget.cpp:51
 msgid "32 MiB"
-msgstr ""
+msgstr "32 MiB"
 
 #: src/generator/config/settingswidget.cpp:52
 msgid "64 MiB"
-msgstr ""
+msgstr "64 MiB"
 
 #: src/generator/config/settingswidget.cpp:53
 msgid "128 MiB"
-msgstr ""
+msgstr "128 MiB"
 
 #: src/generator/config/settingswidget.cpp:54
 msgid "256 MiB"
-msgstr ""
+msgstr "256 MiB"
 
 #: src/generator/config/settingswidget.cpp:58
 msgid "Off"
-msgstr ""
+msgstr "Tắt"
 
 #: src/generator/config/settingswidget.cpp:59
 msgid "Conservative"
-msgstr ""
+msgstr "Thận trọng"
 
 #: src/generator/config/settingswidget.cpp:61
 msgid "Aggressive"
-msgstr ""
+msgstr "Mạnh"
 
 #: src/generator/config/settingswidget.cpp:65
 msgid "Relaxed"
-msgstr ""
+msgstr "Nới lỏng"
 
 #: src/generator/config/settingswidget.cpp:66
 msgid "Strict"
-msgstr ""
+msgstr "Nghiêm ngặt"
 
 #: src/generator/config/settingswidget.cpp:70
 msgid "A5 (148 × 210 mm)"
-msgstr ""
+msgstr "A5 (148 × 210 mm)"
 
 #: src/generator/config/settingswidget.cpp:71
 msgid "6×9 (152 × 229 mm)"
-msgstr ""
+msgstr "6×9 (152 × 229 mm)"
 
 #: src/generator/config/settingswidget.cpp:72
 msgid "B5 (176 × 250 mm)"
-msgstr ""
+msgstr "B5 (176 × 250 mm)"
 
 #: src/generator/config/settingswidget.cpp:73
 msgid "Letter (216 × 279 mm)"
-msgstr ""
+msgstr "Letter (216 × 279 mm)"
 
 #: src/generator/config/settingswidget.cpp:77
 msgid "Default"
-msgstr ""
+msgstr "Mặc định"
 
 #: src/generator/config/settingswidget.cpp:78
 msgid "Serif"
-msgstr ""
+msgstr "Chữ có chân"
 
 #: src/generator/config/settingswidget.cpp:79
 msgid "Sans-serif"
-msgstr ""
+msgstr "Chữ không chân"
 
 #: src/generator/config/settingswidget.cpp:80
 msgid "Monospace"
-msgstr ""
+msgstr "Chữ đơn cách"
 
 #: src/generator/config/settingswidget.cpp:120
 msgid "Speed (150dpi)"
-msgstr ""
+msgstr "Tốc độ (150 dpi)"
 
 #: src/generator/config/settingswidget.cpp:121
 msgid "Balanced (225dpi)"
-msgstr ""
+msgstr "Cân bằng (225 dpi)"
 
 #: src/generator/config/settingswidget.cpp:122
 msgid "Accuracy (300dpi)"
-msgstr ""
+msgstr "Độ chính xác (300 dpi)"
 
 #: src/generator/config/settingswidget.cpp:126
 msgid "0 (Never)"
-msgstr ""
+msgstr "0 (Không bao giờ)"
 
 #: src/generator/config/settingswidget.cpp:127
 msgid "5 characters"
-msgstr ""
+msgstr "5 ký tự"
 
 #: src/generator/config/settingswidget.cpp:128
 msgid "20 characters"
-msgstr ""
+msgstr "20 ký tự"
 
 #: src/generator/config/settingswidget.cpp:129
 msgid "∞ (Always)"
-msgstr ""
+msgstr "∞ (Luôn luôn)"
 
 #: src/generator/config/settingswidget.cpp:131
 msgid ""
@@ -158,100 +155,100 @@ msgid ""
 "the selected threshold.\n"
 "Choose \"Never\" to disable automatic OCR or \"Always\" to run OCR on every "
 "page."
-msgstr ""
+msgstr "Tự động chạy OCR khi số ký tự trích xuất trên trang ít hơn ngưỡng đã chọn.\nChọn \"Không bao giờ\" để tắt OCR tự động hoặc \"Luôn luôn\" để chạy OCR trên mọi trang."
 
 #: src/generator/config/settingswidget.cpp:140
 msgid "Complete"
-msgstr ""
+msgstr "Đầy đủ"
 
 #: src/generator/config/settingswidget.cpp:141
 msgid "Simple"
-msgstr ""
+msgstr "Đơn giản"
 
 #: src/generator/config/settingswidget.cpp:168
 msgid "Custom CSS (configured)"
-msgstr ""
+msgstr "CSS tùy chỉnh (đã cấu hình)"
 
 #: src/generator/config/settingswidget.cpp:168 rc.cpp:42
 msgid "Custom CSS"
-msgstr ""
+msgstr "CSS tùy chỉnh"
 
 #: src/generator/config/settingswidget.cpp:174
 msgid "NSS database unavailable"
-msgstr ""
+msgstr "Không có cơ sở dữ liệu NSS"
 
 #: src/generator/config/settingswidget.cpp:176
 msgid "Manage Certificates - %1"
-msgstr ""
+msgstr "Quản lý chứng chỉ - %1"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:36
 #: src/generator/config/certmanager/manager_dialog.cpp:120
 msgid "Unknown"
-msgstr ""
+msgstr "Không xác định"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:52
 msgid "Add Certificate"
-msgstr ""
+msgstr "Thêm chứng chỉ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:53
 msgid "Delete Selected"
-msgstr ""
+msgstr "Xóa mục đã chọn"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:54
 msgid "Close"
-msgstr ""
+msgstr "Đóng"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:58
 msgid "Manage NSS Certificates"
-msgstr ""
+msgstr "Quản lý chứng chỉ NSS"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:62
 msgid "Nickname"
-msgstr ""
+msgstr "Biệt danh"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:63
 msgid "Subject"
-msgstr ""
+msgstr "Chủ thể"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:64
 msgid "Issuer"
-msgstr ""
+msgstr "Đơn vị cấp"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:65
 msgid "Algorithm"
-msgstr ""
+msgstr "Thuật toán"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:66
 msgid "Valid From"
-msgstr ""
+msgstr "Có hiệu lực từ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:67
 msgid "Valid Until"
-msgstr ""
+msgstr "Có hiệu lực đến"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:81
 msgid "Signing certificates in this NSS database:"
-msgstr ""
+msgstr "Chứng chỉ ký trong cơ sở dữ liệu NSS này:"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:110
 msgid "Certificate Database"
-msgstr ""
+msgstr "Cơ sở dữ liệu chứng chỉ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:141
 msgid "Import from File..."
-msgstr ""
+msgstr "Nhập từ tệp..."
 
 #: src/generator/config/certmanager/manager_dialog.cpp:142
 msgid "Paste PEM Certificate..."
-msgstr ""
+msgstr "Dán chứng chỉ PEM..."
 
 #: src/generator/config/certmanager/manager_dialog.cpp:143
 msgid "Create Self-Signed Certificate..."
-msgstr ""
+msgstr "Tạo chứng chỉ tự ký..."
 
 #: src/generator/config/certmanager/manager_dialog.cpp:169
 msgid "Create Certificate"
-msgstr ""
+msgstr "Tạo chứng chỉ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:181
 #: src/generator/config/certmanager/manager_dialog.cpp:188
@@ -260,231 +257,231 @@ msgstr ""
 #: src/generator/config/certmanager/manager_dialog.cpp:251
 #: src/generator/config/certmanager/manager_dialog.cpp:270
 msgid "Import Certificate"
-msgstr ""
+msgstr "Nhập chứng chỉ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:183
 msgid "PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"
-msgstr ""
+msgstr "Gói PKCS#12 (*.p12 *.pfx);;Chứng chỉ PEM (*.pem);;Tất cả tệp (*)"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:201
 msgid "PKCS#12 Password"
-msgstr ""
+msgstr "Mật khẩu PKCS#12"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:202
 msgid "Bundle password:"
-msgstr ""
+msgstr "Mật khẩu gói:"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:231
 msgid "Paste PEM Certificate"
-msgstr ""
+msgstr "Dán chứng chỉ PEM"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:234
 msgid "Paste a PEM certificate here..."
-msgstr ""
+msgstr "Dán chứng chỉ PEM vào đây..."
 
 #: src/generator/config/certmanager/manager_dialog.cpp:251
 msgid "The certificate data is empty"
-msgstr ""
+msgstr "Dữ liệu chứng chỉ đang trống"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:258
 msgid "Certificate Nickname"
-msgstr ""
+msgstr "Biệt danh chứng chỉ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:259
 #: src/generator/config/certmanager/self_signed_dialog.cpp:57
 msgid "Nickname:"
-msgstr ""
+msgstr "Biệt danh:"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:290
 #: src/generator/config/certmanager/manager_dialog.cpp:297
 msgid "Delete Certificate"
-msgstr ""
+msgstr "Xóa chứng chỉ"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:291
 msgid "Delete certificate \"%1\" from the NSS database?"
-msgstr ""
+msgstr "Xóa chứng chỉ \"%1\" khỏi cơ sở dữ liệu NSS?"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:53
 msgid "Create Self-Signed Certificate"
-msgstr ""
+msgstr "Tạo chứng chỉ tự ký"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:55
 msgid "Certificate identity"
-msgstr ""
+msgstr "Thông tin định danh chứng chỉ"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:58
 msgid "Email:"
-msgstr ""
+msgstr "Email:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:59
 msgid "Common Name:"
-msgstr ""
+msgstr "Tên thường dùng:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:60
 msgid "Organization:"
-msgstr ""
+msgstr "Tổ chức:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:61
 msgid "Organizational Unit:"
-msgstr ""
+msgstr "Đơn vị tổ chức:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:62
 msgid "Locality:"
-msgstr ""
+msgstr "Thành phố:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:63
 msgid "State or Province:"
-msgstr ""
+msgstr "Bang hoặc tỉnh:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:64
 msgid "Country (2 letters):"
-msgstr ""
+msgstr "Quốc gia (2 chữ cái):"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:74
 msgid "Validity and key"
-msgstr ""
+msgstr "Thời hạn và khóa"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:99
 msgid "Valid from:"
-msgstr ""
+msgstr "Có hiệu lực từ:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:100
 msgid "Valid until:"
-msgstr ""
+msgstr "Có hiệu lực đến:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:101
 msgid "Signing key:"
-msgstr ""
+msgstr "Khóa ký:"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:101
 msgid "RSA 2048"
-msgstr ""
+msgstr "RSA 2048"
 
 #: src/generator/config/certmanager/self_signed_dialog.cpp:104
 msgid "Create"
-msgstr ""
+msgstr "Tạo"
 
 #: src/generator/mupdfng.cpp:144
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
-msgstr ""
+msgstr "Bộ kết xuất tài liệu đã dừng khi còn thay đổi biểu mẫu và chú thích chưa lưu. Các thay đổi đó đã bị mất."
 
 #: src/generator/mupdfng.cpp:148
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
-msgstr ""
+msgstr "Bộ kết xuất tài liệu đã dừng khi còn thay đổi biểu mẫu chưa lưu. Các thay đổi đó đã bị mất."
 
 #: src/generator/mupdfng.cpp:149
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
-msgstr ""
+msgstr "Bộ kết xuất tài liệu đã dừng khi còn thay đổi chú thích chưa lưu. Các thay đổi đó đã bị mất."
 
 #: src/generator/mupdfng.cpp:173
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
-msgstr ""
+msgstr "Bộ kết xuất tài liệu đã khởi động lại nhưng không thể mở lại tài liệu. Hãy khởi động lại Okular để thử lại."
 
 #: src/generator/mupdfng.cpp:184
 msgid "The document renderer stopped responding. Restart Okular to try again."
-msgstr ""
+msgstr "Bộ kết xuất tài liệu đã ngừng phản hồi. Hãy khởi động lại Okular để thử lại."
 
 #: src/generator/mupdfng.cpp:218
 msgid "Export to PDF failed: %1"
-msgstr ""
+msgstr "Xuất PDF không thành công: %1"
 
 #: src/generator/mupdfng.cpp:221
 msgid "Export to PDF finished."
-msgstr ""
+msgstr "Đã xuất PDF xong."
 
 #: src/generator/mupdfng.cpp:238
 msgid "OCR completed for page %1"
-msgstr ""
+msgstr "Đã hoàn tất OCR cho trang %1"
 
 #: src/generator/mupdfng.cpp:243
 msgid "Running OCR on page %1..."
-msgstr ""
+msgstr "Đang chạy OCR trên trang %1..."
 
 #: src/generator/mupdfng.cpp:247
 msgid "OCR failed for page %1"
-msgstr ""
+msgstr "OCR không thành công trên trang %1"
 
 #: src/generator/mupdfng.cpp:340
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
-msgstr ""
+msgstr "Không thể bật chế độ thực thi hộp cát nghiêm ngặt khi còn thay đổi chưa lưu. Hãy lưu hoặc hủy các thay đổi đó rồi khởi động lại Okular."
 
 #: src/generator/mupdfng.cpp:363
 msgid "MuPDF-NG"
-msgstr ""
+msgstr "MuPDF-NG"
 
 #: src/generator/mupdfng.cpp:365
 msgid "MuPDF-NG Configuration"
-msgstr ""
+msgstr "Cấu hình MuPDF-NG"
 
 #: src/generator/mupdfng.cpp:371
 msgid "Restart needed"
-msgstr ""
+msgstr "Cần khởi động lại"
 
 #: src/generator/mupdfng.cpp:371
 msgid "You need to restart Okular to apply this change."
-msgstr ""
+msgstr "Bạn cần khởi động lại Okular để áp dụng thay đổi này."
 
 #: src/generator/mupdfng.cpp:625
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
-msgstr ""
+msgstr "Đã phát hiện một số lỗi trong tài liệu; Okular có thể không hiển thị nội dung chính xác"
 
 #: src/generator/mupdfng.cpp:638
 msgid ""
 "[WARN] The MuPDF worker is partially hardened: Okular's protection is "
 "limited."
-msgstr ""
+msgstr "[CẢNH BÁO] Worker MuPDF chỉ được gia cố một phần: khả năng bảo vệ của Okular bị hạn chế."
 
 #: src/generator/mupdfng.cpp:640
 msgid ""
 "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
 "you from malicious documents."
-msgstr ""
+msgstr "[NGHIÊM TRỌNG] Worker MuPDF không bị giới hạn: Okular không thể bảo vệ bạn khỏi tài liệu độc hại."
 
 #: src/generator/mupdfng.cpp:661
 msgid "Pinned against MuPDF %1"
-msgstr ""
+msgstr "Đã ghim vào MuPDF %1"
 
 #: src/generator/mupdfng.cpp:663
 msgid "Using MuPDF %1"
-msgstr ""
+msgstr "Đang dùng MuPDF %1"
 
 #: src/generator/mupdfng.cpp:665
 msgid ""
 "Using MuPDF %1\n"
 "Pinned against MuPDF %2"
-msgstr ""
+msgstr "Đang dùng MuPDF %1\nĐã ghim vào MuPDF %2"
 
 #: src/generator/mupdfng.cpp:672
 msgid "Worker is fully hardened [OK]"
-msgstr ""
+msgstr "Worker được gia cố đầy đủ [OK]"
 
 #: src/generator/mupdfng.cpp:674
 msgid "Worker is partially hardened [WARN]"
-msgstr ""
+msgstr "Worker chỉ được gia cố một phần [CẢNH BÁO]"
 
 #: src/generator/mupdfng.cpp:676
 msgid "Worker is unconfined [CRIT]"
-msgstr ""
+msgstr "Worker không bị giới hạn [NGHIÊM TRỌNG]"
 
 #: src/generator/mupdfng.cpp:682
 msgid "unknown"
-msgstr ""
+msgstr "không xác định"
 
 #: src/generator/mupdfng.cpp:683
 msgid "Worker is using %1"
-msgstr ""
+msgstr "Worker đang dùng %1"
 
 #: src/generator/mupdfng.cpp:709
 msgid ""
@@ -493,252 +490,251 @@ msgid ""
 "To open this document, switch Sandbox Enforcement to Relaxed. This will "
 "reduce security protections.\n"
 "Error: %1"
-msgstr ""
+msgstr "[CẢNH BÁO] Hộp cát của worker chưa được gia cố đầy đủ và chế độ thực thi hộp cát đang ở mức Nghiêm ngặt.\nĐể mở tài liệu này, hãy chuyển chế độ Thực thi hộp cát sang Nới lỏng. Thao tác này sẽ giảm mức bảo vệ.\nLỗi: %1"
 
 #: src/generator/mupdfng.cpp:794
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
-msgstr ""
+msgstr "Đã chuyển sang chế độ thực thi Nới lỏng. Vui lòng mở lại tài liệu theo cách thủ công."
 
 #: src/generator/mupdfng.cpp:824
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
-msgstr ""
+msgstr "Không thể tải lại tài liệu sau khi lưu. Hãy khởi động lại Okular để tiếp tục."
 
 #: src/generator/mupdfng.cpp:1069
 msgid "Format"
-msgstr ""
+msgstr "Định dạng"
 
 #: src/generator/mupdfng.cpp:1072 rc.cpp:12
 msgid "Security"
-msgstr ""
+msgstr "Bảo mật"
 
 #: src/generator/mupdfng.cpp:1074
 msgid "Yes"
-msgstr ""
+msgstr "Có"
 
 #: src/generator/mupdfng.cpp:1074
 msgid "No"
-msgstr ""
+msgstr "Không"
 
 #: src/generator/mupdfng.cpp:1075
 msgid "Optimized"
-msgstr ""
+msgstr "Đã tối ưu hóa"
 
 #: src/generator/mupdfng.cpp:1078
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "Đã ký (%1 chữ ký)"
 
 #: src/generator/mupdfng.cpp:1078
 msgid "Not Signed"
-msgstr ""
+msgstr "Chưa ký"
 
 #: src/generator/mupdfng.cpp:1079
 msgid "Digital Signatures"
-msgstr ""
+msgstr "Chữ ký số"
 
 #: src/generator/mupdfng.cpp:1302
 msgid "Strict sandbox enforcement blocks this document."
-msgstr ""
+msgstr "Chế độ thực thi hộp cát nghiêm ngặt đã chặn tài liệu này."
 
 #: src/generator/mupdfng.cpp:1303 src/generator/mupdfng.cpp:1314
 msgid "MuPDF worker is unavailable."
-msgstr ""
+msgstr "Worker MuPDF không khả dụng."
 
 #: src/generator/mupdfng.cpp:1310
 msgid "Failed to save PDF document."
-msgstr ""
+msgstr "Không thể lưu tài liệu PDF."
 
 #: src/generator/mupdfng.cpp:1339
 msgid "Starting to export to PDF."
-msgstr ""
+msgstr "Đang bắt đầu xuất PDF."
 
 #: src/generator/printing.cpp:16
 msgid "MuPDF-NG Options"
-msgstr ""
+msgstr "Tùy chọn MuPDF-NG"
 
 #: src/generator/printing.cpp:24
 msgid "Fit to printable area"
-msgstr ""
+msgstr "Vừa vùng in"
 
 #: src/generator/printing.cpp:27
 msgid "Fit to full page"
-msgstr ""
+msgstr "Vừa toàn trang"
 
 #: src/generator/printing.cpp:30
 msgid "None; print original size"
-msgstr ""
+msgstr "Không; in theo kích thước gốc"
 
 #: src/generator/printing.cpp:32
 msgid "Scaling mode for the printed pages"
-msgstr ""
+msgstr "Chế độ co giãn trang in"
 
 #: src/generator/printing.cpp:33
 msgid "Scale mode:"
-msgstr ""
+msgstr "Chế độ co giãn:"
 
 #: src/generator/proxy/annotation.cpp:70
 msgid ""
 "Signature\n"
 "Placeholder"
-msgstr ""
+msgstr "Vị trí\nchữ ký"
 
 #: rc.cpp:1
 msgid "General"
-msgstr ""
+msgstr "Chung"
 
 #: rc.cpp:2
 msgid "Rendering Quality"
-msgstr ""
+msgstr "Chất lượng kết xuất"
 
 #: rc.cpp:3
 msgid "Graphics Antialiasing"
-msgstr ""
+msgstr "Khử răng cưa đồ họa"
 
 #: rc.cpp:4
 msgid "Text Antialiasing"
-msgstr ""
+msgstr "Khử răng cưa văn bản"
 
 #: rc.cpp:5
 msgid "Image Quality"
-msgstr ""
+msgstr "Chất lượng hình ảnh"
 
 #: rc.cpp:6
 msgid "Interpolate images"
-msgstr ""
+msgstr "Nội suy hình ảnh"
 
 #: rc.cpp:7
 msgid "Performance"
-msgstr ""
+msgstr "Hiệu năng"
 
 #: rc.cpp:8
 msgid "Texture Cache Memory Usage"
-msgstr ""
+msgstr "Bộ nhớ bộ đệm kết cấu"
 
 #: rc.cpp:9 rc.cpp:11
 msgid ""
 "How eagerly the worker releases cached memory while idle. Off disables idle "
 "trimming."
-msgstr ""
+msgstr "Mức độ giải phóng bộ nhớ đệm khi worker ở trạng thái nghỉ. Chọn Tắt để không giải phóng bộ nhớ lúc nghỉ."
 
 #: rc.cpp:10
 msgid "Idle Memory Trim"
-msgstr ""
+msgstr "Giải phóng bộ nhớ khi nghỉ"
 
 #: rc.cpp:13 rc.cpp:15
 msgid ""
 "Strict refuses to process documents unless the worker sandbox is fully "
 "hardened on this host."
-msgstr ""
+msgstr "Chế độ Nghiêm ngặt từ chối xử lý tài liệu nếu hộp cát của worker chưa được gia cố đầy đủ trên máy này."
 
 #: rc.cpp:14
 msgid "Sandbox Enforcement"
-msgstr ""
+msgstr "Thực thi hộp cát"
 
 #: rc.cpp:16
 msgid "Show notification when sandbox is degraded"
-msgstr ""
+msgstr "Hiện thông báo khi hộp cát bị suy giảm"
 
 #: rc.cpp:17
 msgid "PDF"
-msgstr ""
+msgstr "PDF"
 
 #: rc.cpp:18
 msgid "Optical Character Recognition"
-msgstr ""
+msgstr "Nhận dạng ký tự quang học (OCR)"
 
 #: rc.cpp:19
 msgid "Tesseract Model"
-msgstr ""
+msgstr "Mô hình Tesseract"
 
 #: rc.cpp:20
 msgid "Tesseract Quality"
-msgstr ""
+msgstr "Chất lượng Tesseract"
 
 #: rc.cpp:21
 msgid "Auto-trigger OCR when page has less than"
-msgstr ""
+msgstr "Tự động chạy OCR khi trang có ít hơn"
 
 #: rc.cpp:22
 msgid "Show notifications on OCR status"
-msgstr ""
+msgstr "Hiện thông báo về trạng thái OCR"
 
 #: rc.cpp:23
 msgid "Crypto Engine"
-msgstr ""
+msgstr "Bộ máy mật mã"
 
 #: rc.cpp:24
 msgid "Default Certificate Database:"
-msgstr ""
+msgstr "Cơ sở dữ liệu chứng chỉ mặc định:"
 
 #: rc.cpp:25
 msgid "/etc/pki/nssdb"
-msgstr ""
+msgstr "/etc/pki/nssdb"
 
 #: rc.cpp:26
 msgid "Custom Certificate Database"
-msgstr ""
+msgstr "Cơ sở dữ liệu chứng chỉ tùy chỉnh"
 
 #: rc.cpp:27
 msgid "Manage Certificates"
-msgstr ""
+msgstr "Quản lý chứng chỉ"
 
 #: rc.cpp:28
 msgid ""
 "Check certificate revocation via OCSP responders while validating "
 "signatures. Requires network access; an unreachable responder does not "
 "invalidate signatures."
-msgstr ""
+msgstr "Kiểm tra trạng thái thu hồi chứng chỉ qua máy chủ OCSP khi xác thực chữ ký. Cần có kết nối mạng; nếu không liên lạc được với máy chủ thì chữ ký vẫn hợp lệ."
 
 #: rc.cpp:29
 msgid "Check certificate revocation via OCSP (requires network)"
-msgstr ""
+msgstr "Kiểm tra thu hồi chứng chỉ qua OCSP (cần mạng)"
 
 #: rc.cpp:30
 msgid "Signature"
-msgstr ""
+msgstr "Chữ ký"
 
 #: rc.cpp:31
 msgid "Signature profile:"
-msgstr ""
+msgstr "Hồ sơ chữ ký:"
 
 #: rc.cpp:32
 msgid "Render the signature appearance timestamp in UTC instead of local time."
-msgstr ""
+msgstr "Hiển thị dấu thời gian trên chữ ký theo UTC thay vì giờ địa phương."
 
 #: rc.cpp:33
 msgid "Use UTC time for signatures"
-msgstr ""
+msgstr "Dùng giờ UTC cho chữ ký"
 
 #: rc.cpp:34
 msgid "Draw a 1px border around the signed signature appearance."
-msgstr ""
+msgstr "Vẽ đường viền 1 px quanh phần hiển thị chữ ký đã ký."
 
 #: rc.cpp:35
 msgid "Draw signature border"
-msgstr ""
+msgstr "Vẽ đường viền chữ ký"
 
 #: rc.cpp:36
 msgid "ePUB"
-msgstr ""
+msgstr "ePUB"
 
 #: rc.cpp:37
 msgid "Page Layout"
-msgstr ""
+msgstr "Bố cục trang"
 
 #: rc.cpp:38
 msgid "Font Size"
-msgstr ""
+msgstr "Cỡ chữ"
 
 #: rc.cpp:39
 msgid " pt"
-msgstr ""
+msgstr " pt"
 
 #: rc.cpp:40
 msgid "Font Family"
-msgstr ""
+msgstr "Phông chữ"
 
 #: rc.cpp:41
 msgid "Page Size"
-msgstr ""
+msgstr "Khổ giấy"

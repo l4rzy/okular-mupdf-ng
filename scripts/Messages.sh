@@ -64,3 +64,12 @@ else
         --keyword='i18ncp:1c,2' \
         $source_files "$rc_file" -o "$podir/$domain.pot"
 fi
+
+for po_file in "$podir"/*/"$domain.po"; do
+    [ -f "$po_file" ] || continue
+    if ! command -v msgmerge >/dev/null 2>&1; then
+        echo "msgmerge is required to update translation catalogs" >&2
+        exit 1
+    fi
+    msgmerge --update --backup=none --previous "$po_file" "$podir/$domain.pot"
+done
