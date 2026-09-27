@@ -31,7 +31,9 @@ jobs:
             ca-certificates \
             clang \
             cmake \
+            dpkg-dev \
             extra-cmake-modules \
+            file \
             git \
             libbrotli-dev \
             libfreetype-dev \
@@ -39,9 +41,16 @@ jobs:
             libjbig2dec0-dev \
             libjpeg-dev \
             libnss3-dev \
+            libnss3-tools \
             libopenjp2-7-dev \
             libseccomp-dev \
-            make \
+            mold \
+            openssl \
+            libkf6config-dev \
+            libkf6configwidgets-dev \
+            libkf6coreaddons-dev \
+            libkf6i18n-dev \
+            libkf6kio-dev \
             ninja-build \
             okular-dev \
             pkg-config \
