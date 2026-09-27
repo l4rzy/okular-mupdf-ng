@@ -22,9 +22,9 @@ makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
 # keep the OCR pair on matching versions. Global depends serves the pre-build
 # dependency check; each package function overrides depends for its own link
 # variant.
-_common_depends=('okular' 'qt6-base' 'qt6-5compat' 'nss' 'libseccomp')
+_common_depends=('okular' 'qt6-base' 'nss' 'libseccomp')
 depends=("${_common_depends[@]}"
-         'brotli' 'freetype2' 'harfbuzz' 'jbig2dec'
+         'brotli' 'freetype2' 'jbig2dec'
          'libjpeg-turbo' 'openjpeg2' 'zlib')
 conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 # Replace with source=("git+$url.git") when the PKGBUILD is standalone.
@@ -104,7 +104,7 @@ package_okular-mupdf-ng() {
 package_okular-mupdf-ng-dynamic() {
   pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, dynamically linked against system MuPDF)"
   # The system MuPDF pulls its third-party libraries in transitively.
-  depends=("${_common_depends[@]}" "libmupdf>=${_mupdf_min_ver}")
+  depends=("${_common_depends[@]}" "libmupdf")
   provides=(okular-mupdf-ng)
   conflicts=(okular-mupdf-ng okular-mupdf-ng-git)
   cp -a "$srcdir/stage-dynamic/." "$pkgdir"/

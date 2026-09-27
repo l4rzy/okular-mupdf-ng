@@ -21,11 +21,9 @@ endif()
 
 if(USE_SYSTEM_MUPDF)
     # The bundled build is pinned to MUPDF_REQUIRED_VERSION; the system variant
-    # only requires a compatible baseline that distributors can lower to the
-    # version they ship.
-    set(MUPDF_SYSTEM_MIN_VERSION "${MUPDF_REQUIRED_VERSION}" CACHE STRING
-        "Minimum system MuPDF version accepted for USE_SYSTEM_MUPDF=ON")
-    pkg_check_modules(MUPDF_SYSTEM REQUIRED IMPORTED_TARGET mupdf>=${MUPDF_SYSTEM_MIN_VERSION})
+    # uses whatever MuPDF the distribution provides, leaving any version floor to
+    # the distributor's package dependencies.
+    pkg_check_modules(MUPDF_SYSTEM REQUIRED IMPORTED_TARGET mupdf)
 
     add_library(MuPDF::Engine INTERFACE IMPORTED GLOBAL)
     set_target_properties(MuPDF::Engine PROPERTIES
