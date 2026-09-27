@@ -24,6 +24,17 @@
 
 namespace Mu::Generator {
 
+namespace {
+
+// Marks a mandatory field. The marker stays outside the translatable text so
+// each locale can decide whether/how to indicate required fields.
+QString requiredFieldLabel(const QString& label)
+{
+    return label + QStringLiteral(" *");
+}
+
+} // namespace
+
 SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, QWidget* parent)
     : QDialog(parent)
     , m_nickname(new QLineEdit(this))
@@ -43,9 +54,9 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
 
     auto* subjectGroup = new QGroupBox(i18n("Certificate identity"), this);
     auto* subjectForm = new QFormLayout(subjectGroup);
-    subjectForm->addRow(i18n("Nickname *:"), m_nickname);
+    subjectForm->addRow(requiredFieldLabel(i18n("Nickname:")), m_nickname);
     subjectForm->addRow(i18n("Email:"), m_email);
-    subjectForm->addRow(i18n("Common Name *:"), m_commonName);
+    subjectForm->addRow(requiredFieldLabel(i18n("Common Name:")), m_commonName);
     subjectForm->addRow(i18n("Organization:"), m_organization);
     subjectForm->addRow(i18n("Organizational Unit:"), m_organizationalUnit);
     subjectForm->addRow(i18n("Locality:"), m_locality);
