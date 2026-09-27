@@ -327,13 +327,15 @@ bool checkSelfSignedOptions(const SelfSignedCertificateOptions& options,
     *nickname = options.nickname.trimmed();
     *commonName = options.commonName.trimmed();
     *country = options.country.trimmed();
+    const QString email = options.email.trimmed();
     const QList<QString> subjectValues { *nickname,
                                          *commonName,
                                          options.organization.trimmed(),
                                          options.organizationalUnit.trimmed(),
                                          options.locality.trimmed(),
                                          options.state.trimmed(),
-                                         *country };
+                                         *country,
+                                         email };
     if (nickname->isEmpty() || commonName->isEmpty()) {
         setError(error, QStringLiteral("A nickname and Common Name are required"));
         return false;
@@ -346,6 +348,14 @@ bool checkSelfSignedOptions(const SelfSignedCertificateOptions& options,
     if (nickname->size() > 128) {
         setError(error, QStringLiteral("The certificate nickname must be 128 characters or shorter"));
         return false;
+    }
+    if (!email.isEmpty()) {
+        const qsizetype at = email.indexOf(QLatin1Char('@'));
+        if (at <= 0 || at != email.lastIndexOf(QLatin1Char('@')) || at == email.size() - 1
+            || std::any_of(email.cbegin(), email.cend(), [](QChar character) { return character.isSpace(); })) {
+            setError(error, QStringLiteral("The email address is invalid"));
+            return false;
+        }
     }
     if (!convertToNssTime(options.validFrom, validFrom) || !convertToNssTime(options.validUntil, validUntil)
         || options.validUntil <= options.validFrom) {
@@ -393,6 +403,7 @@ QByteArray buildDistinguishedNameBytes(const SelfSignedCertificateOptions& optio
     appendDn(&distinguishedName, QStringLiteral("ST="), options.state);
     if (!country.isEmpty())
         distinguishedName.append(QStringLiteral("C=%1").arg(country.toUpper()));
+    appendDn(&distinguishedName, QStringLiteral("E="), options.email);
     return distinguishedName.join(QStringLiteral(", ")).toUtf8();
 }
 

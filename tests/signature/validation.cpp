@@ -368,6 +368,7 @@ private slots:
         options.commonName = QStringLiteral("Generated, Signing + Certificate");
         options.organization = QStringLiteral("Okular \"MuPDF\"");
         options.country = QStringLiteral("CA");
+        options.email = QStringLiteral("signer+test@example.org");
         options.validFrom = QDateTime::currentDateTime().addSecs(-60);
         options.validUntil = options.validFrom.addYears(1);
 
@@ -381,6 +382,7 @@ private slots:
         const auto certificate = findManagedCertificate(certificates, "okular-mupdf-generated");
         QVERIFY(certificate != certificates.cend());
         QCOMPARE(certificate->certificate.subjectCommonName, std::string("Generated, Signing + Certificate"));
+        QCOMPARE(certificate->certificate.subjectEmail, std::string("signer+test@example.org"));
         QCOMPARE(certificate->certificate.issuerDistinguishedName, certificate->certificate.subjectDistinguishedName);
 
         QVERIFY2(
@@ -719,6 +721,20 @@ private slots:
         QVERIFY(!error.isEmpty());
 
         options.country = QStringLiteral("CA");
+        for (const QString& invalidEmail : { QStringLiteral("local-only"),
+                                             QStringLiteral("@example.org"),
+                                             QStringLiteral("user@"),
+                                             QStringLiteral("a@@example.org"),
+                                             QStringLiteral("invalid email@example.org") }) {
+            options.email = invalidEmail;
+            error.clear();
+            QVERIFY2(!::Mu::Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(
+                         m_nssDb.path(), options, &error),
+                     qPrintable(invalidEmail));
+            QVERIFY2(error.contains(QStringLiteral("email address is invalid")), qPrintable(error));
+        }
+
+        options.email.clear();
         options.validUntil = options.validFrom;
         error.clear();
         QVERIFY(

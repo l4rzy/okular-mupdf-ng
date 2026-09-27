@@ -46,6 +46,8 @@ struct SelfSignedCertificateOptions {
     QDateTime validFrom;
     /// End of the certificate validity interval.
     QDateTime validUntil;
+    /// Optional email address placed in the certificate subject.
+    QString email;
 };
 
 /// Lists internal-slot certificates with private keys from the selected persistent NSS database.

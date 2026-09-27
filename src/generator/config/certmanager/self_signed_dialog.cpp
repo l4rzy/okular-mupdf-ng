@@ -33,6 +33,7 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     , m_locality(new QLineEdit(this))
     , m_state(new QLineEdit(this))
     , m_country(new QLineEdit(this))
+    , m_email(new QLineEdit(this))
     , m_validFrom(new QDateTimeEdit(QDateTime::currentDateTime(), this))
     , m_validUntil(new QDateTimeEdit(QDateTime::currentDateTime().addYears(1), this))
     , m_databasePath(std::move(databasePath))
@@ -42,8 +43,9 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
 
     auto* subjectGroup = new QGroupBox(i18n("Certificate identity"), this);
     auto* subjectForm = new QFormLayout(subjectGroup);
-    subjectForm->addRow(i18n("Nickname:"), m_nickname);
-    subjectForm->addRow(i18n("Common Name:"), m_commonName);
+    subjectForm->addRow(i18n("Nickname *:"), m_nickname);
+    subjectForm->addRow(i18n("Email:"), m_email);
+    subjectForm->addRow(i18n("Common Name *:"), m_commonName);
     subjectForm->addRow(i18n("Organization:"), m_organization);
     subjectForm->addRow(i18n("Organizational Unit:"), m_organizationalUnit);
     subjectForm->addRow(i18n("Locality:"), m_locality);
@@ -53,6 +55,7 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
         field->setMaxLength(256);
     m_nickname->setMaxLength(128);
     m_country->setMaxLength(2);
+    m_email->setMaxLength(256);
     // NSS expects an ISO-style two-letter country code when one is supplied.
     m_country->setValidator(
         new QRegularExpressionValidator(QRegularExpression(QStringLiteral("[A-Za-z]{0,2}")), m_country));
@@ -105,9 +108,9 @@ SelfSignedCertificateDialog::certificateOptions() const
 {
     // Preserve field order required by SelfSignedCertificateOptions; no NSS
     // operation is performed while the dialog is merely being inspected.
-    return { m_nickname->text(),      m_commonName->text(), m_organization->text(), m_organizationalUnit->text(),
-             m_locality->text(),      m_state->text(),      m_country->text(),      m_validFrom->dateTime(),
-             m_validUntil->dateTime() };
+    return { m_nickname->text(),       m_commonName->text(), m_organization->text(), m_organizationalUnit->text(),
+             m_locality->text(),       m_state->text(),      m_country->text(),      m_validFrom->dateTime(),
+             m_validUntil->dateTime(), m_email->text() };
 }
 
 } // namespace Mu::Generator

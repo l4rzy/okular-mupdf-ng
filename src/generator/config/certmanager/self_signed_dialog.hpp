@@ -34,6 +34,7 @@ private:
     QLineEdit* m_locality;
     QLineEdit* m_state;
     QLineEdit* m_country;
+    QLineEdit* m_email;
     QDateTimeEdit* m_validFrom;
     QDateTimeEdit* m_validUntil;
     // Used in the title so operations identify which NSS database is edited.
