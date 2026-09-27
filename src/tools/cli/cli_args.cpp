@@ -70,6 +70,16 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
     return parser;
 }
 
+QCommandLineParser& setupExportXfdfParser(QCommandLineParser& parser)
+{
+    parser.setApplicationDescription("Export annotations from a PDF document as XFDF.");
+    parser.addHelpOption();
+    parser.addOption({ { "o", "output" }, "Output XFDF file (required).", "file" });
+    addSharedOptions(parser);
+    parser.addPositionalArgument("file", "Input PDF document.", "<file>");
+    return parser;
+}
+
 Command parseOcr(const QStringList& args)
 {
     Command command;
@@ -148,6 +158,37 @@ Command parseExportPdf(const QStringList& args)
     return command;
 }
 
+Command parseExportXfdf(const QStringList& args)
+{
+    Command command;
+    command.kind = Command::Kind::ExportXfdf;
+    auto& options = command.exportXfdf;
+    QCommandLineParser parser;
+    setupExportXfdfParser(parser);
+    if (!parser.parse(args)) {
+        command.error = parser.errorText().toStdString();
+        return command;
+    }
+    if (parser.isSet("help")) {
+        command.helpRequested = true;
+        return command;
+    }
+    const QStringList files = parser.positionalArguments();
+    if (files.size() != 1) {
+        command.error = "expected exactly one input file";
+        return command;
+    }
+    options.file = files.front().toStdString();
+    if (!parser.isSet("output")) {
+        command.error = "missing required -o output";
+        return command;
+    }
+    options.output = parser.value("output").toStdString();
+    if (!readSharedOptions(parser, options.shared, command.error))
+        return command;
+    return command;
+}
+
 } // namespace
 
 bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error)
@@ -211,6 +252,8 @@ Command parseArgs(const QStringList& argv)
         return parseOcr(sub);
     if (verb == "export-pdf")
         return parseExportPdf(sub);
+    if (verb == "export-xfdf")
+        return parseExportXfdf(sub);
     command.error = "unknown command: " + verb.toStdString();
     return command;
 }
@@ -222,10 +265,13 @@ QString helpTextFor(Command::Kind kind)
         return setupOcrParser(parser).helpText();
     if (kind == Command::Kind::ExportPdf)
         return setupExportParser(parser).helpText();
+    if (kind == Command::Kind::ExportXfdf)
+        return setupExportXfdfParser(parser).helpText();
     return QStringLiteral("usage: mupdfng-cli <command> [options]\n\n"
                           "commands:\n"
                           "  ocr <file> --page N          OCR one page, print text boxes\n"
-                          "  export-pdf <file> -o OUT.pdf export an EPUB document to PDF\n\n"
+                          "  export-pdf <file> -o OUT.pdf export an EPUB document to PDF\n"
+                          "  export-xfdf <file> -o OUT.xfdf export PDF annotations as XFDF\n\n"
                           "options:\n"
                           "  -V, --version                print version and exit\n\n"
                           "run 'mupdfng-cli <command> --help' for command options.\n");

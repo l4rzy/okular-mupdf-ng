@@ -5,16 +5,21 @@
 // All worker IPC lives in Mu::Plugin::WorkerClient; this file only maps CLI
 // commands onto its blocking calls and prints the results.
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QSaveFile>
 #include <QTextStream>
 #include <QTimer>
 
 #include "generator/config/settings.hpp"
 #include "plugin/util/document_type.hpp"
+#include "plugin/util/xfdf.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/compat.hpp"
 #include "tools/cli/cli_args.hpp"
+
+#include <utility>
 
 #ifndef TESSDATA_DIR
 #define TESSDATA_DIR "/usr/share/tessdata"
@@ -93,9 +98,11 @@ QString tessDataFor(const OcrOptions& options)
 qsizetype openDocument(Mu::Plugin::WorkerClient& client,
                        const QString& file,
                        const QString& password,
-                       Mu::Model::DocumentType type)
+                       Mu::Model::DocumentType type,
+                       QList<Mu::Model::PageInfo>* pageInfo = nullptr)
 {
-    QList<Mu::Model::PageInfo> pages;
+    QList<Mu::Model::PageInfo> openedPages;
+    QList<Mu::Model::PageInfo>& pages = pageInfo ? *pageInfo : openedPages;
     const auto status = client.open(file, password, pages, type);
     if (status == Mu::Model::OpenStatus::NeedsPassword) {
         err() << "mupdfng-cli: document needs a password (--password)\n";
@@ -201,6 +208,47 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& optio
     return ExitOk;
 }
 
+int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportXfdfOptions& options)
+{
+    const QString file = QString::fromStdString(options.file);
+    if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Pdf) {
+        err() << "mupdfng-cli: export-xfdf only supports PDF documents\n";
+        return ExitJobFailed;
+    }
+
+    QList<Mu::Model::PageInfo> pageInfo;
+    if (openDocument(
+            client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Pdf, &pageInfo)
+        < 0)
+        return ExitJobFailed;
+
+    QVector<Mu::Plugin::Util::XfdfPage> pages;
+    pages.reserve(pageInfo.size());
+    for (const Mu::Model::PageInfo& page : pageInfo) {
+        Mu::Plugin::Util::XfdfPage xfdfPage;
+        xfdfPage.widthPoints = page.geometry.widthPoints;
+        xfdfPage.heightPoints = page.geometry.heightPoints;
+        xfdfPage.annotations.reserve(static_cast<qsizetype>(page.annotations.size()));
+        for (const Mu::Model::Annotation& annotation : page.annotations)
+            xfdfPage.annotations.append(annotation);
+        pages.append(std::move(xfdfPage));
+    }
+
+    QSaveFile output(QString::fromStdString(options.output));
+    if (!output.open(QIODevice::WriteOnly)) {
+        err() << "mupdfng-cli: could not open output file\n";
+        return ExitJobFailed;
+    }
+    const QByteArray data = Mu::Plugin::Util::annotationsToXfdf(pages).toUtf8();
+    if (output.write(data) != data.size() || !output.commit()) {
+        err() << "mupdfng-cli: XFDF export failed\n";
+        return ExitJobFailed;
+    }
+    out() << "exported " << QString::fromStdString(options.output) << '\n';
+    out().flush();
+    return ExitOk;
+}
+
 int run(const Command& command)
 {
     QCoreApplication::setApplicationName(QStringLiteral("mupdfng-cli"));
@@ -212,7 +260,9 @@ int run(const Command& command)
         return runVersion();
 
     Mu::Plugin::WorkerClient client;
-    const SharedOptions& shared = command.kind == Command::Kind::Ocr ? command.ocr.shared : command.exportPdf.shared;
+    const SharedOptions& shared = command.kind == Command::Kind::Ocr ? command.ocr.shared
+        : command.kind == Command::Kind::ExportPdf                   ? command.exportPdf.shared
+                                                                     : command.exportXfdf.shared;
     QStringList tessDirs;
     if (command.kind == Command::Kind::Ocr)
         tessDirs.push_back(tessDataFor(command.ocr));
@@ -226,6 +276,8 @@ int run(const Command& command)
         code = runOcr(client, command.ocr);
     else if (command.kind == Command::Kind::ExportPdf)
         code = runExportPdf(client, command.exportPdf);
+    else if (command.kind == Command::Kind::ExportXfdf)
+        code = runExportXfdf(client, command.exportXfdf);
 
     client.close();
     client.stop();

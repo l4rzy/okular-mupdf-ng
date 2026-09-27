@@ -81,6 +81,33 @@ private slots:
         QVERIFY(command.exportPdf.useLayout);
     }
 
+    void parsesExportXfdfCommand()
+    {
+        const Cli::Command command = Cli::parseArgs(
+            { "mupdfng-cli", "export-xfdf", "doc.pdf", "-o", "out.xfdf", "--password", "secret", "--timeout", "30" });
+        QVERIFY(command.error.empty());
+        QCOMPARE(command.kind, Cli::Command::Kind::ExportXfdf);
+        QCOMPARE(command.exportXfdf.file, std::string("doc.pdf"));
+        QCOMPARE(command.exportXfdf.output, std::string("out.xfdf"));
+        QCOMPARE(command.exportXfdf.shared.password, std::string("secret"));
+        QCOMPARE(command.exportXfdf.shared.timeoutSeconds, 30);
+    }
+
+    void exportXfdfRequiresInputAndOutput()
+    {
+        const Cli::Command missingOutput = Cli::parseArgs({ "mupdfng-cli", "export-xfdf", "doc.pdf" });
+        QCOMPARE(missingOutput.kind, Cli::Command::Kind::ExportXfdf);
+        QVERIFY(!missingOutput.error.empty());
+
+        const Cli::Command missingInput = Cli::parseArgs({ "mupdfng-cli", "export-xfdf", "-o", "out.xfdf" });
+        QVERIFY(!missingInput.error.empty());
+
+        const Cli::Command help = Cli::parseArgs({ "mupdfng-cli", "export-xfdf", "--help" });
+        QCOMPARE(help.kind, Cli::Command::Kind::ExportXfdf);
+        QVERIFY(help.helpRequested);
+        QVERIFY(help.error.empty());
+    }
+
     void exportRequiresOutput()
     {
         const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub" });
@@ -119,6 +146,8 @@ private slots:
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Ocr).isEmpty());
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::ExportPdf).isEmpty());
         QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportPdf).contains(QStringLiteral("--use-layout")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("export-xfdf")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportXfdf).contains(QStringLiteral("--password")));
     }
 
     void versionFlagAndText()

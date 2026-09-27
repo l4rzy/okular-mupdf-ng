@@ -12,6 +12,7 @@
 #include <KLocalizedString>
 #include <KPluginFactory>
 #include <QBuffer>
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
@@ -25,6 +26,7 @@
 #include <QPointer>
 #include <QPrinter>
 #include <QRunnable>
+#include <QSaveFile>
 #include <QTemporaryFile>
 #include <QTextStream>
 #include <QThreadPool>
@@ -39,6 +41,7 @@
 #include "generator/conversion/document.hpp"
 #include "generator/conversion/signing.hpp"
 #include "generator/conversion/text.hpp"
+#include "generator/conversion/xfdf.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/form/checkbox.hpp"
 #include "generator/proxy/form/choice.hpp"
@@ -1313,6 +1316,14 @@ Okular::ExportFormat::List Main::exportFormats() const
     Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
     if (m_document.type == Model::DocumentType::Epub)
         formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
+    if (m_document.type == Model::DocumentType::Pdf) {
+        // Standard PDF annotations can be dumped to an XFDF interchange file.
+        // Advertised as application/xml because XFDF lacks a portable MIME
+        // registration on many systems; the file dialog then filters *.xml.
+        const QMimeType xml = QMimeDatabase().mimeTypeForName(QStringLiteral("application/xml"));
+        if (xml.isValid())
+            formats.append(Okular::ExportFormat(i18n("Annotation File (XFDF)"), xml));
+    }
     return formats;
 }
 
@@ -1330,6 +1341,22 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
             return m_worker.savePdfToFile(fileName, { }, true);
         Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
         return m_worker.startPdfExport(fileName, { }).has_value();
+    }
+
+    if (format.mimeType().name() == QLatin1String("application/xml")) {
+        // Annotations are exported from the live Okular pages, so unsaved
+        // in-session changes are included and no worker round trip is needed.
+        if (m_document.type != Model::DocumentType::Pdf)
+            return false;
+        const QByteArray data = Conversion::annotationsToXfdf(m_okularPages, dpi()).toUtf8();
+        // QSaveFile keeps the destination intact until the write fully succeeds.
+        QSaveFile file(fileName);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            return false;
+        const bool success = file.write(data) == data.size() && file.commit();
+        if (success)
+            Q_EMIT notice(i18n("Export to XFDF finished."), NoticeMs);
+        return success;
     }
 
     if (!format.mimeType().inherits(QStringLiteral("text/plain")) || !workerReady())

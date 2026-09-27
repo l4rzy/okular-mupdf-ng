@@ -70,6 +70,19 @@ add_layer_test(test_tools_cliargs tools/test_cli_args.cpp tools ../src/tools/cli
 target_include_directories(test_tools_cliargs PRIVATE ../src ${MU_GENERATED_INCLUDE_DIR})
 target_link_libraries(test_tools_cliargs PRIVATE Qt6::Core)
 
+add_executable(test_tools_cli_xfdf tools/test_cli_xfdf.cpp)
+target_link_libraries(test_tools_cli_xfdf PRIVATE Qt6::Core Qt6::Test Qt6::Xml)
+target_compile_definitions(test_tools_cli_xfdf PRIVATE
+    MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf")
+add_dependencies(test_tools_cli_xfdf mupdfng-cli okular-mupdf-worker)
+add_test(NAME test_tools_cli_xfdf COMMAND test_tools_cli_xfdf)
+set_tests_properties(test_tools_cli_xfdf PROPERTIES
+    LABELS "tools;integration"
+    TIMEOUT 60
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Plugin behaviour owns persistent cache state and uses a per-test root.
 add_layer_test(test_plugin_ocrcache plugin/test_ocrcache.cpp plugin)
 target_include_directories(test_plugin_ocrcache PRIVATE ../src)
@@ -154,6 +167,10 @@ target_link_libraries(test_generator_proxies PRIVATE
 add_layer_test(test_generator_signingconversion generator/test_signing_conversion.cpp generator)
 target_include_directories(test_generator_signingconversion PRIVATE ../src)
 target_link_libraries(test_generator_signingconversion PRIVATE mupdf_generator_adapters KF6::I18n)
+
+add_layer_test(test_generator_xfdf generator/test_xfdf.cpp generator)
+target_include_directories(test_generator_xfdf PRIVATE ../src)
+target_link_libraries(test_generator_xfdf PRIVATE mupdf_generator_adapters KF6::I18n)
 
 # Security policy checks execute in a child because sandbox activation is irreversible.
 add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp)

@@ -145,6 +145,12 @@ in one `test_mupdf` executable to avoid repeatedly linking large static MuPDF
 binaries. Cache, generator, security, and boundary tests remain small focused
 executables.
 
+## Known limitations
+
+- XFDF annotation export serializes coordinates in the page's rotated display
+  frame, so pages with a non-zero `/Rotate` are displaced relative to unrotated
+  PDF user-space.
+
 ## Source tree
 
 ```text

@@ -130,7 +130,8 @@ add_library(mupdf_plugin_util STATIC
   plugin/util/process_memory.cpp
   plugin/util/signature_image.cpp
   plugin/util/render_image.cpp
-  plugin/util/signing_timestamp.cpp)
+  plugin/util/signing_timestamp.cpp
+  plugin/util/xfdf.cpp)
 target_include_directories(mupdf_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mupdf_plugin_util PUBLIC Qt6::Core Qt6::Gui mupdf_shared)
 
@@ -144,6 +145,7 @@ add_library(mupdf_generator_adapters STATIC
   generator/conversion/document.cpp
   generator/conversion/signing.cpp
   generator/conversion/text.cpp
+  generator/conversion/xfdf.cpp
   generator/proxy/annotation.cpp
   generator/proxy/form/text.cpp
   generator/proxy/form/checkbox.cpp
