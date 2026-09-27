@@ -37,6 +37,8 @@ struct ExportPdfOptions {
     std::string output;
     /// Empty means all pages.
     std::vector<int> pages;
+    /// Apply the persisted EPUB layout settings before exporting.
+    bool useLayout = false;
     SharedOptions shared;
 };
 
@@ -46,6 +48,8 @@ struct Command {
     Kind kind = Kind::Help;
     OcrOptions ocr;
     ExportPdfOptions exportPdf;
+    /// True when -h/--help was recognized for the selected command.
+    bool helpRequested = false;
     /// Non-empty when parsing failed; main prints it with the help text.
     std::string error;
 };

@@ -51,6 +51,7 @@ target_include_directories(mupdfng-cli PRIVATE
 target_link_libraries(mupdfng-cli PRIVATE
     mupdf_plugin_worker
     mupdf_plugin_util
+    mupdf_generator_settings
     Qt6::Core
 )
 target_compile_definitions(mupdfng-cli PRIVATE

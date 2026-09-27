@@ -62,6 +62,9 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output PDF file (required).", "file" });
     parser.addOption({ "pages", "Zero-based pages to export, e.g. 0,2,5 or 1-3. Default: all pages.", "list" });
+    parser.addOption({ "use-layout",
+                       "Apply the configured EPUB layout settings (font size, page size, font family, custom CSS) "
+                       "before exporting." });
     addSharedOptions(parser);
     parser.addPositionalArgument("file", "Input EPUB document.", "<file>");
     return parser;
@@ -78,8 +81,10 @@ Command parseOcr(const QStringList& args)
         command.error = parser.errorText().toStdString();
         return command;
     }
-    if (parser.isSet("help"))
-        return Command { };
+    if (parser.isSet("help")) {
+        command.helpRequested = true;
+        return command;
+    }
     const QStringList files = parser.positionalArguments();
     if (files.size() != 1) {
         command.error = "expected exactly one input file";
@@ -120,8 +125,10 @@ Command parseExportPdf(const QStringList& args)
         command.error = parser.errorText().toStdString();
         return command;
     }
-    if (parser.isSet("help"))
-        return Command { };
+    if (parser.isSet("help")) {
+        command.helpRequested = true;
+        return command;
+    }
     const QStringList files = parser.positionalArguments();
     if (files.size() != 1) {
         command.error = "expected exactly one input file";
@@ -135,6 +142,7 @@ Command parseExportPdf(const QStringList& args)
     options.output = parser.value("output").toStdString();
     if (parser.isSet("pages") && !parsePageList(parser.value("pages").toStdString(), options.pages, command.error))
         return command;
+    options.useLayout = parser.isSet("use-layout");
     if (!readSharedOptions(parser, options.shared, command.error))
         return command;
     return command;

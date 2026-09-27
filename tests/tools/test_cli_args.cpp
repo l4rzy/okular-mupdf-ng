@@ -69,6 +69,16 @@ private slots:
         const Cli::Command all = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf" });
         QVERIFY(all.error.empty());
         QVERIFY(all.exportPdf.pages.empty());
+        QVERIFY(!all.exportPdf.useLayout);
+    }
+
+    void exportParsesUseLayout()
+    {
+        const Cli::Command command =
+            Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf", "--use-layout" });
+        QVERIFY(command.error.empty());
+        QCOMPARE(command.kind, Cli::Command::Kind::ExportPdf);
+        QVERIFY(command.exportPdf.useLayout);
     }
 
     void exportRequiresOutput()
@@ -90,8 +100,17 @@ private slots:
     {
         QCOMPARE(Cli::parseArgs({ "mupdfng-cli" }).kind, Cli::Command::Kind::Help);
         QCOMPARE(Cli::parseArgs({ "mupdfng-cli", "--help" }).kind, Cli::Command::Kind::Help);
-        QCOMPARE(Cli::parseArgs({ "mupdfng-cli", "ocr", "--help" }).kind, Cli::Command::Kind::Help);
         QVERIFY(!Cli::parseArgs({ "mupdfng-cli" }).error.empty());
+
+        const Cli::Command ocrHelp = Cli::parseArgs({ "mupdfng-cli", "ocr", "--help" });
+        QCOMPARE(ocrHelp.kind, Cli::Command::Kind::Ocr);
+        QVERIFY(ocrHelp.helpRequested);
+        QVERIFY(ocrHelp.error.empty());
+
+        const Cli::Command exportHelp = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "--help" });
+        QCOMPARE(exportHelp.kind, Cli::Command::Kind::ExportPdf);
+        QVERIFY(exportHelp.helpRequested);
+        QVERIFY(exportHelp.error.empty());
 
         const Cli::Command unknown = Cli::parseArgs({ "mupdfng-cli", "frobnicate" });
         QVERIFY(!unknown.error.empty());
@@ -99,6 +118,7 @@ private slots:
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Help).isEmpty());
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Ocr).isEmpty());
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::ExportPdf).isEmpty());
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportPdf).contains(QStringLiteral("--use-layout")));
     }
 
     void versionFlagAndText()

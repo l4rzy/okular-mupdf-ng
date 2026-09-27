@@ -10,6 +10,7 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include "generator/config/settings.hpp"
 #include "plugin/util/document_type.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/compat.hpp"
@@ -164,6 +165,18 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& optio
         err() << "mupdfng-cli: export-pdf only supports EPUB documents\n";
         return ExitJobFailed;
     }
+    if (options.useLayout) {
+        // Refresh the KConfigXT singleton and build worker-facing settings from
+        // the same persisted EPUB layout Okular uses. No session paper color is
+        // available here, so default to white.
+        Mu::Generator::Config::reloadSettings();
+        const Mu::Model::DocumentSettings settings =
+            Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF);
+        if (!client.setSettings(settings)) {
+            err() << "mupdfng-cli: failed to apply EPUB layout settings\n";
+            return ExitJobFailed;
+        }
+    }
     const qsizetype pageCount =
         openDocument(client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Epub);
     if (pageCount < 0)
@@ -193,7 +206,7 @@ int run(const Command& command)
     QCoreApplication::setApplicationName(QStringLiteral("mupdfng-cli"));
     if (!command.error.empty())
         return failUsage(command);
-    if (command.kind == Command::Kind::Help)
+    if (command.kind == Command::Kind::Help || command.helpRequested)
         return showHelp(command);
     if (command.kind == Command::Kind::Version)
         return runVersion();
