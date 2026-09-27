@@ -24,6 +24,7 @@
 namespace {
 
 constexpr std::string_view DefaultTessDataDirectory = TESSDATA_DIR;
+constexpr std::string_view SignatureFontDirectory = SIGNATURE_FONT_DIR;
 constexpr unsigned char JsonControlCharLimit = 0x20;
 
 std::string makeAbsolutePath(std::string_view path)
@@ -131,7 +132,8 @@ void printSandboxStatusJson(const Mu::Model::SandboxStatus& status)
 /// 5. Enter the non-blocking polling event loop in `WorkerServer::run` until termination or parent disconnect.
 int main(int argc, char* argv[])
 {
-    std::vector<std::string> tessDataDirectories { makeAbsolutePath(DefaultTessDataDirectory) };
+    std::vector<std::string> readOnlyDirectories { makeAbsolutePath(DefaultTessDataDirectory),
+                                                   makeAbsolutePath(SignatureFontDirectory) };
     auto options = makeWorkerOptions();
     cxxopts::ParseResult result;
     try {
@@ -149,7 +151,7 @@ int main(int argc, char* argv[])
         }
         if (result.count("tessdata-dir")) {
             for (const auto& directory : result["tessdata-dir"].as<std::vector<std::string>>())
-                appendUniquePath(tessDataDirectories, makeAbsolutePath(directory));
+                appendUniquePath(readOnlyDirectories, makeAbsolutePath(directory));
         }
         if (result.count("sandbox-check")) {
             if (result.count("sandbox-check") > 1)
@@ -165,7 +167,7 @@ int main(int argc, char* argv[])
             // Preserve output for the report even in Release, which redirects
             // and closes nonessential inherited descriptors.
             const std::vector<int> preserve { STDOUT_FILENO, STDERR_FILENO };
-            const auto status = ::Mu::Worker::Sandbox::activate(tessDataDirectories, preserve);
+            const auto status = ::Mu::Worker::Sandbox::activate(readOnlyDirectories, preserve);
             if (json)
                 printSandboxStatusJson(status);
             else
@@ -209,11 +211,12 @@ int main(int argc, char* argv[])
     }
 
     // Step 4: Activate namespaces, resource limits, Landlock, and Seccomp.
-    // Landlock leaves read-only access to the configured tessdata directories for
-    // Tesseract. Document and output access instead use descriptors transferred
-    // over the FD channel; Seccomp prevents creating new filesystem or network endpoints.
+    // Landlock allows read-only access to configured Tesseract data and the
+    // bundled signature font. Document and output access use descriptors
+    // transferred over the FD channel; Seccomp prevents creating new filesystem
+    // or network endpoints.
     const std::vector<int> preservedFds = { fdChannel.fd(), server.controlSocketFd() };
-    const auto sandbox = ::Mu::Worker::Sandbox::activate(tessDataDirectories, preservedFds);
+    const auto sandbox = ::Mu::Worker::Sandbox::activate(readOnlyDirectories, preservedFds);
     server.setSandboxStatus(sandbox);
 
     // Best-effort sandboxing is intentional: worker availability is preferred

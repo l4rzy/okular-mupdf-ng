@@ -3,6 +3,7 @@
 
 #include "generator/config/signature_preview.hpp"
 
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QLatin1String>
 #include <QPainter>
@@ -12,6 +13,22 @@
 #include "plugin/util/signing_timestamp.hpp"
 
 namespace Mu::Generator::Config {
+namespace {
+
+QString loadSignatureFont()
+{
+    static const QString family = [] {
+        const int fontId =
+            QFontDatabase::addApplicationFont(QString::fromUtf8(SIGNATURE_FONT_DIR "/Allura-Regular.ttf"));
+        if (fontId < 0)
+            return QString { };
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        return families.isEmpty() ? QString { } : families.front();
+    }();
+    return family;
+}
+
+} // namespace
 
 SignaturePreview buildSignaturePreview(bool simple, bool useUtc, const QDateTime& now)
 {
@@ -45,16 +62,28 @@ QImage renderSignaturePreview(const SignaturePreview& preview, const QFont& font
     const qsizetype lineCount = std::max<qsizetype>(preview.rightLines.size(), 1);
 
     QFont leftFont(font);
-    leftFont.setBold(true);
+    const QString scriptFamily = loadSignatureFont();
+    if (scriptFamily.isEmpty())
+        leftFont.setBold(true);
+    else {
+        leftFont.setFamily(scriptFamily);
+        leftFont.setBold(false);
+    }
     if (leftFont.pointSizeF() > 0)
-        leftFont.setPointSizeF(leftFont.pointSizeF() * 1.3);
+        leftFont.setPointSizeF(leftFont.pointSizeF() * 1.5);
     else if (leftFont.pixelSize() > 0)
-        leftFont.setPixelSize(static_cast<int>(leftFont.pixelSize() * 1.3));
+        leftFont.setPixelSize(static_cast<int>(leftFont.pixelSize() * 1.5));
     const QFontMetrics leftMetrics(leftFont);
-    const int leftWidth = preview.leftText.isEmpty() ? 0 : leftMetrics.horizontalAdvance(preview.leftText);
+    const QRect leftInkBounds = leftMetrics.boundingRect(preview.leftText);
+    const int leftMinX = std::min(0, leftInkBounds.left());
+    const int leftMaxX = std::max(leftMetrics.horizontalAdvance(preview.leftText), leftInkBounds.right() + 1);
+    const int leftWidth = preview.leftText.isEmpty() ? 0 : leftMaxX - leftMinX;
+    const int rightHeight = lineHeight * static_cast<int>(lineCount);
+    const int leftHeight = preview.leftText.isEmpty() ? 0 : leftInkBounds.height();
+    const int contentHeight = std::max(rightHeight, leftHeight);
     const int panesWidth = leftWidth > 0 ? leftWidth + paneGap + rightWidth : rightWidth;
 
-    const QSize logicalSize(panesWidth + 2 * padding + 2, static_cast<int>(lineHeight * lineCount + 2 * padding + 2));
+    const QSize logicalSize(panesWidth + 2 * padding + 2, contentHeight + 2 * padding + 2);
 
     const qreal ratio = devicePixelRatio > 0 ? devicePixelRatio : 1;
     QImage image((logicalSize.toSizeF() * ratio).toSize(), QImage::Format_RGB32);
@@ -66,11 +95,11 @@ QImage renderSignaturePreview(const SignaturePreview& preview, const QFont& font
     painter.setPen(Qt::black);
     if (leftWidth > 0) {
         painter.setFont(leftFont);
-        const int textTop = padding + (logicalSize.height() - 2 * padding - leftMetrics.height()) / 2;
-        painter.drawText(padding, textTop + leftMetrics.ascent(), preview.leftText);
+        const int leftBaseline = padding + (contentHeight - leftHeight) / 2 - leftInkBounds.top();
+        painter.drawText(padding - leftMinX, leftBaseline, preview.leftText);
     }
     painter.setFont(font);
-    int baseline = padding + metrics.ascent();
+    int baseline = padding + (contentHeight - rightHeight) / 2 + metrics.ascent();
     const int rightLeft = padding + (leftWidth > 0 ? leftWidth + paneGap : 0);
     for (const QString& line : preview.rightLines) {
         painter.drawText(rightLeft, baseline, line);

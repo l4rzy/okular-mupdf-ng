@@ -39,7 +39,7 @@ using CmsCallback =
  * 3. The isolated worker process never has direct access to user private keys or PKCS#11 tokens.
  *
  * @param nickname Certificate nickname identifying the signing identity.
- * @param subjectCommonName Common Name (CN) displayed on the visual signature line.
+ * @param subjectCommonName Common Name (CN) displayed in the visual signature.
  * @param callback Callback invoked when the digest is ready for PKCS#7 / CMS signing.
  * @return Heap-allocated `pdf_pkcs7_signer` pointer owned and reference-counted by MuPDF.
  */

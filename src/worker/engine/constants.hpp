@@ -52,6 +52,7 @@ inline constexpr std::size_t MaxEmbeddedBytes = 16U * 1024U * 1024U;
 inline constexpr int MaxEmbeddedTreeDepth = 32;
 
 // --- PDF Annotations & Signatures ---
+inline constexpr const char* SignatureAppearanceFontFileName = "Allura-Regular.ttf";
 inline constexpr int MaxAnnotationGeometryPoints = 4'096;
 inline constexpr std::size_t MaxPageAnnotations = 100'000;
 inline constexpr std::size_t MaxPageSignatures = 100'000;

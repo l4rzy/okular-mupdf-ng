@@ -102,6 +102,8 @@ jobs:
           dpkg-deb --contents "$package" | grep -q '/mupdfngsettings\.kcfg$'
           dpkg-deb --contents "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
           dpkg-deb --contents "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
+          dpkg-deb --contents "$package" | grep -q '/share/okular-mupdf-ng/Allura-Regular\.ttf$'
+          dpkg-deb --contents "$package" | grep -q '/doc/okular-mupdf-ng/Allura-OFL\.txt$'
           dpkg-deb --info "$package"
 
       - name: Upload Debian package

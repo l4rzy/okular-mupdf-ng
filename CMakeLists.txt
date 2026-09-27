@@ -58,6 +58,8 @@ endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mupdf.cmake")
 
 set(TESSDATA_DIR "/usr/share/tessdata" CACHE PATH "Path to tesseract tessdata directory")
+set(SIGNATURE_FONT_DIR "${CMAKE_INSTALL_FULL_DATADIR}/okular-mupdf-ng" CACHE PATH
+    "Directory containing the bundled signature font")
 
 find_package(Okular6 REQUIRED)
 find_package(Threads REQUIRED)
@@ -108,6 +110,13 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.png"
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME copyright)
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/allura/Allura-Regular.ttf"
+    DESTINATION "${SIGNATURE_FONT_DIR}")
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/allura/OFL.txt"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
+    RENAME Allura-OFL.txt)
 
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -117,6 +126,7 @@ message(STATUS "Mu debug diagnostics: ${MU_DEBUG_BUILD}")
 message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
 message(STATUS "Build-tree worker: ${ENABLE_BUILD_TREE_WORKER}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
+message(STATUS "Signature font directory: ${SIGNATURE_FONT_DIR}")
 message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
 # BUILD_TESTING is defined by ECM's KDECMakeSettings (default ON).
 if(BUILD_TESTING)

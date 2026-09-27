@@ -136,8 +136,8 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
     };
 
     // All configured directories are optional read-only exceptions. Missing
-    // entries are skipped so a host without tessdata still gets Landlock
-    // enforced with zero path exceptions (strictest posture).
+    // entries are skipped so Landlock still applies on hosts without optional
+    // runtime data directories.
     std::size_t addedRules = 0;
     for (const auto& directory : readOnlyDirectories) {
         if (directory.empty())
@@ -146,9 +146,9 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
             ++addedRules;
     }
     if (addedRules == 0)
-        recordIssue(status, "no tessdata directories available; Landlock enforced without read exceptions");
+        recordIssue(status, "no read-only directories available; Landlock enforced without read exceptions");
 
-    // Enforce the ruleset only after every permitted tessdata directory has been added.
+    // Enforce the ruleset only after every configured read-only directory has been added.
     bool success = true;
     if (static_cast<int>(::syscall(SYS_landlock_restrict_self, rulesetFd, 0)) < 0) {
         recordErrno(status, "Landlock activation failed");

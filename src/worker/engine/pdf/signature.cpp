@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <ctime>
 #include <optional>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -83,6 +84,95 @@ void clearSignatureMutation(fz_context* context, pdf_page* page, pdf_annot* widg
 bool hasElement(std::uint8_t elements, SignatureElement element)
 {
     return (elements & static_cast<std::uint8_t>(element)) != 0;
+}
+
+fz_display_list* signatureAppearanceWithCustomFont(fz_context* context,
+                                                   fz_rect rectangle,
+                                                   fz_text_language language,
+                                                   const char* nickname,
+                                                   const char* rightText,
+                                                   int includeLogo)
+{
+    const std::string fontPath = std::string(SIGNATURE_FONT_DIR) + '/' + Constant::SignatureAppearanceFontFileName;
+    fz_font* font = nullptr;
+    bool fontLoaded = false;
+    fz_var(font);
+    fz_var(fontLoaded);
+    fz_try(context)
+    {
+        font = fz_new_font_from_file(context, "Allura", fontPath.c_str(), 0, 0);
+        fontLoaded = font != nullptr;
+    }
+    fz_catch(context)
+    {
+        fontLoaded = false;
+    }
+    if (!fontLoaded) {
+        fz_drop_font(context, font);
+        return pdf_signature_appearance_signed(context, rectangle, language, nullptr, nickname, rightText, includeLogo);
+    }
+    fz_set_font_embedding(context, font, 1);
+
+    fz_display_list* baseAppearance = nullptr;
+    fz_display_list* appearance = nullptr;
+    fz_device* device = nullptr;
+    fz_text* text = nullptr;
+    fz_colorspace* colorspace = nullptr;
+    fz_var(baseAppearance);
+    fz_var(appearance);
+    fz_var(device);
+    fz_var(text);
+    fz_try(context)
+    {
+        // A blank left-side string makes MuPDF reserve the same two-pane layout
+        // as its built-in name renderer without drawing Helvetica over Allura.
+        baseAppearance =
+            pdf_signature_appearance_signed(context, rectangle, language, nullptr, " ", rightText, includeLogo);
+        appearance = fz_new_display_list(context, rectangle);
+        device = fz_new_list_device(context, appearance);
+        fz_run_display_list(context, baseAppearance, device, fz_identity, rectangle, nullptr);
+
+        fz_rect nameRectangle = rectangle;
+        if (rightText)
+            nameRectangle.x1 = (nameRectangle.x0 + nameRectangle.x1) / 2.0f;
+        const float sidePadding = std::min(2.0f, (nameRectangle.x1 - nameRectangle.x0) * 0.05f);
+        nameRectangle.x0 += sidePadding;
+        nameRectangle.x1 -= sidePadding;
+        text = pdf_layout_fit_text(context, font, language, nickname, nameRectangle);
+        const fz_rect textBounds = fz_bound_text(context, text, nullptr, fz_identity);
+        const float textWidth = textBounds.x1 - textBounds.x0;
+        const float textHeight = textBounds.y1 - textBounds.y0;
+        const float availableWidth = nameRectangle.x1 - nameRectangle.x0;
+        const float availableHeight = std::max(1.0f, rectangle.y1 - rectangle.y0 - 2.0f);
+        constexpr float preferredScale = 1.35f;
+        float scale = preferredScale;
+        if (textWidth > 0.0f)
+            scale = std::min(scale, availableWidth / textWidth);
+        if (textHeight > 0.0f)
+            scale = std::min(scale, availableHeight / textHeight);
+        const float textCenterY = (textBounds.y0 + textBounds.y1) / 2.0f;
+        const float rectangleCenterY = (rectangle.y0 + rectangle.y1) / 2.0f;
+        const fz_matrix textTransform {
+            scale, 0.0f, 0.0f, scale, nameRectangle.x0 - textBounds.x0 * scale, rectangleCenterY - textCenterY * scale
+        };
+        colorspace = fz_device_rgb(context);
+        constexpr float black[] = { 0.0f, 0.0f, 0.0f };
+        fz_fill_text(context, device, text, textTransform, colorspace, black, 1.0f, fz_default_color_params);
+        fz_close_device(context, device);
+    }
+    fz_always(context)
+    {
+        fz_drop_device(context, device);
+        fz_drop_text(context, text);
+        fz_drop_font(context, font);
+        fz_drop_display_list(context, baseAppearance);
+    }
+    fz_catch(context)
+    {
+        fz_drop_display_list(context, appearance);
+        fz_rethrow(context);
+    }
+    return appearance;
 }
 
 std::optional<SignatureField> extractSignatureField(fz_context* context,
@@ -423,8 +513,8 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         // ISO-8601 timestamp and always renders every element.
         const char* reason = request.appearance.reason.empty() ? nullptr : request.appearance.reason.c_str();
         const char* location = request.appearance.location.empty() ? nullptr : request.appearance.location.c_str();
-        const char* signerCn =
-            request.certificateSubjectCommonName.empty() ? nullptr : request.certificateSubjectCommonName.c_str();
+        const char* signerNickname =
+            request.certificateNickname.empty() ? nullptr : request.certificateNickname.c_str();
 
         fz_try(m_context)
         {
@@ -439,7 +529,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                 // date -1 suppresses MuPDF's ISO date line; the friendly date is appended below.
                 info = pdf_signature_info(
                     m_context,
-                    hasElement(request.appearance.elements, SignatureElement::TextName) ? signerCn : nullptr,
+                    hasElement(request.appearance.elements, SignatureElement::TextName) ? signerNickname : nullptr,
                     hasElement(request.appearance.elements, SignatureElement::DistinguishedName) ? dn : nullptr,
                     reason,
                     location,
@@ -466,7 +556,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                         pdf_signature_appearance_signed(m_context, rect, lang, graphic, nullptr, appearanceText, logo);
                 else if (hasElement(request.appearance.elements, SignatureElement::GraphicName))
                     dlist =
-                        pdf_signature_appearance_signed(m_context, rect, lang, nullptr, signerCn, appearanceText, logo);
+                        signatureAppearanceWithCustomFont(m_context, rect, lang, signerNickname, appearanceText, logo);
                 else
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, nullptr, nullptr, appearanceText, logo);

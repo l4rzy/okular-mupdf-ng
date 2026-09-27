@@ -31,7 +31,6 @@ conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 source=("$_pkgname::git+file://$startdir/..")
 sha256sums=('SKIP')
 _PREFIX="${PREFIX:-/usr}"
-_mupdf_min_ver="1.28.0"
 
 pkgver() {
   local json_file="$srcdir/$_pkgname/src/generator/manifest.json"
@@ -76,7 +75,6 @@ build() {
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DCMAKE_LINKER_TYPE=MOLD \
     -DUSE_SYSTEM_MUPDF=ON \
-    -DMUPDF_SYSTEM_MIN_VERSION=$_mupdf_min_ver \
     -DBUILD_TESTING=ON
   cmake --build "$_builddir"
   ctest --test-dir "$_builddir" --output-on-failure
@@ -89,6 +87,10 @@ check() {
   # stages were produced.
   test -f "$srcdir/stage-static/${_PREFIX#/}/lib/okular-mupdf-ng/okular-mupdf-worker" \
     && test -f "$srcdir/stage-dynamic/${_PREFIX#/}/lib/okular-mupdf-ng/okular-mupdf-worker"
+  test -f "$srcdir/stage-static/${_PREFIX#/}/share/okular-mupdf-ng/Allura-Regular.ttf" \
+    && test -f "$srcdir/stage-static/${_PREFIX#/}/share/doc/okular-mupdf-ng/Allura-OFL.txt"
+  test -f "$srcdir/stage-dynamic/${_PREFIX#/}/share/okular-mupdf-ng/Allura-Regular.ttf" \
+    && test -f "$srcdir/stage-dynamic/${_PREFIX#/}/share/doc/okular-mupdf-ng/Allura-OFL.txt"
 }
 
 package_okular-mupdf-ng() {

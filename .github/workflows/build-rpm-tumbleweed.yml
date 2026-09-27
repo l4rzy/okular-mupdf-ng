@@ -116,6 +116,8 @@ jobs:
           rpm --list -qp "$package" | grep -q '/mupdfngsettings\.kcfg$'
           rpm --list -qp "$package" | grep -q '/icons/hicolor/512x512/apps/mupdfng\.png$'
           rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
+          rpm --list -qp "$package" | grep -q '/share/okular-mupdf-ng/Allura-Regular\.ttf$'
+          rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/Allura-OFL\.txt$'
           rpm --checksig "$package"
           rpm --info -qp "$package"
 

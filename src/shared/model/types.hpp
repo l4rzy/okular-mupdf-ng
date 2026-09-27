@@ -878,7 +878,7 @@ enum class SignatureElement : std::uint8_t {
     Labels = 1 << 0, // "Digitally signed by", "DN:", "Date:" prefixes
     DistinguishedName = 1 << 1,
     Date = 1 << 2,
-    TextName = 1 << 3, // signer common name as a text line
+    TextName = 1 << 3, // signer nickname as a text line
     GraphicName = 1 << 4, // signer common name as the left graphic text
     Logo = 1 << 5,
 };

@@ -2,7 +2,7 @@
 pkgbase=okular-mupdf-ng-git
 pkgname=okular-mupdf-ng-git
 _pkgname=okular-mupdf-ng
-pkgver=0.2.0.r0.gdf11ffe
+pkgver=0.2.11.r7.gd44c4cd
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation) - git"
 arch=('x86_64')
@@ -29,7 +29,6 @@ build() {
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DUSE_SYSTEM_MUPDF=ON \
-    -DMUPDF_SYSTEM_MIN_VERSION=1.28.0 \
     -DBUILD_TESTING=ON
   cmake --build "build"
 }

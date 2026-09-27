@@ -79,7 +79,7 @@ private slots:
         const QImage twoPane = renderSignaturePreview({ QStringLiteral("Jane Doe"), lines }, font, 1.0);
 
         QVERIFY(!twoPane.isNull());
-        QCOMPARE(twoPane.height(), single.height());
+        QVERIFY(twoPane.height() >= single.height());
         QVERIFY(twoPane.width() > single.width());
         QCOMPARE(twoPane.pixelColor(0, 0), QColor(0x9a, 0x9a, 0x9a));
         QCOMPARE(twoPane.pixelColor(5, 5), QColor(Qt::white));
