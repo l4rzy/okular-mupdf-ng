@@ -5,12 +5,9 @@
 #ifndef MU_GENERATOR_MUPDFNG_HPP
 #define MU_GENERATOR_MUPDFNG_HPP
 
-#include <okular/core/action.h>
-#include <okular/core/area.h>
 #include <okular/core/document.h>
 #include <okular/core/fontinfo.h>
 #include <okular/core/generator.h>
-#include <okular/core/sourcereference.h>
 #include <okular/core/version.h>
 #include <okular/interfaces/configinterface.h>
 #include <okular/interfaces/printinterface.h>
@@ -239,13 +236,12 @@ private:
     // sent to the already-sandboxed worker).
     Config::WorkerSettings m_settings;
     // Opaque page background requested by Okular (paper-color setting).
-    std::uint32_t m_paperColorRgb = 0xFFFFFF;
+    static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
+    std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;
 
-    // Restart decision state: whether pending settings need an Okular
-    // restart, and whether the one-shot dialog notice was already shown.
+    // Restart decision state: whether pending settings need an Okular restart.
     struct RestartState {
         bool required = false;
-        bool noticeShown = false;
     };
 
     RestartState m_restartState;

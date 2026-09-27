@@ -18,6 +18,8 @@
 #include <QRegularExpressionValidator>
 #include <QVBoxLayout>
 
+#include <KLocalizedString>
+
 #include <utility>
 
 namespace Mu::Generator {
@@ -36,17 +38,17 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     , m_databasePath(std::move(databasePath))
 {
     // Step 1: Collect the subject identity fields used to construct the cert.
-    setWindowTitle(CertificateManager::dialogTitle(tr("Create Self-Signed Certificate"), m_databasePath));
+    setWindowTitle(CertificateManager::dialogTitle(i18n("Create Self-Signed Certificate"), m_databasePath));
 
-    auto* subjectGroup = new QGroupBox(tr("Certificate identity"), this);
+    auto* subjectGroup = new QGroupBox(i18n("Certificate identity"), this);
     auto* subjectForm = new QFormLayout(subjectGroup);
-    subjectForm->addRow(tr("Nickname:"), m_nickname);
-    subjectForm->addRow(tr("Common Name:"), m_commonName);
-    subjectForm->addRow(tr("Organization:"), m_organization);
-    subjectForm->addRow(tr("Organizational Unit:"), m_organizationalUnit);
-    subjectForm->addRow(tr("Locality:"), m_locality);
-    subjectForm->addRow(tr("State or Province:"), m_state);
-    subjectForm->addRow(tr("Country (2 letters):"), m_country);
+    subjectForm->addRow(i18n("Nickname:"), m_nickname);
+    subjectForm->addRow(i18n("Common Name:"), m_commonName);
+    subjectForm->addRow(i18n("Organization:"), m_organization);
+    subjectForm->addRow(i18n("Organizational Unit:"), m_organizationalUnit);
+    subjectForm->addRow(i18n("Locality:"), m_locality);
+    subjectForm->addRow(i18n("State or Province:"), m_state);
+    subjectForm->addRow(i18n("Country (2 letters):"), m_country);
     for (auto* field : { m_nickname, m_commonName, m_organization, m_organizationalUnit, m_locality, m_state })
         field->setMaxLength(256);
     m_nickname->setMaxLength(128);
@@ -55,7 +57,7 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     m_country->setValidator(
         new QRegularExpressionValidator(QRegularExpression(QStringLiteral("[A-Za-z]{0,2}")), m_country));
 
-    auto* validityGroup = new QGroupBox(tr("Validity and key"), this);
+    auto* validityGroup = new QGroupBox(i18n("Validity and key"), this);
     auto* validityForm = new QFormLayout(validityGroup);
     m_validFrom->setCalendarPopup(true);
     m_validUntil->setCalendarPopup(true);
@@ -80,12 +82,12 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
         validityForm->addRow(row);
     };
 
-    addValueRow(tr("Valid from:"), m_validFrom);
-    addValueRow(tr("Valid until:"), m_validUntil);
-    addValueRow(tr("Signing key:"), new QLabel(tr("RSA 2048"), validityGroup));
+    addValueRow(i18n("Valid from:"), m_validFrom);
+    addValueRow(i18n("Valid until:"), m_validUntil);
+    addValueRow(i18n("Signing key:"), new QLabel(i18n("RSA 2048"), validityGroup));
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    buttons->button(QDialogButtonBox::Ok)->setText(tr("Create"));
+    buttons->button(QDialogButtonBox::Ok)->setText(i18n("Create"));
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 

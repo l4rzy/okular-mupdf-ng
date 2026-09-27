@@ -10,7 +10,6 @@
 #include <QTimeZone>
 #include <QUrl>
 
-#include <array>
 #include <functional>
 #include <limits>
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #ifndef MU_GENERATOR_CONFIG_SETTINGSWIDGET_HPP
 #define MU_GENERATOR_CONFIG_SETTINGSWIDGET_HPP
 

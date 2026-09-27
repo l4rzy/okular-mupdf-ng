@@ -10,7 +10,6 @@
 
 #include <KConfigDialog>
 #include <KLocalizedString>
-#include <KMessageBox>
 #include <KPluginFactory>
 #include <QBuffer>
 #include <QCoreApplication>
@@ -23,7 +22,6 @@
 #include <QMimeType>
 #include <QMutexLocker>
 #include <QPageLayout>
-#include <QPainter>
 #include <QPointer>
 #include <QPrinter>
 #include <QRunnable>
@@ -64,6 +62,20 @@
 K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "manifest.json")
 
 namespace Mu::Generator {
+
+namespace {
+
+// Okular notification durations in milliseconds. Positive values are the
+// on-screen timeout; a negative value asks Okular to derive the timeout from
+// the message length.
+constexpr int AutoDurationMs = -1;
+constexpr int ShortNoticeMs = 1500;
+constexpr int BriefNoticeMs = 2000;
+constexpr int NoticeMs = 3000;
+constexpr int WarningMs = 5000;
+constexpr int LongWarningMs = 10000;
+
+} // namespace
 
 // Okular Generator Func: creates the generator and initializes worker services.
 Main::Main(QObject* parent, const QVariantList& args)
@@ -136,7 +148,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                       "The document renderer stopped while unsaved form changes were present. Those changes were lost.")
                 : i18n("The document renderer stopped while unsaved annotation changes were present. Those changes "
                        "were lost.");
-            Q_EMIT warning(message, 10000);
+            Q_EMIT warning(message, LongWarningMs);
             m_formsDirty = false;
             m_annotationsDirty = false;
         }
@@ -203,10 +215,10 @@ Main::Main(QObject* parent, const QVariantList& args)
             Q_UNUSED(jobId);
             if (!success) {
                 MU_LOG(warning, "Mu::Generator::Main", std::string("PDF export failed: ") + error.toStdString());
-                Q_EMIT warning(i18n("Export to PDF failed: %1", error), 10000);
+                Q_EMIT warning(i18n("Export to PDF failed: %1", error), LongWarningMs);
             } else {
                 MU_LOG(debug, "Mu::Generator::Main", "PDF export completed");
-                Q_EMIT notice(i18n("Export to PDF finished."), 3000);
+                Q_EMIT notice(i18n("Export to PDF finished."), NoticeMs);
             }
         },
         Qt::QueuedConnection);
@@ -223,18 +235,18 @@ Main::Main(QObject* parent, const QVariantList& args)
                 Q_EMIT signalTextGenerationDone(m_okularPages.at(page), textPage);
                 if (Config::readOcrSettings().notify
                     && source == Plugin::OCR::Controller::CompletionSource::OcrCompleted) {
-                    Q_EMIT notice(i18n("OCR completed for page %1", page + 1), 1500);
+                    Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
                 }
             });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::started, this, [this](int page) {
         if (Config::readOcrSettings().notify)
-            Q_EMIT notice(i18n("Running OCR on page %1...", page + 1), 2000);
+            Q_EMIT notice(i18n("Running OCR on page %1...", page + 1), BriefNoticeMs);
     });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::failed, this, [this](int page) {
         MU_LOG(warning, "Mu::Generator::Main", std::string("OCR failed for page ") + std::to_string(page + 1));
-        Q_EMIT warning(i18n("OCR failed for page %1", page + 1), 5000);
+        Q_EMIT warning(i18n("OCR failed for page %1", page + 1), WarningMs);
     });
-    MU_LOG(debug, "Main::Main", "Scheduling cache vacuum");
+    MU_LOG(debug, "Mu::Generator::Main", "Scheduling cache vacuum");
     scheduleCacheVacuum();
 }
 
@@ -288,8 +300,8 @@ Main::~Main()
 void Main::refreshPaperColor()
 {
     const QColor color = documentMetaData(Okular::Generator::PaperColorMetaData, true).value<QColor>();
-    m_paperColorRgb =
-        color.isValid() ? static_cast<std::uint32_t>(qRgb(color.red(), color.green(), color.blue())) : 0xFFFFFFu;
+    m_paperColorRgb = color.isValid() ? static_cast<std::uint32_t>(qRgb(color.red(), color.green(), color.blue()))
+                                      : DefaultPaperColorRgb;
 }
 
 // Okular Generator Func: reloads settings and sends rendering changes to the worker.
@@ -610,16 +622,16 @@ void Main::warnIfRepairedDocument(const Model::DocumentMetadata& info)
     if (repaired == info.values.end() || repaired->second != "true")
         return;
     Q_EMIT warning(
-        i18n("Some errors were found in the document, Okular might not be able to show the content correctly"), 5000);
+        i18n("Some errors were found in the document, Okular might not be able to show the content correctly"),
+        WarningMs);
 }
 
-// Reports a degraded worker sandbox once per opened document. The banner is
-// sticky (duration 0) because the degraded state persists for the session;
-// Okular offers no banner retraction when the preference flips off mid-session.
+// Reports a degraded worker sandbox once per opened document. The banner uses a
+// long timeout because the degraded state persists for the session; Okular
+// offers no banner retraction when the preference flips off mid-session.
 void Main::notifyDegradedSandbox()
 {
     auto sandboxStatus = m_worker.sandboxStatus();
-    const QString reason = QString::fromStdString(sandboxStatus.reason);
 
     auto warningMessage = [sandboxStatus]() {
         if (sandboxStatus.isPartiallyActive())
@@ -629,8 +641,7 @@ void Main::notifyDegradedSandbox()
     };
 
     if (Config::readDegradedSandboxNotificationEnabled() && !sandboxStatus.isFullyHardened())
-        Q_EMIT warning(warningMessage(), 10000);
-    return;
+        Q_EMIT warning(warningMessage(), LongWarningMs);
 }
 
 // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
@@ -780,7 +791,7 @@ void Main::reopenWithheldDocumentInternal()
     const QUrl url = doc->currentDocument();
     if (!url.isLocalFile()) {
         MU_LOG(warning, "Mu::Generator::Main", "cannot auto-reopen a document without a local file");
-        Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), -1);
+        Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), AutoDurationMs);
         notifyDegradedSandbox();
         return;
     }
@@ -1325,7 +1336,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
         // input descriptor the job needs; fall back to the synchronous path.
         if (m_document.sourcePath.isEmpty())
             return m_worker.savePdfToFile(fileName, { }, true);
-        Q_EMIT notice(i18n("Starting to export to PDF."), 3000);
+        Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
         return m_worker.startPdfExport(fileName, { }).has_value();
     }
 

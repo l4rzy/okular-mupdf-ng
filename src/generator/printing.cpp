@@ -47,7 +47,9 @@ bool PrintOptionsPage::ignorePrintMargins() const
 
 PrintScaleMode PrintOptionsPage::scaleMode() const
 {
-    return m_scaleMode->currentData().value<PrintScaleMode>();
+    // Items store the enum as int (see the insertItem calls); convert explicitly
+    // instead of relying on an implicit QVariant int-to-enum conversion.
+    return static_cast<PrintScaleMode>(m_scaleMode->currentData().toInt());
 }
 
 void PrintOptionsPage::setScaleMode(PrintScaleMode mode)

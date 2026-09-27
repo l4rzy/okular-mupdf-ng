@@ -17,6 +17,8 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 
+#include <KLocalizedString>
+
 #include <utility>
 
 #include "dialog_utils.hpp"
@@ -31,7 +33,7 @@ QString formatDate(const Model::Timestamp& timestamp)
 {
     // NSS can omit validity metadata; avoid presenting an epoch date as real.
     if (!timestamp.valid)
-        return QObject::tr("Unknown");
+        return i18n("Unknown");
     return QDateTime::fromMSecsSinceEpoch(timestamp.unixMilliseconds).toString(Qt::ISODate);
 }
 
@@ -47,18 +49,22 @@ QString certificateName(const Model::Certificate& certificate)
 CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget* parent)
     : QDialog(parent)
     , m_table(new QTableWidget(this))
-    , m_addButton(new QPushButton(tr("Add Certificate"), this))
-    , m_deleteButton(new QPushButton(tr("Delete Selected"), this))
-    , m_closeButton(new QPushButton(tr("Close"), this))
+    , m_addButton(new QPushButton(i18n("Add Certificate"), this))
+    , m_deleteButton(new QPushButton(i18n("Delete Selected"), this))
+    , m_closeButton(new QPushButton(i18n("Close"), this))
     , m_databasePath(std::move(databasePath))
 {
     // Step 1: Build a read-only table; all edits are explicit button actions.
-    setWindowTitle(CertificateManager::dialogTitle(tr("Manage NSS Certificates"), m_databasePath));
+    setWindowTitle(CertificateManager::dialogTitle(i18n("Manage NSS Certificates"), m_databasePath));
     resize(760, 420);
 
     m_table->setColumnCount(6);
-    m_table->setHorizontalHeaderLabels(
-        { tr("Nickname"), tr("Subject"), tr("Issuer"), tr("Algorithm"), tr("Valid From"), tr("Valid Until") });
+    m_table->setHorizontalHeaderLabels({ i18n("Nickname"),
+                                         i18n("Subject"),
+                                         i18n("Issuer"),
+                                         i18n("Algorithm"),
+                                         i18n("Valid From"),
+                                         i18n("Valid Until") });
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -72,7 +78,7 @@ CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget
     buttons->addWidget(m_closeButton);
 
     auto* layout = new QVBoxLayout(this);
-    layout->addWidget(new QLabel(tr("Signing certificates in this NSS database:"), this));
+    layout->addWidget(new QLabel(i18n("Signing certificates in this NSS database:"), this));
     layout->addWidget(m_table);
     layout->addLayout(buttons);
 
@@ -101,7 +107,7 @@ void CertificateManagerDialog::refreshCertificates()
         m_table->clearContents();
         m_table->setRowCount(0);
         m_deleteButton->setEnabled(false);
-        showWarning(tr("Certificate Database"), error);
+        showWarning(i18n("Certificate Database"), error);
         return;
     }
     m_table->setRowCount(static_cast<int>(m_certificates.size()));
@@ -111,7 +117,7 @@ void CertificateManagerDialog::refreshCertificates()
         const QStringList values { certificateName(certificate),
                                    QString::fromStdString(certificate.subjectCommonName),
                                    QString::fromStdString(certificate.issuerCommonName),
-                                   algorithm.isEmpty() ? tr("Unknown") : algorithm,
+                                   algorithm.isEmpty() ? i18n("Unknown") : algorithm,
                                    formatDate(certificate.validityStart),
                                    formatDate(certificate.validityEnd) };
         for (int column = 0; column < values.size(); ++column)
@@ -132,9 +138,9 @@ void CertificateManagerDialog::addCertificate()
     // Keep the menu at the add button so all creation paths share one entry
     // point while retaining their distinct input formats.
     QMenu menu(this);
-    QAction* fileAction = menu.addAction(tr("Import from File..."));
-    QAction* pasteAction = menu.addAction(tr("Paste PEM Certificate..."));
-    QAction* selfSignedAction = menu.addAction(tr("Create Self-Signed Certificate..."));
+    QAction* fileAction = menu.addAction(i18n("Import from File..."));
+    QAction* pasteAction = menu.addAction(i18n("Paste PEM Certificate..."));
+    QAction* selfSignedAction = menu.addAction(i18n("Create Self-Signed Certificate..."));
     QAction* selected = menu.exec(m_addButton->mapToGlobal(QPoint(0, m_addButton->height())));
     if (!selected)
         return;
@@ -160,7 +166,7 @@ void CertificateManagerDialog::createSelfSignedCertificate()
     QString error;
     if (!Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(
             m_databasePath, dialog.certificateOptions(), &error)) {
-        showWarning(tr("Create Certificate"), error);
+        showWarning(i18n("Create Certificate"), error);
         return;
     }
     refreshCertificates();
@@ -172,19 +178,19 @@ void CertificateManagerDialog::importCertificateFile()
     // selected extension determines whether a PKCS#12 password is required.
     const QString path =
         QFileDialog::getOpenFileName(this,
-                                     CertificateManager::dialogTitle(tr("Import Certificate"), m_databasePath),
+                                     CertificateManager::dialogTitle(i18n("Import Certificate"), m_databasePath),
                                      { },
-                                     tr("PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"));
+                                     i18n("PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"));
     if (path.isEmpty())
         return;
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        showWarning(tr("Import Certificate"), file.errorString());
+        showWarning(i18n("Import Certificate"), file.errorString());
         return;
     }
     const QByteArray certificateData = file.readAll();
     if (file.error() != QFileDevice::NoError) {
-        showWarning(tr("Import Certificate"), file.errorString());
+        showWarning(i18n("Import Certificate"), file.errorString());
         return;
     }
     if (path.endsWith(QStringLiteral(".p12"), Qt::CaseInsensitive)
@@ -192,8 +198,8 @@ void CertificateManagerDialog::importCertificateFile()
         bool accepted = false;
         const QString password =
             QInputDialog::getText(this,
-                                  CertificateManager::dialogTitle(tr("PKCS#12 Password"), m_databasePath),
-                                  tr("Bundle password:"),
+                                  CertificateManager::dialogTitle(i18n("PKCS#12 Password"), m_databasePath),
+                                  i18n("Bundle password:"),
                                   QLineEdit::Password,
                                   { },
                                   &accepted);
@@ -201,7 +207,7 @@ void CertificateManagerDialog::importCertificateFile()
             return;
         QString error;
         if (!Plugin::Crypto::CertificateDatabase::importPkcs12(m_databasePath, certificateData, password, &error)) {
-            showWarning(tr("Import Certificate"), error);
+            showWarning(i18n("Import Certificate"), error);
             return;
         }
         refreshCertificates();
@@ -222,10 +228,10 @@ void CertificateManagerDialog::editCertificateData(const QByteArray& initialData
     // Keep the editor local to this operation; import happens only after the
     // user accepts the modal dialog.
     QDialog pasteDialog(this);
-    pasteDialog.setWindowTitle(CertificateManager::dialogTitle(tr("Paste PEM Certificate"), m_databasePath));
+    pasteDialog.setWindowTitle(CertificateManager::dialogTitle(i18n("Paste PEM Certificate"), m_databasePath));
     auto* layout = new QVBoxLayout(&pasteDialog);
     auto* editor = new QTextEdit(&pasteDialog);
-    editor->setPlaceholderText(tr("Paste a PEM certificate here..."));
+    editor->setPlaceholderText(i18n("Paste a PEM certificate here..."));
     if (!initialData.isEmpty())
         editor->setPlainText(QString::fromUtf8(initialData));
     layout->addWidget(editor);
@@ -242,15 +248,15 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& certifica
 {
     // Reject empty input before prompting for an NSS nickname.
     if (certificateData.isEmpty()) {
-        showWarning(tr("Import Certificate"), tr("The certificate data is empty"));
+        showWarning(i18n("Import Certificate"), i18n("The certificate data is empty"));
         return;
     }
 
     bool accepted = false;
     const QString nickname =
         QInputDialog::getText(this,
-                              CertificateManager::dialogTitle(tr("Certificate Nickname"), m_databasePath),
-                              tr("Nickname:"),
+                              CertificateManager::dialogTitle(i18n("Certificate Nickname"), m_databasePath),
+                              i18n("Nickname:"),
                               QLineEdit::Normal,
                               { },
                               &accepted);
@@ -261,7 +267,7 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& certifica
     // CertificateDatabase performs parsing and private-key checks; refresh only
     // after it reports a successful import.
     if (!Plugin::Crypto::CertificateDatabase::importCertificate(m_databasePath, certificateData, nickname, &error)) {
-        showWarning(tr("Import Certificate"), error);
+        showWarning(i18n("Import Certificate"), error);
         return;
     }
     refreshCertificates();
@@ -281,14 +287,14 @@ void CertificateManagerDialog::deleteSelectedCertificate()
     const auto& record = m_certificates.at(certificateIndex);
     const QString name = certificateName(record.certificate);
     if (QMessageBox::question(this,
-                              CertificateManager::dialogTitle(tr("Delete Certificate"), m_databasePath),
-                              tr("Delete certificate \"%1\" from the NSS database?").arg(name))
+                              CertificateManager::dialogTitle(i18n("Delete Certificate"), m_databasePath),
+                              i18n("Delete certificate \"%1\" from the NSS database?").arg(name))
         != QMessageBox::Yes)
         return;
 
     QString error;
     if (!Plugin::Crypto::CertificateDatabase::deleteCertificate(m_databasePath, record.identity, &error)) {
-        showWarning(tr("Delete Certificate"), error);
+        showWarning(i18n("Delete Certificate"), error);
         return;
     }
     refreshCertificates();
