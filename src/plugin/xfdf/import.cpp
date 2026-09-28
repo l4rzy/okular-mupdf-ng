@@ -82,8 +82,10 @@ void parseSinglePoint(QStringView text, double width, double height, std::vector
 GeometryParseStatus
 parsePointPairs(QStringView text, double width, double height, std::vector<Point>& out, std::size_t limit)
 {
-    if (text.isEmpty())
-        return GeometryParseStatus::Malformed;
+    // Absent geometry is valid (a metadata-only annotation); malformed content
+    // is not. Whitespace alone counts as absent for symmetry with coords.
+    if (text.trimmed().isEmpty())
+        return GeometryParseStatus::Complete;
     const QStringList pairs = text.toString().split(QLatin1Char(';'), Qt::KeepEmptyParts);
     for (const QString& pair : pairs) {
         if (out.size() >= limit)
@@ -107,8 +109,8 @@ parsePointPairs(QStringView text, double width, double height, std::vector<Point
 GeometryParseStatus
 parseCoordList(QStringView text, double width, double height, std::vector<Quad>& out, std::size_t limit)
 {
-    if (text.isEmpty())
-        return GeometryParseStatus::Malformed;
+    if (text.trimmed().isEmpty())
+        return GeometryParseStatus::Complete;
     const QStringList values = text.toString().split(QLatin1Char(','), Qt::KeepEmptyParts);
     qsizetype index = 0;
     while (index + 7 < values.size()) {
@@ -610,6 +612,9 @@ private:
             std::vector<Point> points;
             parseSinglePoint(entry.start, width, height, points);
             parseSinglePoint(entry.end, width, height, points);
+            // Unlike the branches below, endpoint-less lines stay rejected:
+            // the exporter cannot re-emit them, so accepting would only move
+            // the asymmetry.
             if (points.size() < 2) {
                 skip(QStringLiteral("line on page %1 has fewer than two endpoints").arg(entry.page));
                 return false;
@@ -623,16 +628,13 @@ private:
         }
         case AnnotationType::Polygon:
         case AnnotationType::PolyLine: {
+            // Empty vertices are accepted: the exporter re-emits them as an
+            // empty <vertices> element, so the round trip is stable.
             std::vector<Point> points;
             const GeometryParseStatus status =
                 parsePointPairs(entry.vertices, width, height, points, Limit::MaxAnnotationPoints);
-            const std::size_t minimum = subtype == AnnotationType::Polygon ? 3 : 2;
             if (status != GeometryParseStatus::Complete)
                 return rejectGeometry(status, QStringLiteral("polygon"));
-            if (points.size() < minimum) {
-                skip(QStringLiteral("polygon on page %1 has too few vertices").arg(entry.page));
-                return false;
-            }
             annotation.extras.points = std::move(points);
             break;
         }
@@ -640,35 +642,30 @@ private:
         case AnnotationType::Underline:
         case AnnotationType::Squiggly:
         case AnnotationType::StrikeOut: {
+            // Quad-less markup is accepted: the exporter re-emits the element
+            // without a coords attribute, so the round trip is stable.
             std::vector<Quad> quads;
             const GeometryParseStatus status =
                 parseCoordList(entry.coords, width, height, quads, Limit::MaxAnnotationQuads);
             if (status != GeometryParseStatus::Complete)
                 return rejectGeometry(status, QStringLiteral("highlight"));
-            if (quads.empty()) {
-                skip(QStringLiteral("highlight on page %1 has no quads").arg(entry.page));
-                return false;
-            }
             annotation.extras.quads = std::move(quads);
             break;
         }
         case AnnotationType::Ink: {
             if (entry.inkPathLimitExceeded)
                 return rejectGeometry(GeometryParseStatus::LimitExceeded, QStringLiteral("ink"));
-            if (entry.inkGestures.isEmpty()) {
-                skip(QStringLiteral("ink annotation on page %1 has no gestures").arg(entry.page));
-                return false;
-            }
+            // A missing ink list is accepted (a metadata-only annotation the
+            // exporter re-emits without <inklist>). Empty gestures are dropped
+            // rather than passed on, keeping the worker's ink call safely fed.
             std::size_t remaining = Limit::MaxAnnotationInkPoints;
             for (const QString& gesture : entry.inkGestures) {
                 std::vector<Point> path;
                 const GeometryParseStatus status = parsePointPairs(gesture, width, height, path, remaining);
                 if (status != GeometryParseStatus::Complete)
                     return rejectGeometry(status, QStringLiteral("ink"));
-                if (path.empty()) {
-                    skip(QStringLiteral("ink annotation on page %1 has an empty gesture").arg(entry.page));
-                    return false;
-                }
+                if (path.empty())
+                    continue;
                 remaining -= path.size();
                 annotation.extras.inkPaths.push_back(std::move(path));
             }

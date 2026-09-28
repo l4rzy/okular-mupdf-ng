@@ -241,6 +241,63 @@ private slots:
         QVERIFY(!result.warnings.isEmpty());
     }
 
+    void acceptsHighlightWithoutCoords()
+    {
+        const XfdfParseResult result = parse(document(QStringLiteral(
+            "<highlight page=\"0\" rect=\"20,70,100,80\" color=\"#ffff00\" opacity=\"1\" title=\"note\"/>")));
+
+        QCOMPARE(result.applied, 1);
+        QCOMPARE(result.skipped, 0);
+        const Annotation& annotation = result.pages.at(0).annotations.front();
+        QCOMPARE(annotation.subtype, AnnotationType::Highlight);
+        QVERIFY(annotation.extras.quads.empty());
+        QCOMPARE(annotation.author, std::string("note"));
+        QVERIFY(near(annotation.x0, 0.1));
+        QVERIFY(near(annotation.y0, 0.2));
+        QVERIFY(near(annotation.x1, 0.5));
+        QVERIFY(near(annotation.y1, 0.3));
+
+        // The exporter re-emits the quad-less element, so the round trip is stable.
+        const QString roundTrip = Mu::Plugin::Xfdf::annotationsToXfdf(result.pages);
+        QVERIFY(roundTrip.contains(QStringLiteral("<highlight")));
+        QVERIFY(!roundTrip.contains(QStringLiteral("coords=")));
+    }
+
+    void acceptsPolygonWithEmptyVertices()
+    {
+        const XfdfParseResult result =
+            parse(document(QStringLiteral("<polygon page=\"0\" rect=\"20,70,60,90\" color=\"#000000\" opacity=\"1\">"
+                                          "<vertices></vertices></polygon>")));
+
+        QCOMPARE(result.applied, 1);
+        QCOMPARE(result.skipped, 0);
+        QCOMPARE(result.pages.at(0).annotations.front().extras.points.size(), std::size_t(0));
+    }
+
+    void acceptsInkWithoutGesturesAndDropsEmptyOnes()
+    {
+        const XfdfParseResult bare =
+            parse(document(QStringLiteral("<ink page=\"0\" rect=\"20,60,60,90\" color=\"#000000\" opacity=\"1\"/>")));
+        QCOMPARE(bare.applied, 1);
+        QCOMPARE(bare.skipped, 0);
+        QVERIFY(bare.pages.at(0).annotations.front().extras.inkPaths.empty());
+
+        const XfdfParseResult mixed = parse(
+            document(QStringLiteral("<ink page=\"0\" rect=\"20,60,60,90\" color=\"#000000\" opacity=\"1\">"
+                                    "<inklist><gesture></gesture><gesture>20,90;40,80</gesture></inklist></ink>")));
+        QCOMPARE(mixed.applied, 1);
+        QCOMPARE(mixed.pages.at(0).annotations.front().extras.inkPaths.size(), std::size_t(1));
+    }
+
+    void rejectsLineWithoutEndpoints()
+    {
+        // Endpoint-less lines stay rejected: the exporter cannot re-emit them.
+        const XfdfParseResult result =
+            parse(document(QStringLiteral("<line page=\"0\" rect=\"20,80,40,90\" color=\"#000000\" opacity=\"1\"/>")));
+        QCOMPARE(result.applied, 0);
+        QCOMPARE(result.skipped, 1);
+    }
+
     void roundTripsGeometryTypesThroughExporter()
     {
         Page source;
