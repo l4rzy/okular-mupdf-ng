@@ -352,8 +352,6 @@ std::unique_ptr<Okular::Annotation> fromModel(const Model::Annotation& ad)
         if (extra.caretSymbolP)
             caret->setCaretSymbol(Okular::CaretAnnotation::CaretSymbol::P);
         ann = caret;
-    } else if (type == Model::AnnotationType::Widget) {
-        ann = new Okular::WidgetAnnotation();
     } else {
         auto* text = new Okular::TextAnnotation();
         text->setTextType(type == Model::AnnotationType::FreeText ? Okular::TextAnnotation::InPlace

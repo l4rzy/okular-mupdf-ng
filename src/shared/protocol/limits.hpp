@@ -53,6 +53,8 @@ inline constexpr std::size_t MaxEpubCustomCssCharacters = 1000;
 inline constexpr std::size_t MaxEpubCustomCssBase64Bytes = 8192;
 
 // --- Annotation Geometry & Extras Limits ---
+inline constexpr std::size_t MaxAnnotationsPerPage = 100'000;
+inline constexpr std::size_t MaxAnnotationsPerDocument = 100'000;
 inline constexpr std::size_t MaxAnnotationPoints = 10'000;
 inline constexpr std::size_t MaxAnnotationQuads = 10'000;
 inline constexpr std::size_t MaxAnnotationInkPaths = 10'000;

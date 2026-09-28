@@ -65,7 +65,7 @@ using ::Mu::Worker::Engine::OcrJobs;
 constexpr std::size_t MaxResponseBoxes = 200'000;
 constexpr std::size_t MaxResponseTextBytes = 16U * 1024U * 1024U;
 constexpr std::size_t MaxOpenPages = 100'000;
-constexpr std::size_t MaxOpenAnnotations = 100'000;
+constexpr std::size_t MaxOpenAnnotations = Limit::MaxAnnotationsPerDocument;
 constexpr std::size_t MaxOpenSignatures = 100'000;
 constexpr std::size_t MaxOpenLinks = 100'000;
 constexpr std::size_t MaxEmbeddedFileBytes = 32U * 1024U * 1024U;

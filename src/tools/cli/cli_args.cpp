@@ -80,6 +80,18 @@ QCommandLineParser& setupExportXfdfParser(QCommandLineParser& parser)
     return parser;
 }
 
+QCommandLineParser& setupApplyXfdfParser(QCommandLineParser& parser)
+{
+    parser.setApplicationDescription("Apply annotations from an XFDF file to a PDF document, writing a new PDF.\n"
+                                     "Coordinates on pages with a non-zero /Rotate may be displaced.");
+    parser.addHelpOption();
+    parser.addOption({ { "o", "output" }, "Output PDF file (required).", "file" });
+    parser.addOption({ "xfdf", "Input XFDF file (required).", "file" });
+    addSharedOptions(parser);
+    parser.addPositionalArgument("file", "Input PDF document.", "<file>");
+    return parser;
+}
+
 Command parseOcr(const QStringList& args)
 {
     Command command;
@@ -189,6 +201,42 @@ Command parseExportXfdf(const QStringList& args)
     return command;
 }
 
+Command parseApplyXfdf(const QStringList& args)
+{
+    Command command;
+    command.kind = Command::Kind::ApplyXfdf;
+    auto& options = command.applyXfdf;
+    QCommandLineParser parser;
+    setupApplyXfdfParser(parser);
+    if (!parser.parse(args)) {
+        command.error = parser.errorText().toStdString();
+        return command;
+    }
+    if (parser.isSet("help")) {
+        command.helpRequested = true;
+        return command;
+    }
+    const QStringList files = parser.positionalArguments();
+    if (files.size() != 1) {
+        command.error = "expected exactly one input file";
+        return command;
+    }
+    options.file = files.front().toStdString();
+    if (!parser.isSet("xfdf")) {
+        command.error = "missing required --xfdf";
+        return command;
+    }
+    options.xfdf = parser.value("xfdf").toStdString();
+    if (!parser.isSet("output")) {
+        command.error = "missing required -o output";
+        return command;
+    }
+    options.output = parser.value("output").toStdString();
+    if (!readSharedOptions(parser, options.shared, command.error))
+        return command;
+    return command;
+}
+
 } // namespace
 
 bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error)
@@ -254,6 +302,8 @@ Command parseArgs(const QStringList& argv)
         return parseExportPdf(sub);
     if (verb == "export-xfdf")
         return parseExportXfdf(sub);
+    if (verb == "apply-xfdf")
+        return parseApplyXfdf(sub);
     command.error = "unknown command: " + verb.toStdString();
     return command;
 }
@@ -267,11 +317,14 @@ QString helpTextFor(Command::Kind kind)
         return setupExportParser(parser).helpText();
     if (kind == Command::Kind::ExportXfdf)
         return setupExportXfdfParser(parser).helpText();
+    if (kind == Command::Kind::ApplyXfdf)
+        return setupApplyXfdfParser(parser).helpText();
     return QStringLiteral("usage: mupdfng-cli <command> [options]\n\n"
                           "commands:\n"
                           "  ocr <file> --page N          OCR one page, print text boxes\n"
                           "  export-pdf <file> -o OUT.pdf export an EPUB document to PDF\n"
-                          "  export-xfdf <file> -o OUT.xfdf export PDF annotations as XFDF\n\n"
+                          "  export-xfdf <file> -o OUT.xfdf export PDF annotations as XFDF\n"
+                          "  apply-xfdf <file> --xfdf IN.xfdf -o OUT.pdf apply XFDF annotations to a PDF\n\n"
                           "options:\n"
                           "  -V, --version                print version and exit\n\n"
                           "run 'mupdfng-cli <command> --help' for command options.\n");

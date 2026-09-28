@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/conversion/xfdf.hpp"
-#include "plugin/util/xfdf.hpp"
+#include "plugin/xfdf/export.hpp"
 
 #include <QDateTime>
 #include <QFont>
@@ -18,10 +18,10 @@
 #include <string>
 
 using Mu::Generator::Conversion::annotationsToXfdf;
-using Mu::Plugin::Util::normalizedRectToUserSpace;
-using Mu::Plugin::Util::XfdfPage;
+using Mu::Plugin::Xfdf::normalizedRectToUserSpace;
+using Mu::Plugin::Xfdf::Page;
 
-namespace Xfdf = Mu::Plugin::Util;
+namespace Xfdf = Mu::Plugin::Xfdf;
 using Mu::Model::Annotation;
 
 namespace {
@@ -74,7 +74,7 @@ private slots:
 
     void serializesModelPagesWithoutOkularAdapter()
     {
-        XfdfPage page;
+        Page page;
         page.widthPoints = 200;
         page.heightPoints = 100;
         page.annotations.append(baseAnnotation(Mu::Model::AnnotationType::Text, 0.1, 0.2, 0.5, 0.6));
@@ -146,7 +146,7 @@ private slots:
 
     void stripsXmlIllegalControlCharacters()
     {
-        XfdfPage page;
+        Page page;
         page.widthPoints = 200;
         page.heightPoints = 100;
         Annotation annotation = baseAnnotation(Mu::Model::AnnotationType::Text, 0.1, 0.2, 0.5, 0.6);
@@ -171,7 +171,7 @@ private slots:
 
     void replacesNonFiniteCoordinatesWithZero()
     {
-        XfdfPage page;
+        Page page;
         page.widthPoints = 200;
         page.heightPoints = 100;
         Annotation annotation = baseAnnotation(Mu::Model::AnnotationType::Square,
@@ -251,7 +251,7 @@ private slots:
 
     void freeTextCalloutRectSpansBoxAndLeader()
     {
-        XfdfPage page;
+        Page page;
         page.widthPoints = 200;
         page.heightPoints = 100;
         Annotation annotation = baseAnnotation(Mu::Model::AnnotationType::FreeText, 0.1, 0.2, 0.3, 0.4);

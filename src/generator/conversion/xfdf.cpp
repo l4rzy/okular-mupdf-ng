@@ -4,7 +4,7 @@
 #include "generator/conversion/xfdf.hpp"
 
 #include "generator/conversion/annotation.hpp"
-#include "plugin/util/xfdf.hpp"
+#include "plugin/xfdf/export.hpp"
 
 #include <utility>
 
@@ -12,7 +12,7 @@ namespace Mu::Generator::Conversion {
 
 QString annotationsToXfdf(const QVector<Okular::Page*>& pages, const QSizeF& dpi)
 {
-    QVector<Plugin::Util::XfdfPage> modelPages;
+    QVector<Plugin::Xfdf::Page> modelPages;
     modelPages.reserve(pages.size());
 
     // Okular pages carry device-pixel dimensions (points scaled by dpi/72); the
@@ -22,7 +22,7 @@ QString annotationsToXfdf(const QVector<Okular::Page*>& pages, const QSizeF& dpi
     const double scaleY = dpi.height() > 0 ? 72.0 / dpi.height() : 1.0;
 
     for (const Okular::Page* page : pages) {
-        Plugin::Util::XfdfPage modelPage;
+        Plugin::Xfdf::Page modelPage;
         if (page) {
             modelPage.widthPoints = page->width() * scaleX;
             modelPage.heightPoints = page->height() * scaleY;
@@ -34,7 +34,7 @@ QString annotationsToXfdf(const QVector<Okular::Page*>& pages, const QSizeF& dpi
         modelPages.append(std::move(modelPage));
     }
 
-    return Plugin::Util::annotationsToXfdf(modelPages);
+    return Plugin::Xfdf::annotationsToXfdf(modelPages);
 }
 
 } // namespace Mu::Generator::Conversion

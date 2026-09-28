@@ -112,6 +112,10 @@ add_layer_test(test_plugin_signingtimestamp plugin/test_signing_timestamp.cpp pl
 target_include_directories(test_plugin_signingtimestamp PRIVATE ../src)
 target_link_libraries(test_plugin_signingtimestamp PRIVATE Qt6::Core mupdf_plugin_util)
 
+add_layer_test(test_plugin_xfdfparse plugin/test_xfdf_parse.cpp plugin)
+target_include_directories(test_plugin_xfdfparse PRIVATE ../src)
+target_link_libraries(test_plugin_xfdfparse PRIVATE mupdf_plugin_util)
+
 # NSS initialization is process-global, so exercise each runtime mode in a
 # separate test process even though the modes share one test executable.
 add_executable(test_nss_runtime

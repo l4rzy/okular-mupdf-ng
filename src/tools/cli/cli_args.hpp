@@ -48,13 +48,21 @@ struct ExportXfdfOptions {
     SharedOptions shared;
 };
 
+struct ApplyXfdfOptions {
+    std::string file;
+    std::string xfdf;
+    std::string output;
+    SharedOptions shared;
+};
+
 struct Command {
-    enum class Kind { Help, Version, Ocr, ExportPdf, ExportXfdf };
+    enum class Kind { Help, Version, Ocr, ExportPdf, ExportXfdf, ApplyXfdf };
 
     Kind kind = Kind::Help;
     OcrOptions ocr;
     ExportPdfOptions exportPdf;
     ExportXfdfOptions exportXfdf;
+    ApplyXfdfOptions applyXfdf;
     /// True when -h/--help was recognized for the selected command.
     bool helpRequested = false;
     /// Non-empty when parsing failed; main prints it with the help text.

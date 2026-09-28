@@ -8,14 +8,17 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QFile>
 #include <QSaveFile>
+#include <QSizeF>
 #include <QTextStream>
 #include <QTimer>
 
 #include "generator/config/settings.hpp"
 #include "plugin/util/document_type.hpp"
-#include "plugin/util/xfdf.hpp"
 #include "plugin/worker_client.hpp"
+#include "plugin/xfdf/export.hpp"
+#include "plugin/xfdf/import.hpp"
 #include "shared/compat.hpp"
 #include "tools/cli/cli_args.hpp"
 
@@ -222,10 +225,10 @@ int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportXfdfOptions& opt
         < 0)
         return ExitJobFailed;
 
-    QVector<Mu::Plugin::Util::XfdfPage> pages;
+    QVector<Mu::Plugin::Xfdf::Page> pages;
     pages.reserve(pageInfo.size());
     for (const Mu::Model::PageInfo& page : pageInfo) {
-        Mu::Plugin::Util::XfdfPage xfdfPage;
+        Mu::Plugin::Xfdf::Page xfdfPage;
         xfdfPage.widthPoints = page.geometry.widthPoints;
         xfdfPage.heightPoints = page.geometry.heightPoints;
         xfdfPage.annotations.reserve(static_cast<qsizetype>(page.annotations.size()));
@@ -239,12 +242,92 @@ int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportXfdfOptions& opt
         err() << "mupdfng-cli: could not open output file\n";
         return ExitJobFailed;
     }
-    const QByteArray data = Mu::Plugin::Util::annotationsToXfdf(pages).toUtf8();
+    const QByteArray data = Mu::Plugin::Xfdf::annotationsToXfdf(pages).toUtf8();
     if (output.write(data) != data.size() || !output.commit()) {
         err() << "mupdfng-cli: XFDF export failed\n";
         return ExitJobFailed;
     }
     out() << "exported " << QString::fromStdString(options.output) << '\n';
+    out().flush();
+    return ExitOk;
+}
+
+int runApplyXfdf(Mu::Plugin::WorkerClient& client, const ApplyXfdfOptions& options)
+{
+    const QString file = QString::fromStdString(options.file);
+    if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Pdf) {
+        err() << "mupdfng-cli: apply-xfdf only supports PDF documents\n";
+        return ExitJobFailed;
+    }
+
+    QFile xfdfFile(QString::fromStdString(options.xfdf));
+    if (!xfdfFile.open(QIODevice::ReadOnly)) {
+        err() << "mupdfng-cli: could not open " << QString::fromStdString(options.xfdf) << "\n";
+        return ExitJobFailed;
+    }
+    if (xfdfFile.size() > Mu::Plugin::Xfdf::MaxXfdfBytes) {
+        err() << "mupdfng-cli: XFDF file is too large\n";
+        return ExitJobFailed;
+    }
+    const QByteArray xfdf = xfdfFile.readAll();
+
+    QList<Mu::Model::PageInfo> pageInfo;
+    if (openDocument(
+            client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Pdf, &pageInfo)
+        < 0)
+        return ExitJobFailed;
+
+    QVector<QSizeF> pageSizes;
+    Mu::Plugin::Xfdf::XfdfParseLimits parseLimits;
+    std::size_t existingAnnotations = 0;
+    pageSizes.reserve(pageInfo.size());
+    parseLimits.annotationsPerPageRemaining.reserve(pageInfo.size());
+    for (const Mu::Model::PageInfo& page : pageInfo) {
+        pageSizes.append(QSizeF(page.geometry.widthPoints, page.geometry.heightPoints));
+        const std::size_t existingOnPage = page.annotations.size();
+        existingAnnotations += existingOnPage;
+        parseLimits.annotationsPerPageRemaining.append(
+            existingOnPage < Mu::Limit::MaxAnnotationsPerPage ? Mu::Limit::MaxAnnotationsPerPage - existingOnPage : 0);
+    }
+    parseLimits.annotationsRemaining = existingAnnotations < Mu::Limit::MaxAnnotationsPerDocument
+        ? Mu::Limit::MaxAnnotationsPerDocument - existingAnnotations
+        : 0;
+
+    QString error;
+    const Mu::Plugin::Xfdf::XfdfParseResult parsed =
+        Mu::Plugin::Xfdf::xfdfToAnnotations(xfdf, pageSizes, &error, parseLimits);
+    if (!error.isEmpty()) {
+        err() << "mupdfng-cli: could not parse XFDF: " << error << "\n";
+        return ExitJobFailed;
+    }
+
+    int applied = 0;
+    int skipped = parsed.skipped;
+    for (int page = 0; page < parsed.pages.size(); ++page) {
+        for (const Mu::Model::Annotation& annotation : parsed.pages.at(page).annotations) {
+            if (client.addAnnotation(page, annotation))
+                ++applied;
+            else
+                ++skipped;
+        }
+    }
+
+    for (const QString& warning : parsed.warnings)
+        err() << "mupdfng-cli: " << warning << "\n";
+
+    if (applied == 0) {
+        err() << "mupdfng-cli: no annotations applied (" << skipped << " skipped)\n";
+        return ExitJobFailed;
+    }
+    if (!client.saveToFile(QString::fromStdString(options.output))) {
+        err() << "mupdfng-cli: could not write " << QString::fromStdString(options.output) << "\n";
+        return ExitJobFailed;
+    }
+
+    out() << "applied " << applied << " annotations";
+    if (skipped > 0)
+        out() << " (" << skipped << " skipped)";
+    out() << " to " << QString::fromStdString(options.output) << '\n';
     out().flush();
     return ExitOk;
 }
@@ -262,7 +345,8 @@ int run(const Command& command)
     Mu::Plugin::WorkerClient client;
     const SharedOptions& shared = command.kind == Command::Kind::Ocr ? command.ocr.shared
         : command.kind == Command::Kind::ExportPdf                   ? command.exportPdf.shared
-                                                                     : command.exportXfdf.shared;
+        : command.kind == Command::Kind::ExportXfdf                  ? command.exportXfdf.shared
+                                                                     : command.applyXfdf.shared;
     QStringList tessDirs;
     if (command.kind == Command::Kind::Ocr)
         tessDirs.push_back(tessDataFor(command.ocr));
@@ -278,6 +362,8 @@ int run(const Command& command)
         code = runExportPdf(client, command.exportPdf);
     else if (command.kind == Command::Kind::ExportXfdf)
         code = runExportXfdf(client, command.exportXfdf);
+    else if (command.kind == Command::Kind::ApplyXfdf)
+        code = runApplyXfdf(client, command.applyXfdf);
 
     client.close();
     client.stop();

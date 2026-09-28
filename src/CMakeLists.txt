@@ -131,7 +131,8 @@ add_library(mupdf_plugin_util STATIC
   plugin/util/signature_image.cpp
   plugin/util/render_image.cpp
   plugin/util/signing_timestamp.cpp
-  plugin/util/xfdf.cpp)
+  plugin/xfdf/export.cpp
+  plugin/xfdf/import.cpp)
 target_include_directories(mupdf_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mupdf_plugin_util PUBLIC Qt6::Core Qt6::Gui mupdf_shared)
 

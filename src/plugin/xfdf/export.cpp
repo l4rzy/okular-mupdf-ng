@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "plugin/util/xfdf.hpp"
+#include "plugin/xfdf/export.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace Mu::Plugin::Util {
+namespace Mu::Plugin::Xfdf {
 
 namespace {
 
@@ -267,7 +267,7 @@ void appendXfdfQuad(std::vector<Model::Point>& out, const Model::Quad& quad)
 
 /// Writes one annotation element. Returns an empty string for subtypes that the
 /// XFDF mapping does not cover.
-QString annotationElement(const Model::Annotation& annotation, int pageIndex, const XfdfPage& geometry)
+QString annotationElement(const Model::Annotation& annotation, int pageIndex, const Page& geometry)
 {
     const Model::Quad rect = normalizedRectToUserSpace(annotation, geometry.widthPoints, geometry.heightPoints);
     const QString common = commonAttributes(annotation, pageIndex, rect);
@@ -480,14 +480,14 @@ Model::Quad normalizedRectToUserSpace(const Model::Annotation& annotation, doubl
     return { topLeft, { bottomRight.x, topLeft.y }, bottomRight, { topLeft.x, bottomRight.y } };
 }
 
-QString annotationsToXfdf(const QVector<XfdfPage>& pages)
+QString annotationsToXfdf(const QVector<Page>& pages)
 {
     QString out = QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out += QStringLiteral("<xfdf xmlns=\"http://ns.adobe.com/xfdf/\" xml:space=\"preserve\">\n");
     out += QStringLiteral("<annots>\n");
 
     for (int pageIndex = 0; pageIndex < pages.size(); ++pageIndex) {
-        const XfdfPage& page = pages.at(pageIndex);
+        const Page& page = pages.at(pageIndex);
         for (const Model::Annotation& annotation : page.annotations) {
             const QString element = annotationElement(annotation, pageIndex, page);
             if (!element.isEmpty())
@@ -500,4 +500,4 @@ QString annotationsToXfdf(const QVector<XfdfPage>& pages)
     return out;
 }
 
-} // namespace Mu::Plugin::Util
+} // namespace Mu::Plugin::Xfdf

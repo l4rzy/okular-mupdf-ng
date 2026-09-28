@@ -108,6 +108,48 @@ private slots:
         QVERIFY(help.error.empty());
     }
 
+    void parsesApplyXfdfCommand()
+    {
+        const Cli::Command command = Cli::parseArgs({ "mupdfng-cli",
+                                                      "apply-xfdf",
+                                                      "doc.pdf",
+                                                      "--xfdf",
+                                                      "notes.xfdf",
+                                                      "-o",
+                                                      "out.pdf",
+                                                      "--password",
+                                                      "secret",
+                                                      "--timeout",
+                                                      "45" });
+        QVERIFY(command.error.empty());
+        QCOMPARE(command.kind, Cli::Command::Kind::ApplyXfdf);
+        QCOMPARE(command.applyXfdf.file, std::string("doc.pdf"));
+        QCOMPARE(command.applyXfdf.xfdf, std::string("notes.xfdf"));
+        QCOMPARE(command.applyXfdf.output, std::string("out.pdf"));
+        QCOMPARE(command.applyXfdf.shared.password, std::string("secret"));
+        QCOMPARE(command.applyXfdf.shared.timeoutSeconds, 45);
+    }
+
+    void applyXfdfRequiresInputXfdfAndOutput()
+    {
+        const Cli::Command missingXfdf = Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "doc.pdf", "-o", "out.pdf" });
+        QCOMPARE(missingXfdf.kind, Cli::Command::Kind::ApplyXfdf);
+        QVERIFY(!missingXfdf.error.empty());
+
+        const Cli::Command missingOutput =
+            Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "doc.pdf", "--xfdf", "notes.xfdf" });
+        QVERIFY(!missingOutput.error.empty());
+
+        const Cli::Command missingInput =
+            Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "--xfdf", "notes.xfdf", "-o", "out.pdf" });
+        QVERIFY(!missingInput.error.empty());
+
+        const Cli::Command help = Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "--help" });
+        QCOMPARE(help.kind, Cli::Command::Kind::ApplyXfdf);
+        QVERIFY(help.helpRequested);
+        QVERIFY(help.error.empty());
+    }
+
     void exportRequiresOutput()
     {
         const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub" });
@@ -147,7 +189,9 @@ private slots:
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::ExportPdf).isEmpty());
         QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportPdf).contains(QStringLiteral("--use-layout")));
         QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("export-xfdf")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("apply-xfdf")));
         QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportXfdf).contains(QStringLiteral("--password")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ApplyXfdf).contains(QStringLiteral("--xfdf")));
     }
 
     void versionFlagAndText()
