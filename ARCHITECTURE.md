@@ -145,20 +145,15 @@ in one `test_mupdf` executable to avoid repeatedly linking large static MuPDF
 binaries. Cache, generator, security, and boundary tests remain small focused
 executables.
 
-## Known limitations
-
-- XFDF annotation export serializes coordinates in the page's rotated display
-  frame, so pages with a non-zero `/Rotate` are displaced relative to unrotated
-  PDF user-space.
-
 ## Source tree
 
 ```text
 src/
 ├── generator/          # Okular integration, conversion, proxies, configuration
-├── plugin/             # Qt worker bridge, caching, OCR, NSS integration
+├── plugin/             # Qt worker bridge, caching, OCR, NSS, XFDF, utilities
 ├── shared/             # IPC protocol, models, transport, validation
-└── worker/             # isolated native worker
+├── tools/cli/          # command-line interface for worker-backed document tools
+└── worker/              # isolated native worker
     ├── engine/         # PDF/EPUB engines, OCR, signing
     ├── runtime/        # request dispatch and worker server
     └── sys/            # sandboxing, limits, system integration

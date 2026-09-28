@@ -12,7 +12,7 @@
 A secure and fast PDF and ePUB generator for Okular.
 <!-- Note -->
 > [!NOTE]
-> This project is in beta and is not stable yet. If you encounter any issue, please report via Github Issues. If you're editing (annotations, forms) an important PDF, use the official PDF backend (Poppler generator) that comes with Okular instead.
+> This project is in beta and is not stable yet. See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and test coverage. If you encounter any issue, please report via Github Issues. If you're working on an important PDF, use the official PDF backend (Poppler generator) that comes with Okular instead.
 
 ![Screenshot](screenshot.png)
 ---
@@ -24,10 +24,10 @@ Alternatively, you can [build it yourself](#building-and-testing). Installing th
 ---
 
 ## Motivation
-Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's PDF and Epub backends, with the hope of making it more complete:
+Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's PDF and ePUB backends, with the hope of making it more complete:
  - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined.
  - PDF backend with Poppler is rich in features, but sluggish on big PDFs. This is a known weakness of Poppler.
- - Rendering quality of the default Epub backend is terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
+ - Rendering quality of the default ePUB backend is terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
 
 ---
 
@@ -48,10 +48,11 @@ and the source-tree layout.
 | **Formats** | PDF, ePUB | ✓ | ✓ |
 | **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
 | **ePUB export** | Export ePUB to PDF | ✓ | ✗ |
-| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ (plus basic XFA & Js support) |
+| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ (plus basic XFA & JS support) |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
 | **Cert Manager** | NSS Certificate Manager | ✓ | ✗ |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ |
+| **Annotations export** | Export PDF annotations to XFDF | ✓ | ✗ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
 | **Printing & Exporting** | Print & Export | ✓ | ✓ |
 | **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
