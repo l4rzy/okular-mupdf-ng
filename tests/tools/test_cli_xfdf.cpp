@@ -48,8 +48,9 @@ int countAnnotations(const QByteArray& xml)
 }
 
 /// Runs mupdfng-cli with the test worker and returns its exit code, or -1 when
-/// the process could not complete.
-int runCli(const QStringList& arguments)
+/// the process could not complete. Captured standard output/error are appended
+/// to the out parameters when they are not null.
+int runCli(const QStringList& arguments, QString* standardOutput = nullptr, QString* standardError = nullptr)
 {
     QStringList full = arguments;
     full << QStringLiteral("--worker") << QStringLiteral(WORKER_BUILD_PATH);
@@ -59,6 +60,10 @@ int runCli(const QStringList& arguments)
         return -1;
     if (cli.exitStatus() != QProcess::NormalExit)
         return -1;
+    if (standardOutput)
+        *standardOutput = QString::fromUtf8(cli.readAllStandardOutput());
+    if (standardError)
+        *standardError = QString::fromUtf8(cli.readAllStandardError());
     return cli.exitCode();
 }
 
@@ -77,9 +82,8 @@ private slots:
 
         QProcess cli;
         cli.start(QStringLiteral(MUPDFNG_CLI_PATH),
-                  { QStringLiteral("export-xfdf"),
+                  { QStringLiteral("export"),
                     QStringLiteral(TEST_PDF_PATH),
-                    QStringLiteral("-o"),
                     outputPath,
                     QStringLiteral("--worker"),
                     QStringLiteral(WORKER_BUILD_PATH) });
@@ -128,26 +132,21 @@ private slots:
             "</annots>\n</xfdf>\n"));
         source.close();
 
-        QCOMPARE(runCli({ QStringLiteral("apply-xfdf"),
-                          QStringLiteral(TEST_PDF_PATH),
-                          QStringLiteral("--xfdf"),
-                          baseXfdf,
-                          QStringLiteral("-o"),
-                          firstPdf }),
+        QString importOutput;
+        QCOMPARE(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), baseXfdf, firstPdf }, &importOutput),
                  0);
+        QVERIFY(importOutput.contains(QStringLiteral("[INFO] Parsed 2 annotations from")));
+        QVERIFY(importOutput.contains(QStringLiteral("[OK] Applied 2 annotations to")));
 
-        QCOMPARE(runCli({ QStringLiteral("export-xfdf"), firstPdf, QStringLiteral("-o"), exportedXfdf }), 0);
+        QString exportOutput;
+        QCOMPARE(runCli({ QStringLiteral("export"), firstPdf, exportedXfdf }, &exportOutput), 0);
         QCOMPARE(countAnnotations(readFile(exportedXfdf)), 2);
+        QVERIFY(exportOutput.contains(QStringLiteral("[INFO] Found 2 annotations in")));
+        QVERIFY(exportOutput.contains(QStringLiteral("[OK] Exported 2 annotations to")));
 
         // Re-applying the exported XFDF to a clean document reproduces both.
-        QCOMPARE(runCli({ QStringLiteral("apply-xfdf"),
-                          QStringLiteral(TEST_PDF_PATH),
-                          QStringLiteral("--xfdf"),
-                          exportedXfdf,
-                          QStringLiteral("-o"),
-                          secondPdf }),
-                 0);
-        QCOMPARE(runCli({ QStringLiteral("export-xfdf"), secondPdf, QStringLiteral("-o"), roundTripXfdf }), 0);
+        QCOMPARE(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), exportedXfdf, secondPdf }), 0);
+        QCOMPARE(runCli({ QStringLiteral("export"), secondPdf, roundTripXfdf }), 0);
         QCOMPARE(countAnnotations(readFile(roundTripXfdf)), 2);
     }
 
@@ -163,14 +162,13 @@ private slots:
         file.write(QByteArrayLiteral("<xfdf><annots><text page=\"0\"></annots></xfdf>"));
         file.close();
 
-        QVERIFY(runCli({ QStringLiteral("apply-xfdf"),
-                         QStringLiteral(TEST_PDF_PATH),
-                         QStringLiteral("--xfdf"),
-                         badXfdf,
-                         QStringLiteral("-o"),
-                         output })
+        QString standardError;
+        QVERIFY(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), badXfdf, output },
+                       nullptr,
+                       &standardError)
                 != 0);
         QVERIFY(!QFile::exists(output));
+        QVERIFY(standardError.contains(QStringLiteral("[ERROR]")));
     }
 };
 

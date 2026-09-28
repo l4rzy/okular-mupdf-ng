@@ -83,6 +83,19 @@ set_tests_properties(test_tools_cli_xfdf PROPERTIES
     TIMEOUT 60
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+add_executable(test_tools_cli_ocr tools/test_cli_ocr.cpp)
+target_link_libraries(test_tools_cli_ocr PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(test_tools_cli_ocr PRIVATE
+    MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf")
+add_dependencies(test_tools_cli_ocr mupdfng-cli okular-mupdf-worker)
+add_test(NAME test_tools_cli_ocr COMMAND test_tools_cli_ocr)
+set_tests_properties(test_tools_cli_ocr PROPERTIES
+    LABELS "tools;integration"
+    TIMEOUT 180
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Plugin behaviour owns persistent cache state and uses a per-test root.
 add_layer_test(test_plugin_ocrcache plugin/test_ocrcache.cpp plugin)
 target_include_directories(test_plugin_ocrcache PRIVATE ../src)

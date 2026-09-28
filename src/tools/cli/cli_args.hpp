@@ -25,16 +25,27 @@ struct SharedOptions {
 
 struct OcrOptions {
     std::string file;
-    int page = -1;
+    /// Zero-based page index; defaults to the first page.
+    int page = 0;
+    /// Empty (or "-") means stdout.
+    std::string output;
     std::string language = "eng";
     int dpi = 300;
     std::string tessData;
     SharedOptions shared;
 };
 
-struct ExportPdfOptions {
+/// Output format for the export command, inferred from the output suffix.
+enum class ExportFormat {
+    Pdf,
+    Xfdf,
+    Unknown,
+};
+
+struct ExportOptions {
     std::string file;
     std::string output;
+    ExportFormat format = ExportFormat::Unknown;
     /// Empty means all pages.
     std::vector<int> pages;
     /// Apply the persisted EPUB layout settings before exporting.
@@ -42,13 +53,7 @@ struct ExportPdfOptions {
     SharedOptions shared;
 };
 
-struct ExportXfdfOptions {
-    std::string file;
-    std::string output;
-    SharedOptions shared;
-};
-
-struct ApplyXfdfOptions {
+struct ImportOptions {
     std::string file;
     std::string xfdf;
     std::string output;
@@ -56,13 +61,12 @@ struct ApplyXfdfOptions {
 };
 
 struct Command {
-    enum class Kind { Help, Version, Ocr, ExportPdf, ExportXfdf, ApplyXfdf };
+    enum class Kind { Help, Version, Ocr, Export, Import };
 
     Kind kind = Kind::Help;
     OcrOptions ocr;
-    ExportPdfOptions exportPdf;
-    ExportXfdfOptions exportXfdf;
-    ApplyXfdfOptions applyXfdf;
+    ExportOptions exportOptions;
+    ImportOptions importOptions;
     /// True when -h/--help was recognized for the selected command.
     bool helpRequested = false;
     /// Non-empty when parsing failed; main prints it with the help text.
@@ -85,6 +89,10 @@ struct Command {
 
 /// Parses "0,2,5" and "1-3,5" page selections. Empty means all pages.
 [[nodiscard]] bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error);
+
+/// Infers the export format from the output path suffix (.pdf, .xfdf/.xml;
+/// case-insensitive). Anything else yields ExportFormat::Unknown.
+[[nodiscard]] ExportFormat exportFormatForSuffix(const std::string& path);
 
 } // namespace Mu::Tools::Cli
 

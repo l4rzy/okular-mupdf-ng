@@ -16,7 +16,7 @@ private slots:
     void parsesOcrCommand()
     {
         const Cli::Command command =
-            Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "--page", "3", "--lang", "deu", "--dpi", "150" });
+            Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "3", "--lang", "deu", "--dpi", "150" });
         QVERIFY(command.error.empty());
         QCOMPARE(command.kind, Cli::Command::Kind::Ocr);
         QCOMPARE(command.ocr.file, std::string("doc.pdf"));
@@ -27,141 +27,133 @@ private slots:
 
     void ocrDefaultsAreSane()
     {
-        const Cli::Command command = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "--page", "0" });
+        const Cli::Command command = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf" });
         QVERIFY(command.error.empty());
+        QCOMPARE(command.ocr.page, 0);
         QCOMPARE(command.ocr.language, std::string("eng"));
         QCOMPARE(command.ocr.dpi, 300);
         QCOMPARE(command.ocr.shared.timeoutSeconds, 120);
         QVERIFY(command.ocr.shared.worker.empty());
+        QVERIFY(command.ocr.output.empty());
     }
 
-    void ocrRequiresPage()
+    void ocrParsesOutputFile()
     {
-        const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf" });
+        const Cli::Command command = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "2", "-o", "out.txt" });
+        QVERIFY(command.error.empty());
+        QCOMPARE(command.kind, Cli::Command::Kind::Ocr);
+        QCOMPARE(command.ocr.page, 2);
+        QCOMPARE(command.ocr.output, std::string("out.txt"));
+    }
+
+    void ocrValidatesPage()
+    {
+        const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli", "ocr" });
         QCOMPARE(missing.kind, Cli::Command::Kind::Ocr);
         QVERIFY(!missing.error.empty());
 
-        const Cli::Command negative = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "--page", "-1" });
-        QVERIFY(!negative.error.empty());
+        const Cli::Command invalid = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "banana" });
+        QVERIFY(!invalid.error.empty());
 
-        const Cli::Command noFile = Cli::parseArgs({ "mupdfng-cli", "ocr", "--page", "0" });
-        QVERIFY(!noFile.error.empty());
+        const Cli::Command negative = Cli::parseArgs({ "mupdfng-cli", "ocr", "doc.pdf", "-1" });
+        QVERIFY(!negative.error.empty());
     }
 
     void parsesExportCommand()
     {
         const Cli::Command command =
-            Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf", "--pages", "0,2,5" });
+            Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.pdf", "--pages", "0,2,5" });
         QVERIFY(command.error.empty());
-        QCOMPARE(command.kind, Cli::Command::Kind::ExportPdf);
-        QCOMPARE(command.exportPdf.file, std::string("book.epub"));
-        QCOMPARE(command.exportPdf.output, std::string("out.pdf"));
-        QCOMPARE(command.exportPdf.pages, std::vector<int>({ 0, 2, 5 }));
+        QCOMPARE(command.kind, Cli::Command::Kind::Export);
+        QCOMPARE(command.exportOptions.file, std::string("book.epub"));
+        QCOMPARE(command.exportOptions.output, std::string("out.pdf"));
+        QCOMPARE(command.exportOptions.format, Cli::ExportFormat::Pdf);
+        QCOMPARE(command.exportOptions.pages, std::vector<int>({ 0, 2, 5 }));
+    }
+
+    void exportInfersFormatFromSuffix()
+    {
+        const Cli::Command xfdf = Cli::parseArgs({ "mupdfng-cli", "export", "doc.pdf", "-o", "out.xfdf" });
+        QVERIFY(xfdf.error.empty());
+        QCOMPARE(xfdf.exportOptions.format, Cli::ExportFormat::Xfdf);
+
+        const Cli::Command upper = Cli::parseArgs({ "mupdfng-cli", "export", "doc.pdf", "out.XML" });
+        QVERIFY(upper.error.empty());
+        QCOMPARE(upper.exportOptions.format, Cli::ExportFormat::Xfdf);
+
+        const Cli::Command unknown = Cli::parseArgs({ "mupdfng-cli", "export", "doc.pdf", "out.txt" });
+        QCOMPARE(unknown.kind, Cli::Command::Kind::Export);
+        QVERIFY(!unknown.error.empty());
     }
 
     void exportParsesRangesAndDefaults()
     {
         const Cli::Command ranged =
-            Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf", "--pages", "1-3,5" });
+            Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.pdf", "--pages", "1-3,5" });
         QVERIFY(ranged.error.empty());
-        QCOMPARE(ranged.exportPdf.pages, std::vector<int>({ 1, 2, 3, 5 }));
+        QCOMPARE(ranged.exportOptions.pages, std::vector<int>({ 1, 2, 3, 5 }));
 
-        const Cli::Command all = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf" });
+        const Cli::Command all = Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "-o", "out.pdf" });
         QVERIFY(all.error.empty());
-        QVERIFY(all.exportPdf.pages.empty());
-        QVERIFY(!all.exportPdf.useLayout);
+        QVERIFY(all.exportOptions.pages.empty());
+        QVERIFY(!all.exportOptions.useLayout);
     }
 
     void exportParsesUseLayout()
     {
         const Cli::Command command =
-            Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf", "--use-layout" });
+            Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.pdf", "--use-layout" });
         QVERIFY(command.error.empty());
-        QCOMPARE(command.kind, Cli::Command::Kind::ExportPdf);
-        QVERIFY(command.exportPdf.useLayout);
+        QCOMPARE(command.kind, Cli::Command::Kind::Export);
+        QVERIFY(command.exportOptions.useLayout);
     }
 
-    void parsesExportXfdfCommand()
+    void parsesImportCommand()
     {
         const Cli::Command command = Cli::parseArgs(
-            { "mupdfng-cli", "export-xfdf", "doc.pdf", "-o", "out.xfdf", "--password", "secret", "--timeout", "30" });
+            { "mupdfng-cli", "import", "doc.pdf", "notes.xfdf", "out.pdf", "--password", "secret", "--timeout", "45" });
         QVERIFY(command.error.empty());
-        QCOMPARE(command.kind, Cli::Command::Kind::ExportXfdf);
-        QCOMPARE(command.exportXfdf.file, std::string("doc.pdf"));
-        QCOMPARE(command.exportXfdf.output, std::string("out.xfdf"));
-        QCOMPARE(command.exportXfdf.shared.password, std::string("secret"));
-        QCOMPARE(command.exportXfdf.shared.timeoutSeconds, 30);
+        QCOMPARE(command.kind, Cli::Command::Kind::Import);
+        QCOMPARE(command.importOptions.file, std::string("doc.pdf"));
+        QCOMPARE(command.importOptions.xfdf, std::string("notes.xfdf"));
+        QCOMPARE(command.importOptions.output, std::string("out.pdf"));
+        QCOMPARE(command.importOptions.shared.password, std::string("secret"));
+        QCOMPARE(command.importOptions.shared.timeoutSeconds, 45);
     }
 
-    void exportXfdfRequiresInputAndOutput()
+    void importRequiresOperands()
     {
-        const Cli::Command missingOutput = Cli::parseArgs({ "mupdfng-cli", "export-xfdf", "doc.pdf" });
-        QCOMPARE(missingOutput.kind, Cli::Command::Kind::ExportXfdf);
-        QVERIFY(!missingOutput.error.empty());
-
-        const Cli::Command missingInput = Cli::parseArgs({ "mupdfng-cli", "export-xfdf", "-o", "out.xfdf" });
-        QVERIFY(!missingInput.error.empty());
-
-        const Cli::Command help = Cli::parseArgs({ "mupdfng-cli", "export-xfdf", "--help" });
-        QCOMPARE(help.kind, Cli::Command::Kind::ExportXfdf);
-        QVERIFY(help.helpRequested);
-        QVERIFY(help.error.empty());
-    }
-
-    void parsesApplyXfdfCommand()
-    {
-        const Cli::Command command = Cli::parseArgs({ "mupdfng-cli",
-                                                      "apply-xfdf",
-                                                      "doc.pdf",
-                                                      "--xfdf",
-                                                      "notes.xfdf",
-                                                      "-o",
-                                                      "out.pdf",
-                                                      "--password",
-                                                      "secret",
-                                                      "--timeout",
-                                                      "45" });
-        QVERIFY(command.error.empty());
-        QCOMPARE(command.kind, Cli::Command::Kind::ApplyXfdf);
-        QCOMPARE(command.applyXfdf.file, std::string("doc.pdf"));
-        QCOMPARE(command.applyXfdf.xfdf, std::string("notes.xfdf"));
-        QCOMPARE(command.applyXfdf.output, std::string("out.pdf"));
-        QCOMPARE(command.applyXfdf.shared.password, std::string("secret"));
-        QCOMPARE(command.applyXfdf.shared.timeoutSeconds, 45);
-    }
-
-    void applyXfdfRequiresInputXfdfAndOutput()
-    {
-        const Cli::Command missingXfdf = Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "doc.pdf", "-o", "out.pdf" });
-        QCOMPARE(missingXfdf.kind, Cli::Command::Kind::ApplyXfdf);
+        const Cli::Command missingXfdf = Cli::parseArgs({ "mupdfng-cli", "import", "doc.pdf", "-o", "out.pdf" });
+        QCOMPARE(missingXfdf.kind, Cli::Command::Kind::Import);
         QVERIFY(!missingXfdf.error.empty());
 
-        const Cli::Command missingOutput =
-            Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "doc.pdf", "--xfdf", "notes.xfdf" });
+        const Cli::Command missingOutput = Cli::parseArgs({ "mupdfng-cli", "import", "doc.pdf", "notes.xfdf" });
         QVERIFY(!missingOutput.error.empty());
 
-        const Cli::Command missingInput =
-            Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "--xfdf", "notes.xfdf", "-o", "out.pdf" });
+        const Cli::Command missingInput = Cli::parseArgs({ "mupdfng-cli", "import", "-o", "out.pdf" });
         QVERIFY(!missingInput.error.empty());
 
-        const Cli::Command help = Cli::parseArgs({ "mupdfng-cli", "apply-xfdf", "--help" });
-        QCOMPARE(help.kind, Cli::Command::Kind::ApplyXfdf);
+        const Cli::Command help = Cli::parseArgs({ "mupdfng-cli", "import", "--help" });
+        QCOMPARE(help.kind, Cli::Command::Kind::Import);
         QVERIFY(help.helpRequested);
         QVERIFY(help.error.empty());
     }
 
-    void exportRequiresOutput()
+    void exportRequiresExactlyOneOutput()
     {
-        const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub" });
-        QCOMPARE(missing.kind, Cli::Command::Kind::ExportPdf);
+        const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli", "export", "book.epub" });
+        QCOMPARE(missing.kind, Cli::Command::Kind::Export);
         QVERIFY(!missing.error.empty());
 
+        const Cli::Command twice = Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "a.pdf", "-o", "b.pdf" });
+        QVERIFY(!twice.error.empty());
+
         const Cli::Command badPages =
-            Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf", "--pages", "3-1" });
+            Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.pdf", "--pages", "3-1" });
         QVERIFY(!badPages.error.empty());
 
         const Cli::Command unknown =
-            Cli::parseArgs({ "mupdfng-cli", "export-pdf", "book.epub", "-o", "out.pdf", "--bogus", "x" });
+            Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.pdf", "--bogus", "x" });
         QVERIFY(!unknown.error.empty());
     }
 
@@ -176,8 +168,8 @@ private slots:
         QVERIFY(ocrHelp.helpRequested);
         QVERIFY(ocrHelp.error.empty());
 
-        const Cli::Command exportHelp = Cli::parseArgs({ "mupdfng-cli", "export-pdf", "--help" });
-        QCOMPARE(exportHelp.kind, Cli::Command::Kind::ExportPdf);
+        const Cli::Command exportHelp = Cli::parseArgs({ "mupdfng-cli", "export", "--help" });
+        QCOMPARE(exportHelp.kind, Cli::Command::Kind::Export);
         QVERIFY(exportHelp.helpRequested);
         QVERIFY(exportHelp.error.empty());
 
@@ -186,12 +178,11 @@ private slots:
 
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Help).isEmpty());
         QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Ocr).isEmpty());
-        QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::ExportPdf).isEmpty());
-        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportPdf).contains(QStringLiteral("--use-layout")));
-        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("export-xfdf")));
-        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("apply-xfdf")));
-        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ExportXfdf).contains(QStringLiteral("--password")));
-        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::ApplyXfdf).contains(QStringLiteral("--xfdf")));
+        QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Export).isEmpty());
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Export).contains(QStringLiteral("--use-layout")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("export FILE")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains(QStringLiteral("import FILE")));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Import).contains(QStringLiteral("xfdf")));
     }
 
     void versionFlagAndText()

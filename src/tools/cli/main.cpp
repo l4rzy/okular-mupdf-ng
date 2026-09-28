@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QSaveFile>
 #include <QSizeF>
 #include <QTextStream>
@@ -22,6 +23,8 @@
 #include "shared/compat.hpp"
 #include "tools/cli/cli_args.hpp"
 
+#include <cstdio>
+#include <unistd.h>
 #include <utility>
 
 #ifndef TESSDATA_DIR
@@ -44,10 +47,54 @@ QTextStream& err()
     return stream;
 }
 
+/// Tagged status lines: [INFO]/[OK] go to stdout, [WARN]/[ERROR] to stderr.
+/// Tags are colorized only when their stream is a terminal that wants color;
+/// piped output (scripts, tests) stays plain. OCR data lines stay bare so
+/// scripts can parse them; every successful command still ends with an [OK]
+/// trailer.
+bool streamSupportsColor(FILE* stream)
+{
+    return ::isatty(::fileno(stream)) != 0 && qEnvironmentVariableIsEmpty("NO_COLOR") && qgetenv("TERM") != "dumb";
+}
+
+QString colorTag(const QString& tag, const char* code, FILE* stream)
+{
+    if (!streamSupportsColor(stream))
+        return tag;
+    return QStringLiteral("\033[%1m%2\033[0m").arg(QLatin1String(code), tag);
+}
+
+void info(const QString& message)
+{
+    out() << colorTag(QStringLiteral("[INFO]"), "34", stdout) << ' ' << message << '\n';
+}
+
+void ok(const QString& message)
+{
+    out() << colorTag(QStringLiteral("[OK]"), "32", stdout) << ' ' << message << '\n';
+}
+
+void warn(const QString& message)
+{
+    // Bold yellow renders as orange on standard terminal themes; plain red
+    // would collide with [ERROR].
+    err() << colorTag(QStringLiteral("[WARN]"), "1;33", stderr) << ' ' << message << '\n';
+}
+
+void reportError(const QString& message)
+{
+    err() << colorTag(QStringLiteral("[ERROR]"), "31", stderr) << ' ' << message << '\n';
+}
+
+QString plural(int count, const QString& singular, const QString& pluralForm)
+{
+    return count == 1 ? QStringLiteral("1 %1").arg(singular) : QStringLiteral("%1 %2").arg(count).arg(pluralForm);
+}
+
 int failUsage(const Command& command)
 {
     if (!command.error.empty())
-        err() << "mupdfng-cli: " << QString::fromStdString(command.error) << "\n\n";
+        reportError(QString::fromStdString(command.error) + QLatin1Char('\n'));
     err() << helpTextFor(command.kind);
     return ExitUsage;
 }
@@ -84,7 +131,7 @@ int runVersion()
         out().flush();
         return ExitOk;
     }
-    err() << "mupdfng-cli: could not start the worker; showing build-time version\n";
+    warn(QStringLiteral("could not start the worker; showing build-time version"));
     out() << versionText(buildTimeMupdfVersion(), QString());
     out().flush();
     return ExitOk;
@@ -108,11 +155,11 @@ qsizetype openDocument(Mu::Plugin::WorkerClient& client,
     QList<Mu::Model::PageInfo>& pages = pageInfo ? *pageInfo : openedPages;
     const auto status = client.open(file, password, pages, type);
     if (status == Mu::Model::OpenStatus::NeedsPassword) {
-        err() << "mupdfng-cli: document needs a password (--password)\n";
+        reportError(QStringLiteral("document needs a password (--password)"));
         return -1;
     }
     if (status != Mu::Model::OpenStatus::Success) {
-        err() << "mupdfng-cli: could not open " << file << "\n";
+        reportError(QStringLiteral("could not open %1").arg(file));
         return -1;
     }
     return pages.size();
@@ -122,7 +169,14 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
     if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Pdf) {
-        err() << "mupdfng-cli: OCR is only supported for PDF documents\n";
+        reportError(QStringLiteral("OCR is only supported for PDF documents"));
+        return ExitJobFailed;
+    }
+    const QString output = QString::fromStdString(options.output);
+    // Never clobber the source document: QSaveFile replaces atomically.
+    if (!output.isEmpty() && output != QLatin1String("-") && !QFileInfo(output).canonicalFilePath().isEmpty()
+        && QFileInfo(output).canonicalFilePath() == QFileInfo(file).canonicalFilePath()) {
+        reportError(QStringLiteral("output must not be the input file"));
         return ExitJobFailed;
     }
     const qsizetype pageCount =
@@ -130,14 +184,14 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
     if (pageCount < 0)
         return ExitJobFailed;
     if (options.page >= pageCount) {
-        err() << "mupdfng-cli: page " << options.page << " out of range (0.." << pageCount - 1 << ")\n";
+        reportError(QStringLiteral("page %1 out of range (0..%2)").arg(options.page).arg(pageCount - 1));
         return ExitJobFailed;
     }
 
     const std::optional<quint64> jobId =
         client.startOcrPage(options.page, QString::fromStdString(options.language), options.dpi);
     if (!jobId) {
-        err() << "mupdfng-cli: worker rejected the OCR job\n";
+        reportError(QStringLiteral("worker rejected the OCR job"));
         return ExitJobFailed;
     }
 
@@ -152,27 +206,52 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
     loop.exec();
     if (doneId != *jobId) {
         client.cancelOcrJobs();
-        err() << "mupdfng-cli: OCR timed out\n";
+        reportError(QStringLiteral("OCR timed out"));
         return ExitTimeout;
     }
 
     const Mu::Model::OcrResult result = client.ocrResult(*jobId);
     if (result.status != Mu::Model::OcrStatus::Success) {
-        err() << "mupdfng-cli: OCR failed\n";
+        reportError(QStringLiteral("OCR failed"));
         return ExitJobFailed;
     }
-    for (const auto& box : result.boxes)
-        out() << box.left << ' ' << box.top << ' ' << box.right << ' ' << box.bottom << ' '
-              << QString::fromStdString(box.text) << '\n';
+    // Text-only lines, one per box in worker order; embedded line breaks are
+    // flattened so the output stays one line per box.
+    QString recognized;
+    for (const auto& box : result.boxes) {
+        QString line = QString::fromStdString(box.text);
+        line.replace(QLatin1Char('\n'), QLatin1Char(' '));
+        line.replace(QLatin1Char('\r'), QLatin1Char(' '));
+        recognized += line;
+    }
+    const QString recognizedCount =
+        plural(static_cast<int>(result.boxes.size()), QStringLiteral("text box"), QStringLiteral("text boxes"));
+    if (output.isEmpty() || output == QLatin1String("-")) {
+        out() << recognized;
+        ok(QStringLiteral("Recognized %1 on page %2").arg(recognizedCount).arg(options.page));
+        out().flush();
+        return ExitOk;
+    }
+    QSaveFile target(output);
+    if (!target.open(QIODevice::WriteOnly)) {
+        reportError(QStringLiteral("could not open output file"));
+        return ExitJobFailed;
+    }
+    const QByteArray data = recognized.toUtf8();
+    if (target.write(data) != data.size() || !target.commit()) {
+        reportError(QStringLiteral("could not write %1").arg(output));
+        return ExitJobFailed;
+    }
+    ok(QStringLiteral("Recognized %1 on page %2, wrote %3").arg(recognizedCount).arg(options.page).arg(output));
     out().flush();
     return ExitOk;
 }
 
-int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& options)
+int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
     if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Epub) {
-        err() << "mupdfng-cli: export-pdf only supports EPUB documents\n";
+        reportError(QStringLiteral("PDF export only supports EPUB documents"));
         return ExitJobFailed;
     }
     if (options.useLayout) {
@@ -183,9 +262,10 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& optio
         const Mu::Model::DocumentSettings settings =
             Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF);
         if (!client.setSettings(settings)) {
-            err() << "mupdfng-cli: failed to apply EPUB layout settings\n";
+            reportError(QStringLiteral("failed to apply EPUB layout settings"));
             return ExitJobFailed;
         }
+        info(QStringLiteral("Applied Okular EPUB layout settings"));
     }
     const qsizetype pageCount =
         openDocument(client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Epub);
@@ -195,27 +275,36 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportPdfOptions& optio
     pages.reserve(static_cast<qsizetype>(options.pages.size()));
     for (int page : options.pages) {
         if (page >= pageCount) {
-            err() << "mupdfng-cli: page " << page << " out of range (0.." << pageCount - 1 << ")\n";
+            reportError(QStringLiteral("page %1 out of range (0..%2)").arg(page).arg(pageCount - 1));
             return ExitJobFailed;
         }
         pages.push_back(page);
     }
+    info(QStringLiteral("Exporting %1 from %2")
+             .arg(plural(static_cast<int>(pages.isEmpty() ? pageCount : pages.size()),
+                         QStringLiteral("page"),
+                         QStringLiteral("pages")))
+             .arg(file));
     // withReferences=true selects the EPUB export path (metadata, links, TOC),
     // matching Main::exportTo in the generator; false would be a plain page copy.
     if (!client.savePdfToFile(QString::fromStdString(options.output), pages, /*withReferences=*/true)) {
-        err() << "mupdfng-cli: export failed\n";
+        reportError(QStringLiteral("export failed"));
         return ExitJobFailed;
     }
-    out() << "exported " << QString::fromStdString(options.output) << '\n';
+    ok(QStringLiteral("Exported %1 to %2")
+           .arg(plural(static_cast<int>(pages.isEmpty() ? pageCount : pages.size()),
+                       QStringLiteral("page"),
+                       QStringLiteral("pages")))
+           .arg(QString::fromStdString(options.output)));
     out().flush();
     return ExitOk;
 }
 
-int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportXfdfOptions& options)
+int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
     if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Pdf) {
-        err() << "mupdfng-cli: export-xfdf only supports PDF documents\n";
+        reportError(QStringLiteral("XFDF export only supports PDF documents"));
         return ExitJobFailed;
     }
 
@@ -227,6 +316,7 @@ int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportXfdfOptions& opt
 
     QVector<Mu::Plugin::Xfdf::Page> pages;
     pages.reserve(pageInfo.size());
+    qsizetype found = 0;
     for (const Mu::Model::PageInfo& page : pageInfo) {
         Mu::Plugin::Xfdf::Page xfdfPage;
         xfdfPage.widthPoints = page.geometry.widthPoints;
@@ -234,39 +324,46 @@ int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportXfdfOptions& opt
         xfdfPage.annotations.reserve(static_cast<qsizetype>(page.annotations.size()));
         for (const Mu::Model::Annotation& annotation : page.annotations)
             xfdfPage.annotations.append(annotation);
+        found += page.annotations.size();
         pages.append(std::move(xfdfPage));
     }
+    info(QStringLiteral("Found %1 in %2")
+             .arg(plural(static_cast<int>(found), QStringLiteral("annotation"), QStringLiteral("annotations")))
+             .arg(file));
 
     QSaveFile output(QString::fromStdString(options.output));
     if (!output.open(QIODevice::WriteOnly)) {
-        err() << "mupdfng-cli: could not open output file\n";
+        reportError(QStringLiteral("could not open output file"));
         return ExitJobFailed;
     }
     const QByteArray data = Mu::Plugin::Xfdf::annotationsToXfdf(pages).toUtf8();
     if (output.write(data) != data.size() || !output.commit()) {
-        err() << "mupdfng-cli: XFDF export failed\n";
+        reportError(QStringLiteral("XFDF export failed"));
         return ExitJobFailed;
     }
-    out() << "exported " << QString::fromStdString(options.output) << '\n';
+    ok(QStringLiteral("Exported %1 to %2")
+           .arg(plural(static_cast<int>(found), QStringLiteral("annotation"), QStringLiteral("annotations")))
+           .arg(QString::fromStdString(options.output)));
     out().flush();
     return ExitOk;
 }
 
-int runApplyXfdf(Mu::Plugin::WorkerClient& client, const ApplyXfdfOptions& options)
+int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
     if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Pdf) {
-        err() << "mupdfng-cli: apply-xfdf only supports PDF documents\n";
+        reportError(QStringLiteral("import only supports PDF documents"));
         return ExitJobFailed;
     }
 
-    QFile xfdfFile(QString::fromStdString(options.xfdf));
+    const QString xfdfPath = QString::fromStdString(options.xfdf);
+    QFile xfdfFile(xfdfPath);
     if (!xfdfFile.open(QIODevice::ReadOnly)) {
-        err() << "mupdfng-cli: could not open " << QString::fromStdString(options.xfdf) << "\n";
+        reportError(QStringLiteral("could not open %1").arg(xfdfPath));
         return ExitJobFailed;
     }
     if (xfdfFile.size() > Mu::Plugin::Xfdf::MaxXfdfBytes) {
-        err() << "mupdfng-cli: XFDF file is too large\n";
+        reportError(QStringLiteral("XFDF file is too large"));
         return ExitJobFailed;
     }
     const QByteArray xfdf = xfdfFile.readAll();
@@ -297,9 +394,18 @@ int runApplyXfdf(Mu::Plugin::WorkerClient& client, const ApplyXfdfOptions& optio
     const Mu::Plugin::Xfdf::XfdfParseResult parsed =
         Mu::Plugin::Xfdf::xfdfToAnnotations(xfdf, pageSizes, &error, parseLimits);
     if (!error.isEmpty()) {
-        err() << "mupdfng-cli: could not parse XFDF: " << error << "\n";
+        reportError(QStringLiteral("could not parse XFDF: %1").arg(error));
         return ExitJobFailed;
     }
+    if (parsed.skipped > 0)
+        info(QStringLiteral("Parsed %1 from %2 (%3 skipped)")
+                 .arg(plural(parsed.applied, QStringLiteral("annotation"), QStringLiteral("annotations")))
+                 .arg(xfdfPath)
+                 .arg(parsed.skipped));
+    else
+        info(QStringLiteral("Parsed %1 from %2")
+                 .arg(plural(parsed.applied, QStringLiteral("annotation"), QStringLiteral("annotations")))
+                 .arg(xfdfPath));
 
     int applied = 0;
     int skipped = parsed.skipped;
@@ -313,21 +419,26 @@ int runApplyXfdf(Mu::Plugin::WorkerClient& client, const ApplyXfdfOptions& optio
     }
 
     for (const QString& warning : parsed.warnings)
-        err() << "mupdfng-cli: " << warning << "\n";
+        warn(warning);
 
     if (applied == 0) {
-        err() << "mupdfng-cli: no annotations applied (" << skipped << " skipped)\n";
+        reportError(QStringLiteral("no annotations applied (%1 skipped)").arg(skipped));
         return ExitJobFailed;
     }
     if (!client.saveToFile(QString::fromStdString(options.output))) {
-        err() << "mupdfng-cli: could not write " << QString::fromStdString(options.output) << "\n";
+        reportError(QStringLiteral("could not write %1").arg(QString::fromStdString(options.output)));
         return ExitJobFailed;
     }
 
-    out() << "applied " << applied << " annotations";
     if (skipped > 0)
-        out() << " (" << skipped << " skipped)";
-    out() << " to " << QString::fromStdString(options.output) << '\n';
+        ok(QStringLiteral("Applied %1 to %2 (%3 skipped)")
+               .arg(plural(applied, QStringLiteral("annotation"), QStringLiteral("annotations")))
+               .arg(QString::fromStdString(options.output))
+               .arg(skipped));
+    else
+        ok(QStringLiteral("Applied %1 to %2")
+               .arg(plural(applied, QStringLiteral("annotation"), QStringLiteral("annotations")))
+               .arg(QString::fromStdString(options.output)));
     out().flush();
     return ExitOk;
 }
@@ -344,26 +455,26 @@ int run(const Command& command)
 
     Mu::Plugin::WorkerClient client;
     const SharedOptions& shared = command.kind == Command::Kind::Ocr ? command.ocr.shared
-        : command.kind == Command::Kind::ExportPdf                   ? command.exportPdf.shared
-        : command.kind == Command::Kind::ExportXfdf                  ? command.exportXfdf.shared
-                                                                     : command.applyXfdf.shared;
+        : command.kind == Command::Kind::Export                      ? command.exportOptions.shared
+                                                                     : command.importOptions.shared;
     QStringList tessDirs;
     if (command.kind == Command::Kind::Ocr)
         tessDirs.push_back(tessDataFor(command.ocr));
     if (!client.start(QString::fromStdString(shared.worker), tessDirs)) {
-        err() << "mupdfng-cli: could not start the worker process\n";
+        reportError(QStringLiteral("could not start the worker process"));
         return ExitJobFailed;
     }
 
     int code = ExitJobFailed;
     if (command.kind == Command::Kind::Ocr)
         code = runOcr(client, command.ocr);
-    else if (command.kind == Command::Kind::ExportPdf)
-        code = runExportPdf(client, command.exportPdf);
-    else if (command.kind == Command::Kind::ExportXfdf)
-        code = runExportXfdf(client, command.exportXfdf);
-    else if (command.kind == Command::Kind::ApplyXfdf)
-        code = runApplyXfdf(client, command.applyXfdf);
+    else if (command.kind == Command::Kind::Export) {
+        if (command.exportOptions.format == ExportFormat::Pdf)
+            code = runExportPdf(client, command.exportOptions);
+        else
+            code = runExportXfdf(client, command.exportOptions);
+    } else if (command.kind == Command::Kind::Import)
+        code = runImport(client, command.importOptions);
 
     client.close();
     client.stop();
