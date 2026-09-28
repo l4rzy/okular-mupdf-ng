@@ -39,6 +39,7 @@ jobs:
             file \
             git \
             libbrotli-dev \
+            libclang-rt-dev \
             libfreetype-dev \
             libharfbuzz-dev \
             libjbig2dec0-dev \
