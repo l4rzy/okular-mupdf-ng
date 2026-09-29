@@ -798,6 +798,15 @@ void PdfDocument::applyAnnotation(fz_context* context,
 
         const PageCoordinates coordinates { pageBounds, pageWidth, pageHeight };
 
+        // A line-style annotation with fewer than two points has no geometry;
+        // MuPDF would create an invisible, unrecoverable annotation. Reject it
+        // before any mutation so add rolls back cleanly and modify leaves the
+        // existing annotation untouched.
+        if ((annotation.subtype == AnnotationType::Line || annotation.subtype == AnnotationType::Polygon
+             || annotation.subtype == AnnotationType::PolyLine)
+            && annotation.extras.points.size() < 2)
+            fz_throw(context, FZ_ERROR_ARGUMENT, "line annotation requires at least two points");
+
         if (!annotation.uuid.empty())
             pdf_set_annot_name(context, target, annotation.uuid.c_str());
 

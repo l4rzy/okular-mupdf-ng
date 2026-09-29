@@ -759,6 +759,11 @@ std::string CommandService::annotationHandle(int page, std::int32_t objectNumber
     if (const auto it = m_annotationObjectHandles.find(key); it != m_annotationObjectHandles.end())
         return it->second;
 
+    // Bound the handle maps to the document annotation ceiling so a client
+    // cannot grow worker memory without limit by adding annotations.
+    if (m_annotationHandles.size() >= Limit::MaxAnnotationsPerDocument)
+        return { };
+
     auto h = "g" + std::to_string(m_annotationGeneration) + "-p" + std::to_string(page) + "-o"
         + std::to_string(objectNumber);
     m_annotationHandles.emplace(h, HandleLocation { page, objectNumber });
@@ -788,6 +793,10 @@ ResponseMessage CommandService::annotationAdd(const RequestMessage& r, const Ann
         return failure(r.id, ErrorCode::NotOpen, "annot_add", "no document is open");
     if (a.page >= m_document->pageCount())
         return failure(r.id, ErrorCode::InvalidRequest, "annot_add", "invalid annotation");
+    // Reserve handle capacity before creating the annotation so a full map
+    // rejects the request instead of leaving an untracked annotation behind.
+    if (m_annotationHandles.size() >= Limit::MaxAnnotationsPerDocument)
+        return failure(r.id, ErrorCode::ResourceLimit, "annot_add", "annotation handle limit exceeded");
 
     std::string e;
     std::int32_t object = -1;

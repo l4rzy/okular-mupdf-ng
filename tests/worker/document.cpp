@@ -295,6 +295,66 @@ private slots:
         QVERIFY(std::isfinite(rect.x0) && std::isfinite(rect.y0) && std::isfinite(rect.x1) && std::isfinite(rect.y1));
     }
 
+    void lineAnnotationRequiresTwoPoints()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("lines.pdf"));
+        fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        createTextPDF(context, path);
+        fz_drop_context(context);
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Runtime::CommandService service({ });
+        const auto opened = service.openFdResponse(1, ::dup(file.handle()), "lines.pdf");
+        QVERIFY2(!opened.error, opened.error ? opened.error->message.c_str() : "");
+
+        const auto lineCount = [&]() -> std::ptrdiff_t {
+            const auto annotations = service.document()->extractAnnotations(0, nullptr);
+            return std::count_if(annotations.begin(), annotations.end(), [](const ::Mu::Model::Annotation& value) {
+                return value.subtype == ::Mu::Model::AnnotationType::Line;
+            });
+        };
+
+        ::Mu::Model::Annotation line;
+        line.subtype = ::Mu::Model::AnnotationType::Line;
+        line.x0 = .1;
+        line.y0 = .1;
+        line.x1 = .5;
+        line.y1 = .5;
+
+        // Zero and one points both lack geometry and must not create anything.
+        const auto emptyAdd = service.dispatch({ 2, ::Mu::Model::AnnotationAddRequest { 0, line } });
+        QVERIFY(emptyAdd.error);
+        line.extras.points.push_back({ .1, .1 });
+        const auto singleAdd = service.dispatch({ 3, ::Mu::Model::AnnotationAddRequest { 0, line } });
+        QVERIFY(singleAdd.error);
+        QCOMPARE(lineCount(), std::ptrdiff_t(0));
+
+        // A two-point line is accepted, but degrading it to one point fails and
+        // leaves the original two-point geometry intact.
+        line.extras.points.push_back({ .5, .5 });
+        const auto added = service.dispatch({ 4, ::Mu::Model::AnnotationAddRequest { 0, line } });
+        QVERIFY2(!added.error, added.error ? added.error->message.c_str() : "");
+        const auto handle = std::get<::Mu::Model::AnnotationResponse>(added.payload).handle;
+        QVERIFY(!handle.value.empty());
+        QCOMPARE(lineCount(), std::ptrdiff_t(1));
+
+        auto degenerate = line;
+        degenerate.extras.points.pop_back();
+        const auto rejectedModify =
+            service.dispatch({ 5, ::Mu::Model::AnnotationModifyRequest { { 0, handle, degenerate, true } } });
+        QVERIFY(rejectedModify.error);
+
+        std::string error;
+        const auto annotations = service.document()->extractAnnotations(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(annotations.size(), size_t(1));
+        QCOMPARE(annotations.front().extras.points.size(), size_t(2));
+    }
+
     void malformedOpenCanRecoverOnSameDocument()
     {
         QTemporaryDir directory;

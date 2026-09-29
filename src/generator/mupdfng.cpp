@@ -276,7 +276,7 @@ void Main::scheduleCacheVacuum()
                    "Mu::Generator::Main",
                    std::string("cache vacuum removed ") + std::to_string(result.filesRemoved) + " files in "
                        + std::to_string(result.dirsRemoved) + " directories");
-            (void) result;
+            (void)result;
             if (!guard)
                 return;
             QMetaObject::invokeMethod(
