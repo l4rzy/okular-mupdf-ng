@@ -18,8 +18,54 @@ A secure and fast PDF and ePUB generator for Okular.
 ---
 
 ## How to install
-Prebuilt packages for common KDE distros are available for download [here](https://github.com/l4rzy/okular-mupdf-ng/releases).
-Alternatively, you can [build it yourself](#building-and-testing). Installing this plugin will override the default backend for PDF and ePUB. You can select the backend of your choice every time you open a document by enabling "Show backend selection dialog" option in Okular.
+
+Prebuilt packages for supported distros are attached to each
+[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). The links
+below always resolve to the latest release.
+
+Installing this plugin will override the default backend for PDF and ePUB. You
+can select the backend of your choice every time you open a document by enabling
+the "Show backend selection dialog" option in Okular.
+
+### Arch Linux
+
+```bash
+yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.14-1-x86_64.pkg.tar.zst
+```
+
+### Fedora
+
+```bash
+# Fedora 44 x86_64
+sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.14-1.fc44.x86_64.rpm
+
+# Fedora 43 aarch64/Asahi Linux
+sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.14-1.fc43.aarch64.rpm
+```
+
+### openSUSE Tumbleweed
+
+```bash
+sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.14-1.tumbleweed.x86_64.rpm
+```
+
+### Debian 13
+
+```bash
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.2.14-1_amd64_debian-13.deb
+sudo apt install ./okular-mupdf-ng_0.2.14-1_amd64_debian-13.deb
+```
+
+### Ubuntu 26.04
+
+```bash
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.2.14-1_amd64_ubuntu-26.04.deb
+sudo apt install ./okular-mupdf-ng_0.2.14-1_amd64_ubuntu-26.04.deb
+```
+
+### Any other distro
+
+Build from source — see [Building and testing](#building-and-testing).
 
 ---
 
@@ -96,16 +142,6 @@ For an already configured build tree, run all tests with:
 
 ```bash
 ctest --test-dir build --output-on-failure
-```
-
-## Arch Linux
-
-The package recipe lives in `dist/` and downloads the pinned MuPDF source in
-its `prepare()` step:
-
-```bash
-cd dist
-makepkg -si
 ```
 
 ## Credits
