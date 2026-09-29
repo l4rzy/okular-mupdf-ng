@@ -252,36 +252,13 @@ static int okularFlagsFor(int flags)
     return result;
 }
 
-static bool isEditableAnnotationType(Model::AnnotationType type)
-{
-    switch (type) {
-    case Model::AnnotationType::Text:
-    case Model::AnnotationType::FreeText:
-    case Model::AnnotationType::Line:
-    case Model::AnnotationType::Square:
-    case Model::AnnotationType::Circle:
-    case Model::AnnotationType::Polygon:
-    case Model::AnnotationType::PolyLine:
-    case Model::AnnotationType::Highlight:
-    case Model::AnnotationType::Underline:
-    case Model::AnnotationType::Squiggly:
-    case Model::AnnotationType::StrikeOut:
-    case Model::AnnotationType::Stamp:
-    case Model::AnnotationType::Caret:
-    case Model::AnnotationType::Ink:
-        return true;
-    default:
-        return false;
-    }
-}
-
 std::unique_ptr<Okular::Annotation> fromModel(const Model::Annotation& ad)
 {
     const auto& extra = ad.extras;
     const Model::AnnotationType type = ad.subtype;
     // Do not turn an unsupported PDF subtype into a TextAnnotation: doing so
     // makes a later edit silently overwrite data we cannot round-trip.
-    if (!isEditableAnnotationType(type))
+    if (!Model::isEditableAnnotationType(type))
         return nullptr;
     Okular::Annotation* ann = nullptr;
     if (type == Model::AnnotationType::Line || type == Model::AnnotationType::Polygon

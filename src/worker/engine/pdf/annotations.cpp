@@ -75,7 +75,10 @@ void normalizeAnnotationForWrite(Annotation& annotation)
     }
 }
 
-/// Coordinate conversion adapter between absolute PDF user points and Okular normalized [0, 1] page fractions.
+/// Coordinate conversion adapter between MuPDF page-space points and the model's
+/// normalized [0, 1] page fractions. MuPDF page space already uses a top-left
+/// origin with Y growing downward, so (unlike the PDF/XFDF user-space conversion
+/// owned by shared/model/geometry.hpp) no axis flip is applied here.
 struct PageCoordinates {
     fz_rect bounds;
     float width;
@@ -482,7 +485,7 @@ bool PdfDocument::addAnnotation(int page, const Annotation& annotation, std::int
     fz_try(m_context)
     {
         pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
-        if (!pdfPage || !isEditableAnnotation(annotation.subtype))
+        if (!pdfPage || !isEditableAnnotationType(annotation.subtype))
             fz_throw(m_context, FZ_ERROR_ARGUMENT, "annotation type is not editable");
 
         created = pdf_create_annot(m_context, pdfPage, pdfAnnotationType(annotation.subtype));
@@ -534,7 +537,7 @@ bool PdfDocument::modifyAnnotation(
     normalizeAnnotationForWrite(normalized);
     return withAnnotation(page, objectNumber, error, [&](pdf_page* pdfPage, pdf_annot* target) {
         const AnnotationType targetType = modelAnnotationType(pdf_annot_type(m_context, target));
-        if (!isEditableAnnotation(targetType) || annotation.subtype != targetType)
+        if (!isEditableAnnotationType(targetType) || annotation.subtype != targetType)
             fz_throw(m_context, FZ_ERROR_ARGUMENT, "annotation type mismatch");
 
         applyAnnotation(
@@ -742,33 +745,6 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
         return { };
     }
     return result;
-}
-
-// =============================================================================
-// Annotation Type Validation
-// =============================================================================
-
-constexpr bool PdfDocument::isEditableAnnotation(AnnotationType type) noexcept
-{
-    switch (type) {
-    case AnnotationType::Text:
-    case AnnotationType::FreeText:
-    case AnnotationType::Line:
-    case AnnotationType::Square:
-    case AnnotationType::Circle:
-    case AnnotationType::Polygon:
-    case AnnotationType::PolyLine:
-    case AnnotationType::Highlight:
-    case AnnotationType::Underline:
-    case AnnotationType::Squiggly:
-    case AnnotationType::StrikeOut:
-    case AnnotationType::Stamp:
-    case AnnotationType::Caret:
-    case AnnotationType::Ink:
-        return true;
-    default:
-        return false;
-    }
 }
 
 // =============================================================================

@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "shared/model/geometry.hpp"
 #include "shared/protocol/limits.hpp"
 
 namespace Mu::Plugin::Xfdf {
@@ -40,13 +41,6 @@ constexpr int MaxWarnings = 20;
 
 enum class GeometryParseStatus { Complete, Malformed, LimitExceeded };
 
-double clamp01(double value)
-{
-    if (!std::isfinite(value))
-        return 0.0;
-    return std::clamp(value, 0.0, 1.0);
-}
-
 std::optional<double> parseNumber(QStringView text)
 {
     bool ok = false;
@@ -57,12 +51,11 @@ std::optional<double> parseNumber(QStringView text)
 }
 
 /// Maps one PDF user-space point (origin bottom-left) to normalized top-left
-/// page coordinates. This is the exact inverse of the exporter's toUserSpace.
+/// page coordinates. The axis flip is owned by the shared model geometry
+/// helpers, which are the exact inverse of the exporter's conversion.
 Point normalizedPoint(double x, double y, double width, double height)
 {
-    const double nx = width > 0 ? x / width : 0.0;
-    const double ny = height > 0 ? 1.0 - y / height : 0.0;
-    return { clamp01(nx), clamp01(ny) };
+    return Model::userSpaceToNormalized({ x, y }, width, height);
 }
 
 void parseSinglePoint(QStringView text, double width, double height, std::vector<Point>& out)
@@ -715,12 +708,17 @@ private:
         annotation.modificationDate = parseXfdfDate(entry.date);
         annotation.color = composeColor(entry.color, entry.opacity);
         annotation.flags = parseFlags(entry.flags);
-        // rect is "left,bottom,right,top" in user-space; Y flips into the model's
-        // top-left downward frame.
-        annotation.x0 = clamp01(std::min(rect[0], rect[2]) / width);
-        annotation.x1 = clamp01(std::max(rect[0], rect[2]) / width);
-        annotation.y0 = clamp01(1.0 - std::max(rect[1], rect[3]) / height);
-        annotation.y1 = clamp01(1.0 - std::min(rect[1], rect[3]) / height);
+        // rect is "left,bottom,right,top" in user-space; the shared conversion
+        // flips Y into the model's top-left downward frame. Normalizing the two
+        // diagonal corners preserves the ordering guarantees of the input rect.
+        const Point topLeft =
+            Model::userSpaceToNormalized({ std::min(rect[0], rect[2]), std::max(rect[1], rect[3]) }, width, height);
+        const Point bottomRight =
+            Model::userSpaceToNormalized({ std::max(rect[0], rect[2]), std::min(rect[1], rect[3]) }, width, height);
+        annotation.x0 = topLeft.x;
+        annotation.y0 = topLeft.y;
+        annotation.x1 = bottomRight.x;
+        annotation.y1 = bottomRight.y;
 
         if (!applyGeometry(entry, subtype, width, height, annotation))
             return;

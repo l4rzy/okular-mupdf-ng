@@ -132,6 +132,34 @@ enum class AnnotationType : std::int32_t {
     Unknown = -1,
 };
 
+/// Returns whether an annotation subtype can be created or edited through the
+/// annotation mutation protocol. Every other subtype is visible to callers but
+/// is never overwritten by an edit. This is the single source of truth shared
+/// by the worker engine and the Okular generator.
+[[nodiscard]]
+inline constexpr bool isEditableAnnotationType(AnnotationType type) noexcept
+{
+    switch (type) {
+    case AnnotationType::Text:
+    case AnnotationType::FreeText:
+    case AnnotationType::Line:
+    case AnnotationType::Square:
+    case AnnotationType::Circle:
+    case AnnotationType::Polygon:
+    case AnnotationType::PolyLine:
+    case AnnotationType::Highlight:
+    case AnnotationType::Underline:
+    case AnnotationType::Squiggly:
+    case AnnotationType::StrikeOut:
+    case AnnotationType::Stamp:
+    case AnnotationType::Caret:
+    case AnnotationType::Ink:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /// Stable annotation flag bits exchanged across the worker boundary.
 enum class AnnotationFlag : std::int32_t {
     Invisible = 1 << 0,

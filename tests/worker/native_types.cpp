@@ -1,12 +1,14 @@
 #include "runtime/command_service.hpp"
 #include "runtime/render_budget.hpp"
 #include "shared/compat.hpp"
+#include "shared/model/geometry.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/limits.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 #include <QTest>
+#include <cmath>
 #include <mupdf/fitz/version.h>
 
 class TestNativeWorkerTypes : public QObject {
@@ -606,6 +608,61 @@ private slots:
         const auto extremeFallback = Worker::Runtime::fitRenderRequestToFrameBudget(extremeTile);
         QVERIFY(extremeFallback.frameWidth < static_cast<std::uint32_t>(extremeTile.tile->width));
         QVERIFY(sizeof(IPC::FrameBufferHeader) + extremeFallback.frameDataBytes <= Limit::MaxSharedFrameBytes);
+    }
+
+    void sharedEditableAnnotationWhitelistIsStable()
+    {
+        using ::Mu::Model::AnnotationType;
+        using ::Mu::Model::isEditableAnnotationType;
+
+        struct Case {
+            AnnotationType type;
+            bool editable;
+        };
+
+        static constexpr Case cases[] = {
+            { AnnotationType::Text, true },      { AnnotationType::FreeText, true },
+            { AnnotationType::Line, true },      { AnnotationType::Square, true },
+            { AnnotationType::Circle, true },    { AnnotationType::Polygon, true },
+            { AnnotationType::PolyLine, true },  { AnnotationType::Highlight, true },
+            { AnnotationType::Underline, true }, { AnnotationType::Squiggly, true },
+            { AnnotationType::StrikeOut, true }, { AnnotationType::Stamp, true },
+            { AnnotationType::Caret, true },     { AnnotationType::Ink, true },
+            { AnnotationType::Link, false },     { AnnotationType::Redact, false },
+            { AnnotationType::Popup, false },    { AnnotationType::FileAttachment, false },
+            { AnnotationType::Widget, false },   { AnnotationType::Unknown, false },
+        };
+        for (const Case& value : cases)
+            QCOMPARE(isEditableAnnotationType(value.type), value.editable);
+    }
+
+    void sharedNormalizedUserSpaceConversionsAreInverses()
+    {
+        using ::Mu::Model::normalizedToUserSpace;
+        using ::Mu::Model::Point;
+        using ::Mu::Model::userSpaceToNormalized;
+        const auto near = [](double a, double b) {
+            return std::abs(a - b) < 1e-9;
+        };
+
+        // Normalized (0.1, 0.2) on a 200x100 page flips Y to 80.
+        const Point user = normalizedToUserSpace({ 0.1, 0.2 }, 200, 100);
+        QVERIFY(near(user.x, 20.0));
+        QVERIFY(near(user.y, 80.0));
+
+        const Point round = userSpaceToNormalized(user, 200, 100);
+        QVERIFY(near(round.x, 0.1));
+        QVERIFY(near(round.y, 0.2));
+
+        // Out-of-range user-space points clamp into the normalized frame.
+        const Point clamped = userSpaceToNormalized({ -50, 200 }, 200, 100);
+        QVERIFY(near(clamped.x, 0.0));
+        QVERIFY(near(clamped.y, 0.0));
+
+        // A degenerate page extent yields zero rather than an infinity.
+        const Point degenerate = userSpaceToNormalized({ 10, 10 }, 0, 0);
+        QVERIFY(near(degenerate.x, 0.0));
+        QVERIFY(near(degenerate.y, 0.0));
     }
 };
 

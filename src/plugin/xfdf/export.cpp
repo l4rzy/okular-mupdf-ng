@@ -12,16 +12,18 @@
 #include <algorithm>
 #include <cmath>
 
+#include "shared/model/geometry.hpp"
+
 namespace Mu::Plugin::Xfdf {
 
 namespace {
 
 /// Maps one normalized top-left page point to PDF user-space (origin bottom-left)
-/// for a page of the given size. Coordinates are already reported in the page's
-/// rotated display space, so only the vertical axis is flipped.
+/// for a page of the given size. The axis flip is owned by the shared model
+/// geometry helpers so import and export stay exact inverses.
 Model::Point toUserSpace(double x, double y, double pageWidth, double pageHeight)
 {
-    return { x * pageWidth, (1.0 - y) * pageHeight };
+    return Model::normalizedToUserSpace({ x, y }, pageWidth, pageHeight);
 }
 
 QString formatNumber(double value)
