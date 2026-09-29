@@ -237,8 +237,7 @@ fz_page* PdfDocument::loadPage(int page, std::string* error) const
         return cached;
     }
 
-    fz_page* result = nullptr;
-    fz_var(result);
+    fz_page* volatile result = nullptr;
     fz_try(m_context)
     {
         result = fz_load_page(m_context, m_document, page);

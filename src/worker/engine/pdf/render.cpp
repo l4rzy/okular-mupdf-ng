@@ -54,11 +54,8 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
     if (!nativePage)
         return false;
 
-    fz_pixmap* pixmap = nullptr;
-    fz_device* device = nullptr;
-
-    fz_var(pixmap);
-    fz_var(device);
+    fz_pixmap* volatile pixmap = nullptr;
+    fz_device* volatile device = nullptr;
 
     fz_try(m_context)
     {
@@ -160,12 +157,9 @@ std::vector<TextBox> PdfDocument::textBoxes(
     if (!nativePage)
         return { };
 
-    fz_stext_page* text = nullptr;
-    fz_device* device = nullptr;
+    fz_stext_page* volatile text = nullptr;
+    fz_device* volatile device = nullptr;
     std::vector<TextBox> result;
-
-    fz_var(text);
-    fz_var(device);
 
     fz_try(m_context)
     {

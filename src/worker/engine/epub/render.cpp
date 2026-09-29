@@ -49,11 +49,8 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         return false;
 
     fz_matrix ctm = fz_identity;
-    fz_pixmap* pix = nullptr;
-    fz_device* dev = nullptr;
-
-    fz_var(pix);
-    fz_var(dev);
+    fz_pixmap* volatile pix = nullptr;
+    fz_device* volatile dev = nullptr;
 
     fz_try(m_context)
     {
@@ -167,8 +164,7 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
         return { };
 
     std::vector<TextBox> boxes;
-    fz_stext_page* stext = nullptr;
-    fz_var(stext);
+    fz_stext_page* volatile stext = nullptr;
     fz_try(m_context)
     {
         const double scaleX = dpiX / Constant::PointsPerInch;

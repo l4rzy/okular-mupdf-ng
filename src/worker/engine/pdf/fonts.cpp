@@ -37,7 +37,7 @@ std::vector<Font> PdfDocument::fonts(const std::vector<int>& pages, std::string*
     // name while preserving the first resource classification encountered.
     std::vector<Font> result;
     std::set<std::string, std::less<>> seen;
-    fz_page* nativePage = nullptr;
+    fz_page* volatile nativePage = nullptr;
     fz_try(m_context)
     {
         for (const int page : pages) {
@@ -45,7 +45,6 @@ std::vector<Font> PdfDocument::fonts(const std::vector<int>& pages, std::string*
                 fz_throw(m_context, FZ_ERROR_ARGUMENT, "page is unavailable");
 
             nativePage = fz_load_page(m_context, m_document, page);
-            fz_var(nativePage);
             fz_try(m_context)
             {
                 pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);

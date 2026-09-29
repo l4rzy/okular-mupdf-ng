@@ -64,20 +64,16 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
         }
     }
 
-    FILE* file = ::fdopen(fd, "wb");
+    FILE* volatile file = ::fdopen(fd, "wb");
     if (!file) {
         ::close(fd);
         return fail(error, "could not adopt output FD");
     }
 
-    fz_document_writer* writer = nullptr;
-    fz_page* page = nullptr;
-    fz_device* device = nullptr;
-    bool saved = false;
-    fz_var(writer);
-    fz_var(page);
-    fz_var(saved);
-    fz_var(file);
+    fz_document_writer* volatile writer = nullptr;
+    fz_page* volatile page = nullptr;
+    fz_device* volatile device = nullptr;
+    volatile bool saved = false;
 
     std::vector<int> targetPages = pages;
     std::string pageError;
@@ -192,7 +188,7 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
         }
     }
 
-    FILE* file = ::fdopen(fd, "wb");
+    FILE* volatile file = ::fdopen(fd, "wb");
     if (!file) {
         ::close(fd);
         return fail(error, "could not adopt output FD");
@@ -275,27 +271,16 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
     }
     const std::string producer = "Okular/okular-mupdf-ng " + std::string(::Mu::IPC::COMPAT);
 
-    fz_output* output = nullptr;
-    pdf_document* destination = nullptr;
-    fz_page* page = nullptr;
-    pdf_page* destinationPage = nullptr;
-    fz_device* device = nullptr;
-    pdf_obj* resources = nullptr;
-    fz_buffer* contents = nullptr;
-    pdf_obj* pageObject = nullptr;
-    char* generatedUri = nullptr;
-    bool saved = false;
-    fz_var(output);
-    fz_var(destination);
-    fz_var(page);
-    fz_var(destinationPage);
-    fz_var(device);
-    fz_var(resources);
-    fz_var(contents);
-    fz_var(pageObject);
-    fz_var(generatedUri);
-    fz_var(saved);
-    fz_var(file);
+    fz_output* volatile output = nullptr;
+    pdf_document* volatile destination = nullptr;
+    fz_page* volatile page = nullptr;
+    pdf_page* volatile destinationPage = nullptr;
+    fz_device* volatile device = nullptr;
+    pdf_obj* volatile resources = nullptr;
+    fz_buffer* volatile contents = nullptr;
+    pdf_obj* volatile pageObject = nullptr;
+    char* volatile generatedUri = nullptr;
+    volatile bool saved = false;
 
     std::string pageError;
     std::vector<Link> links;
@@ -351,7 +336,13 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
                 fz_concat(fz_translate(-bounds.x0, -bounds.y0),
                           fz_scale(layout.paperWidth / pageWidth, layout.paperHeight / pageHeight));
 
-            device = pdf_page_write(m_context, destination, mediaBox, &resources, &contents);
+            // pdf_page_write requires non-volatile out-params; publish the
+            // results into the volatile cleanup locals immediately after.
+            pdf_obj* resourcesOut = nullptr;
+            fz_buffer* contentsOut = nullptr;
+            device = pdf_page_write(m_context, destination, mediaBox, &resourcesOut, &contentsOut);
+            resources = resourcesOut;
+            contents = contentsOut;
             fz_run_page(m_context, page, device, transform, nullptr);
             fz_close_device(m_context, device);
             fz_drop_device(m_context, device);
@@ -430,7 +421,9 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
                     uri = generatedUri;
                 }
 
-                pdf_create_link(m_context, destinationPage, linkRect, uri);
+                // pdf_create_link returns a caller-owned reference on top of the
+                // page's own; drop it or the link leaks once the page is freed.
+                fz_drop_link(m_context, pdf_create_link(m_context, destinationPage, linkRect, uri));
                 if (generatedUri) {
                     fz_free(m_context, generatedUri);
                     generatedUri = nullptr;
@@ -455,8 +448,7 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
             // Declared before the nested fz_try: a skipped destructor on the
             // error longjmp path would leak the frame stack.
             std::vector<OpenFrame> openFrames;
-            fz_outline_iterator* iterator = pdf_new_outline_iterator(m_context, destination);
-            fz_var(iterator);
+            fz_outline_iterator* volatile iterator = pdf_new_outline_iterator(m_context, destination);
             fz_try(m_context)
             {
                 // Drives the destination outline iterator like MuPDF's

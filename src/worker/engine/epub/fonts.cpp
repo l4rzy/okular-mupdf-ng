@@ -80,8 +80,7 @@ std::vector<Font> EpubDocument::fonts(const std::vector<int>&, std::string*) con
 
     // Open the EPUB ZIP container and snapshot the entry count with PODs
     // only; every std::string/vector operation happens outside the boundary.
-    int entryCount = 0;
-    fz_var(entryCount);
+    volatile int entryCount = 0;
     fz_try(m_context)
     {
         if (!m_archive)
@@ -99,8 +98,7 @@ std::vector<Font> EpubDocument::fonts(const std::vector<int>&, std::string*) con
     }
 
     for (int index = 0; index < entryCount; ++index) {
-        const char* entryName = nullptr;
-        fz_var(entryName);
+        const char* volatile entryName = nullptr;
         fz_try(m_context)
         {
             entryName = fz_list_archive_entry(m_context, m_archive, index);

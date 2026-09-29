@@ -26,12 +26,11 @@ namespace {
 bool lookupMetadataValue(
     fz_context* context, fz_document* document, const char* key, std::string& value, bool& found, std::string* error)
 {
-    char* buffer = nullptr;
-    int required = 0;
+    char* volatile buffer = nullptr;
+    volatile int required = 0;
+    // `found` refers to caller storage, so longjmp cannot invalidate it; no
+    // fz_var/volatile is needed to preserve it across the exception boundary.
     found = false;
-    fz_var(buffer);
-    fz_var(required);
-    fz_var(found);
 
     fz_try(context)
     {
@@ -204,8 +203,7 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
             if (!nativePage)
                 return { };
 
-            std::size_t pageSignatureCount = 0;
-            fz_var(pageSignatureCount);
+            std::size_t volatile pageSignatureCount = 0;
             fz_try(m_context)
             {
                 const fz_rect bounds = fz_bound_page(m_context, nativePage);

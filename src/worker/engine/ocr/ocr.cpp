@@ -53,10 +53,8 @@ void detectImageMask(
 /// If a page contains only vector paths and text, expensive Tesseract OCR can be skipped.
 bool pageHasImages(fz_context* context, fz_page* page, fz_cookie* cookie)
 {
-    ImagePresenceDevice* detector = nullptr;
-    bool hasImage = false;
-    fz_var(detector);
-    fz_var(hasImage);
+    ImagePresenceDevice* volatile detector = nullptr;
+    volatile bool hasImage = false;
     fz_try(context)
     {
         detector = reinterpret_cast<ImagePresenceDevice*>(fz_new_device_of_size(context, sizeof(ImagePresenceDevice)));
@@ -135,22 +133,15 @@ std::string tessdataLanguage(std::string language)
     FILE* input = ::fdopen(fd.get(), "rb");
     if (input)
         (void)fd.release();
-    fz_stream* stream = nullptr;
-    fz_document* document = nullptr;
-    fz_page* page = nullptr;
-    fz_stext_page* text = nullptr;
-    fz_device* textDevice = nullptr;
-    fz_device* ocrDevice = nullptr;
-    fz_var(stream);
-    fz_var(document);
-    fz_var(page);
-    fz_var(text);
-    fz_var(textDevice);
-    fz_var(ocrDevice);
+    fz_stream* volatile stream = nullptr;
+    fz_document* volatile document = nullptr;
+    fz_page* volatile page = nullptr;
+    fz_stext_page* volatile text = nullptr;
+    fz_device* volatile textDevice = nullptr;
+    fz_device* volatile ocrDevice = nullptr;
     CancellationCookie fallbackCookie;
     CancellationCookie* activeCookie = cookie ? cookie : &fallbackCookie;
-    bool failed = false;
-    fz_var(failed);
+    volatile bool failed = false;
     const std::string lang = tessdataLanguage(language);
 
     fz_try(context)

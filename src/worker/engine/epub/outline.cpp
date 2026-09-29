@@ -47,8 +47,7 @@ EpubDocument::copyOutline(const fz_outline* source, std::size_t depth, std::size
         } else {
             // Isolate the only throwing MuPDF call so no C++ object is live
             // across the longjmp; a bad destination only leaves this link invalid.
-            int pageNum = -1;
-            fz_var(pageNum);
+            volatile int pageNum = -1;
             fz_try(m_context)
             {
                 pageNum = fz_page_number_from_location(m_context, m_document, item->page);
@@ -82,8 +81,7 @@ std::vector<OutlineNode> EpubDocument::outline(std::string* error) const
         return { };
     }
     std::vector<OutlineNode> result;
-    fz_outline* outlineHead = nullptr;
-    fz_var(outlineHead);
+    fz_outline* volatile outlineHead = nullptr;
     fz_try(m_context)
     {
         // Load table-of-contents tree from EPUB navigation document / NCX

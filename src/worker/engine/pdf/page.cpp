@@ -245,9 +245,8 @@ std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_re
     if (width <= 0 || height <= 0)
         fz_throw(m_context, FZ_ERROR_GENERIC, "page has invalid bounds");
 
-    fz_link* list = nullptr;
+    fz_link* volatile list = nullptr;
     std::vector<Link> result;
-    fz_var(list);
     fz_try(m_context)
     {
         // Load link annotations from page content stream and annotation dictionaries

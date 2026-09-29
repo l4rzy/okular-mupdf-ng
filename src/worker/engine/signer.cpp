@@ -51,10 +51,8 @@ pdf_pkcs7_signer* createSigner(std::string nickname, std::string subjectCommonNa
         auto* signer = reinterpret_cast<Signer*>(value);
         if (signer->subjectCommonName.empty())
             return nullptr;
-        pdf_pkcs7_distinguished_name* result = nullptr;
-        bool complete = false;
-        fz_var(result);
-        fz_var(complete);
+        pdf_pkcs7_distinguished_name* volatile result = nullptr;
+        volatile bool complete = false;
         fz_try(context)
         {
             result =

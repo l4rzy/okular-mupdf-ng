@@ -59,10 +59,9 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
         // Step 2: Collect page-level file attachment annotations across all pages.
         // Skip the walk entirely when the name-tree phase already tripped the
         // budget; the remaining budget is zero and partial results are kept.
-        fz_page* nativePage = nullptr;
+        fz_page* volatile nativePage = nullptr;
         for (int page = 0; page < m_pageCount && !(resourceLimit && *resourceLimit); ++page) {
             nativePage = fz_load_page(m_context, m_document, page);
-            fz_var(nativePage);
             std::size_t visitedAnnots = 0;
             fz_try(m_context)
             {
@@ -221,8 +220,7 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
     }
 
     // Stream raw decompressed bytes into buffer with strict resource size enforcement
-    fz_stream* input = nullptr;
-    fz_var(input);
+    fz_stream* volatile input = nullptr;
     fz_try(context)
     {
         input = pdf_open_stream(context, streamObject);

@@ -107,12 +107,9 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
     }
     // Snapshot the MuPDF outcome into PODs only; the C++ result is built
     // after fz_catch so no std::string lives across the longjmp.
-    bool isExternal = false;
-    bool found = false;
-    int pageNum = -1;
-    fz_var(isExternal);
-    fz_var(found);
-    fz_var(pageNum);
+    volatile bool isExternal = false;
+    volatile bool found = false;
+    volatile int pageNum = -1;
     fz_try(m_context)
     {
         if (fz_is_external_link(m_context, uri.c_str())) {
@@ -183,8 +180,7 @@ std::vector<Link> EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect
 
     // Load the C link list in a narrow protected region; iteration and all
     // C++ work happen outside so no destructor is skipped by longjmp.
-    fz_link* linkList = nullptr;
-    fz_var(linkList);
+    fz_link* volatile linkList = nullptr;
     fz_try(m_context)
     {
         linkList = fz_load_links(m_context, pagePtr);

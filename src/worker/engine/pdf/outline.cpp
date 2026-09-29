@@ -28,10 +28,9 @@ std::vector<OutlineNode> PdfDocument::outline(std::string* error) const
         return { };
     }
 
-    fz_outline* root = nullptr;
+    fz_outline* volatile root = nullptr;
     std::vector<OutlineNode> result;
 
-    fz_var(root);
     fz_try(m_context)
     {
         // Load hierarchical document outline from Fitz engine

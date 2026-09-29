@@ -478,10 +478,12 @@ bool PdfDocument::addAnnotation(int page, const Annotation& annotation, std::int
 
     Annotation normalized = annotation;
     normalizeAnnotationForWrite(normalized);
-    bool complete = false;
-    pdf_annot* created = nullptr;
-    fz_var(complete);
-    fz_var(created);
+    // volatile, not fz_var: fz_var_imp is a no-op that LTO inlines away, so a
+    // non-volatile local modified between the setjmp in fz_try and the longjmp
+    // in fz_throw is indeterminate afterwards. The rollback below depends on
+    // the annotated pointer and completion flag surviving that jump.
+    volatile bool complete = false;
+    pdf_annot* volatile created = nullptr;
     fz_try(m_context)
     {
         pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
@@ -759,14 +761,12 @@ void PdfDocument::applyAnnotation(fz_context* context,
                                   const fz_rect& pageBounds,
                                   bool updateAppearance)
 {
-    fz_quad* quads = nullptr;
-    fz_point* linePoints = nullptr;
-    int* inkCounts = nullptr;
-    fz_point* inkPoints = nullptr;
-    fz_var(quads);
-    fz_var(linePoints);
-    fz_var(inkCounts);
-    fz_var(inkPoints);
+    // volatile, not fz_var: these buffers are freed in fz_always after a
+    // potential longjmp, and LTO defeats fz_var's non-volatile address escape.
+    fz_quad* volatile quads = nullptr;
+    fz_point* volatile linePoints = nullptr;
+    int* volatile inkCounts = nullptr;
+    fz_point* volatile inkPoints = nullptr;
     fz_try(context)
     {
         const float pageWidth = pageBounds.x1 - pageBounds.x0;

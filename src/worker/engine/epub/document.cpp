@@ -183,10 +183,8 @@ bool EpubDocument::openFdWithAccelerator(int fd,
     const std::string css = documentCss(m_settings, customCss.value_or(std::string()));
     const std::string fallbackCss = hasCustomCss ? documentCss(m_settings, { }) : std::string();
 
-    fz_buffer* acceleratorBuffer = nullptr;
-    fz_stream* acceleratorStream = nullptr;
-    fz_var(acceleratorBuffer);
-    fz_var(acceleratorStream);
+    fz_buffer* volatile acceleratorBuffer = nullptr;
+    fz_stream* volatile acceleratorStream = nullptr;
     fz_try(m_context)
     {
         // Step 1: Open stream and instantiate MuPDF document handle
@@ -240,9 +238,8 @@ std::vector<std::uint8_t> EpubDocument::exportAccelerator(std::string* error) co
     if (!m_context || !m_document || !fz_document_supports_accelerator(m_context, m_document))
         return { };
 
-    fz_buffer* buffer = nullptr;
+    fz_buffer* volatile buffer = nullptr;
     std::vector<std::uint8_t> result;
-    fz_var(buffer);
     fz_try(m_context)
     {
         buffer = fz_new_buffer(m_context, 0);
@@ -401,8 +398,7 @@ fz_page* EpubDocument::loadPage(int page, std::string* error) const
     if (fz_page* cached = m_pageCache.acquire(m_context, page))
         return cached;
 
-    fz_page* result = nullptr;
-    fz_var(result);
+    fz_page* volatile result = nullptr;
     fz_try(m_context)
     {
         result = fz_load_page(m_context, m_document, page);
@@ -432,13 +428,11 @@ fz_page* EpubDocument::loadPageWithBounds(int page, fz_rect* bounds, std::string
         return nullptr;
     }
 
-    fz_page* result = loadPage(page, error);
+    fz_page* volatile result = loadPage(page, error);
     if (!result)
         return nullptr;
 
-    bool boundsLoaded = false;
-    fz_var(result);
-    fz_var(boundsLoaded);
+    volatile bool boundsLoaded = false;
     fz_try(m_context)
     {
         *bounds = fz_bound_page(m_context, result);

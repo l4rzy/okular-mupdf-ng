@@ -25,12 +25,10 @@ namespace {
 bool lookupMetadataValue(
     fz_context* context, fz_document* document, const char* key, std::string& value, bool& found, std::string* error)
 {
-    char* buffer = nullptr;
-    int required = 0;
+    char* volatile buffer = nullptr;
+    volatile int required = 0;
+    // `found` refers to caller storage, so longjmp cannot invalidate it.
     found = false;
-    fz_var(buffer);
-    fz_var(required);
-    fz_var(found);
 
     fz_try(context)
     {

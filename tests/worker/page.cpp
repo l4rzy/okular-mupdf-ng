@@ -354,7 +354,7 @@ private slots:
 
         pdf_obj* malformedPage = pdf_lookup_page_obj(context, pdfDocument, 2);
         QVERIFY(malformedPage);
-        pdf_dict_puts(context, malformedPage, "MediaBox", pdf_new_string(context, "malformed", 9));
+        pdf_dict_puts_drop(context, malformedPage, "MediaBox", pdf_new_string(context, "malformed", 9));
         const auto malformed = document.resolveLink("#page=3&zoom=nan,0.5,0.5");
         QVERIFY(malformed.valid);
         QCOMPARE(malformed.viewport.page, 2);

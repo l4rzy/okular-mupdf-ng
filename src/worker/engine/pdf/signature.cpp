@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <memory>
 #include <optional>
 #include <string>
 #include <sys/stat.h>
@@ -94,10 +95,10 @@ fz_display_list* signatureAppearanceWithCustomFont(fz_context* context,
                                                    int includeLogo)
 {
     const std::string fontPath = std::string(SIGNATURE_FONT_DIR) + '/' + Constant::SignatureAppearanceFontFileName;
-    fz_font* font = nullptr;
-    bool fontLoaded = false;
-    fz_var(font);
-    fz_var(fontLoaded);
+    // volatile, not fz_var: fz_var_imp is a no-op that LTO inlines away, so the
+    // cleanup reads below would otherwise see indeterminate values.
+    fz_font* volatile font = nullptr;
+    volatile bool fontLoaded = false;
     fz_try(context)
     {
         font = fz_new_font_from_file(context, "Allura", fontPath.c_str(), 0, 0);
@@ -113,15 +114,11 @@ fz_display_list* signatureAppearanceWithCustomFont(fz_context* context,
     }
     fz_set_font_embedding(context, font, 1);
 
-    fz_display_list* baseAppearance = nullptr;
-    fz_display_list* appearance = nullptr;
-    fz_device* device = nullptr;
-    fz_text* text = nullptr;
+    fz_display_list* volatile baseAppearance = nullptr;
+    fz_display_list* volatile appearance = nullptr;
+    fz_device* volatile device = nullptr;
+    fz_text* volatile text = nullptr;
     fz_colorspace* colorspace = nullptr;
-    fz_var(baseAppearance);
-    fz_var(appearance);
-    fz_var(device);
-    fz_var(text);
     fz_try(context)
     {
         // A blank left-side string makes MuPDF reserve the same two-pane layout
@@ -184,10 +181,12 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
 {
     const float width = bounds.x1 - bounds.x0;
     const float height = bounds.y1 - bounds.y0;
-    RawSignatureField raw;
-    bool accepted = false;
-    fz_var(raw);
-    fz_var(accepted);
+    // Keep the record on the heap: fz_var only address-escapes a local, which
+    // LTO defeats, and a volatile struct cannot be used with &raw->contents.
+    // The pointer is never reassigned and the storage outlives the longjmp.
+    const auto rawStorage = std::make_unique<RawSignatureField>();
+    RawSignatureField* const raw = rawStorage.get();
+    volatile bool accepted = false;
 
     fz_try(context)
     {
@@ -195,40 +194,40 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
         const bool signatureWidget = pdf_widget_type(context, annotation) == PDF_WIDGET_TYPE_SIGNATURE
             || (field && pdf_name_eq(context, pdf_dict_get_inheritable(context, field, PDF_NAME(FT)), PDF_NAME(Sig)));
         if (signatureWidget) {
-            raw.page = pdf_lookup_page_number(context, pdfDocument, pdf_dict_get(context, field, PDF_NAME(P)));
-            raw.objectNumber = pdf_to_num(context, field);
-            raw.partialName = pdf_to_text_string(context, pdf_dict_get_inheritable(context, field, PDF_NAME(T)));
-            raw.fullyQualifiedName = pdf_load_field_name(context, field);
-            raw.annotationFlags = pdf_dict_get_int(context, field, PDF_NAME(F));
-            raw.readOnly = (pdf_field_flags(context, field) & PDF_FIELD_IS_READ_ONLY) != 0
-                || (raw.annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0;
-            raw.visible =
-                (raw.annotationFlags & (PDF_ANNOT_IS_INVISIBLE | PDF_ANNOT_IS_HIDDEN | PDF_ANNOT_IS_NO_VIEW)) == 0;
-            raw.signedField = pdf_signature_is_signed(context, pdfDocument, field) != 0;
-            raw.rectangle = pdf_bound_annot(context, annotation);
+            raw->page = pdf_lookup_page_number(context, pdfDocument, pdf_dict_get(context, field, PDF_NAME(P)));
+            raw->objectNumber = pdf_to_num(context, field);
+            raw->partialName = pdf_to_text_string(context, pdf_dict_get_inheritable(context, field, PDF_NAME(T)));
+            raw->fullyQualifiedName = pdf_load_field_name(context, field);
+            raw->annotationFlags = pdf_dict_get_int(context, field, PDF_NAME(F));
+            raw->readOnly = (pdf_field_flags(context, field) & PDF_FIELD_IS_READ_ONLY) != 0
+                || (raw->annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0;
+            raw->visible =
+                (raw->annotationFlags & (PDF_ANNOT_IS_INVISIBLE | PDF_ANNOT_IS_HIDDEN | PDF_ANNOT_IS_NO_VIEW)) == 0;
+            raw->signedField = pdf_signature_is_signed(context, pdfDocument, field) != 0;
+            raw->rectangle = pdf_bound_annot(context, annotation);
 
-            if (raw.signedField) {
+            if (raw->signedField) {
                 // Parse signature dictionary (/V entry)
                 pdf_obj* signature = pdf_dict_get_inheritable(context, field, PDF_NAME(V));
-                raw.signerName = pdf_to_text_string(context, pdf_dict_get(context, signature, PDF_NAME(Name)));
-                raw.reason = pdf_to_text_string(context, pdf_dict_get(context, signature, PDF_NAME(Reason)));
-                raw.location = pdf_to_text_string(context, pdf_dict_get(context, signature, PDF_NAME(Location)));
+                raw->signerName = pdf_to_text_string(context, pdf_dict_get(context, signature, PDF_NAME(Name)));
+                raw->reason = pdf_to_text_string(context, pdf_dict_get(context, signature, PDF_NAME(Reason)));
+                raw->location = pdf_to_text_string(context, pdf_dict_get(context, signature, PDF_NAME(Location)));
 
                 if (pdf_obj* date = pdf_dict_get(context, signature, PDF_NAME(M))) {
                     const std::int64_t seconds = pdf_to_date(context, date);
                     if (seconds > 0)
-                        raw.signingSeconds = seconds;
+                        raw->signingSeconds = seconds;
                 }
 
                 if (pdf_obj* filter = pdf_dict_get(context, signature, PDF_NAME(SubFilter)))
-                    raw.subFilter = pdf_to_name(context, filter);
+                    raw->subFilter = pdf_to_name(context, filter);
 
                 // Validate /ByteRange array to check whether the signature covers the entire file
                 pdf_obj* byteRange = pdf_dict_get(context, signature, PDF_NAME(ByteRange));
                 if (byteRange && pdf_is_array(context, byteRange) && pdf_array_len(context, byteRange) == 4) {
-                    raw.byteRangeCount = 4;
-                    for (int index = 0; index < raw.byteRangeCount; ++index)
-                        raw.byteRange[index] = pdf_to_int64(context, pdf_array_get(context, byteRange, index));
+                    raw->byteRangeCount = 4;
+                    for (int index = 0; index < raw->byteRangeCount; ++index)
+                        raw->byteRange[index] = pdf_to_int64(context, pdf_array_get(context, byteRange, index));
                 }
 
                 // Avoid asking MuPDF to allocate an oversized /Contents string.
@@ -239,7 +238,7 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
                 const std::size_t maxContentsBytes = std::min(Constant::MaxSignatureCmsBytes, remainingCmsBytes);
                 if (contents && pdf_is_string(context, contents)
                     && pdf_to_str_len(context, contents) <= maxContentsBytes) {
-                    raw.contentsSize = pdf_signature_contents(context, pdfDocument, field, &raw.contents);
+                    raw->contentsSize = pdf_signature_contents(context, pdfDocument, field, &raw->contents);
                 }
             }
             accepted = true;
@@ -252,41 +251,41 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
     }
 
     if (!accepted) {
-        freeRawSignatureField(context, raw);
+        freeRawSignatureField(context, *raw);
         return std::nullopt;
     }
 
     try {
         SignatureField value;
-        value.page = raw.page;
-        value.objectNumber = raw.objectNumber;
-        if (raw.partialName)
-            value.partialName = raw.partialName;
-        if (raw.fullyQualifiedName)
-            value.fullyQualifiedName = raw.fullyQualifiedName;
-        value.readOnly = raw.readOnly;
-        value.visible = raw.visible;
-        value.signedField = raw.signedField;
+        value.page = raw->page;
+        value.objectNumber = raw->objectNumber;
+        if (raw->partialName)
+            value.partialName = raw->partialName;
+        if (raw->fullyQualifiedName)
+            value.fullyQualifiedName = raw->fullyQualifiedName;
+        value.readOnly = raw->readOnly;
+        value.visible = raw->visible;
+        value.signedField = raw->signedField;
         value.certificateStatus = CertificateStatus::NotVerified;
         value.certificateStatusAtSigningTime = CertificateStatus::NotVerified;
         value.certificateStatusCurrent = CertificateStatus::NotVerified;
         value.signatureStatus = value.signedField ? SignatureStatus::NotVerified : SignatureStatus::NotFound;
-        value.left = (raw.rectangle.x0 - bounds.x0) / width;
-        value.top = (raw.rectangle.y0 - bounds.y0) / height;
-        value.right = (raw.rectangle.x1 - bounds.x0) / width;
-        value.bottom = (raw.rectangle.y1 - bounds.y0) / height;
+        value.left = (raw->rectangle.x0 - bounds.x0) / width;
+        value.top = (raw->rectangle.y0 - bounds.y0) / height;
+        value.right = (raw->rectangle.x1 - bounds.x0) / width;
+        value.bottom = (raw->rectangle.y1 - bounds.y0) / height;
 
-        if (raw.signedField) {
-            if (raw.signerName)
-                value.signerName = raw.signerName;
-            if (raw.reason)
-                value.reason = raw.reason;
-            if (raw.location)
-                value.location = raw.location;
-            if (raw.signingSeconds > 0)
-                value.signingTime = { true, raw.signingSeconds * Constant::MillisecondsPerSecond };
-            if (raw.subFilter)
-                value.subFilter = raw.subFilter;
+        if (raw->signedField) {
+            if (raw->signerName)
+                value.signerName = raw->signerName;
+            if (raw->reason)
+                value.reason = raw->reason;
+            if (raw->location)
+                value.location = raw->location;
+            if (raw->signingSeconds > 0)
+                value.signingTime = { true, raw->signingSeconds * Constant::MillisecondsPerSecond };
+            if (raw->subFilter)
+                value.subFilter = raw->subFilter;
 
             if (value.subFilter.find("sha256") != std::string::npos)
                 value.hashAlgorithm = HashAlgorithm::Sha256;
@@ -299,8 +298,8 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
             else if (value.subFilter.find("md5") != std::string::npos)
                 value.hashAlgorithm = HashAlgorithm::Md5;
 
-            if (raw.byteRangeCount == 4) {
-                for (const auto range : raw.byteRange)
+            if (raw->byteRangeCount == 4) {
+                for (const auto range : raw->byteRange)
                     value.byteRange.push_back(range);
                 const auto validRange = value.byteRange[0] == 0 && value.byteRange[1] >= 0
                     && value.byteRange[2] >= value.byteRange[1] && value.byteRange[3] >= 0
@@ -309,17 +308,17 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
                     validRange && fileSize > 0 && value.byteRange[2] + value.byteRange[3] == fileSize;
             }
 
-            if (raw.contents && raw.contentsSize <= Constant::MaxSignatureCmsBytes
-                && raw.contentsSize <= Constant::MaxPageSignatureCmsBytes - totalCmsBytes) {
-                value.cmsSignature.assign(reinterpret_cast<std::uint8_t*>(raw.contents),
-                                          reinterpret_cast<std::uint8_t*>(raw.contents) + raw.contentsSize);
-                totalCmsBytes += raw.contentsSize;
+            if (raw->contents && raw->contentsSize <= Constant::MaxSignatureCmsBytes
+                && raw->contentsSize <= Constant::MaxPageSignatureCmsBytes - totalCmsBytes) {
+                value.cmsSignature.assign(reinterpret_cast<std::uint8_t*>(raw->contents),
+                                          reinterpret_cast<std::uint8_t*>(raw->contents) + raw->contentsSize);
+                totalCmsBytes += raw->contentsSize;
             }
         }
-        freeRawSignatureField(context, raw);
+        freeRawSignatureField(context, *raw);
         return value;
     } catch (...) {
-        freeRawSignatureField(context, raw);
+        freeRawSignatureField(context, *raw);
         throw;
     }
 }
@@ -366,21 +365,24 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     // signature byte ranges before invoking the CMS callback.
     // Adopt the caller-owned descriptor exactly once. From this point, every
     // failure path must close file, unless MuPDF output takes ownership below.
-    FILE* file = ::fdopen(outputFd, "w+b");
+    FILE* volatile file = ::fdopen(outputFd, "w+b");
     if (!file) {
         ::close(outputFd);
         return fail(error, "could not adopt output FD");
     }
 
     pdf_pkcs7_signer* signer = nullptr;
-    pdf_page* nativePage = nullptr;
-    pdf_annot* widget = nullptr;
-    fz_image* graphic = nullptr;
-    fz_output* output = nullptr;
-    FILE* sourceCopy = nullptr;
-    bool saved = false;
-    bool createdWidget = false;
-    bool widgetMutationComplete = false;
+    // Rollback locals are volatile, not fz_var: fz_var_imp is a no-op that LTO
+    // inlines away, so non-volatile locals are indeterminate after fz_try's
+    // setjmp / fz_throw's longjmp and the cleanup below would be skipped.
+    pdf_page* volatile nativePage = nullptr;
+    pdf_annot* volatile widget = nullptr;
+    fz_image* volatile graphic = nullptr;
+    fz_output* volatile output = nullptr;
+    FILE* volatile sourceCopy = nullptr;
+    volatile bool saved = false;
+    volatile bool createdWidget = false;
+    volatile bool widgetMutationComplete = false;
 
     try {
         signer = createSigner(request.certificateNickname, request.certificateSubjectCommonName, std::move(callback));
@@ -399,16 +401,6 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     std::string displayDate = !request.appearance.signingDisplayDate.empty() ? request.appearance.signingDisplayDate
                                                                              : formatSignatureDate(signingTime);
     std::string signatureText;
-
-    fz_var(nativePage);
-    fz_var(widget);
-    fz_var(graphic);
-    fz_var(output);
-    fz_var(sourceCopy);
-    fz_var(file);
-    fz_var(saved);
-    fz_var(createdWidget);
-    fz_var(widgetMutationComplete);
 
     fz_try(m_context)
     {
@@ -487,8 +479,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
         // Optional: Load background image graphic if provided
         if (!request.appearance.backgroundImage.empty()) {
-            fz_buffer* imgBuf = nullptr;
-            fz_var(imgBuf);
+            fz_buffer* volatile imgBuf = nullptr;
             fz_try(m_context)
             {
                 imgBuf = fz_new_buffer_from_copied_data(
@@ -518,12 +509,9 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
         fz_try(m_context)
         {
-            char* info = nullptr;
-            fz_display_list* dlist = nullptr;
-            pdf_pkcs7_distinguished_name* dn = signer->get_signing_name(m_context, signer);
-            fz_var(info);
-            fz_var(dn);
-            fz_var(dlist);
+            char* volatile info = nullptr;
+            fz_display_list* volatile dlist = nullptr;
+            pdf_pkcs7_distinguished_name* volatile dn = signer->get_signing_name(m_context, signer);
             fz_try(m_context)
             {
                 // date -1 suppresses MuPDF's ISO date line; the friendly date is appended below.
@@ -566,14 +554,10 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                     // box. Runs in its own error domain so a border failure
                     // keeps the original appearance instead of failing the
                     // signing itself.
-                    fz_display_list* bordered = nullptr;
-                    fz_device* borderDevice = nullptr;
-                    fz_path* borderPath = nullptr;
-                    fz_stroke_state* borderStroke = nullptr;
-                    fz_var(bordered);
-                    fz_var(borderDevice);
-                    fz_var(borderPath);
-                    fz_var(borderStroke);
+                    fz_display_list* volatile bordered = nullptr;
+                    fz_device* volatile borderDevice = nullptr;
+                    fz_path* volatile borderPath = nullptr;
+                    fz_stroke_state* volatile borderStroke = nullptr;
                     fz_try(m_context)
                     {
                         bordered = fz_new_display_list(m_context, rect);

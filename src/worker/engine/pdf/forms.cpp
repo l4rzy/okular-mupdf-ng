@@ -432,8 +432,7 @@ bool PdfDocument::updateFormField(int page,
     if (!nativePage)
         return false;
 
-    pdf_obj* newValue = nullptr;
-    fz_var(newValue);
+    pdf_obj* volatile newValue = nullptr;
 
     // Locate the widget on the requested page first, then resolve its logical
     // field head. This prevents a valid object number on another page from being

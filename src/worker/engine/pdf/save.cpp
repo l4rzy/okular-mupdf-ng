@@ -48,7 +48,7 @@ bool copyFileContents(FILE* src, FILE* dst)
 }
 
 /// Helper to safely close and release Fitz output stream without leaking file descriptors.
-void closeAndDropOutput(fz_context* context, fz_output*& output, FILE*& file) noexcept
+void closeAndDropOutput(fz_context* context, fz_output* volatile& output, FILE* volatile& file) noexcept
 {
     // This helper is used only after a failed write. Closing output is best
     // effort; the original MuPDF/write error remains the caller's diagnostic.
@@ -93,17 +93,14 @@ bool PdfDocument::saveFd(int fd, std::string* error)
     // write sees the same open-page set it would without the render cache.
     clearPageCache();
 
-    FILE* file = ::fdopen(fd, "wb");
+    FILE* volatile file = ::fdopen(fd, "wb");
     if (!file) {
         ::close(fd);
         return fail(error, "could not adopt output FD");
     }
 
-    fz_output* output = nullptr;
-    bool saved = false;
-    fz_var(output);
-    fz_var(saved);
-    fz_var(file);
+    fz_output* volatile output = nullptr;
+    volatile bool saved = false;
 
     fz_try(m_context)
     {
@@ -175,21 +172,16 @@ bool PdfDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string* 
         }
     }
 
-    FILE* file = ::fdopen(fd, "wb");
+    FILE* volatile file = ::fdopen(fd, "wb");
     if (!file) {
         ::close(fd);
         return fail(error, "could not adopt output FD");
     }
 
-    fz_output* output = nullptr;
-    pdf_document* dstDoc = nullptr;
-    pdf_graft_map* map = nullptr;
-    bool saved = false;
-    fz_var(output);
-    fz_var(dstDoc);
-    fz_var(map);
-    fz_var(saved);
-    fz_var(file);
+    fz_output* volatile output = nullptr;
+    pdf_document* volatile dstDoc = nullptr;
+    pdf_graft_map* volatile map = nullptr;
+    volatile bool saved = false;
 
     std::vector<int> targetPages = pages;
     if (targetPages.empty()) {
