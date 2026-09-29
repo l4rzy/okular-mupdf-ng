@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-27 00:02-0500\n"
+"POT-Creation-Date: 2026-09-28 21:55-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -186,6 +186,7 @@ msgstr ""
 
 #: src/generator/config/certmanager/manager_dialog.cpp:36
 #: src/generator/config/certmanager/manager_dialog.cpp:120
+#: src/generator/mupdfng.cpp:657
 msgid "Unknown"
 msgstr ""
 
@@ -364,129 +365,119 @@ msgstr ""
 msgid "Create"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:144
+#: src/generator/mupdfng.cpp:147
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:148
+#: src/generator/mupdfng.cpp:151
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:149
+#: src/generator/mupdfng.cpp:152
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:173
+#: src/generator/mupdfng.cpp:176
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:184
+#: src/generator/mupdfng.cpp:187
 msgid "The document renderer stopped responding. Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:218
+#: src/generator/mupdfng.cpp:221
 msgid "Export to PDF failed: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:221
+#: src/generator/mupdfng.cpp:224
 msgid "Export to PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:238
+#: src/generator/mupdfng.cpp:241
 msgid "OCR completed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:243
+#: src/generator/mupdfng.cpp:246
 msgid "Running OCR on page %1..."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:247
+#: src/generator/mupdfng.cpp:250
 msgid "OCR failed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:340
+#: src/generator/mupdfng.cpp:344
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:363
+#: src/generator/mupdfng.cpp:367
 msgid "MuPDF-NG"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:365
+#: src/generator/mupdfng.cpp:369
 msgid "MuPDF-NG Configuration"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:371
+#: src/generator/mupdfng.cpp:375
 msgid "Restart needed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:371
+#: src/generator/mupdfng.cpp:375
 msgid "You need to restart Okular to apply this change."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:625
+#: src/generator/mupdfng.cpp:629
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:638
+#: src/generator/mupdfng.cpp:642
 msgid ""
 "[WARN] The MuPDF worker is partially hardened: Okular's protection is "
 "limited."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:640
+#: src/generator/mupdfng.cpp:644
 msgid ""
 "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
 "you from malicious documents."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:661
-msgid "Pinned against MuPDF %1"
-msgstr ""
-
-#: src/generator/mupdfng.cpp:663
+#: src/generator/mupdfng.cpp:664
 msgid "Using MuPDF %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:665
-msgid ""
-"Using MuPDF %1\n"
-"Pinned against MuPDF %2"
-msgstr ""
-
-#: src/generator/mupdfng.cpp:672
+#: src/generator/mupdfng.cpp:668
 msgid "Worker is fully hardened [OK]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:674
+#: src/generator/mupdfng.cpp:670
 msgid "Worker is partially hardened [WARN]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:676
+#: src/generator/mupdfng.cpp:672
 msgid "Worker is unconfined [CRIT]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:682
+#: src/generator/mupdfng.cpp:678
 msgid "unknown"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:683
+#: src/generator/mupdfng.cpp:679
 msgid "Worker is using %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:709
+#: src/generator/mupdfng.cpp:705
 msgid ""
 "[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
@@ -495,63 +486,71 @@ msgid ""
 "Error: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:794
+#: src/generator/mupdfng.cpp:790
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:824
+#: src/generator/mupdfng.cpp:820
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1069
+#: src/generator/mupdfng.cpp:1065
 msgid "Format"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1072 rc.cpp:12
+#: src/generator/mupdfng.cpp:1068 rc.cpp:12
 msgid "Security"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1074
+#: src/generator/mupdfng.cpp:1070
 msgid "Yes"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1074
+#: src/generator/mupdfng.cpp:1070
 msgid "No"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1075
+#: src/generator/mupdfng.cpp:1071
 msgid "Optimized"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1078
+#: src/generator/mupdfng.cpp:1074
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/generator/mupdfng.cpp:1078
+#: src/generator/mupdfng.cpp:1074
 msgid "Not Signed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1079
+#: src/generator/mupdfng.cpp:1075
 msgid "Digital Signatures"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1302
+#: src/generator/mupdfng.cpp:1298
 msgid "Strict sandbox enforcement blocks this document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1303 src/generator/mupdfng.cpp:1314
+#: src/generator/mupdfng.cpp:1299 src/generator/mupdfng.cpp:1310
 msgid "MuPDF worker is unavailable."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1310
+#: src/generator/mupdfng.cpp:1306
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1339
+#: src/generator/mupdfng.cpp:1326
+msgid "Annotation File (XFDF)"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:1343
 msgid "Starting to export to PDF."
+msgstr ""
+
+#: src/generator/mupdfng.cpp:1359
+msgid "Export to XFDF finished."
 msgstr ""
 
 #: src/generator/printing.cpp:16
