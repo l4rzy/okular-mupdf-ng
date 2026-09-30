@@ -280,16 +280,25 @@ QString annotationElement(const Model::Annotation& annotation, int pageIndex, co
     case Model::AnnotationType::Text:
     case Model::AnnotationType::FreeText: {
         const bool freeText = annotation.subtype == Model::AnnotationType::FreeText;
+        const bool hasCallout = freeText && !annotation.extras.callout.empty()
+            && (!style.intent || *style.intent == Model::AnnotationIntent::Default
+                || *style.intent == Model::AnnotationIntent::FreeTextCallout);
         QString inner = contents;
         if (style.appearance && !style.appearance->fontName.empty())
             inner += QStringLiteral("<defaultappearance>0 0 0 rg %1 %2 Tf</defaultappearance>")
                          .arg(escapeXml(pdfName(style.appearance->fontName)), formatNumber(style.appearance->fontSize));
         QString out =
             QStringLiteral("<%1%2").arg(freeText ? QStringLiteral("freetext") : QStringLiteral("text")).arg(common);
+        if (hasCallout)
+            out += QStringLiteral(" callout=\"%1\"")
+                       .arg(coordinateList(annotation.extras.callout, geometry.widthPoints, geometry.heightPoints));
         if (style.appearance && !style.appearance->icon.empty())
             out += QStringLiteral(" icon=\"%1\"").arg(escapeXml(QString::fromStdString(style.appearance->icon)));
-        if (style.intent) {
-            const QString intent = intentName(*style.intent);
+        if (style.intent || hasCallout) {
+            const QString intent = style.intent && *style.intent != Model::AnnotationIntent::Default
+                ? intentName(*style.intent)
+                : hasCallout ? QStringLiteral("FreeTextCallout")
+                             : QString();
             if (!intent.isEmpty())
                 out += QStringLiteral(" intent=\"%1\"").arg(intent);
         }
@@ -460,11 +469,8 @@ NormalizedBounds normalizedBoundsOf(const Model::Annotation& annotation)
         }
         break;
     case Model::AnnotationType::FreeText:
-        // A free-text box always contributes its own bounds; a callout adds a
-        // leader line that may extend outside it, so union both.
+        // XFDF rect describes the text box; its leader is serialized separately.
         valid = true;
-        for (const Model::Point& point : annotation.extras.callout)
-            extendBounds(bounds, valid, point);
         break;
     default:
         break;

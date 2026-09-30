@@ -605,7 +605,10 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 if (modification > 0)
                     value.modificationDate = { true, modification * Constant::MillisecondsPerSecond };
 
-                const fz_rect rectangle = pdf_bound_annot(m_context, annotation);
+                // MuPDF's display bounds include a FreeText callout leader;
+                // XFDF rect must remain the text box's PDF /Rect.
+                const fz_rect rectangle = type == PDF_ANNOT_FREE_TEXT ? pdf_annot_rect(m_context, annotation)
+                                                                      : pdf_bound_annot(m_context, annotation);
                 const Point topLeft = coordinates.fromPdfPoint({ rectangle.x0, rectangle.y0 });
                 const Point bottomRight = coordinates.fromPdfPoint({ rectangle.x1, rectangle.y1 });
                 value.x0 = topLeft.x;
@@ -717,7 +720,8 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                         appearance.textColor = pdfColorToArgb(textComponents, textColor, 1.0f);
                     if (pdf_annot_has_quadding(m_context, annotation))
                         appearance.alignment = pdf_annot_quadding(m_context, annotation);
-                    if (pdf_annot_has_callout(m_context, annotation)) {
+                    if (pdf_annot_has_callout(m_context, annotation) && value.extras.style.intent
+                        && *value.extras.style.intent == AnnotationIntent::FreeTextCallout) {
                         fz_point points[3] { };
                         int count = 0;
                         pdf_annot_callout_line(m_context, annotation, points, &count);

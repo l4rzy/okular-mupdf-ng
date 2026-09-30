@@ -3,6 +3,7 @@
 
 #include "generator/conversion/xfdf.hpp"
 #include "plugin/xfdf/export.hpp"
+#include "plugin/xfdf/import.hpp"
 
 #include <QDateTime>
 #include <QFont>
@@ -249,21 +250,99 @@ private slots:
         QVERIFY(xfdf.contains(QStringLiteral("rect=\"20,50,100,80\"")));
     }
 
-    void freeTextCalloutRectSpansBoxAndLeader()
+    void freeTextCalloutUsesSeparateGeometry()
     {
         Page page;
         page.widthPoints = 200;
         page.heightPoints = 100;
         Annotation annotation = baseAnnotation(Mu::Model::AnnotationType::FreeText, 0.1, 0.2, 0.3, 0.4);
-        // The leader line ends outside the text box, so the rect must cover both
-        // the box (x 0.1..0.3, y 0.2..0.4) and the callout endpoint.
+        // The leader line ends outside the text box and must not expand its rect.
         annotation.extras.callout = { { 0.3, 0.4 }, { 0.8, 0.9 } };
         page.annotations.append(annotation);
 
         const QString xfdf = Xfdf::annotationsToXfdf({ page });
 
-        // user-space: left=20, right=160, bottom=(1-0.9)*100=10, top=(1-0.2)*100=80
-        QVERIFY(xfdf.contains(QStringLiteral("rect=\"20,10,160,80\"")));
+        QVERIFY(xfdf.contains(QStringLiteral("rect=\"20,60,60,80\"")));
+        QVERIFY(xfdf.contains(QStringLiteral("callout=\"60,60,160,10\"")));
+        QVERIFY(xfdf.contains(QStringLiteral("intent=\"FreeTextCallout\"")));
+
+        QString error;
+        const auto imported = Xfdf::xfdfToAnnotations(xfdf.toUtf8(), { QSizeF(200, 100) }, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(imported.applied, 1);
+        const Annotation& roundTripped = imported.pages.first().annotations.first();
+        QCOMPARE(roundTripped.x0, 0.1);
+        QCOMPARE(roundTripped.y0, 0.2);
+        QCOMPARE(roundTripped.x1, 0.3);
+        QCOMPARE(roundTripped.y1, 0.4);
+        QCOMPARE(roundTripped.extras.callout.size(), 2U);
+        QCOMPARE(roundTripped.extras.callout[0].x, 0.3);
+        QCOMPARE(roundTripped.extras.callout[0].y, 0.4);
+        QCOMPARE(roundTripped.extras.callout[1].x, 0.8);
+        QCOMPARE(roundTripped.extras.callout[1].y, 0.9);
+        QCOMPARE(roundTripped.extras.style.intent, Mu::Model::AnnotationIntent::FreeTextCallout);
+    }
+
+    void importsThreePointFreeTextCallout()
+    {
+        const QByteArray xml =
+            R"(<xfdf><annots><freetext page="0" rect="20,60,60,80" callout="60,60,100,30,160,10"><contents>note</contents></freetext></annots></xfdf>)";
+        QString error;
+        const auto imported = Xfdf::xfdfToAnnotations(xml, { QSizeF(200, 100) }, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(imported.applied, 1);
+        const Annotation& annotation = imported.pages.first().annotations.first();
+        QCOMPARE(annotation.extras.callout.size(), 3U);
+        QCOMPARE(annotation.extras.style.intent, Mu::Model::AnnotationIntent::FreeTextCallout);
+    }
+
+    void rejectsMalformedFreeTextCallout()
+    {
+        const QStringList malformed {
+            QStringLiteral("1,2,3"),
+            QStringLiteral("1,2,3,4,5,6,7,8"),
+            QStringLiteral("1,").repeated(100000),
+        };
+        for (const QString& callout : malformed) {
+            const QByteArray xml =
+                QStringLiteral(
+                    "<xfdf><annots><freetext page=\"0\" rect=\"20,60,60,80\" callout=\"%1\"/></annots></xfdf>")
+                    .arg(callout)
+                    .toUtf8();
+            QString error;
+            const auto imported = Xfdf::xfdfToAnnotations(xml, { QSizeF(200, 100) }, &error);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            QCOMPARE(imported.applied, 0);
+            QCOMPARE(imported.skipped, 1);
+        }
+    }
+
+    void rejectsCalloutWithIncompatibleIntent()
+    {
+        const QByteArray xml =
+            R"(<xfdf><annots><freetext page="0" rect="20,60,60,80" callout="60,60,160,10" intent="FreeTextTypewriter"/></annots></xfdf>)";
+        QString error;
+        const auto imported = Xfdf::xfdfToAnnotations(xml, { QSizeF(200, 100) }, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(imported.applied, 0);
+        QCOMPARE(imported.skipped, 1);
+        QVERIFY(imported.warnings.first().contains(QStringLiteral("callout intent")));
+    }
+
+    void doesNotExportCalloutWithIncompatibleIntent()
+    {
+        Page page;
+        page.widthPoints = 200;
+        page.heightPoints = 100;
+        Annotation annotation = baseAnnotation(Mu::Model::AnnotationType::FreeText, 0.1, 0.2, 0.3, 0.4);
+        annotation.extras.callout = { { 0.3, 0.4 }, { 0.8, 0.9 } };
+        annotation.extras.style.intent = Mu::Model::AnnotationIntent::FreeTextTypewriter;
+        page.annotations.append(annotation);
+
+        const QString xfdf = Xfdf::annotationsToXfdf({ page });
+
+        QVERIFY(!xfdf.contains(QStringLiteral("callout=")));
+        QVERIFY(xfdf.contains(QStringLiteral("intent=\"FreeTextTypewriter\"")));
     }
 
     void emitsLineEndpointsAndEndingStyles()

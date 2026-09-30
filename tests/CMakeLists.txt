@@ -76,7 +76,8 @@ target_link_libraries(test_tools_cli_xfdf PRIVATE Qt6::Core Qt6::Test Qt6::Xml)
 target_compile_definitions(test_tools_cli_xfdf PRIVATE
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
-    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf")
+    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf"
+    TEST_CALLOUT_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/freetext_callout_no_intent.pdf")
 add_dependencies(test_tools_cli_xfdf mupdfng-cli okular-mupdf-worker)
 add_test(NAME test_tools_cli_xfdf COMMAND test_tools_cli_xfdf)
 set_tests_properties(test_tools_cli_xfdf PROPERTIES

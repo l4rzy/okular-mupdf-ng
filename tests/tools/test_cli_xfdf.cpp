@@ -9,6 +9,9 @@
 #include <QTest>
 #include <QXmlStreamReader>
 
+#include <cmath>
+#include <initializer_list>
+
 namespace {
 
 QByteArray readFile(const QString& path)
@@ -65,6 +68,21 @@ int runCli(const QStringList& arguments, QString* standardOutput = nullptr, QStr
     if (standardError)
         *standardError = QString::fromUtf8(cli.readAllStandardError());
     return cli.exitCode();
+}
+
+bool coordinatesMatch(const QString& value, std::initializer_list<double> expected)
+{
+    const QStringList parts = value.split(QLatin1Char(','));
+    if (parts.size() != static_cast<qsizetype>(expected.size()))
+        return false;
+    qsizetype index = 0;
+    for (const double expectedCoordinate : expected) {
+        bool ok = false;
+        const double coordinate = parts.at(index++).toDouble(&ok);
+        if (!ok || std::abs(coordinate - expectedCoordinate) > 0.001)
+            return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -148,6 +166,72 @@ private slots:
         QCOMPARE(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), exportedXfdf, secondPdf }), 0);
         QCOMPARE(runCli({ QStringLiteral("export"), secondPdf, roundTripXfdf }), 0);
         QCOMPARE(countAnnotations(readFile(roundTripXfdf)), 2);
+    }
+
+    void freeTextCalloutRoundTripsWithoutExpandingItsRect()
+    {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const QString inputXfdf = tempDir.filePath(QStringLiteral("callout.xfdf"));
+        const QString importedPdf = tempDir.filePath(QStringLiteral("callout.pdf"));
+        const QString outputXfdf = tempDir.filePath(QStringLiteral("exported.xfdf"));
+
+        QFile source(inputXfdf);
+        QVERIFY(source.open(QIODevice::WriteOnly));
+        source.write(QByteArrayLiteral(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<xfdf xmlns=\"http://ns.adobe.com/xfdf/\"><annots>"
+            "<freetext page=\"0\" rect=\"72,500,150,550\" callout=\"0,792,60,550\" "
+            "intent=\"FreeTextCallout\" color=\"#000000\"><contents>callout note</contents></freetext>"
+            "</annots></xfdf>"));
+        source.close();
+
+        QCOMPARE(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), inputXfdf, importedPdf }), 0);
+        QCOMPARE(runCli({ QStringLiteral("export"), importedPdf, outputXfdf }), 0);
+
+        QXmlStreamReader reader(readFile(outputXfdf));
+        bool foundCallout = false;
+        while (!reader.atEnd()) {
+            reader.readNext();
+            if (!reader.isStartElement() || reader.name() != QLatin1String("freetext"))
+                continue;
+            const auto attributes = reader.attributes();
+            QVERIFY(coordinatesMatch(attributes.value(QLatin1String("rect")).toString(), { 72, 500, 150, 550 }));
+            QVERIFY(coordinatesMatch(attributes.value(QLatin1String("callout")).toString(), { 0, 792, 60, 550 }));
+            QCOMPARE(attributes.value(QLatin1String("intent")).toString(), QStringLiteral("FreeTextCallout"));
+            foundCallout = true;
+        }
+        QVERIFY2(!reader.hasError(), qPrintable(reader.errorString()));
+        QVERIFY(foundCallout);
+    }
+
+    void ignoresPdfCalloutWithoutCalloutIntent()
+    {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const QString outputPath = tempDir.filePath(QStringLiteral("annotations.xfdf"));
+        const QString importedPdf = tempDir.filePath(QStringLiteral("imported.pdf"));
+        const QString roundTripPath = tempDir.filePath(QStringLiteral("roundtrip.xfdf"));
+        QCOMPARE(runCli({ QStringLiteral("export"), QStringLiteral(TEST_CALLOUT_PDF_PATH), outputPath }), 0);
+
+        QXmlStreamReader reader(readFile(outputPath));
+        bool foundCallout = false;
+        while (!reader.atEnd()) {
+            reader.readNext();
+            if (!reader.isStartElement() || reader.name() != QLatin1String("freetext"))
+                continue;
+            const auto attributes = reader.attributes();
+            QVERIFY(coordinatesMatch(attributes.value(QLatin1String("rect")).toString(), { 72, 500, 150, 550 }));
+            QVERIFY(!attributes.hasAttribute(QLatin1String("callout")));
+            QVERIFY(!attributes.hasAttribute(QLatin1String("intent")));
+            foundCallout = true;
+        }
+        QVERIFY2(!reader.hasError(), qPrintable(reader.errorString()));
+        QVERIFY(foundCallout);
+
+        QCOMPARE(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), outputPath, importedPdf }), 0);
+        QCOMPARE(runCli({ QStringLiteral("export"), importedPdf, roundTripPath }), 0);
+        QVERIFY(!readFile(roundTripPath).contains(QByteArrayLiteral(" callout=")));
     }
 
     void rejectsMalformedXfdf()

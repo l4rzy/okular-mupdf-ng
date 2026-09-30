@@ -12,6 +12,7 @@
 #include <QXmlStreamReader>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -92,6 +93,38 @@ parsePointPairs(QStringView text, double width, double height, std::vector<Point
             return GeometryParseStatus::Malformed;
         out.push_back(normalizedPoint(*x, *y, width, height));
     }
+    return GeometryParseStatus::Complete;
+}
+
+/// Parses at most three comma-separated callout points without allocating a
+/// token list proportional to the untrusted attribute size.
+GeometryParseStatus parseCallout(QStringView text, double width, double height, std::vector<Point>& out)
+{
+    std::array<double, Limit::MaxAnnotationCalloutPoints * 2> coordinates { };
+    qsizetype count = 0;
+    qsizetype start = 0;
+    while (start <= text.size()) {
+        if (count == static_cast<qsizetype>(coordinates.size()))
+            return GeometryParseStatus::LimitExceeded;
+        const qsizetype comma = text.indexOf(QLatin1Char(','), start);
+        const qsizetype end = comma < 0 ? text.size() : comma;
+        const auto value = parseNumber(text.mid(start, end - start));
+        if (!value)
+            return GeometryParseStatus::Malformed;
+        coordinates[static_cast<std::size_t>(count++)] = *value;
+        if (comma < 0)
+            break;
+        start = comma + 1;
+    }
+    if (count < 4 || count % 2 != 0)
+        return GeometryParseStatus::Malformed;
+
+    out.reserve(static_cast<std::size_t>(count / 2));
+    for (qsizetype index = 0; index < count; index += 2)
+        out.push_back(normalizedPoint(coordinates[static_cast<std::size_t>(index)],
+                                      coordinates[static_cast<std::size_t>(index + 1)],
+                                      width,
+                                      height));
     return GeometryParseStatus::Complete;
 }
 
@@ -393,7 +426,7 @@ struct Entry {
     int page = -1;
     QString rect, color, opacity, title, name, creationDate, date, flags;
     QString contents, defaultAppearance, vertices, coords;
-    QString icon, intent, width, start, end, head, tail, symbol;
+    QString icon, intent, width, start, end, head, tail, symbol, callout;
     QStringList inkGestures;
     bool inkPathLimitExceeded = false;
 };
@@ -533,6 +566,7 @@ private:
         entry.head = attributes.value(QLatin1String("head")).toString();
         entry.tail = attributes.value(QLatin1String("tail")).toString();
         entry.symbol = attributes.value(QLatin1String("symbol")).toString();
+        entry.callout = attributes.value(QLatin1String("callout")).toString();
 
         while (!reader.atEnd()) {
             const QXmlStreamReader::TokenType token = reader.readNext();
@@ -600,6 +634,18 @@ private:
             }
             if (!entry.defaultAppearance.isEmpty())
                 applyDefaultAppearance(entry.defaultAppearance, annotation);
+            if (!entry.callout.trimmed().isEmpty()) {
+                std::vector<Point> callout;
+                const GeometryParseStatus status = parseCallout(entry.callout, width, height, callout);
+                if (status != GeometryParseStatus::Complete)
+                    return rejectGeometry(status, QStringLiteral("callout"));
+                if (!entry.intent.trimmed().isEmpty()
+                    && annotation.extras.style.intent != AnnotationIntent::FreeTextCallout)
+                    return rejectGeometry(GeometryParseStatus::Malformed, QStringLiteral("callout intent"));
+                annotation.extras.callout = std::move(callout);
+                if (!annotation.extras.style.intent)
+                    annotation.extras.style.intent = AnnotationIntent::FreeTextCallout;
+            }
             break;
         case AnnotationType::Line: {
             std::vector<Point> points;
