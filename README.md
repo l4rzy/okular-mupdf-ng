@@ -4,11 +4,12 @@
 
 # okular-mupdf-ng
 
-[![GitHub license](https://img.shields.io/github/license/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/commits)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml)](https://github.com/l4rzy/okular-mupdf-ng/actions)
-[![Github Release](https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng)](https://github.com/l4rzy/okular-mupdf-ng/releases)
-
+<p align="center">
+  <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
+  <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING"><img src="https://img.shields.io/github/license/l4rzy/okular-mupdf-ng" alt="GitHub license"></a>
+  <a href="https://github.com/l4rzy/okular-mupdf-ng/actions"><img src="https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml" alt="GitHub Workflow Status"></a>
+  <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
+</p>
 A secure and fast PDF and ePUB generator for Okular.
 <!-- Note -->
 > [!NOTE]
