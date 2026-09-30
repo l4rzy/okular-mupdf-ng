@@ -288,7 +288,7 @@ void CertificateManagerDialog::deleteSelectedCertificate()
     const QString name = certificateName(record.certificate);
     if (QMessageBox::question(this,
                               CertificateManager::dialogTitle(i18n("Delete Certificate"), m_databasePath),
-                              i18n("Delete certificate \"%1\" from the NSS database?").arg(name))
+                              i18n("Delete certificate \"%1\" from the NSS database?", name))
         != QMessageBox::Yes)
         return;
 
