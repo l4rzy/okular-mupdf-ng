@@ -58,6 +58,22 @@ inline std::size_t countStextChars(const fz_stext_page* text) noexcept
     return count;
 }
 
+/// Identifies characters that MuPDF marks for removal when dehyphenating text.
+inline bool shouldSkipDehyphenatedChar(const fz_stext_line* line, const fz_stext_char* character) noexcept
+{
+    if (!line || !character)
+        return false;
+    if (character->c == 0x00AD)
+        return true;
+    return !character->next && (line->flags & FZ_STEXT_LINE_FLAGS_JOINED) && fz_is_unicode_hyphen(character->c);
+}
+
+/// Reports whether MuPDF joined this line to the following line at a hyphen.
+inline bool isDehyphenatedLine(const fz_stext_line* line) noexcept
+{
+    return line && (line->flags & FZ_STEXT_LINE_FLAGS_JOINED) != 0;
+}
+
 /// Releases cached store entries and trims unused malloc arenas back to OS.
 inline void trimProcessMemory(fz_context* context) noexcept
 {

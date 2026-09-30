@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "engine/constants.hpp"
+#include "engine/mupdf_helpers.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
@@ -170,7 +171,7 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
         const double scaleX = dpiX / Constant::PointsPerInch;
         const double scaleY = dpiY / Constant::PointsPerInch;
         fz_stext_options options { };
-        options.flags = FZ_STEXT_CLIP;
+        options.flags = FZ_STEXT_CLIP | FZ_STEXT_ACCURATE_BBOXES | FZ_STEXT_DEHYPHENATE;
         stext = fz_new_stext_page_from_page(m_context, pagePtr, &options);
 
         const std::size_t charCount = countStextChars(stext);
@@ -181,8 +182,11 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
             if (block->type != FZ_STEXT_BLOCK_TEXT)
                 continue;
             for (fz_stext_line* line = block->u.t.first_line; line; line = line->next) {
-                bool hasText = false;
+                const std::size_t lineStart = boxes.size();
                 for (fz_stext_char* ch = line->first_char; ch; ch = ch->next) {
+                    if (shouldSkipDehyphenatedChar(line, ch))
+                        continue;
+
                     if (ch->c < 0 || ch->c > Constant::UnicodeMaxCodePoint
                         || (ch->c >= Constant::UnicodeSurrogateMin && ch->c <= Constant::UnicodeSurrogateMax))
                         continue;
@@ -209,9 +213,10 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
                     const double bottom = (charBox.y1 - bounds.y0) * scaleY;
                     boxes.emplace_back(
                         std::string(utf8, static_cast<std::size_t>(len)), left, top, right, bottom, false);
-                    hasText = true;
                 }
-                if (hasText)
+                if (boxes.size() > lineStart && isDehyphenatedLine(line))
+                    boxes.back().endOfLine = false;
+                else if (boxes.size() > lineStart)
                     boxes.back().endOfLine = true;
             }
         }

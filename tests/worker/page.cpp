@@ -44,6 +44,39 @@ private:
 
 private slots:
 
+    void testDehyphenatedCharacterFiltering_data()
+    {
+        QTest::addColumn<int>("lineFlags");
+        QTest::addColumn<int>("codepoint");
+        QTest::addColumn<bool>("hasNext");
+        QTest::addColumn<bool>("expectedSkip");
+
+        QTest::newRow("ordinary-hyphen") << 0 << static_cast<int>('-') << false << false;
+        QTest::newRow("joined-line-hyphen")
+            << static_cast<int>(FZ_STEXT_LINE_FLAGS_JOINED) << static_cast<int>('-') << false << true;
+        QTest::newRow("joined-line-nonterminal-hyphen")
+            << static_cast<int>(FZ_STEXT_LINE_FLAGS_JOINED) << static_cast<int>('-') << true << false;
+        QTest::newRow("soft-hyphen") << 0 << 0x00AD << false << true;
+    }
+
+    void testDehyphenatedCharacterFiltering()
+    {
+        QFETCH(int, lineFlags);
+        QFETCH(int, codepoint);
+        QFETCH(bool, hasNext);
+        QFETCH(bool, expectedSkip);
+
+        fz_stext_line line { };
+        line.flags = static_cast<decltype(line.flags)>(lineFlags);
+        fz_stext_char next { };
+        fz_stext_char character { };
+        character.c = codepoint;
+        character.next = hasNext ? &next : nullptr;
+
+        QCOMPARE(Mu::Worker::Engine::shouldSkipDehyphenatedChar(&line, &character), expectedSkip);
+        QCOMPARE(Mu::Worker::Engine::isDehyphenatedLine(&line), (lineFlags & FZ_STEXT_LINE_FLAGS_JOINED) != 0);
+    }
+
     void initTestCase()
     {
         QVERIFY(m_tempDir.isValid());
