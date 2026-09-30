@@ -81,7 +81,13 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
 
     m_mupdfsw->kcfg_EpubCustomCss->setVisible(false);
     updateCustomCssButtonText();
-    connect(m_mupdfsw->customCssButton, &QPushButton::toggled, m_mupdfsw->kcfg_EpubCustomCss, &QWidget::setVisible);
+    // Freeze repaints while the 140px editor enters/leaves the layout so the
+    // tab shows a single clean frame instead of intermediate relayout flicker.
+    connect(m_mupdfsw->customCssButton, &QPushButton::toggled, this, [this](bool checked) {
+        setUpdatesEnabled(false);
+        m_mupdfsw->kcfg_EpubCustomCss->setVisible(checked);
+        setUpdatesEnabled(true);
+    });
     connect(m_mupdfsw->kcfg_EpubCustomCss,
             &CssEditor::encodedTextChanged,
             this,
@@ -165,7 +171,11 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
 void MuPDFNGSettingsWidget::updateCustomCssButtonText()
 {
     const bool hasCustomCss = !m_mupdfsw->kcfg_EpubCustomCss->encodedText().isEmpty();
-    m_mupdfsw->customCssButton->setText(hasCustomCss ? i18n("Custom CSS (configured)") : i18n("Custom CSS"));
+    // encodedTextChanged fires per keystroke; only resize the button when the
+    // configured/empty state actually flips.
+    const QString text = hasCustomCss ? i18n("Custom CSS (configured)") : i18n("Custom CSS");
+    if (m_mupdfsw->customCssButton->text() != text)
+        m_mupdfsw->customCssButton->setText(text);
 }
 
 void MuPDFNGSettingsWidget::updateManageCertificatesButton()
