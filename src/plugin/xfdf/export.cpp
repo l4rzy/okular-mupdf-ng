@@ -386,7 +386,10 @@ QString annotationElement(const Model::Annotation& annotation, int pageIndex, co
         return out;
     }
     case Model::AnnotationType::Ink: {
-        QString out = QStringLiteral("<ink%1>").arg(common);
+        QString out = QStringLiteral("<ink%1").arg(common);
+        if (const auto& width = style.borderWidth)
+            out += QStringLiteral(" width=\"%1\"").arg(formatNumber(*width));
+        out += QLatin1Char('>');
         if (!annotation.extras.inkPaths.empty())
             out += QStringLiteral("<inklist>");
         for (const auto& path : annotation.extras.inkPaths) {

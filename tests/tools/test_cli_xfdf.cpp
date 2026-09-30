@@ -234,6 +234,38 @@ private slots:
         QVERIFY(!readFile(roundTripPath).contains(QByteArrayLiteral(" callout=")));
     }
 
+    void preservesInkWidthThroughPdfRoundTrip()
+    {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const QString inputXfdf = tempDir.filePath(QStringLiteral("ink.xfdf"));
+        const QString importedPdf = tempDir.filePath(QStringLiteral("ink.pdf"));
+        const QString outputXfdf = tempDir.filePath(QStringLiteral("exported.xfdf"));
+
+        QFile source(inputXfdf);
+        QVERIFY(source.open(QIODevice::WriteOnly));
+        source.write(QByteArrayLiteral(
+            "<xfdf><annots><ink page=\"0\" rect=\"100,600,140,640\" width=\"2\" color=\"#ff5500\" opacity=\"1\">"
+            "<inklist><gesture>100,600;110,610;120,620;130,630;140,640</gesture></inklist>"
+            "</ink></annots></xfdf>"));
+        source.close();
+
+        QCOMPARE(runCli({ QStringLiteral("import"), QStringLiteral(TEST_PDF_PATH), inputXfdf, importedPdf }), 0);
+        QCOMPARE(runCli({ QStringLiteral("export"), importedPdf, outputXfdf }), 0);
+
+        QXmlStreamReader reader(readFile(outputXfdf));
+        bool foundInk = false;
+        while (!reader.atEnd()) {
+            reader.readNext();
+            if (reader.isStartElement() && reader.name() == QLatin1String("ink")) {
+                QCOMPARE(reader.attributes().value(QLatin1String("width")).toString(), QStringLiteral("2"));
+                foundInk = true;
+            }
+        }
+        QVERIFY2(!reader.hasError(), qPrintable(reader.errorString()));
+        QVERIFY(foundInk);
+    }
+
     void rejectsMalformedXfdf()
     {
         QTemporaryDir tempDir;
