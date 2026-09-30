@@ -704,6 +704,56 @@ private slots:
         QVERIFY(QString::fromStdString(error).contains(QStringLiteral("maximum length")));
     }
 
+    void formJavaScriptCalculatesDependentField()
+    {
+        QFile file(QStringLiteral(FORM_JS_PDF_PATH));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_calculation.pdf", &error), error.c_str());
+
+        pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
+        QVERIFY(pdfDoc);
+        if (!pdf_js_supported(doc.context(), pdfDoc))
+            QSKIP("JavaScript is disabled in this MuPDF build");
+
+        auto details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto quantity = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Quantity";
+        });
+        QVERIFY(quantity != details.formFields.end());
+
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(
+            doc.updateFormField(0, quantity->pdfObjectNumber, ::Mu::Model::FormTextValue { "4" }, &mutations, &error),
+            error.c_str());
+
+        details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        auto total = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Total";
+        });
+        QVERIFY(total != details.formFields.end());
+        QCOMPARE(total->text, std::string("71.82"));
+
+        const auto discount = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "DiscountPercent";
+        });
+        QVERIFY(discount != details.formFields.end());
+        QVERIFY2(
+            doc.updateFormField(0, discount->pdfObjectNumber, ::Mu::Model::FormTextValue { "101" }, &mutations, &error),
+            error.c_str());
+
+        details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        total = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Total";
+        });
+        QVERIFY(total != details.formFields.end());
+        QCOMPARE(total->text, std::string("Invalid input"));
+    }
+
     void updateMultiselectAndEditableComboPersistAcrossReopen()
     {
         QTemporaryDir dir;

@@ -57,6 +57,9 @@ target_compile_definitions(mupdf_worker_core PRIVATE
     TESSDATA_DIR="${TESSDATA_DIR}"
     SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
 )
+if(ENABLE_FORM_JAVASCRIPT)
+    target_compile_definitions(mupdf_worker_core PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
+endif()
 
 add_executable(okular-mupdf-worker
     main.cpp

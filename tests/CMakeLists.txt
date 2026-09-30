@@ -53,6 +53,7 @@ target_compile_definitions(test_mupdf PRIVATE
     HAVE_NEW_SIGNATURE_API=1
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
+    FORM_JS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_calculation.pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
     TESSDATA_DIR="${TESSDATA_DIR}")
 if(MU_DEBUG_BUILD)

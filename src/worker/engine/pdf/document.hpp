@@ -149,6 +149,9 @@ private:
     /// Updates the cached presence of the catalog AcroForm dictionary.
     void updateAcroFormPresence();
 
+    /// Enables MuPDF's document JavaScript runtime when this build supports it.
+    void enableFormJavaScript();
+
     /// Converts MuPDF page bounds rect to PageGeometry.
     [[nodiscard]] PageGeometry geometryFromPage(fz_page* page, const fz_rect& bounds) const;
 

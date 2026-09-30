@@ -14,6 +14,7 @@ set(MUPDF_REQUIRED_VERSION "${_mupdf_file_version}")
 option(USE_SYSTEM_MUPDF "Use the system MuPDF package instead of bundled MuPDF" OFF)
 option(USE_SYSTEM_GUMBO "Use the system Gumbo package instead of bundled Gumbo" OFF)
 option(MUPDF_OPTIMIZED_BUILD "Build bundled MuPDF with the release profile (-O2)" ON)
+option(ENABLE_FORM_JAVASCRIPT "Enable PDF form JavaScript support" ON)
 
 if(USE_SYSTEM_MUPDF AND USE_SYSTEM_GUMBO)
     message(WARNING "USE_SYSTEM_GUMBO is ignored when USE_SYSTEM_MUPDF is ON")
@@ -84,6 +85,14 @@ else()
     endif()
 
     set(MUPDF_BUILD_DIR "${CMAKE_BINARY_DIR}/mupdf/${MUPDF_BUILD_PROFILE}")
+    if(ENABLE_FORM_JAVASCRIPT)
+        set(MUPDF_USE_MUJS yes)
+        # Keep JS and non-JS archives separate so toggling the option cannot
+        # accidentally reuse MuPDF objects built with the other configuration.
+        string(APPEND MUPDF_BUILD_DIR "/js")
+    else()
+        set(MUPDF_USE_MUJS no)
+    endif()
     set(MUPDF_CORE_LIBRARY "${MUPDF_BUILD_DIR}/libmupdf.a")
     set(MUPDF_THIRD_LIBRARY "${MUPDF_BUILD_DIR}/libmupdf-third.a")
     set(MUPDF_THREADS_LIBRARY "${MUPDF_BUILD_DIR}/libmupdf-threads.a")
@@ -173,7 +182,7 @@ else()
             "CXX=${CMAKE_CXX_COMPILER}"
             OUT=${MUPDF_BUILD_DIR}
             build=${MUPDF_BUILD_PROFILE}
-            mujs=no
+            mujs=${MUPDF_USE_MUJS}
             tesseract=yes
             xps=no
             extract=no

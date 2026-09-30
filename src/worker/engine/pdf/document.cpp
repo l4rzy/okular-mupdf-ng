@@ -11,10 +11,14 @@
 extern "C" {
 #include <mupdf/fitz.h>
 #include <mupdf/pdf.h>
+#ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
+#include <mupdf/pdf/javascript.h>
+#endif
 }
 
 #include "engine/constants.hpp"
 #include "runtime/memory_pressure.hpp"
+#include "shared/logging.hpp"
 #include "shared/model/types.hpp"
 
 namespace Mu::Worker::Engine {
@@ -77,6 +81,7 @@ bool PdfDocument::openFd(int fd, std::string displayName, std::string* error)
             if (declaredCount == 0)
                 fz_throw(m_context, FZ_ERROR_GENERIC, "document has no loadable pages");
             updateAcroFormPresence();
+            enableFormJavaScript();
         }
     }
     fz_catch(m_context)
@@ -109,6 +114,7 @@ bool PdfDocument::unlock(const std::string& password, std::string* error)
 
         updateAcroFormPresence();
         m_locked = false;
+        enableFormJavaScript();
     }
     fz_catch(m_context)
     {
@@ -183,6 +189,30 @@ void PdfDocument::updateAcroFormPresence()
     pdf_document* pdf = pdf_specifics(m_context, m_document);
     m_hasAcroForm =
         pdf && pdf_dict_getl(m_context, pdf_trailer(m_context, pdf), PDF_NAME(Root), PDF_NAME(AcroForm), nullptr);
+}
+
+void PdfDocument::enableFormJavaScript()
+{
+#ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
+    pdf_document* pdf = pdf_specifics(m_context, m_document);
+    if (!pdf)
+        return;
+
+    fz_try(m_context)
+    {
+        pdf_enable_js(m_context, pdf);
+    }
+    fz_catch(m_context)
+    {
+        MU_LOG(warning,
+               "Mu::Worker::Pdf",
+               std::string("PDF form JavaScript initialization failed: ") + fz_caught_message(m_context));
+        return;
+    }
+
+    if (!pdf_js_supported(m_context, pdf))
+        MU_LOG(warning, "Mu::Worker::Pdf", "PDF form JavaScript is unavailable in the linked MuPDF build");
+#endif
 }
 
 void PdfDocument::discardResolvedLinkCache() noexcept

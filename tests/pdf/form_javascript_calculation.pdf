@@ -1,0 +1,64 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R 7 0 R] /CO [7 0 R] /NeedAppearances true >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 500 300] /Resources << /Font << /F1 9 0 R >> >> /Contents 8 0 R /Annots [4 0 R 5 0 R 6 0 R 7 0 R] >>
+endobj
+4 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Tx /T (Quantity) /V (3) /Rect [250 195 465 220] /P 3 0 R /F 4 >>
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Tx /T (UnitPrice) /V (19.95) /Rect [250 153 465 178] /P 3 0 R /F 4 >>
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Tx /T (DiscountPercent) /V (10) /Rect [250 111 465 136] /P 3 0 R /F 4 >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Tx /T (Total) /V (53.87) /Rect [250 69 465 94] /P 3 0 R /F 4 /AA << /C << /JS (var quantity = parseFloat\(this.getField\('Quantity'\).value\);
+var unitPrice = parseFloat\(this.getField\('UnitPrice'\).value\);
+var discountPercent = parseFloat\(this.getField\('DiscountPercent'\).value\);
+if \(isNaN\(quantity\) || isNaN\(unitPrice\) || isNaN\(discountPercent\) || quantity < 0 || unitPrice < 0 || discountPercent < 0 || discountPercent > 100\) {
+    event.value = 'Invalid input';
+} else {
+    var total = quantity * unitPrice * \(1 - discountPercent / 100\);
+    event.value = \(Math.round\(total * 100\) / 100\).toFixed\(2\);
+}) >> >> >>
+endobj
+8 0 obj
+<< /Length 513 >>
+stream
+BT /F1 18 Tf 35 265 Td (Discounted order total) Tj ET
+BT /F1 10 Tf 35 242 Td (Enter values in the fields below.) Tj ET
+BT /F1 10 Tf 35 205 Td (Quantity) Tj ET
+BT /F1 10 Tf 35 163 Td (Unit price) Tj ET
+BT /F1 10 Tf 35 121 Td (Discount \(percent\)) Tj ET
+BT /F1 10 Tf 35 79 Td (Calculated total) Tj ET
+BT /F1 9 Tf 35 39 Td (Total = quantity x unit price x \(1 - discount / 100\), rounded to 2 decimals.) Tj ET
+BT /F1 8 Tf 35 22 Td (Discount must be 0 to 100 percent; quantity and price must be non-negative.) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000148 00000 n 
+0000000205 00000 n 
+0000000365 00000 n 
+0000000483 00000 n 
+0000000606 00000 n 
+0000000732 00000 n 
+0000001424 00000 n 
+0000001987 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+2057
+%%EOF
