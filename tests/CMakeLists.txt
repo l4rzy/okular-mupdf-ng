@@ -50,6 +50,7 @@ target_link_libraries(test_mupdf PRIVATE
     ${NSS_LIBRARIES}
     ZLIB::ZLIB)
 target_compile_definitions(test_mupdf PRIVATE
+    HAVE_NEW_SIGNATURE_API=1
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"

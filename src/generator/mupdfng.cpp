@@ -83,7 +83,14 @@ constexpr int LongWarningMs = 10000;
 // Okular Generator Func: creates the generator and initializes worker services.
 Main::Main(QObject* parent, const QVariantList& args)
     : Generator(parent, args)
-    , m_annotationProxy(&m_worker, [this] { m_annotationsDirty = true; })
+    , m_annotationProxy(&m_worker,
+                        [this](int page) {
+                            m_annotationsDirty = true;
+                            const Okular::Document* currentDocument = document();
+                            if (!currentDocument || page < 0 || page >= m_okularPages.size())
+                                return;
+                            const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(page);
+                        })
     , m_certStore(std::make_unique<Proxy::CertificateStore>())
     , m_settings(Config::readWorkerSettings())
 {

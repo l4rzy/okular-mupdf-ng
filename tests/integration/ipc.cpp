@@ -1,4 +1,5 @@
 #include "engine/pdf/document.hpp"
+#include "generator/proxy/annotation.hpp"
 #include "genpdf.hpp"
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/epub_cache.hpp"
@@ -92,6 +93,48 @@ private slots:
         // Restore defaults and close: later slots must not inherit the
         // custom paper color or an open document from this test.
         QVERIFY(m_client.setSettings(::Mu::Model::DocumentSettings { }));
+        QVERIFY(m_client.close());
+    }
+
+    void annotationRemovalNotifiesChangedPage()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), ::Mu::Model::OpenStatus::Success);
+
+        QList<int> changedPages;
+        ::Mu::Generator::Proxy::Annotation proxy(&m_client, [&](int page) { changedPages.append(page); });
+        proxy.setAvailable(true);
+
+        const QImage before = m_client.render(0, 160, 160);
+        QVERIFY(!before.isNull());
+
+        Okular::TextAnnotation annotation;
+        annotation.setTextType(Okular::TextAnnotation::Linked);
+        annotation.setContents(QStringLiteral("temporary annotation"));
+        annotation.setBoundingRectangle(Okular::NormalizedRect(0.2, 0.2, 0.4, 0.4));
+        proxy.notifyAddition(&annotation, 0);
+        QCOMPARE(changedPages, QList<int> { 0 });
+        QVERIFY(annotation.nativeId().isValid());
+
+        const QImage withAnnotation = m_client.render(0, 160, 160);
+        QVERIFY(!withAnnotation.isNull());
+        QVERIFY(imageHash(withAnnotation) != imageHash(before));
+
+        changedPages.clear();
+        proxy.notifyRemoval(&annotation, 0);
+        QCOMPARE(changedPages, QList<int> { 0 });
+        QVERIFY(!annotation.nativeId().isValid());
+
+        // Removal is successful in the worker, and the callback identifies
+        // exactly the page whose cached Okular image must be invalidated.
+        const QImage afterRemoval = m_client.render(0, 160, 160);
+        QVERIFY(!afterRemoval.isNull());
+        QCOMPARE(imageHash(afterRemoval), imageHash(before));
+
+        // A second removal has no native handle and must not request another
+        // page refresh.
+        proxy.notifyRemoval(&annotation, 0);
+        QCOMPARE(changedPages, QList<int> { 0 });
         QVERIFY(m_client.close());
     }
 

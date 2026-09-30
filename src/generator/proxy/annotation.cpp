@@ -157,13 +157,13 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
         return;
     const auto result = m_backend->addAnnotation(page, *model);
     if (result) {
-        if (m_mutationCallback)
-            m_mutationCallback();
         const QString id = QString::fromStdString(result->value);
         annotation->setNativeId(id);
         // The worker, rather than Okular's overlay, draws native PDF
         // annotations. This makes Document refresh the page raster now.
         annotation->setFlags(annotation->flags() | Okular::Annotation::ExternallyDrawn);
+        if (m_mutationCallback)
+            m_mutationCallback(page);
     }
 }
 
@@ -185,7 +185,7 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
         return;
     if (m_backend->modifyAnnotation(page, id.toString(), *model, appearanceChanged)) {
         if (m_mutationCallback)
-            m_mutationCallback();
+            m_mutationCallback(page);
     }
 }
 
@@ -203,9 +203,9 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
     if (!id.isValid() || id.toString().isEmpty())
         return;
     if (m_backend->removeAnnotation(page, id.toString())) {
-        if (m_mutationCallback)
-            m_mutationCallback();
         annotation->setNativeId(QVariant());
+        if (m_mutationCallback)
+            m_mutationCallback(page);
     }
 }
 

@@ -22,9 +22,9 @@ namespace Mu::Generator::Proxy {
 
 class Annotation final : public Okular::AnnotationProxy {
 public:
-    // Called when Okular has changed a native annotation and the worker state
-    // may no longer match the retained source document.
-    using MutationCallback = std::function<void()>;
+    // Called after the worker accepts a native annotation mutation so the
+    // generator can invalidate the changed page's rendered image.
+    using MutationCallback = std::function<void(int page)>;
 
     explicit Annotation(Plugin::WorkerClient* backend = nullptr, MutationCallback mutationCallback = { });
     ~Annotation() override;
