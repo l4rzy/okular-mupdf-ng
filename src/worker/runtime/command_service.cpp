@@ -155,6 +155,10 @@ std::optional<ResponseMessage> validateInboundRequest(std::uint64_t id, const Re
                                           operation = "form_reset";
                                           return isValidFormResetRequest(request, &reason);
                                       },
+                                      [&](const FormButtonClickRequest& request) {
+                                          operation = "form_button_click";
+                                          return isValidFormButtonClickRequest(request, &reason);
+                                      },
                                       [&](const auto&) { return true; },
                                   },
                                   payload);
@@ -876,6 +880,23 @@ ResponseMessage CommandService::formReset(const RequestMessage& r, const FormRes
     return success(r.id, formUpdateResponse(mutations));
 }
 
+ResponseMessage CommandService::formButtonClick(const RequestMessage& r, const FormButtonClickRequest& click)
+{
+    if (!hasOpenDocument())
+        return failure(r.id, ErrorCode::NotOpen, "form_button_click", "no document is open");
+
+    const auto it = m_formFieldHandles.find(click.handle);
+    if (it == m_formFieldHandles.end())
+        return failure(r.id, ErrorCode::InvalidRequest, "form_button_click", "invalid form field handle");
+
+    std::vector<Engine::DocumentBase::FieldMutation> mutations;
+    std::string error;
+    if (!m_document->clickFormButton(it->second.page, it->second.objectNumber, &mutations, &error))
+        return failure(r.id, ErrorCode::Internal, "form_button_click", error);
+
+    return success(r.id, formUpdateResponse(mutations));
+}
+
 FormUpdateResponse
 CommandService::formUpdateResponse(const std::vector<Engine::DocumentBase::FieldMutation>& mutations) const
 {
@@ -1206,6 +1227,7 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
             [&](const EmbeddedFilesRequest&) { return embeddedFiles(request); },
             [&](const FormUpdateRequest& payload) { return formUpdate(request, payload); },
             [&](const FormResetRequest& payload) { return formReset(request, payload); },
+            [&](const FormButtonClickRequest& payload) { return formButtonClick(request, payload); },
             [&](const SignReply&) {
                 return failure(
                     request.id, ErrorCode::InvalidRequest, "request", "sign replies are only valid as nested messages");

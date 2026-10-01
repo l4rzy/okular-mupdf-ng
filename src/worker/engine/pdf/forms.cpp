@@ -77,9 +77,53 @@ pdf_obj* resetAction(fz_context* context, pdf_obj* field)
     return action;
 }
 
-bool collectFormMutations(PdfDocument* document,
-                          std::vector<DocumentBase::FieldMutation>* mutations,
-                          std::string* error)
+bool actionContainsJavaScript(fz_context* context, pdf_obj* action, std::vector<pdf_obj*>& visited, std::size_t depth)
+{
+    constexpr std::size_t MaxActionNodes = 256;
+    constexpr std::size_t MaxActionDepth = 32;
+    if (!action || depth >= MaxActionDepth || visited.size() >= MaxActionNodes)
+        return false;
+
+    action = pdf_resolve_indirect(context, action);
+    if (!action || std::find(visited.begin(), visited.end(), action) != visited.end())
+        return false;
+    visited.push_back(action);
+
+    if (pdf_is_array(context, action)) {
+        const int length = pdf_array_len(context, action);
+        for (int i = 0; i < length && visited.size() < MaxActionNodes; ++i) {
+            if (actionContainsJavaScript(context, pdf_array_get(context, action, i), visited, depth + 1))
+                return true;
+        }
+        return false;
+    }
+
+    if (!pdf_is_dict(context, action))
+        return false;
+
+    if (pdf_name_eq(context, pdf_dict_get(context, action, PDF_NAME(S)), PDF_NAME(JavaScript))
+        && pdf_dict_get(context, action, PDF_NAME(JS))) {
+        return true;
+    }
+    return actionContainsJavaScript(context, pdf_dict_get(context, action, PDF_NAME(Next)), visited, depth + 1);
+}
+
+bool hasJavaScriptClickAction(fz_context* context, pdf_obj* field)
+{
+    pdf_obj* additionalActions = pdf_dict_get(context, field, PDF_NAME(AA));
+    std::vector<pdf_obj*> visited;
+    if (additionalActions
+        && actionContainsJavaScript(context, pdf_dict_get(context, additionalActions, PDF_NAME(D)), visited, 0)) {
+        return true;
+    }
+
+    pdf_obj* action = pdf_dict_get(context, field, PDF_NAME(A));
+    if (!action && additionalActions)
+        action = pdf_dict_get(context, additionalActions, PDF_NAME(U));
+    return actionContainsJavaScript(context, action, visited, 0);
+}
+
+bool collectFormMutations(PdfDocument* document, std::vector<DocumentBase::FieldMutation>* mutations)
 {
     if (!mutations)
         return true;
@@ -92,9 +136,9 @@ bool collectFormMutations(PdfDocument* document,
         std::string detailsError;
         const auto details = document->pageDetails(currentPage, &detailsError);
         if (!detailsError.empty()) {
-            if (error)
-                *error = std::move(detailsError);
-            return false;
+            fz_warn(
+                document->context(), "could not collect form fields on page %d: %s", currentPage, detailsError.c_str());
+            continue;
         }
         for (const auto& fieldState : details.formFields) {
             if (fieldState.type != FormFieldType::PushButton)
@@ -130,18 +174,21 @@ void updateAllPages(fz_context* context, fz_document* document, int pageCount)
     // Field values can be shared by widgets on different pages. Rebuild every
     // page's appearance stream before extracting mutation results.
     for (int pageNumber = 0; pageNumber < pageCount; ++pageNumber) {
-        fz_page* page = fz_load_page(context, document, pageNumber);
+        fz_page* volatile page = nullptr;
         fz_try(context)
         {
+            page = fz_load_page(context, document, pageNumber);
             pdf_update_page(context, pdf_page_from_fz_page(context, page));
         }
         fz_always(context)
         {
-            fz_drop_page(context, page);
+            if (page)
+                fz_drop_page(context, page);
         }
         fz_catch(context)
         {
-            fz_rethrow(context);
+            fz_warn(
+                context, "could not update form appearances on page %d: %s", pageNumber, fz_caught_message(context));
         }
     }
 }
@@ -276,6 +323,8 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                     appearance ? pdf_dict_get(m_context, appearance, PDF_NAME(CA)) : nullptr, Limit::MaxFormNameBytes);
                 if (resetAction(m_context, field))
                     formField.pushButtonAction = FormPushButtonAction::Reset;
+                else if (pdf_js_supported(m_context, pdfDocument) && hasJavaScriptClickAction(m_context, field))
+                    formField.pushButtonAction = FormPushButtonAction::JavaScript;
             } else if (widgetType == PDF_WIDGET_TYPE_TEXT) {
                 formField.type = FormFieldType::Text;
                 if (const char* val = pdf_field_value(m_context, field)) {
@@ -433,6 +482,8 @@ bool PdfDocument::updateFormField(int page,
         return false;
 
     pdf_obj* volatile newValue = nullptr;
+    volatile int effectsPossible = 0;
+    std::string operationError;
 
     // Locate the widget on the requested page first, then resolve its logical
     // field head. This prevents a valid object number on another page from being
@@ -479,6 +530,7 @@ bool PdfDocument::updateFormField(int page,
             if (maxLen > 0 && utf8CodepointCount(textVal.text) > static_cast<std::size_t>(maxLen))
                 fz_throw(m_context, FZ_ERROR_GENERIC, "text value exceeds field maximum length");
 
+            effectsPossible = 1;
             if (!pdf_set_field_value(m_context, pdfDocument, logicalField, textVal.text.c_str(), 0))
                 fz_throw(m_context, FZ_ERROR_GENERIC, "form value rejected");
         } else if (std::holds_alternative<FormCheckValue>(value)) {
@@ -495,8 +547,47 @@ bool PdfDocument::updateFormField(int page,
                 if (!checkVal.checked && widgetType == PDF_WIDGET_TYPE_RADIOBUTTON
                     && (pdf_field_flags(m_context, logicalField) & PDF_BTN_FIELD_IS_NO_TOGGLE_TO_OFF) != 0)
                     fz_throw(m_context, FZ_ERROR_GENERIC, "radio button cannot be unchecked directly");
-                if (!pdf_toggle_widget(m_context, targetWidget))
+
+                const bool javaScriptEnabled = pdf_js_supported(m_context, pdfDocument) != 0;
+                effectsPossible = 1;
+                if (javaScriptEnabled) {
+                    fz_try(m_context)
+                    {
+                        pdf_annot_event_down(m_context, targetWidget);
+                    }
+                    fz_catch(m_context)
+                    {
+                        fz_warn(m_context, "checkbox or radio down action failed: %s", fz_caught_message(m_context));
+                    }
+                }
+
+                // MuPDF's toggle helper writes checkbox /V as a PDF name and
+                // synchronizes radio siblings. pdf_set_field_value currently
+                // stores button values as strings, which breaks radio state.
+                if (javaScriptEnabled) {
+                    fz_try(m_context)
+                    {
+                        if (!pdf_toggle_widget(m_context, targetWidget))
+                            fz_throw(m_context, FZ_ERROR_GENERIC, "could not update button widget");
+                    }
+                    fz_catch(m_context)
+                    {
+                        fz_warn(m_context, "checkbox or radio toggle failed: %s", fz_caught_message(m_context));
+                    }
+                } else if (!pdf_toggle_widget(m_context, targetWidget)) {
                     fz_throw(m_context, FZ_ERROR_GENERIC, "could not update button widget");
+                }
+
+                if (javaScriptEnabled) {
+                    fz_try(m_context)
+                    {
+                        pdf_annot_event_up(m_context, targetWidget);
+                    }
+                    fz_catch(m_context)
+                    {
+                        fz_warn(m_context, "checkbox or radio up action failed: %s", fz_caught_message(m_context));
+                    }
+                }
             }
         } else if (std::holds_alternative<FormChoiceSelection>(value)) {
             // Store selected display/export values in /V and clear /I. MuPDF can
@@ -517,6 +608,7 @@ bool PdfDocument::updateFormField(int page,
             }
 
             const bool useExportValues = pdf_choice_widget_options(m_context, targetWidget, 1, nullptr) == numOpts;
+            effectsPossible = 1;
             if (selectionVal.selectedIndices.empty()) {
                 pdf_dict_del(m_context, logicalField, PDF_NAME(V));
                 pdf_dict_del(m_context, logicalField, PDF_NAME(I));
@@ -547,30 +639,34 @@ bool PdfDocument::updateFormField(int page,
                 fz_throw(m_context, FZ_ERROR_GENERIC, "combobox is not editable");
 
             const auto& customTextVal = std::get<FormChoiceCustomText>(value);
+            effectsPossible = 1;
             if (!pdf_set_field_value(m_context, pdfDocument, logicalField, customTextVal.text.c_str(), 0))
                 fz_throw(m_context, FZ_ERROR_GENERIC, "form value rejected");
         }
-
-        // Updating a logical field can affect widgets on every page, so refresh
-        // all appearances before the fz_try boundary is left.
-        updateAllPages(m_context, m_document, pageCount());
     }
     fz_always(m_context)
     {
         if (newValue)
             pdf_drop_obj(m_context, newValue);
         fz_drop_page(m_context, nativePage);
-        // updateAllPages refreshed widgets through separate page handles, so the
-        // page cache can no longer be trusted.
-        clearPageCache();
     }
     fz_catch(m_context)
     {
-        fail(error, fz_caught_message(m_context));
-        return false;
+        operationError = fz_caught_message(m_context);
     }
 
-    return collectFormMutations(this, mutations, error);
+    if (!operationError.empty() && !effectsPossible) {
+        clearPageCache();
+        return fail(error, operationError.c_str());
+    }
+    if (!operationError.empty())
+        fz_warn(m_context, "form update failed after effects may have been applied: %s", operationError.c_str());
+
+    // Refresh and collect even after a late MuPDF error so callers learn about
+    // any field changes that the action committed before it failed.
+    updateAllPages(m_context, m_document, pageCount());
+    clearPageCache();
+    return collectFormMutations(this, mutations);
 }
 
 bool PdfDocument::resetForm(int page,
@@ -644,7 +740,97 @@ bool PdfDocument::resetForm(int page,
         return false;
     }
 
-    return collectFormMutations(this, mutations, error);
+    return collectFormMutations(this, mutations);
+}
+
+bool PdfDocument::clickFormButton(int page,
+                                  std::int32_t objectNumber,
+                                  std::vector<FieldMutation>* mutations,
+                                  std::string* error)
+{
+    if (!m_document || m_locked)
+        return fail(error, "document is not open");
+
+    pdf_document* pdfDocument = pdf_specifics(m_context, m_document);
+    if (!pdfDocument)
+        return fail(error, "document is not a PDF");
+    if (!pdf_js_supported(m_context, pdfDocument))
+        return fail(error, "PDF form JavaScript is unavailable");
+
+    fz_page* nativePage = loadPage(page, error);
+    if (!nativePage)
+        return false;
+
+    volatile int effectsPossible = 0;
+    std::string operationError;
+    fz_try(m_context)
+    {
+        pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
+        if (!pdfPage)
+            fz_throw(m_context, FZ_ERROR_GENERIC, "not a PDF page");
+
+        pdf_annot* targetWidget = nullptr;
+        for (pdf_annot* widget = pdf_first_widget(m_context, pdfPage); widget;
+             widget = pdf_next_widget(m_context, widget)) {
+            pdf_obj* field = pdf_annot_obj(m_context, widget);
+            if (field && pdf_to_num(m_context, field) == objectNumber) {
+                targetWidget = widget;
+                break;
+            }
+        }
+        if (!targetWidget)
+            fz_throw(m_context, FZ_ERROR_GENERIC, "widget object not found on page");
+
+        pdf_obj* field = pdf_annot_obj(m_context, targetWidget);
+        const int fieldFlags = pdf_field_flags(m_context, field);
+        const int annotationFlags = pdf_dict_get_int(m_context, field, PDF_NAME(F));
+        if ((fieldFlags & PDF_BTN_FIELD_IS_PUSHBUTTON) == 0)
+            fz_throw(m_context, FZ_ERROR_GENERIC, "field is not a push button");
+        if ((fieldFlags & PDF_FIELD_IS_READ_ONLY) != 0 || (annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0)
+            fz_throw(m_context, FZ_ERROR_GENERIC, "form field is read-only");
+        if (resetAction(m_context, field))
+            fz_throw(m_context, FZ_ERROR_GENERIC, "reset buttons use the form reset operation");
+        if (!hasJavaScriptClickAction(m_context, field))
+            fz_throw(m_context, FZ_ERROR_GENERIC, "push button has no JavaScript click action");
+
+        effectsPossible = 1;
+        fz_try(m_context)
+        {
+            pdf_annot_event_down(m_context, targetWidget);
+        }
+        fz_catch(m_context)
+        {
+            fz_warn(m_context, "push button down action failed: %s", fz_caught_message(m_context));
+        }
+        fz_try(m_context)
+        {
+            pdf_annot_event_up(m_context, targetWidget);
+        }
+        fz_catch(m_context)
+        {
+            fz_warn(m_context, "push button up action failed: %s", fz_caught_message(m_context));
+        }
+    }
+    fz_always(m_context)
+    {
+        fz_drop_page(m_context, nativePage);
+    }
+    fz_catch(m_context)
+    {
+        operationError = fz_caught_message(m_context);
+    }
+
+    if (!operationError.empty() && !effectsPossible) {
+        clearPageCache();
+        return fail(error, operationError.c_str());
+    }
+    if (!operationError.empty())
+        fz_warn(m_context, "push button action failed after effects may have been applied: %s", operationError.c_str());
+
+    // Button scripts can change fields and appearances anywhere in the document.
+    updateAllPages(m_context, m_document, pageCount());
+    clearPageCache();
+    return collectFormMutations(this, mutations);
 }
 
 } // namespace Mu::Worker::Engine

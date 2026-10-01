@@ -600,6 +600,20 @@ private slots:
         QCOMPARE(custVal->text, std::string("CustomString"));
     }
 
+    void formButtonClickRoundTrip()
+    {
+        std::string error;
+        const ::Mu::Model::RequestMessage request { 12, ::Mu::Model::FormButtonClickRequest { "button-42" } };
+        const auto encoded = ::Mu::IPC::ZppCodec::encode(request, &error);
+        QVERIFY2(encoded.has_value(), error.c_str());
+
+        ::Mu::Model::RequestMessage decoded;
+        QVERIFY2(::Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
+        const auto* click = std::get_if<::Mu::Model::FormButtonClickRequest>(&decoded.payload);
+        QVERIFY(click != nullptr);
+        QCOMPARE(click->handle, std::string("button-42"));
+    }
+
 #ifdef MU_DEBUG_ENABLED
     void signingPayloadDoesNotExposeSecrets()
     {

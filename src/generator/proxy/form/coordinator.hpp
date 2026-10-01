@@ -20,6 +20,12 @@ class FormField;
 
 namespace Mu::Generator::Proxy::Form {
 
+/// Payload attached to Okular's backend callback for a PDF push button.
+struct ButtonActivation {
+    Model::FormPushButtonAction action = Model::FormPushButtonAction::None;
+    std::string handle;
+};
+
 /// Outcome of applying a worker canonical value to a proxy snapshot.
 /// Rejected values touch nothing; unchanged values refresh their widget but
 /// stay clean; only changed values dirty the document.
@@ -81,6 +87,10 @@ public:
     // Requests a worker-side reset and applies its affected-field response.
     // Returns true only when at least one proxy view actually changed.
     [[nodiscard]] bool resetForm(const std::string& handle);
+    // Runs a JavaScript push-button action and applies the returned field changes.
+    [[nodiscard]] bool clickFormButton(const std::string& handle);
+    // Dispatches an Okular backend activation to its worker operation.
+    [[nodiscard]] bool activateButton(const ButtonActivation& activation);
     // Restores existing proxies from the clean values returned by a reopened worker document.
     void resetFields(const std::vector<Model::FormField>& fields);
 

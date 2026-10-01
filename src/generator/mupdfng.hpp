@@ -89,6 +89,8 @@ public:
     bool exportTo(const QString& fileName, const Okular::ExportFormat& format) override;
     // Okular Generator Func: returns the annotation adapter used by Okular.
     Okular::AnnotationProxy* annotationProxy() const override;
+    // Executes worker-backed form button activations from Okular's UI event path.
+    Okular::BackendOpaqueAction::OpaqueActionResult opaqueAction(const Okular::BackendOpaqueAction* action) override;
 
     // Okular Generator Func: reports that worker-backed signing is supported.
     bool canSign() const override;

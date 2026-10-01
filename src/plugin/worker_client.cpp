@@ -194,6 +194,12 @@ std::optional<Model::FormUpdateResponse> WorkerClient::resetForm(const Model::Fo
     return sync([&](WorkerTransport* transport) { return transport->resetForm(request); });
 }
 
+std::optional<Model::FormUpdateResponse>
+WorkerClient::clickFormButton(const Model::FormButtonClickRequest& request) const
+{
+    return sync([&](WorkerTransport* transport) { return transport->clickFormButton(request); });
+}
+
 bool WorkerClient::saveToFile(const QString& t)
 {
     return sync([&](WorkerTransport* transport) { return transport->saveToFile(t); });

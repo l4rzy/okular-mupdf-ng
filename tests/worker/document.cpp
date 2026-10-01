@@ -754,6 +754,171 @@ private slots:
         QCOMPARE(total->text, std::string("Invalid input"));
     }
 
+    void formJavaScriptPushButtonRunsClickAction()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QFile file(QStringLiteral(FORM_JS_BUTTON_PDF_PATH));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_button.pdf", &error), error.c_str());
+
+        pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
+        QVERIFY(pdfDoc);
+        if (!pdf_js_supported(doc.context(), pdfDoc))
+            QSKIP("JavaScript is disabled in this MuPDF build");
+
+        auto details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        auto button = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "IncrementButton";
+        });
+        QVERIFY(button != details.formFields.end());
+        QCOMPARE(button->pushButtonAction, ::Mu::Model::FormPushButtonAction::JavaScript);
+
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(doc.clickFormButton(0, button->pdfObjectNumber, &mutations, &error), error.c_str());
+
+        details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto counter = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Counter";
+        });
+        QVERIFY(counter != details.formFields.end());
+        QCOMPARE(counter->text, std::string("1"));
+
+        const QString savedPath = dir.filePath(QStringLiteral("form_javascript_button-saved.pdf"));
+        QFile savedFile(savedPath);
+        QVERIFY(savedFile.open(QIODevice::WriteOnly));
+        QVERIFY2(doc.saveFd(savedFile.handle(), &error), error.c_str());
+        savedFile.close();
+
+        QFile savedInput(savedPath);
+        QVERIFY(savedInput.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reopened;
+        QVERIFY2(reopened.openFd(::dup(savedInput.handle()), "form_javascript_button-saved.pdf", &error),
+                 error.c_str());
+        const auto reopenedDetails = reopened.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto reopenedCounter = std::find_if(reopenedDetails.formFields.begin(),
+                                                  reopenedDetails.formFields.end(),
+                                                  [](const auto& field) { return field.partialName == "Counter"; });
+        QVERIFY(reopenedCounter != reopenedDetails.formFields.end());
+        QCOMPARE(reopenedCounter->text, std::string("1"));
+    }
+
+    void formJavaScriptFailuresStillReturnAppliedMutations()
+    {
+        QFile file(QStringLiteral(FORM_JS_PARTIAL_ERROR_PDF_PATH));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_partial_error.pdf", &error), error.c_str());
+        pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
+        QVERIFY(pdfDoc);
+        if (!pdf_js_supported(doc.context(), pdfDoc))
+            QSKIP("JavaScript is disabled in this MuPDF build");
+
+        const auto details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto flag = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Flag";
+        });
+        const auto counter = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Counter";
+        });
+        QVERIFY(flag != details.formFields.end());
+        QVERIFY(counter != details.formFields.end());
+
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(
+            doc.updateFormField(0, flag->pdfObjectNumber, ::Mu::Model::FormCheckValue { true }, &mutations, &error),
+            error.c_str());
+        const auto changedCounter = std::find_if(mutations.begin(), mutations.end(), [&](const auto& mutation) {
+            return mutation.objectNumber == counter->pdfObjectNumber;
+        });
+        QVERIFY(changedCounter != mutations.end());
+        const auto* changedText = std::get_if<::Mu::Model::FormTextValue>(&changedCounter->actualValue);
+        QVERIFY(changedText);
+        QCOMPARE(changedText->text, std::string("checkbox-up"));
+
+        const auto updatedDetails = doc.pageDetails(0, &error);
+        const auto button = std::find_if(updatedDetails.formFields.begin(),
+                                         updatedDetails.formFields.end(),
+                                         [](const auto& f) { return f.partialName == "ThrowingButton"; });
+        QVERIFY(button != updatedDetails.formFields.end());
+        QVERIFY2(doc.clickFormButton(0, button->pdfObjectNumber, &mutations, &error), error.c_str());
+        const auto buttonCounter = std::find_if(mutations.begin(), mutations.end(), [&](const auto& mutation) {
+            return mutation.objectNumber == counter->pdfObjectNumber;
+        });
+        QVERIFY(buttonCounter != mutations.end());
+        const auto* buttonText = std::get_if<::Mu::Model::FormTextValue>(&buttonCounter->actualValue);
+        QVERIFY(buttonText);
+        QCOMPARE(buttonText->text, std::string("button-down"));
+    }
+
+    void formJavaScriptCheckboxAndRadioEventsRun()
+    {
+        QFile file(QStringLiteral(FORM_JS_CONTROLS_PDF_PATH));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_controls.pdf", &error), error.c_str());
+
+        pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
+        QVERIFY(pdfDoc);
+        if (!pdf_js_supported(doc.context(), pdfDoc))
+            QSKIP("JavaScript is disabled in this MuPDF build");
+
+        auto details = doc.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        auto checkbox = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.type == ::Mu::Model::FormFieldType::CheckBox;
+        });
+        auto radio = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.type == ::Mu::Model::FormFieldType::RadioButton && field.onState == "Second";
+        });
+        QVERIFY(checkbox != details.formFields.end());
+        QVERIFY(radio != details.formFields.end());
+
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(
+            doc.updateFormField(0, checkbox->pdfObjectNumber, ::Mu::Model::FormCheckValue { true }, &mutations, &error),
+            error.c_str());
+        details = doc.pageDetails(0, &error);
+        auto log = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Log";
+        });
+        QVERIFY(log != details.formFields.end());
+        QCOMPARE(log->text, std::string("checkbox"));
+
+        radio = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.type == ::Mu::Model::FormFieldType::RadioButton && field.onState == "Second";
+        });
+        QVERIFY(radio != details.formFields.end());
+        QVERIFY2(
+            doc.updateFormField(0, radio->pdfObjectNumber, ::Mu::Model::FormCheckValue { true }, &mutations, &error),
+            error.c_str());
+        details = doc.pageDetails(0, &error);
+        log = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.partialName == "Log";
+        });
+        QVERIFY(log != details.formFields.end());
+        QCOMPARE(log->text, std::string("radio"));
+
+        const auto firstRadio =
+            std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+                return field.type == ::Mu::Model::FormFieldType::RadioButton && field.onState == "First";
+            });
+        QVERIFY(firstRadio != details.formFields.end());
+        QVERIFY(!firstRadio->checked);
+        radio = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
+            return field.type == ::Mu::Model::FormFieldType::RadioButton && field.onState == "Second";
+        });
+        QVERIFY(radio->checked);
+    }
+
     void updateMultiselectAndEditableComboPersistAcrossReopen()
     {
         QTemporaryDir dir;

@@ -122,6 +122,10 @@ public:
                                  std::int32_t objectNumber,
                                  std::vector<FieldMutation>* mutations,
                                  std::string* error = nullptr) override;
+    [[nodiscard]] bool clickFormButton(int page,
+                                       std::int32_t objectNumber,
+                                       std::vector<FieldMutation>* mutations,
+                                       std::string* error = nullptr) override;
     [[nodiscard]] std::vector<Font> fonts(const std::vector<int>& pages, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<EmbeddedFile> embeddedFiles(std::size_t maxBytes,
                                                           std::size_t maxFiles,

@@ -54,6 +54,9 @@ target_compile_definitions(test_mupdf PRIVATE
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
     FORM_JS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_calculation.pdf"
+    FORM_JS_BUTTON_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_button.pdf"
+    FORM_JS_CONTROLS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_controls.pdf"
+    FORM_JS_PARTIAL_ERROR_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_partial_error.pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
     TESSDATA_DIR="${TESSDATA_DIR}")
 if(MU_DEBUG_BUILD)

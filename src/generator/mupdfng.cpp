@@ -119,11 +119,14 @@ Main::Main(QObject* parent, const QVariantList& args)
             // Recovery applies clean values while the coordinator is
             // unavailable; those must not re-dirty the document. Accepted but
             // unchanged responses refresh their widget without dirtying it.
-            if (m_formCoordinator && m_formCoordinator->isAvailable() && changed)
+            const Okular::Document* currentDocument = document();
+            if (m_formCoordinator && m_formCoordinator->isAvailable() && changed) {
                 m_formsDirty = true;
+                if (currentDocument)
+                    const_cast<Okular::Document*>(currentDocument)->setHistoryClean(false);
+            }
             // Form mutations happen in the worker. Ask Okular to refresh the
             // affected widgets and page pixmaps after the proxy state changes.
-            const Okular::Document* currentDocument = document();
             if (!currentDocument)
                 return;
             auto* mutableDocument = const_cast<Okular::Document*>(currentDocument);
@@ -1393,6 +1396,16 @@ Okular::AnnotationProxy* Main::annotationProxy() const
     if (m_document.type == Model::DocumentType::Epub)
         return nullptr;
     return &m_annotationProxy;
+}
+
+Okular::BackendOpaqueAction::OpaqueActionResult Main::opaqueAction(const Okular::BackendOpaqueAction* action)
+{
+    if (!action || !action->nativeHandle() || !m_formCoordinator)
+        return Okular::BackendOpaqueAction::DoNothing;
+
+    const auto* activation = static_cast<const Proxy::Form::ButtonActivation*>(action->nativeHandle());
+    static_cast<void>(m_formCoordinator->activateButton(*activation));
+    return Okular::BackendOpaqueAction::DoNothing;
 }
 
 // Okular Generator Func: prints through a temporary worker output file.

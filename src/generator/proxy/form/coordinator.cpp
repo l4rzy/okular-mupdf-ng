@@ -91,6 +91,28 @@ bool Coordinator::resetForm(const std::string& handle)
     return response && applyResponse(*response);
 }
 
+bool Coordinator::clickFormButton(const std::string& handle)
+{
+    if (!m_available || handle.empty() || !m_backend)
+        return false;
+
+    const auto response = m_backend->clickFormButton({ handle });
+    return response && applyResponse(*response);
+}
+
+bool Coordinator::activateButton(const ButtonActivation& activation)
+{
+    switch (activation.action) {
+    case Model::FormPushButtonAction::Reset:
+        return resetForm(activation.handle);
+    case Model::FormPushButtonAction::JavaScript:
+        return clickFormButton(activation.handle);
+    case Model::FormPushButtonAction::None:
+        return false;
+    }
+    return false;
+}
+
 void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
 {
     // Worker handles embed a per-open generation that resets when the worker

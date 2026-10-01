@@ -456,6 +456,21 @@ bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* 
     return true;
 }
 
+bool isValidFormButtonClickRequest(const FormButtonClickRequest& request, std::string_view* reason)
+{
+    if (request.handle.empty() || request.handle.size() > Limit::MaxFormFieldHandleBytes) {
+        if (reason)
+            *reason = "invalid form button handle length";
+        return false;
+    }
+    if (!isValidUtf8(request.handle) || !hasNoEmbeddedNul(request.handle)) {
+        if (reason)
+            *reason = "invalid form button handle encoding";
+        return false;
+    }
+    return true;
+}
+
 bool isValidAnnotationAddRequest(const AnnotationAddRequest& request, std::string_view* reason)
 {
     if (request.page < 0)

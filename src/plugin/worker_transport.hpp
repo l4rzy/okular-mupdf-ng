@@ -100,6 +100,7 @@ public:
     Model::SignResponse signToFile(Model::SignRequest request, const QString& password, const QString& target);
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
+    std::optional<Model::FormUpdateResponse> clickFormButton(const Model::FormButtonClickRequest& request);
     bool settings(const Model::DocumentSettings& settings);
 
 signals:

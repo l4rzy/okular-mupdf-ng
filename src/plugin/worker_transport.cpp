@@ -915,6 +915,14 @@ std::optional<FormUpdateResponse> WorkerTransport::resetForm(const FormResetRequ
     return std::nullopt;
 }
 
+std::optional<FormUpdateResponse> WorkerTransport::clickFormButton(const FormButtonClickRequest& request)
+{
+    auto response = call(request);
+    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
+        return std::get<FormUpdateResponse>(std::move(response->payload));
+    return std::nullopt;
+}
+
 bool WorkerTransport::settings(const DocumentSettings& settings)
 {
     if (!isValidDocumentSettings(settings))

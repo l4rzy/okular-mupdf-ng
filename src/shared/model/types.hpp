@@ -554,6 +554,7 @@ enum class FormFieldType : std::uint8_t {
 enum class FormPushButtonAction : std::uint8_t {
     None,
     Reset,
+    JavaScript,
 };
 
 /// Form widget metadata and its current value state.
@@ -632,6 +633,11 @@ struct FormUpdateRequest {
 
 /// Request to reset a form field identified by handle.
 struct FormResetRequest {
+    std::string handle;
+};
+
+/// Activates a JavaScript push button identified by its worker field handle.
+struct FormButtonClickRequest {
     std::string handle;
 };
 
@@ -973,7 +979,8 @@ using RequestPayload = std::variant<PingRequest,
                                     SignReply,
                                     FormUpdateRequest,
                                     FormResetRequest,
-                                    ExportPdfAsyncRequest>;
+                                    ExportPdfAsyncRequest,
+                                    FormButtonClickRequest>;
 
 /// Correlated request envelope sent over the control channel.
 struct RequestMessage {

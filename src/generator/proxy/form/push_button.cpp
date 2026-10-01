@@ -3,6 +3,8 @@
 
 #include "generator/proxy/form/push_button.hpp"
 
+#include <okular/core/action.h>
+
 namespace Mu::Generator::Proxy::Form {
 
 PushButton::PushButton(int id, Model::FormField data, Coordinator* coordinator)
@@ -10,6 +12,13 @@ PushButton::PushButton(int id, Model::FormField data, Coordinator* coordinator)
     , m_data(std::move(data))
     , m_coordinator(coordinator)
 {
+    if (m_data.pushButtonAction == Model::FormPushButtonAction::Reset
+        || m_data.pushButtonAction == Model::FormPushButtonAction::JavaScript) {
+        m_activation = std::make_shared<ButtonActivation>(ButtonActivation { m_data.pushButtonAction, m_data.handle });
+        auto* action = new Okular::BackendOpaqueAction;
+        action->setNativeHandle(m_activation);
+        setActivationAction(action);
+    }
 }
 
 PushButton::~PushButton()
@@ -71,10 +80,20 @@ bool PushButton::state() const
 
 void PushButton::setState(bool state)
 {
-    // Okular reports activation as true; only the reset action has a worker
-    // operation, while ordinary push-button actions remain unsupported here.
-    if (state && !m_data.readOnly && m_data.pushButtonAction == Model::FormPushButtonAction::Reset && m_coordinator)
+    if (!state || m_data.readOnly || !m_coordinator)
+        return;
+
+    if (m_data.pushButtonAction == Model::FormPushButtonAction::Reset)
         static_cast<void>(m_coordinator->resetForm(m_data.handle));
+    else if (m_data.pushButtonAction == Model::FormPushButtonAction::JavaScript)
+        static_cast<void>(m_coordinator->clickFormButton(m_data.handle));
+}
+
+void PushButton::setHandle(const std::string& handle)
+{
+    m_data.handle = handle;
+    if (m_activation)
+        m_activation->handle = handle;
 }
 
 } // namespace Mu::Generator::Proxy::Form

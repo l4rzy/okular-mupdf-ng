@@ -429,6 +429,11 @@ private slots:
         QCOMPARE(invalidForm.error->code, Model::ErrorCode::InvalidRequest);
         QCOMPARE(invalidForm.error->operation, std::string("form_update"));
 
+        const auto invalidButton = service.dispatch({ 18, Model::FormButtonClickRequest { } });
+        QVERIFY(invalidButton.error);
+        QCOMPARE(invalidButton.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(invalidButton.error->operation, std::string("form_button_click"));
+
         const auto invalidSign = service.dispatch({ 15, Model::SignRequest { } });
         QVERIFY(invalidSign.error);
         QCOMPARE(invalidSign.error->code, Model::ErrorCode::InvalidRequest);

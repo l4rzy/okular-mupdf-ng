@@ -85,6 +85,11 @@ bool DocumentBase::resetForm(int, std::int32_t, std::vector<FieldMutation>*, std
     return fail(error, "form reset is not supported for this document type");
 }
 
+bool DocumentBase::clickFormButton(int, std::int32_t, std::vector<FieldMutation>*, std::string* error)
+{
+    return fail(error, "form button clicks are not supported for this document type");
+}
+
 std::vector<Font> DocumentBase::fonts(const std::vector<int>&, std::string*) const
 {
     return { };

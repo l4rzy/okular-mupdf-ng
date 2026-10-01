@@ -38,6 +38,7 @@ using ::Mu::Model::AnnotationRemoveRequest;
 using ::Mu::Model::DocumentType;
 using ::Mu::Model::ExportPdfAsyncRequest;
 using ::Mu::Model::FontsRequest;
+using ::Mu::Model::FormButtonClickRequest;
 using ::Mu::Model::FormResetRequest;
 using ::Mu::Model::FormUpdateRequest;
 using ::Mu::Model::MetadataRequest;
@@ -266,6 +267,7 @@ private:
     [[nodiscard]] ResponseMessage embeddedFiles(const RequestMessage& request);
     [[nodiscard]] ResponseMessage formUpdate(const RequestMessage& request, const FormUpdateRequest& update);
     [[nodiscard]] ResponseMessage formReset(const RequestMessage& request, const FormResetRequest& reset);
+    [[nodiscard]] ResponseMessage formButtonClick(const RequestMessage& request, const FormButtonClickRequest& click);
     [[nodiscard]] Model::FormUpdateResponse
     formUpdateResponse(const std::vector<Engine::DocumentBase::FieldMutation>& mutations) const;
     /// Performs the synchronous CMS reply exchange used by the MuPDF signer.

@@ -89,6 +89,8 @@ public:
     bool removeAnnotation(int page, const QString& id) const;
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const override;
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request) const override;
+    std::optional<Model::FormUpdateResponse>
+    clickFormButton(const Model::FormButtonClickRequest& request) const override;
     [[nodiscard]] Model::SandboxStatus sandboxStatus() const;
     [[nodiscard]] std::string engineVersion() const;
 signals:

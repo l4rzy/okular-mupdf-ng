@@ -1,0 +1,55 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R] /NeedAppearances true >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 220] /Resources << >> /Annots [4 0 R 5 0 R 7 0 R 8 0 R] >>
+endobj
+4 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Btn /T (Checkbox) /V /Off /AS /Off /Rect [40 140 70 170] /P 3 0 R /AP << /N << /Off 10 0 R /Yes 10 0 R >> >> /AA << /U << /S /JavaScript /JS <746869732e6765744669656c6428274c6f6727292e76616c7565203d2027636865636b626f78273b> >> >> >>
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Tx /T (Log) /V (initial) /Rect [120 140 280 170] /P 3 0 R /F 4 >>
+endobj
+6 0 obj
+<< /FT /Btn /Ff 32768 /T (RadioGroup) /V /First /Kids [7 0 R 8 0 R] >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Widget /Parent 6 0 R /AS /First /Rect [40 80 70 110] /P 3 0 R /AP << /N << /Off 10 0 R /First 10 0 R >> >> /AA << /U << /S /JavaScript /JS <746869732e6765744669656c6428274c6f6727292e76616c7565203d2027726164696f273b> >> >> >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /Parent 6 0 R /AS /Off /Rect [40 35 70 65] /P 3 0 R /AP << /N << /Off 10 0 R /Second 10 0 R >> >> /AA << /U << /S /JavaScript /JS <746869732e6765744669656c6428274c6f6727292e76616c7565203d2027726164696f273b> >> >> >>
+endobj
+9 0 obj
+<< /Length 0 >>
+stream
+
+endstream
+endobj
+10 0 obj
+<< /Length 0 >>
+stream
+
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000124 00000 n 
+0000000181 00000 n 
+0000000303 00000 n 
+0000000589 00000 n 
+0000000708 00000 n 
+0000000794 00000 n 
+0000001060 00000 n 
+0000001324 00000 n 
+0000001373 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1423
+%%EOF

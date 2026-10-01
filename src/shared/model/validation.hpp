@@ -91,6 +91,9 @@ bool isValidFormUpdateRequest(const FormUpdateRequest& request, std::string_view
 /// On failure, optionally stores a stable diagnostic in `reason`.
 bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* reason = nullptr);
 
+/// Validates the handle carried by a JavaScript push-button click request.
+bool isValidFormButtonClickRequest(const FormButtonClickRequest& request, std::string_view* reason = nullptr);
+
 /// Validates an annotation add request before document state is consulted.
 bool isValidAnnotationAddRequest(const AnnotationAddRequest& request, std::string_view* reason = nullptr);
 

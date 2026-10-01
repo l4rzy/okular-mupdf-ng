@@ -4,6 +4,8 @@
 #ifndef MU_GENERATOR_PROXY_FORM_PUSH_BUTTON_HPP
 #define MU_GENERATOR_PROXY_FORM_PUSH_BUTTON_HPP
 
+#include <memory>
+
 #include <okular/core/form.h>
 
 #include "generator/proxy/form/coordinator.hpp"
@@ -37,9 +39,10 @@ public:
     // Push buttons have no persistent value to apply from an update response.
     ApplyResult applyCanonicalValue(const Model::FormValue&) override { return ApplyResult::Rejected; }
 
+
     Okular::FormField* formField() override { return this; }
 
-    void setHandle(const std::string& handle) override { m_data.handle = handle; }
+    void setHandle(const std::string& handle) override;
 
     const Model::FormField& model() const noexcept { return m_data; }
 
@@ -47,7 +50,9 @@ private:
     int m_id;
     // Button metadata remains local because button activation is stateless.
     Model::FormField m_data;
-    // Non-owning coordinator used for reset-form actions.
+    // Shared with Okular's activation action and updated when recovery rekeys the field.
+    std::shared_ptr<ButtonActivation> m_activation;
+    // Non-owning coordinator used by direct state changes.
     Coordinator* m_coordinator;
 };
 

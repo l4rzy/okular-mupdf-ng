@@ -415,6 +415,9 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "outputTransfer", value.output.transferId);
                 field(out, "inputTransfer", value.input.transferId);
                 field(out, "pages", value.pages.size());
+            } else if constexpr (std::is_same_v<T, Model::FormButtonClickRequest>) {
+                out << "form-button-click";
+                field(out, "handle", value.handle);
             }
         },
         payload);

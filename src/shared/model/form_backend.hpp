@@ -15,6 +15,8 @@ public:
 
     [[nodiscard]] virtual std::optional<FormUpdateResponse> updateForm(const FormUpdateRequest& request) const = 0;
     [[nodiscard]] virtual std::optional<FormUpdateResponse> resetForm(const FormResetRequest& request) const = 0;
+    [[nodiscard]] virtual std::optional<FormUpdateResponse>
+    clickFormButton(const FormButtonClickRequest& request) const = 0;
 };
 
 } // namespace Mu::Model

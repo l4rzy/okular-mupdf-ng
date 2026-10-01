@@ -34,6 +34,8 @@ namespace Mu::Plugin {
 
 static std::function<std::optional<Model::FormUpdateResponse>(const Model::FormUpdateRequest&)> s_mockUpdateForm;
 static std::function<std::optional<Model::FormUpdateResponse>(const Model::FormResetRequest&)> s_mockResetForm;
+static std::function<std::optional<Model::FormUpdateResponse>(const Model::FormButtonClickRequest&)>
+    s_mockClickFormButton;
 
 static std::optional<Model::FormUpdateResponse> echoFormUpdate(const Model::FormUpdateRequest& request)
 {
@@ -57,6 +59,14 @@ public:
             return s_mockResetForm(request);
         return std::nullopt;
     }
+
+    std::optional<Model::FormUpdateResponse>
+    clickFormButton(const Model::FormButtonClickRequest& request) const override
+    {
+        if (s_mockClickFormButton)
+            return s_mockClickFormButton(request);
+        return std::nullopt;
+    }
 };
 
 static FormBackendFake s_formBackend;
@@ -74,6 +84,7 @@ private slots:
     {
         ::Mu::Plugin::s_mockUpdateForm = nullptr;
         ::Mu::Plugin::s_mockResetForm = nullptr;
+        ::Mu::Plugin::s_mockClickFormButton = nullptr;
     }
 
     void pendingSignaturePreviewPaintsAndHides()
@@ -461,8 +472,10 @@ private slots:
         field.rectangle = { 0.1, 0.2, 0.3, 0.4 };
 
         int resetCount = 0;
+        int clickCount = 0;
+        std::string resetHandle = field.handle;
         ::Mu::Plugin::s_mockResetForm = [&](const ::Mu::Model::FormResetRequest& request) {
-            if (request.handle == field.handle)
+            if (request.handle == resetHandle)
                 ++resetCount;
             return ::Mu::Model::FormUpdateResponse { };
         };
@@ -472,6 +485,7 @@ private slots:
         QCOMPARE(proxy.buttonType(), Okular::FormFieldButton::Push);
         QCOMPARE(proxy.caption(), QStringLiteral("Clear form"));
         QVERIFY(!proxy.state());
+        QVERIFY(proxy.activationAction() == nullptr);
         proxy.setState(false);
         QCOMPARE(resetCount, 0);
         proxy.setState(true);
@@ -480,10 +494,53 @@ private slots:
         field.pushButtonAction = ::Mu::Model::FormPushButtonAction::Reset;
         ::Mu::Generator::Proxy::Form::PushButton resetProxy(field.pdfObjectNumber, field, &coordinator);
         coordinator.registerField(field.handle, &resetProxy);
+        QVERIFY(resetProxy.activationAction() != nullptr);
+        QCOMPARE(resetProxy.activationAction()->actionType(), Okular::Action::BackendOpaque);
+        auto* resetOpaque = dynamic_cast<Okular::BackendOpaqueAction*>(resetProxy.activationAction());
+        QVERIFY(resetOpaque != nullptr);
+        auto* resetActivation =
+            static_cast<const ::Mu::Generator::Proxy::Form::ButtonActivation*>(resetOpaque->nativeHandle());
+        QVERIFY(resetActivation != nullptr);
+        QCOMPARE(resetActivation->action, ::Mu::Model::FormPushButtonAction::Reset);
+        QCOMPARE(resetActivation->handle, field.handle);
         resetProxy.setState(true);
         QCOMPARE(resetCount, 1);
+        resetProxy.setHandle("g1-f0-o45");
+        resetHandle = "g1-f0-o45";
+        QCOMPARE(resetActivation->handle, std::string("g1-f0-o45"));
+        static_cast<void>(coordinator.activateButton(*resetActivation));
+        QCOMPARE(resetCount, 2);
+
+        std::string clickHandle = field.handle;
+        ::Mu::Plugin::s_mockClickFormButton = [&](const ::Mu::Model::FormButtonClickRequest& request) {
+            if (request.handle == clickHandle)
+                ++clickCount;
+            return ::Mu::Model::FormUpdateResponse { };
+        };
+        field.pushButtonAction = ::Mu::Model::FormPushButtonAction::JavaScript;
+        ::Mu::Generator::Proxy::Form::PushButton javascriptProxy(field.pdfObjectNumber, field, &coordinator);
+        coordinator.registerField(field.handle, &javascriptProxy);
+        QVERIFY(javascriptProxy.activationAction() != nullptr);
+        QCOMPARE(javascriptProxy.activationAction()->actionType(), Okular::Action::BackendOpaque);
+        auto* javascriptOpaque = dynamic_cast<Okular::BackendOpaqueAction*>(javascriptProxy.activationAction());
+        QVERIFY(javascriptOpaque != nullptr);
+        auto* javascriptActivation =
+            static_cast<const ::Mu::Generator::Proxy::Form::ButtonActivation*>(javascriptOpaque->nativeHandle());
+        QVERIFY(javascriptActivation != nullptr);
+        QCOMPARE(javascriptActivation->action, ::Mu::Model::FormPushButtonAction::JavaScript);
+        QCOMPARE(javascriptActivation->handle, field.handle);
+        javascriptProxy.setState(true);
+        QCOMPARE(clickCount, 1);
+        static_cast<void>(coordinator.activateButton(*javascriptActivation));
+        QCOMPARE(clickCount, 2);
+        javascriptProxy.setHandle("g1-f0-o46");
+        clickHandle = "g1-f0-o46";
+        QCOMPARE(javascriptActivation->handle, std::string("g1-f0-o46"));
+        static_cast<void>(coordinator.activateButton(*javascriptActivation));
+        QCOMPARE(clickCount, 3);
 
         ::Mu::Plugin::s_mockResetForm = nullptr;
+        ::Mu::Plugin::s_mockClickFormButton = nullptr;
     }
 
     void formFieldCheckBoxProxyExposesProperties()

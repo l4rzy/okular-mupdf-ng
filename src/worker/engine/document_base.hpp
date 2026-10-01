@@ -210,6 +210,12 @@ public:
     [[nodiscard]] virtual bool
     resetForm(int page, std::int32_t objectNumber, std::vector<FieldMutation>* mutations, std::string* error = nullptr);
 
+    /// Activates a JavaScript push button (PDF only).
+    [[nodiscard]] virtual bool clickFormButton(int page,
+                                               std::int32_t objectNumber,
+                                               std::vector<FieldMutation>* mutations,
+                                               std::string* error = nullptr);
+
     /// Lists embedded fonts used across specified pages (PDF only).
     [[nodiscard]] virtual std::vector<Font> fonts(const std::vector<int>& pages, std::string* error = nullptr) const;
 
