@@ -246,6 +246,9 @@ target_compile_definitions(mupdf_generator_settings PRIVATE
     TESSDATA_DIR="${TESSDATA_DIR}"
     SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
 )
+if(ENABLE_FORM_JAVASCRIPT)
+    target_compile_definitions(mupdf_generator_settings PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
+endif()
 target_include_directories(mupdf_generator_settings PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
@@ -274,6 +277,9 @@ target_include_directories(okularGenerator_mupdfng PRIVATE
 )
 
 target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
+if(ENABLE_FORM_JAVASCRIPT)
+    target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
+endif()
 
 target_link_libraries(okularGenerator_mupdfng
     mupdf_generator_adapters

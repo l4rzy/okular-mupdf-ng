@@ -24,6 +24,12 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
 {
     m_mupdfsw->setupUi(this);
 
+#ifndef MU_WORKER_ENABLE_FORM_JAVASCRIPT
+    m_mupdfsw->kcfg_PdfFormJavaScriptEnabled->setEnabled(false);
+    m_mupdfsw->kcfg_PdfFormJavaScriptEnabled->setToolTip(
+        i18n("PDF form JavaScript support was disabled when this application was built."));
+#endif
+
     auto* gfxAA = m_mupdfsw->kcfg_GraphicsAntialiasingBits;
     gfxAA->clear();
     gfxAA->addItem(i18n("Disabled"), MuPDFNGSettings::EnumGraphicsAntialiasingBits::Disabled);

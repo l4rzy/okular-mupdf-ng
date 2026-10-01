@@ -400,6 +400,8 @@ struct DocumentSettings {
     /// Opaque page background as 0xRRGGBB (Okular paper-color setting).
     std::uint32_t paperColorRgb = 0xFFFFFF;
     EpubLayoutSettings epub;
+    /// Whether the PDF engine may execute embedded form JavaScript.
+    bool formJavaScriptEnabled = false;
 };
 
 /// Document metadata values and basic document identity.

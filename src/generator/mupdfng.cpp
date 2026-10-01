@@ -328,12 +328,42 @@ bool Main::reparseConfig()
     refreshPaperColor();
     const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
     const bool changed = Config::renderingOutputChanged(m_settings.rendering, settings.rendering) || paperColorChanged;
-    const bool settingsChanged = settings.rendering != m_settings.rendering || paperColorChanged;
+    const bool renderingSettingsChanged = settings.rendering != m_settings.rendering || paperColorChanged;
+    const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
+    const bool pendingJavaScriptChanged =
+        !m_pendingFormJavaScriptEnabled || *m_pendingFormJavaScriptEnabled != settings.formJavaScriptEnabled;
+    const bool activePdf = document() && !m_placeholder.isActive() && !m_okularPages.isEmpty()
+        && m_document.type == Model::DocumentType::Pdf;
+    const bool deferJavaScript = formJavaScriptChanged && activePdf && (m_formsDirty || m_annotationsDirty);
+    const bool refreshJavaScript = formJavaScriptChanged && activePdf && !deferJavaScript && workerReady();
+
     m_settings.rendering = settings.rendering;
+    if (deferJavaScript) {
+        m_pendingFormJavaScriptEnabled = settings.formJavaScriptEnabled;
+        if (pendingJavaScriptChanged)
+            Q_EMIT warning(i18n("PDF JavaScript will be enabled or disabled when this document is next opened."),
+                           LongWarningMs);
+    } else {
+        m_settings.formJavaScriptEnabled = settings.formJavaScriptEnabled;
+        m_pendingFormJavaScriptEnabled.reset();
+    }
+
+    const bool settingsChanged =
+        !refreshJavaScript && (renderingSettingsChanged || (formJavaScriptChanged && !deferJavaScript));
 
     // Propagate changed settings to the worker process.
     if (settingsChanged && workerReady() && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
+
+    if (refreshJavaScript) {
+        // Disable worker-backed edits during the source refresh; a failure is
+        // terminal because the worker has replaced its prior document copy.
+        m_formCoordinator->setAvailable(false);
+        m_annotationProxy.setAvailable(false);
+        m_ocrController->reset();
+        if (!reopenWorkerDocument(true))
+            failClosed(i18n("The PDF could not be refreshed after changing its JavaScript setting. Restart Okular."));
+    }
 
     // Re-evaluate sandbox enforcement for the active document. Blocking
     // immediately withholds the document (renders become placeholders and the
@@ -560,6 +590,11 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
         return Okular::Document::OpenError;
     }
 
+    if (m_pendingFormJavaScriptEnabled) {
+        m_settings.formJavaScriptEnabled = *m_pendingFormJavaScriptEnabled;
+        m_pendingFormJavaScriptEnabled.reset();
+    }
+
     // Push render settings before the open round trip; the paper color is the
     // only swapped value, refreshed immediately before the settings are built.
     refreshPaperColor();
@@ -604,6 +639,11 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     if (docType == Model::DocumentType::Unknown) {
         MU_LOG(warning, "Mu::Generator::Main", "unsupported document data");
         return Okular::Document::OpenError;
+    }
+
+    if (m_pendingFormJavaScriptEnabled) {
+        m_settings.formJavaScriptEnabled = *m_pendingFormJavaScriptEnabled;
+        m_pendingFormJavaScriptEnabled.reset();
     }
 
     refreshPaperColor();
@@ -877,7 +917,7 @@ void Main::observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount)
         Plugin::OCR::NativeTextObservation { observedPage, nativeTextBoxCount });
 }
 
-bool Main::reopenWorkerDocument()
+bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 {
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
@@ -918,7 +958,7 @@ bool Main::reopenWorkerDocument()
     std::vector<Model::FormField> formFields;
     for (const auto& page : pages)
         formFields.insert(formFields.end(), page.formFields.begin(), page.formFields.end());
-    m_formCoordinator->resetFields(formFields);
+    const bool formValuesChanged = m_formCoordinator->resetFields(formFields);
     {
         // Mirrors clearWorkerDerivedState: live pages require userMutex().
         QMutexLocker locker(userMutex());
@@ -926,18 +966,20 @@ bool Main::reopenWorkerDocument()
             Conversion::rebuildPageAnnotations(m_okularPages.at(i), pages.at(i).annotations);
     }
     // Phase 4: publish the clean state before accepting edits again.
-    m_formsDirty = false;
+    m_formsDirty = markFormChangesDirty && formValuesChanged;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
     m_annotationProxy.setAvailable(true);
     if (const Okular::Document* currentDocument = document()) {
+        if (m_formsDirty)
+            const_cast<Okular::Document*>(currentDocument)->setHistoryClean(false);
         for (int i = 0; i < m_okularPages.size(); ++i) {
             clearPageDisplayState(i);
             const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(i);
         }
     }
     m_ocrController->reset();
-    MU_LOG(warning, "Mu::Generator::Main", "reopened document after worker restart");
+    MU_LOG(debug, "Mu::Generator::Main", "reopened document from retained source");
     return true;
 }
 

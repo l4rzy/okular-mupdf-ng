@@ -113,7 +113,7 @@ bool Coordinator::activateButton(const ButtonActivation& activation)
     return false;
 }
 
-void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
+bool Coordinator::resetFields(const std::vector<Model::FormField>& fields)
 {
     // Worker handles embed a per-open generation that resets when the worker
     // process restarts. Match surviving proxies by their stable widget object
@@ -134,6 +134,7 @@ void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
             continue;
         }
         proxy->setHandle(match->handle);
+        proxy->setPushButtonAction(match->pushButtonAction);
         rekeyed.emplace(match->handle, proxy);
     }
     m_fields.swap(rekeyed);
@@ -159,6 +160,7 @@ void Coordinator::resetFields(const std::vector<Model::FormField>& fields)
 
     if (m_refreshCallback)
         m_refreshCallback(changedFields, affectedPages, changed);
+    return changed;
 }
 
 bool Coordinator::applyResponse(const Model::FormUpdateResponse& response)

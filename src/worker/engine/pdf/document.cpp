@@ -81,7 +81,7 @@ bool PdfDocument::openFd(int fd, std::string displayName, std::string* error)
             if (declaredCount == 0)
                 fz_throw(m_context, FZ_ERROR_GENERIC, "document has no loadable pages");
             updateAcroFormPresence();
-            enableFormJavaScript();
+            applyFormJavaScriptSetting();
         }
     }
     fz_catch(m_context)
@@ -114,7 +114,7 @@ bool PdfDocument::unlock(const std::string& password, std::string* error)
 
         updateAcroFormPresence();
         m_locked = false;
-        enableFormJavaScript();
+        applyFormJavaScriptSetting();
     }
     fz_catch(m_context)
     {
@@ -191,7 +191,7 @@ void PdfDocument::updateAcroFormPresence()
         pdf && pdf_dict_getl(m_context, pdf_trailer(m_context, pdf), PDF_NAME(Root), PDF_NAME(AcroForm), nullptr);
 }
 
-void PdfDocument::enableFormJavaScript()
+void PdfDocument::applyFormJavaScriptSetting()
 {
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
     pdf_document* pdf = pdf_specifics(m_context, m_document);
@@ -200,7 +200,10 @@ void PdfDocument::enableFormJavaScript()
 
     fz_try(m_context)
     {
-        pdf_enable_js(m_context, pdf);
+        if (m_settings.formJavaScriptEnabled)
+            pdf_enable_js(m_context, pdf);
+        else
+            pdf_disable_js(m_context, pdf);
     }
     fz_catch(m_context)
     {
@@ -210,7 +213,7 @@ void PdfDocument::enableFormJavaScript()
         return;
     }
 
-    if (!pdf_js_supported(m_context, pdf))
+    if (m_settings.formJavaScriptEnabled && !pdf_js_supported(m_context, pdf))
         MU_LOG(warning, "Mu::Worker::Pdf", "PDF form JavaScript is unavailable in the linked MuPDF build");
 #endif
 }
@@ -246,10 +249,13 @@ DocumentSettings PdfDocument::settings() const noexcept
 
 void PdfDocument::setSettings(const DocumentSettings& settings) noexcept
 {
+    const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
     m_settings = settings;
     m_settings.idleTrimAggressiveness =
         ::Mu::Worker::Runtime::MemoryPressure::normalizeIdleTrim(m_settings.idleTrimAggressiveness);
     applyFitzSettings(m_context, m_settings);
+    if (formJavaScriptChanged && m_document && !m_locked)
+        applyFormJavaScriptSetting();
 }
 
 // =============================================================================

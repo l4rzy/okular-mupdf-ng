@@ -156,7 +156,7 @@ WorkerSettings readWorkerSettings()
     // One reader keeps the session-scope pair coherent: rendering values are
     // normalized into worker-facing units; EPUB values come from
     // readEpubSettings() (page size in model order, CSS sanitized).
-    return {
+    WorkerSettings settings {
         { graphicsAntialiasingBitsForConfig(MuPDFNGSettings::graphicsAntialiasingBits()),
           textAntialiasingBitsForConfig(MuPDFNGSettings::textAntialiasingBits()),
           static_cast<int>(MuPDFNGSettings::imageRenderingQuality()),
@@ -165,6 +165,10 @@ WorkerSettings readWorkerSettings()
           idleTrimAggressivenessForConfig(MuPDFNGSettings::idleTrimLevel()) },
         readEpubSettings(),
     };
+#ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
+    settings.formJavaScriptEnabled = MuPDFNGSettings::pdfFormJavaScriptEnabled();
+#endif
+    return settings;
 }
 
 OcrSettings readOcrSettings()

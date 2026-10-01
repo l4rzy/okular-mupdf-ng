@@ -115,18 +115,21 @@ inline bool renderingOutputChanged(const RenderingSettings& previous, const Rend
         || previous.interpolateImages != current.interpolateImages;
 }
 
-/// Session-scope worker configuration: rendering values track the settings
-/// dialog; EPUB values stay fixed at process start (worker lifetime).
+/// Session-scope worker configuration: rendering and PDF JavaScript values
+/// track the settings dialog; EPUB values stay fixed at process start.
 struct WorkerSettings {
     RenderingSettings rendering;
     EpubSettings startupEpub;
+    bool formJavaScriptEnabled = false;
 
     /// Builds the worker-facing payload (clamped at the IPC boundary).
     /// The paper color is Okular session state, not a config value, so it is
     /// supplied by the caller.
     [[nodiscard]] Model::DocumentSettings documentSettings(std::uint32_t paperColorRgb) const
     {
-        return documentSettingsFor(rendering, startupEpub, paperColorRgb);
+        auto settings = documentSettingsFor(rendering, startupEpub, paperColorRgb);
+        settings.formJavaScriptEnabled = formJavaScriptEnabled;
+        return settings;
     }
 
     bool operator==(const WorkerSettings&) const = default;

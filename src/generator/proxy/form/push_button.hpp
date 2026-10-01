@@ -39,14 +39,16 @@ public:
     // Push buttons have no persistent value to apply from an update response.
     ApplyResult applyCanonicalValue(const Model::FormValue&) override { return ApplyResult::Rejected; }
 
-
     Okular::FormField* formField() override { return this; }
 
     void setHandle(const std::string& handle) override;
+    void setPushButtonAction(Model::FormPushButtonAction action) override;
 
     const Model::FormField& model() const noexcept { return m_data; }
 
 private:
+    void updateActivationAction();
+
     int m_id;
     // Button metadata remains local because button activation is stateless.
     Model::FormField m_data;

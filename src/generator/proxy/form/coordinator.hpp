@@ -43,6 +43,9 @@ public:
     virtual Okular::FormField* formField() = 0;
     // Updates the opaque worker handle when recovery re-keys a proxy.
     virtual void setHandle(const std::string& handle) = 0;
+
+    // Refreshes action metadata when a document is reopened with new settings.
+    virtual void setPushButtonAction(Model::FormPushButtonAction) { }
 };
 
 /// Minimal bridge between Okular form proxies and worker-side canonical state.
@@ -92,7 +95,7 @@ public:
     // Dispatches an Okular backend activation to its worker operation.
     [[nodiscard]] bool activateButton(const ButtonActivation& activation);
     // Restores existing proxies from the clean values returned by a reopened worker document.
-    void resetFields(const std::vector<Model::FormField>& fields);
+    bool resetFields(const std::vector<Model::FormField>& fields);
 
 private:
     // Updates local proxy views before notifying the generator/UI layer.

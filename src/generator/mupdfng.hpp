@@ -17,6 +17,7 @@
 #include <QtCore/qglobal.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "generator/config/settings.hpp"
@@ -129,7 +130,7 @@ private:
     void observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount);
     // Reopens the retained source after a worker restart and verifies that it
     // still represents the active Okular document.
-    bool reopenWorkerDocument();
+    bool reopenWorkerDocument(bool markFormChangesDirty = false);
     // Permanently disables the active document after an unrecoverable worker failure.
     void failClosed(const QString& message);
     // Clears transient Okular display state without removing document data.
@@ -237,6 +238,9 @@ private:
     // worker startup (changes require restarting Okular rather than being
     // sent to the already-sandboxed worker).
     Config::WorkerSettings m_settings;
+    // A JavaScript preference changed while the active PDF had unsaved edits;
+    // apply it at the next document-open boundary.
+    std::optional<bool> m_pendingFormJavaScriptEnabled;
     // Opaque page background requested by Okular (paper-color setting).
     static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
     std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;

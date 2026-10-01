@@ -313,6 +313,16 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="kcfg_PdfFormJavaScriptEnabled">
+            <property name="toolTip">
+             <string>Run JavaScript embedded in PDF forms. Disabled by default; enable only for documents you trust.</string>
+            </property>
+            <property name="text">
+             <string>Enable JavaScript support</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

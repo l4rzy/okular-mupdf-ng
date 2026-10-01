@@ -12,13 +12,7 @@ PushButton::PushButton(int id, Model::FormField data, Coordinator* coordinator)
     , m_data(std::move(data))
     , m_coordinator(coordinator)
 {
-    if (m_data.pushButtonAction == Model::FormPushButtonAction::Reset
-        || m_data.pushButtonAction == Model::FormPushButtonAction::JavaScript) {
-        m_activation = std::make_shared<ButtonActivation>(ButtonActivation { m_data.pushButtonAction, m_data.handle });
-        auto* action = new Okular::BackendOpaqueAction;
-        action->setNativeHandle(m_activation);
-        setActivationAction(action);
-    }
+    updateActivationAction();
 }
 
 PushButton::~PushButton()
@@ -94,6 +88,34 @@ void PushButton::setHandle(const std::string& handle)
     m_data.handle = handle;
     if (m_activation)
         m_activation->handle = handle;
+}
+
+void PushButton::setPushButtonAction(Model::FormPushButtonAction action)
+{
+    m_data.pushButtonAction = action;
+    updateActivationAction();
+}
+
+void PushButton::updateActivationAction()
+{
+    if (m_data.pushButtonAction != Model::FormPushButtonAction::Reset
+        && m_data.pushButtonAction != Model::FormPushButtonAction::JavaScript) {
+        // If this proxy previously had an action, keep its Okular-owned opaque
+        // action alive but make it inert. This avoids replacing an activation
+        // action while a document is being reconciled in place.
+        if (m_activation)
+            m_activation->action = Model::FormPushButtonAction::None;
+        return;
+    }
+
+    if (!m_activation) {
+        m_activation = std::make_shared<ButtonActivation>();
+        auto* action = new Okular::BackendOpaqueAction;
+        action->setNativeHandle(m_activation);
+        setActivationAction(action);
+    }
+    m_activation->action = m_data.pushButtonAction;
+    m_activation->handle = m_data.handle;
 }
 
 } // namespace Mu::Generator::Proxy::Form
