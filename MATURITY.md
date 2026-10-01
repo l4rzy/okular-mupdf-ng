@@ -38,6 +38,7 @@ promise that every input or workflow has been tested.
 | PDF form filling | 🟣 Experimental | Generator proxy and worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
+| PDF JS support | 🟣 Experimental | Basic integration tests |
 
 ## Known limitations
 
@@ -55,5 +56,6 @@ promise that every input or workflow has been tested.
 
 | Issue | Status |
 |---|---|
-| [Bug 525809](https://bugs.kde.org/show_bug.cgi?id=525809) | Merged |
-| [Bug 525842](https://bugs.kde.org/show_bug.cgi?id=525842) | Not merged yet |
+| [Bug 525809](https://bugs.kde.org/show_bug.cgi?id=525809) | Fix Merged |
+| [Bug 525842](https://bugs.kde.org/show_bug.cgi?id=525842) | MR submitted |
+| [Bug 526370](https://bugs.kde.org/show_bug.cgi?id=526370) | MR submitted |

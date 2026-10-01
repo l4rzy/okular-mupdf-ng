@@ -35,37 +35,37 @@ the "Show backend selection dialog" option in Okular.
 ### Arch Linux
 
 ```bash
-yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.15-1-x86_64.pkg.tar.zst
+yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.16-1-x86_64.pkg.tar.zst
 ```
 
 ### Fedora
 
 ```bash
 # Fedora 44 x86_64
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.15-1.fc44.x86_64.rpm
+sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.16-1.fc44.x86_64.rpm
 
 # Fedora 43 aarch64/Asahi Linux
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.15-1.fc43.aarch64.rpm
+sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.16-1.fc43.aarch64.rpm
 ```
 
 ### openSUSE Tumbleweed
 
 ```bash
-sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.15-1.tumbleweed.x86_64.rpm
+sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.2.16-1.tumbleweed.x86_64.rpm
 ```
 
 ### Debian 13
 
 ```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.2.15-1_amd64_debian-13.deb
-sudo apt install ./okular-mupdf-ng_0.2.15-1_amd64_debian-13.deb
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.2.16-1_amd64_debian-13.deb
+sudo apt install ./okular-mupdf-ng_0.2.16-1_amd64_debian-13.deb
 ```
 
 ### Ubuntu 26.04
 
 ```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.2.15-1_amd64_ubuntu-26.04.deb
-sudo apt install ./okular-mupdf-ng_0.2.15-1_amd64_ubuntu-26.04.deb
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.2.16-1_amd64_ubuntu-26.04.deb
+sudo apt install ./okular-mupdf-ng_0.2.16-1_amd64_ubuntu-26.04.deb
 ```
 
 ### Any other distro
