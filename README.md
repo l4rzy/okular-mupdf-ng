@@ -98,11 +98,11 @@ and the source-tree layout.
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
 | **Formats** | PDF, ePUB | ✓ | ✓ |
 | **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
-| **ePUB export** | Export ePUB to PDF | ✓ | ✗ |
-| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, and choices | ✓ | ✓ (plus basic XFA & JS support) |
+| **ePUB export** | Export ePUB to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
+| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (incl. JS calculation & button/field-event actions; no XFA) | ✓ (AcroForm; JS stored, not executed; XFA detected only) |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
 | **Cert Manager** | NSS Certificate Manager | ✓ | ✗ |
-| **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ |
+| **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
 | **Annotations export** | Export PDF annotations to XFDF | ✓ | ✗ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
 | **Printing & Exporting** | Print & Export | ✓ | ✓ |
