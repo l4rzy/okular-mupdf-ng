@@ -51,8 +51,7 @@ build() {
   # MuPDF-dependent targets (worker core, generator adapters, tests) recompile
   # when USE_SYSTEM_MUPDF changes, while MuPDF-agnostic objects are reused.
   # Each variant is staged before the flip overwrites it. The dynamic variant
-  # accepts the MuPDF version actually shipped by Arch, which lags the bundled
-  # pin; verified to link against 1.28.0.
+  # targets the system MuPDF package pinned by the dynamic variant dependency.
   local _builddir="$srcdir/build-unified"
   rm -rf "$srcdir/stage-static" "$srcdir/stage-dynamic"
   cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
@@ -104,7 +103,9 @@ package_okular-mupdf-ng() {
 package_okular-mupdf-ng-dynamic() {
   pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, dynamically linked against system MuPDF)"
   # The system MuPDF pulls its third-party libraries in transitively.
-  depends=("${_common_depends[@]}" "libmupdf")
+  local mupdf_version
+  mupdf_version=$(pkg-config --modversion mupdf)
+  depends=("${_common_depends[@]}" "libmupdf=${mupdf_version}")
   provides=(okular-mupdf-ng)
   conflicts=(okular-mupdf-ng okular-mupdf-ng-git)
   cp -a "$srcdir/stage-dynamic/." "$pkgdir"/
