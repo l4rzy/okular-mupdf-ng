@@ -1563,6 +1563,68 @@ private slots:
         QCOMPARE(pixels[lastPixel + 3], 0xFF);
     }
 
+    void metadataReportsXfaForms_data()
+    {
+        QTest::addColumn<QByteArray>("acroForm");
+        QTest::addColumn<bool>("expected");
+        QTest::newRow("no-acroform") << QByteArray() << false;
+        QTest::newRow("acroform-only") << QByteArray("/AcroForm << /Fields [] >>") << false;
+        QTest::newRow("null-xfa") << QByteArray("/AcroForm << /Fields [] /XFA null >>") << false;
+        QTest::newRow("xfa-stream") << QByteArray("/AcroForm << /Fields [] /XFA 5 0 R >>") << true;
+        QTest::newRow("xfa-packets") << QByteArray("/AcroForm << /Fields [] /XFA [(template) 5 0 R] >>") << true;
+        QTest::newRow("indirect-acroform") << QByteArray("/AcroForm 6 0 R") << true;
+    }
+
+    void metadataReportsXfaForms()
+    {
+        QFETCH(QByteArray, acroForm);
+        QFETCH(bool, expected);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        // A minimal, valid PDF with an indirect XFA stream. Its XML is never
+        // interpreted; the catalog entry alone determines the metadata flag.
+        const QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R " + acroForm + " >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 4 0 R >>",
+            "<< /Length 0 >>\nstream\n\nendstream",
+            "<< /Length 6 >>\nstream\n<xfa/>\nendstream",
+            "<< /Fields [] /XFA 5 0 R >>"
+        };
+        QByteArray data("%PDF-1.7\n");
+        QByteArray xref("0000000000 65535 f \n");
+        for (qsizetype i = 0; i < objects.size(); ++i) {
+            xref += QByteArray::number(data.size()).rightJustified(10, '0') + " 00000 n \n";
+            data += QByteArray::number(i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
+        }
+        const auto xrefOffset = data.size();
+        data += "xref\n0 7\n" + xref + "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n"
+            + QByteArray::number(xrefOffset) + "\n%%EOF\n";
+
+        QFile file(dir.filePath(QStringLiteral("xfa.pdf")));
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        QCOMPARE(file.write(data), data.size());
+        QVERIFY(file.flush());
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument doc;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "xfa.pdf", &error), error.c_str());
+        const auto info = doc.metadata({ "hasXfaForm" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(info.values.at("hasXfaForm"), std::string(expected ? "true" : "false"));
+        QCOMPARE(info.values.size(), size_t(1));
+        QVERIFY(!doc.metadata({ "title" }, &error).values.contains("hasXfaForm"));
+
+        // Reusing the document for a plain PDF must not retain XFA state.
+        const QString plainPath = dir.filePath(QStringLiteral("plain.pdf"));
+        createTextPDF(doc.context(), plainPath);
+        QFile plain(plainPath);
+        QVERIFY(plain.open(QIODevice::ReadOnly));
+        QVERIFY2(doc.openFd(::dup(plain.handle()), "plain.pdf", &error), error.c_str());
+        QCOMPARE(doc.metadata({ "hasXfaForm" }, &error).values.at("hasXfaForm"), std::string("false"));
+        QVERIFY2(error.empty(), error.c_str());
+    }
+
     void metadataReportsXrefRepairState()
     {
         QTemporaryDir dir;

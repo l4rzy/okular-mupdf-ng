@@ -151,6 +151,24 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
             result.values.emplace("repaired", pdf_was_repaired(m_context, pdf) ? "true" : "false");
     }
 
+    if (wanted("hasXfaForm")) {
+        volatile bool hasXfaForm = false;
+        fz_try(m_context)
+        {
+            pdf_document* pdf = pdf_specifics(m_context, m_document);
+            pdf_obj* xfa = pdf_dict_getl(
+                m_context, pdf_trailer(m_context, pdf), PDF_NAME(Root), PDF_NAME(AcroForm), PDF_NAME(XFA), nullptr);
+            // Detect presence only; XFA XML and packet contents are unsupported.
+            hasXfaForm = xfa && !pdf_is_null(m_context, xfa);
+        }
+        fz_catch(m_context)
+        {
+            fail(error, fz_convert_error(m_context, nullptr));
+            return { };
+        }
+        result.values.emplace("hasXfaForm", hasXfaForm ? "true" : "false");
+    }
+
     const bool wantHash = wanted("hash");
     fz_sha256 hash { };
     constexpr unsigned char separator = 0;

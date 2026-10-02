@@ -218,6 +218,7 @@ private:
         QByteArray sourceData;
         QString hash;
         Model::DocumentType type = Model::DocumentType::Pdf;
+        bool hasXfaForm = false;
     };
 
     Document m_document;

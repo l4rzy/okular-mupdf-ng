@@ -447,8 +447,9 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // Phase 2: document identity from a single worker round trip. Every
     // m_document identity member is written here; the load path retained only
     // the source and the password.
-    const auto info =
-        m_worker.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired") });
+    const auto info = m_worker.getDocumentInfo(
+        { QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired"), QStringLiteral("hasXfaForm") });
+    m_document.hasXfaForm = info.values.contains("hasXfaForm") && info.values.at("hasXfaForm") == "true";
     m_document.type = Model::documentTypeFromMime(info.mimeType);
     m_document.hash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
     const QString title =
@@ -810,6 +811,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPlaceholderDerivedState()
 {
+    m_document.hasXfaForm = false;
     m_ocrController->reset();
     m_formsDirty = false;
     m_annotationsDirty = false;
@@ -1310,6 +1312,10 @@ QVariant Main::metaData(const QString& key, const QVariant& option) const
     }
     if (key == QLatin1String("GeneratorExtraDescription")) {
         return generatorExtraDescription();
+    }
+    if (key == QLatin1String("HasUnsupportedXfaForm")) {
+        // Okular displays its standard unsupported-XFA banner for this key.
+        return m_document.hasXfaForm;
     }
 
     return QVariant();
