@@ -350,10 +350,12 @@ bool isValidFormField(const FormField& field, std::string_view* reason)
             return fail("form field contains string with embedded NUL byte");
     }
 
-    if (field.partialName.size() > Limit::MaxFormNameBytes || field.uiName.size() > Limit::MaxFormNameBytes
-        || field.fullyQualifiedName.size() > Limit::MaxFormNameBytes
+    if (field.partialName.size() > Limit::MaxFormNameBytes || field.fullyQualifiedName.size() > Limit::MaxFormNameBytes
         || field.groupName.size() > Limit::MaxFormNameBytes)
         return fail("form field name exceeds limit");
+
+    if (field.uiName.size() > Limit::MaxFormFieldStringBytes)
+        return fail("form field label exceeds limit");
 
     if (field.text.size() > Limit::MaxFormFieldStringBytes)
         return fail("form field text exceeds limit");

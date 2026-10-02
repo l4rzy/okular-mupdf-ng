@@ -691,8 +691,27 @@ private slots:
         QVERIFY(!f1.checked);
     }
 
-    void extractFormFieldsRejectsOversizedFieldString()
+    void extractFormFieldsStringLimits_data()
     {
+        QTest::addColumn<QByteArray>("key");
+        QTest::addColumn<QByteArray>("value");
+        QTest::addColumn<bool>("accepted");
+        const int nameLimit = static_cast<int>(::Mu::Limit::MaxFormNameBytes);
+        const int textLimit = static_cast<int>(::Mu::Limit::MaxFormFieldStringBytes);
+        QTest::newRow("name-at-limit") << QByteArray("T") << QByteArray(nameLimit, 'X') << true;
+        QTest::newRow("name-over-limit") << QByteArray("T") << QByteArray(nameLimit + 1, 'X') << false;
+        QTest::newRow("label-over-name-limit") << QByteArray("TU") << QByteArray(nameLimit + 1, 'X') << true;
+        QTest::newRow("label-at-limit") << QByteArray("TU") << QByteArray(textLimit, 'X') << true;
+        QTest::newRow("label-over-limit") << QByteArray("TU") << QByteArray(textLimit + 1, 'X') << false;
+        QTest::newRow("label-utf8-byte-limit")
+            << QByteArray("TU") << (QByteArray(textLimit - 1, 'X') + QByteArray("\xc3\xa9")) << false;
+    }
+
+    void extractFormFieldsStringLimits()
+    {
+        QFETCH(QByteArray, key);
+        QFETCH(QByteArray, value);
+        QFETCH(bool, accepted);
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString path = dir.filePath(QStringLiteral("oversized_form.pdf"));
@@ -712,9 +731,8 @@ private slots:
             pdf_obj* widgetObj = pdf_annot_obj(ctx, widget);
             pdf_dict_put(ctx, widgetObj, PDF_NAME(FT), PDF_NAME(Tx));
 
-            // Create a field name string larger than MaxFormNameBytes (1024)
-            std::string hugeName(2000, 'X');
-            pdf_dict_put_text_string(ctx, widgetObj, PDF_NAME(T), hugeName.c_str());
+            pdf_dict_put_text_string(ctx, widgetObj, PDF_NAME(T), "field");
+            pdf_dict_puts_drop(ctx, widgetObj, key.constData(), pdf_new_text_string(ctx, value.constData()));
 
             pdf_update_page(ctx, page);
             pdf_drop_annot(ctx, widget);
@@ -734,11 +752,23 @@ private slots:
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         std::string error;
+        std::string warnings;
         ::Mu::Worker::Engine::PdfDocument doc;
         QVERIFY(doc.openFd(::dup(file.handle()), "oversized_form.pdf", &error));
+        fz_set_warning_callback(
+            doc.context(),
+            [](void* user, const char* message) { *static_cast<std::string*>(user) += message; },
+            &warnings);
         const auto details = doc.pageDetails(0, &error);
-        QVERIFY(!error.empty());
-        QVERIFY(QString::fromStdString(error).contains(QStringLiteral("resource limit")));
+        QVERIFY2(warnings.find("UNHANDLED EXCEPTION") == std::string::npos, warnings.c_str());
+        if (accepted) {
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(details.formFields.size(), 1u);
+            const auto& field = details.formFields.front();
+            QCOMPARE(key == "TU" ? field.uiName : field.partialName, value.toStdString());
+        } else {
+            QVERIFY(QString::fromStdString(error).contains(QStringLiteral("resource limit")));
+        }
     }
 
     void updateTextWithUnicodeCharacterLimit()

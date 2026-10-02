@@ -568,6 +568,28 @@ private slots:
         }
     }
 
+    void formFieldLabelLimits_data()
+    {
+        QTest::addColumn<int>("bytes");
+        QTest::addColumn<bool>("accepted");
+        const int limit = static_cast<int>(::Mu::Limit::MaxFormFieldStringBytes);
+        QTest::newRow("above-name-limit") << static_cast<int>(::Mu::Limit::MaxFormNameBytes + 1) << true;
+        QTest::newRow("at-label-limit") << limit << true;
+        QTest::newRow("above-label-limit") << limit + 1 << false;
+    }
+
+    void formFieldLabelLimits()
+    {
+        QFETCH(int, bytes);
+        QFETCH(bool, accepted);
+        ::Mu::Model::FormField field;
+        field.handle = "g1-f0-o1";
+        field.page = 0;
+        field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
+        field.uiName.assign(static_cast<std::size_t>(bytes), 'X');
+        QCOMPARE(::Mu::Model::isValidFormField(field), accepted);
+    }
+
     void formChoiceSelectionAndCustomTextRoundTrip()
     {
         std::string error;

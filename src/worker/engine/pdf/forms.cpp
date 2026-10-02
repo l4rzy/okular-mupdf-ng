@@ -281,7 +281,7 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
             formField.partialName =
                 safeText(pdf_dict_get_inheritable(m_context, field, PDF_NAME(T)), Limit::MaxFormNameBytes);
             formField.uiName =
-                safeText(pdf_dict_get_inheritable(m_context, field, PDF_NAME(TU)), Limit::MaxFormNameBytes);
+                safeText(pdf_dict_get_inheritable(m_context, field, PDF_NAME(TU)), Limit::MaxFormFieldStringBytes);
 
             if (char* name = pdf_load_field_name(m_context, field)) {
                 const std::size_t len = std::strlen(name);
@@ -457,7 +457,9 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
     }
     fz_catch(m_context)
     {
-        fail(error, fz_caught_message(m_context));
+        // Convert the caught error before pageDetails wraps it in another
+        // MuPDF exception, so the original is marked handled.
+        fail(error, fz_convert_error(m_context, nullptr));
         return { };
     }
 
