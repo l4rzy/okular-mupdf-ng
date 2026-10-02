@@ -182,6 +182,17 @@ Main::Main(QObject* parent, const QVariantList& args)
                     m_worker.commitSessionReady();
                     return;
                 }
+                if (sandboxGated()) {
+                    // Degraded sandbox under Strict after restart: withhold document,
+                    // keep session failed until Relaxed triggers reopenWithheldDocument.
+                    m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
+                    if (m_worker.isConnected())
+                        m_worker.close();
+                    clearPlaceholderDerivedState();
+                    m_worker.commitSessionFailed();
+                    Q_EMIT warning(sandboxGateMessage(), LongWarningMs);
+                    return;
+                }
                 m_worker.commitSessionFailed();
                 failClosed(i18n("The document renderer restarted but the document could not be reopened. Restart "
                                 "Okular to try again."));
@@ -921,6 +932,8 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 {
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
+    if (sandboxGated())
+        return false; // Withhold document transfer under Strict + not-fully-hardened
 
     // Phase 1: restore the worker session. No Okular objects are touched yet,
     // so any failure here leaves the UI and availability state unchanged.

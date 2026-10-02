@@ -129,7 +129,8 @@ private:
     // Updates OCR scheduling from the pages currently visible in Okular.
     void observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount);
     // Reopens the retained source after a worker restart and verifies that it
-    // still represents the active Okular document.
+    // still represents the active Okular document. Sandbox enforcement is rechecked
+    // before transferring document data to the worker.
     bool reopenWorkerDocument(bool markFormChangesDirty = false);
     // Permanently disables the active document after an unrecoverable worker failure.
     void failClosed(const QString& message);
