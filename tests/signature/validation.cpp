@@ -14,15 +14,23 @@
 #include <QPainter>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QTest>
+#include <QThread>
 
 #include <algorithm>
+#include <atomic>
+#include <future>
+#include <memory>
+#include <mutex>
 #pragma push_macro("slots")
 #undef slots
 #include <cert.h>
 #include <certdb.h>
+#include <ocsp.h>
 #include <pk11pub.h>
 #pragma pop_macro("slots")
 #include <cstring>
@@ -35,6 +43,78 @@
 #endif
 
 namespace {
+
+// NSS performs synchronous HTTP requests. Serve them on a separate thread so
+// certificate validation does not depend on the test thread's Qt event loop.
+class OcspResponder {
+public:
+    OcspResponder()
+    {
+        std::promise<quint16> port;
+        auto ready = port.get_future();
+        m_thread = QThread::create([this, port = std::move(port)]() mutable {
+            QTcpServer server;
+            if (!server.listen(QHostAddress::LocalHost)) {
+                port.set_value(0);
+                return;
+            }
+            port.set_value(server.serverPort());
+            while (!QThread::currentThread()->isInterruptionRequested()) {
+                if (!server.waitForNewConnection(100))
+                    continue;
+                std::unique_ptr<QTcpSocket> socket(server.nextPendingConnection());
+                if (!socket)
+                    continue;
+                QByteArray request;
+                while (!request.contains("\r\n\r\n") && socket->waitForReadyRead(1000))
+                    request += socket->readAll();
+                if (!request.contains("\r\n\r\n"))
+                    continue;
+                ++m_requests;
+                QByteArray response;
+                {
+                    std::lock_guard lock(m_mutex);
+                    response = m_response;
+                }
+                socket->write("HTTP/1.0 200 OK\r\nContent-Type: application/ocsp-response\r\nContent-Length: "
+                              + QByteArray::number(response.size()) + "\r\n\r\n" + response);
+                socket->waitForBytesWritten(1000);
+                socket->disconnectFromHost();
+            }
+        });
+        m_thread->start();
+        m_port = ready.get();
+    }
+
+    ~OcspResponder()
+    {
+        stop();
+        delete m_thread;
+    }
+
+    void stop()
+    {
+        m_thread->requestInterruption();
+        m_thread->wait();
+    }
+
+    void setResponse(const QByteArray& response)
+    {
+        std::lock_guard lock(m_mutex);
+        m_response = response;
+    }
+
+    quint16 port() const { return m_port; }
+
+    int requests() const { return m_requests.load(); }
+
+private:
+    QThread* m_thread = nullptr;
+    quint16 m_port = 0;
+    std::atomic<int> m_requests = 0;
+    std::mutex m_mutex;
+    QByteArray m_response;
+};
 
 bool openDocument(Mu::Worker::Engine::PdfDocument& document, QFile& source, const QString& path)
 {
@@ -607,6 +687,180 @@ private slots:
             qPrintable(error));
     }
 
+    void checksOcspRevocation_data()
+    {
+        QTest::addColumn<bool>("checkOcsp");
+        QTest::addColumn<bool>("revoked");
+        QTest::addColumn<bool>("reachable");
+        QTest::addColumn<int>("expectedStatus");
+        using Mu::Model::CertificateStatus;
+        QTest::newRow("disabled-revoked") << false << true << true << int(CertificateStatus::Trusted);
+        QTest::newRow("enabled-good") << true << false << true << int(CertificateStatus::Trusted);
+        QTest::newRow("enabled-revoked") << true << true << true << int(CertificateStatus::Revoked);
+        QTest::newRow("enabled-unreachable") << true << false << false << int(CertificateStatus::Trusted);
+    }
+
+    void checksOcspRevocation()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
+            QSKIP("openssl is required for the OCSP responder test");
+        QFETCH(bool, checkOcsp);
+        QFETCH(bool, revoked);
+        QFETCH(bool, reachable);
+        QFETCH(int, expectedStatus);
+
+        QTemporaryDir fixture;
+        QVERIFY(fixture.isValid());
+        OcspResponder responder;
+        QVERIFY2(responder.port() != 0, "could not listen on loopback for OCSP");
+        const auto path = [&fixture](const char* name) {
+            return fixture.filePath(QString::fromLatin1(name));
+        };
+        const auto writeFile = [](const QString& filename, const QByteArray& data) {
+            QFile file(filename);
+            return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
+        };
+        const QString caName = QStringLiteral("OCSP Test CA ") + QString::fromLatin1(QTest::currentDataTag());
+        QVERIFY(runOpenSsl({ "req",
+                             "-new",
+                             "-x509",
+                             "-newkey",
+                             "rsa:2048",
+                             "-nodes",
+                             "-days",
+                             "2",
+                             "-subj",
+                             QStringLiteral("/CN=") + caName,
+                             "-keyout",
+                             path("ca.key"),
+                             "-out",
+                             path("ca.pem"),
+                             "-addext",
+                             "basicConstraints=critical,CA:TRUE",
+                             "-addext",
+                             "keyUsage=critical,keyCertSign,cRLSign" }));
+        QVERIFY(runOpenSsl({ "req",
+                             "-new",
+                             "-newkey",
+                             "rsa:2048",
+                             "-nodes",
+                             "-subj",
+                             "/CN=OCSP Test Signer",
+                             "-keyout",
+                             path("signer.key"),
+                             "-out",
+                             path("signer.csr") }));
+        const QByteArray extensions = "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\n"
+                                      "extendedKeyUsage=emailProtection\nauthorityInfoAccess=OCSP;URI:http://127.0.0.1:"
+            + QByteArray::number(responder.port()) + "/ocsp\n";
+        QVERIFY(writeFile(path("extensions"), extensions));
+        QVERIFY(runOpenSsl({ "x509",
+                             "-req",
+                             "-in",
+                             path("signer.csr"),
+                             "-CA",
+                             path("ca.pem"),
+                             "-CAkey",
+                             path("ca.key"),
+                             "-set_serial",
+                             "2",
+                             "-days",
+                             "1",
+                             "-extfile",
+                             path("extensions"),
+                             "-out",
+                             path("signer.pem") }));
+        const auto now = QDateTime::currentDateTimeUtc();
+        const QByteArray expiry = now.addDays(1).toString(QStringLiteral("yyMMddHHmmss'Z'")).toLatin1();
+        const QByteArray revocation =
+            revoked ? now.addSecs(-3600).toString(QStringLiteral("yyMMddHHmmss'Z'")).toLatin1() : QByteArray();
+        QVERIFY(writeFile(path("index"),
+                          QByteArray(revoked ? "R\t" : "V\t") + expiry + '\t' + revocation
+                              + "\t02\tunknown\t/CN=OCSP Test Signer\n"));
+        QVERIFY(runOpenSsl({ "ocsp",
+                             "-index",
+                             path("index"),
+                             "-rsigner",
+                             path("ca.pem"),
+                             "-rkey",
+                             path("ca.key"),
+                             "-CA",
+                             path("ca.pem"),
+                             "-issuer",
+                             path("ca.pem"),
+                             "-cert",
+                             path("signer.pem"),
+                             "-respout",
+                             path("response.der"),
+                             "-ndays",
+                             "1",
+                             "-no_nonce" }));
+        QFile response(path("response.der"));
+        QVERIFY(response.open(QIODevice::ReadOnly));
+        responder.setResponse(response.readAll());
+        if (!reachable)
+            responder.stop(); // Connection refusal, rather than a long network timeout.
+
+        // Import only the CA's public certificate and email-signing trust. The
+        // signer and chain are embedded in the detached CMS, as in a real PDF.
+        QFile caFile(path("ca.pem"));
+        QVERIFY(caFile.open(QIODevice::ReadOnly));
+        QByteArray caPem = caFile.readAll();
+        Mu::Plugin::Crypto::NssCertificate ca(CERT_DecodeCertFromPackage(caPem.data(), static_cast<int>(caPem.size())));
+        QVERIFY(ca);
+        const QByteArray nickname = caName.toUtf8();
+        CERTCertTrust trust { };
+        trust.emailFlags = CERTDB_TRUSTED_CA | CERTDB_VALID_CA;
+        Mu::Plugin::Crypto::NssSlot slot(PK11_GetInternalKeySlot());
+        QVERIFY(slot);
+        QVERIFY(PK11_ImportCert(slot.get(), ca.get(), CK_INVALID_HANDLE, nickname.constData(), PR_FALSE) == SECSuccess);
+        QVERIFY(CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), ca.get(), &trust) == SECSuccess);
+
+        const QByteArray document = QByteArrayLiteral("OCSP signed document");
+        QVERIFY(writeFile(path("document"), document));
+        QVERIFY(runOpenSsl({ "cms",
+                             "-sign",
+                             "-binary",
+                             "-md",
+                             "sha256",
+                             "-in",
+                             path("document"),
+                             "-signer",
+                             path("signer.pem"),
+                             "-inkey",
+                             path("signer.key"),
+                             "-certfile",
+                             path("ca.pem"),
+                             "-outform",
+                             "DER",
+                             "-out",
+                             path("signature.der") }));
+        QFile signature(path("signature.der"));
+        QVERIFY(signature.open(QIODevice::ReadOnly));
+        const QByteArray cms = signature.readAll();
+        Mu::Model::SignatureField field;
+        field.signedField = true;
+        field.cmsSignature.assign(cms.cbegin(), cms.cend());
+        field.byteRange = { 0, document.size(), document.size(), 0 };
+        QBuffer source;
+        source.setData(document);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        // Off must suppress requests even if another caller left checking on,
+        // and validation must restore that caller's previous state.
+        if (!checkOcsp)
+            QVERIFY(CERT_EnableOCSPChecking(CERT_GetDefaultCertDB()) == SECSuccess);
+        QVERIFY(CERT_ClearOCSPCache() == SECSuccess);
+        Mu::Plugin::Crypto::validateDetachedPdfSignature(field, source, checkOcsp);
+        QCOMPARE(field.signatureStatus, Mu::Model::SignatureStatus::Valid);
+        QCOMPARE(int(field.certificateStatus), expectedStatus);
+        if (checkOcsp && reachable)
+            QVERIFY2(responder.requests() > 0, "OCSP validation made no responder request");
+        else
+            QCOMPARE(responder.requests(), 0);
+        QCOMPARE(CERT_DisableOCSPChecking(CERT_GetDefaultCertDB()), checkOcsp ? SECFailure : SECSuccess);
+        QVERIFY(CERT_ClearOCSPCache() == SECSuccess);
+    }
+
     void validatesSelfSignedCertificateWithoutChainRecursion()
     {
         const QString nickname = QStringLiteral("okular-mupdf-self-signed-validation");
@@ -657,8 +911,8 @@ private slots:
         QCOMPARE(trustedField.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
         QCOMPARE(trustedField.certificateStatus, ::Mu::Model::CertificateStatus::Trusted);
 
-        // OCSP checking (no responder in the test environment) must not change
-        // chain-derived statuses: soft-fail keeps the trust decision intact.
+        // Self-signed certificates retain their explicit trust when the OCSP
+        // preference is enabled; this path does not contact a responder.
         auto ocspField = field;
         ::Mu::Plugin::Crypto::validateDetachedPdfSignature(ocspField, source, true);
         QCOMPARE(ocspField.signatureStatus, trustedField.signatureStatus);

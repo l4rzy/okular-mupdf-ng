@@ -10,6 +10,7 @@
 #undef slots
 #include <cert.h>
 #include <nss.h>
+#include <ocsp.h>
 #include <prerror.h>
 #pragma pop_macro("slots")
 
@@ -170,6 +171,13 @@ void initializeInternalToken()
 void recordNssRuntime(NssRuntimeMode mode, const QString& databaseIdentity = { })
 {
     CERT_SetUsePKIXForValidation(PR_TRUE);
+    // NSS defaults to hard-fail. Configure our runtime once so unavailable
+    // OCSP responses preserve chain trust, while verified revocation fails.
+    if (CERT_SetOCSPFailureMode(ocspMode_FailureIsNotAVerificationFailure) != SECSuccess) {
+        MU_LOG(critical, "Mu::Plugin::Crypto", "Unable to configure NSS OCSP soft-fail policy");
+        g_nssMode = NssRuntimeMode::Unavailable;
+        return;
+    }
     g_nssMode = mode;
     g_nssDatabaseIdentity = isPersistentMode(mode) ? databaseIdentity : QString { };
 }

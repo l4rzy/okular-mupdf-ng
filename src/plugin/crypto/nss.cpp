@@ -107,7 +107,45 @@ bool isTrustedForEmailSigning(const CERTCertificate* certificate)
     return (trust.emailFlags & (CERTDB_TRUSTED | CERTDB_TRUSTED_CA)) != 0;
 }
 
-CertificateStatus certificateStatusAt(CERTCertDBHandle* certdb, CERTCertificate* certificate, PRTime validationTime)
+// NSS attaches OCSP checking to the shared certificate database. Limit the
+// override to chain verification and restore the previous enabled state under
+// the same mutex used by certificate database operations.
+class OcspScope {
+public:
+    OcspScope(CERTCertDBHandle* certdb, bool enabled)
+        : m_lock(Internal::nssMutex())
+        , m_certdb(certdb)
+    {
+        if (!m_certdb)
+            return;
+        // A successful disable means checking was previously enabled. NSS has
+        // no public getter; disabling an already-disabled checker is safe.
+        m_restoreEnabled = CERT_DisableOCSPChecking(m_certdb) == SECSuccess;
+        if (enabled)
+            CERT_EnableOCSPChecking(m_certdb);
+    }
+
+    ~OcspScope()
+    {
+        if (!m_certdb)
+            return;
+        if (m_restoreEnabled)
+            CERT_EnableOCSPChecking(m_certdb);
+        else
+            CERT_DisableOCSPChecking(m_certdb);
+    }
+
+    OcspScope(const OcspScope&) = delete;
+    OcspScope& operator=(const OcspScope&) = delete;
+
+private:
+    std::lock_guard<std::mutex> m_lock;
+    CERTCertDBHandle* m_certdb = nullptr;
+    bool m_restoreEnabled = false;
+};
+
+CertificateStatus
+certificateStatusAt(CERTCertDBHandle* certdb, CERTCertificate* certificate, PRTime validationTime, bool checkOcsp)
 {
     // Report time validity separately from chain trust so callers can explain
     // expired, revoked, self-signed, and unknown-issuer certificates distinctly.
@@ -126,6 +164,7 @@ CertificateStatus certificateStatusAt(CERTCertDBHandle* certdb, CERTCertificate*
     // chain to validate; use its explicit email-signing trust state instead.
     if (isSelfSigned(certificate))
         return isTrustedForEmailSigning(certificate) ? CertificateStatus::Trusted : CertificateStatus::UntrustedIssuer;
+    const OcspScope ocsp(certdb, checkOcsp);
     SECCertificateUsage returnedUsages = 0;
     if (certdb
         && CERT_VerifyCertificate(certdb,
@@ -230,32 +269,6 @@ HashAlgorithm Internal::hashAlgorithmForDigest(SECOidTag digestAlgorithm)
     }
 }
 
-// Applies the caller's OCSP preference to the process-global certificate
-// database for the duration of one validation. Soft-fail semantics apply: an
-// unreachable responder keeps the chain-derived status. The OCSP response
-// cache persists across scopes, so repeated validations stay cheap.
-class OcspScope {
-public:
-    OcspScope(CERTCertDBHandle* certdb, bool enabled)
-    {
-        if (!certdb || !enabled)
-            return;
-        m_restore = CERT_EnableOCSPChecking(certdb) == SECSuccess;
-    }
-
-    ~OcspScope()
-    {
-        if (m_restore)
-            CERT_DisableOCSPChecking(CERT_GetDefaultCertDB());
-    }
-
-    OcspScope(const OcspScope&) = delete;
-    OcspScope& operator=(const OcspScope&) = delete;
-
-private:
-    bool m_restore = false;
-};
-
 void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool checkOcsp)
 {
     // Validation proceeds in phases: validate the signed range, parse CMS,
@@ -295,7 +308,6 @@ void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool
         return;
     }
     CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
-    const OcspScope ocsp(certdb, checkOcsp);
     const NssCertificate certificate = loadCmsSignerCertificate(cms.signedData, cms.signerInfo, certdb);
     if (!certificate) {
         field.signatureStatus = SignatureStatus::DecodingError;
@@ -359,7 +371,7 @@ void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool
     // timestamp. Without an independently authenticated timestamp token, historical
     // trust cannot be verified; validate at the current evaluation time.
     field.hasTrustedTimestamp = false;
-    field.certificateStatusCurrent = certificateStatusAt(certdb, certificate.get(), currentTime);
+    field.certificateStatusCurrent = certificateStatusAt(certdb, certificate.get(), currentTime, checkOcsp);
     field.certificateStatusAtSigningTime = field.certificateStatusCurrent;
     field.certificateStatus = field.certificateStatusCurrent;
 }
