@@ -56,6 +56,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
 
     fz_pixmap* volatile pixmap = nullptr;
     fz_device* volatile device = nullptr;
+    fz_separations* volatile separations = nullptr;
 
     fz_try(m_context)
     {
@@ -77,6 +78,18 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         const fz_matrix transform =
             pageToDevice(bounds, static_cast<float>(width) / pageWidth, static_cast<float>(height) / pageHeight);
 
+        if (m_settings.overprintSimulation) {
+            separations = fz_page_separations(m_context, nativePage);
+            if (separations) {
+                const int count = fz_count_separations(m_context, separations);
+                for (int i = 0; i < count; ++i)
+                    fz_set_separation_behavior(m_context, separations, i, FZ_SEPARATION_COMPOSITE);
+            } else {
+                // Even process-color overprinting requires a separations object.
+                separations = fz_new_separations(m_context, 0);
+            }
+        }
+
         // Optimization: When rendering a full page directly into a matching buffer stride,
         // point MuPDF's pixmap memory directly at destination memory (zero-copy rendering).
         if (!tiled && dstStride == minRowBytes) {
@@ -84,12 +97,12 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
                                              fz_device_rgb(m_context),
                                              width,
                                              height,
-                                             nullptr,
+                                             separations,
                                              1,
                                              static_cast<int>(dstStride),
                                              static_cast<unsigned char*>(dstPixels));
         } else {
-            pixmap = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
+            pixmap = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, separations, 1);
         }
 
         // Initialize background with the opaque Okular paper color.
@@ -131,6 +144,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             fz_drop_device(m_context, device);
         if (pixmap)
             fz_drop_pixmap(m_context, pixmap);
+        fz_drop_separations(m_context, separations);
         fz_drop_page(m_context, nativePage);
     }
     fz_catch(m_context)

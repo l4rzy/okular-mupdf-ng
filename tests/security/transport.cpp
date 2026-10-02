@@ -33,6 +33,32 @@ class TestTransport : public QObject {
 
 private slots:
 
+    void overprintSettingsRoundTrip_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::newRow("off") << false;
+        QTest::newRow("on") << true;
+    }
+
+    void overprintSettingsRoundTrip()
+    {
+        QFETCH(bool, enabled);
+        ::Mu::Model::SettingsRequest payload;
+        payload.settings.overprintSimulation = enabled;
+        const ::Mu::Model::RequestMessage request { 1, payload };
+        std::string error;
+        auto bytes = ::Mu::IPC::ZppCodec::encode(request, &error);
+        QVERIFY2(bytes.has_value(), error.c_str());
+        ::Mu::Model::RequestMessage decoded;
+        QVERIFY2(::Mu::IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
+        const auto* settings = std::get_if<::Mu::Model::SettingsRequest>(&decoded.payload);
+        QVERIFY(settings);
+        QCOMPARE(settings->settings.overprintSimulation, enabled);
+        // The little-endian version follows the four-byte wire magic.
+        (*bytes)[4] = std::byte { 2 };
+        QVERIFY(!::Mu::IPC::ZppCodec::decode(*bytes, &decoded, &error));
+    }
+
     void frameLayoutAndOverflowBoundaries()
     {
         QCOMPARE(sizeof(::Mu::IPC::FrameBufferHeader), size_t(64));

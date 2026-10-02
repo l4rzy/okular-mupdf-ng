@@ -190,6 +190,8 @@ void MuPDFNGSettingsWidget::setupToolTips()
     setToolTip({ m_mupdfsw->kcfg_ImageRenderingQuality, m_mupdfsw->labelImageQuality },
                i18n("Choose the balance between image rendering speed and quality."));
     setToolTip({ m_mupdfsw->kcfg_ImageInterpolation }, i18n("Smooth images when scaling them to reduce jagged edges."));
+    setToolTip({ m_mupdfsw->kcfg_OverprintSimulation },
+               i18n("Preview how overlapping inks appear in a PDF. This affects viewing only; printing is unchanged."));
     setToolTip({ m_mupdfsw->kcfg_MemoryLimit, m_mupdfsw->labelMemoryUsage },
                i18n("Limit the worker’s rendering cache memory. This is not a limit on total process memory usage."));
     setToolTip({ m_mupdfsw->kcfg_IdleTrimLevel, m_mupdfsw->labelIdleTrim },

@@ -26,6 +26,7 @@ struct RenderingSettings {
     bool interpolateImages = true;
     std::int64_t memoryCacheBytes = 64LL * 1024 * 1024;
     std::int32_t idleTrimAggressiveness = Model::IdleTrimLevel::Balanced;
+    bool overprintSimulation = false;
 
     bool operator==(const RenderingSettings& other) const = default;
 };
@@ -88,6 +89,7 @@ documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub
     settings.textAntialiasing = std::clamp(rendering.textAntialiasing, 0, Limit::MaxDocumentAntialiasing);
     settings.imageQuality = std::clamp(rendering.imageQuality, 0, Limit::MaxDocumentImageQuality);
     settings.interpolateImages = rendering.interpolateImages;
+    settings.overprintSimulation = rendering.overprintSimulation;
     settings.memoryCacheBytes =
         std::clamp(rendering.memoryCacheBytes, Limit::MinDocumentMemoryCacheBytes, Limit::MaxDocumentMemoryCacheBytes);
     // Clamp the trim level at the IPC boundary like the EPUB enums; the
@@ -112,7 +114,8 @@ inline bool renderingOutputChanged(const RenderingSettings& previous, const Rend
     // invalidate immediately.
     return previous.graphicsAntialiasing != current.graphicsAntialiasing
         || previous.textAntialiasing != current.textAntialiasing || previous.imageQuality != current.imageQuality
-        || previous.interpolateImages != current.interpolateImages;
+        || previous.interpolateImages != current.interpolateImages
+        || previous.overprintSimulation != current.overprintSimulation;
 }
 
 /// Session-scope worker configuration: rendering and PDF JavaScript values

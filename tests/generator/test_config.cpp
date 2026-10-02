@@ -96,6 +96,29 @@ private slots:
         QVERIFY(::Mu::Generator::Config::renderingOutputChanged(original, antialiasing));
     }
 
+    void propagatesOverprintSimulation_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::newRow("off") << false;
+        QTest::newRow("on") << true;
+    }
+
+    void propagatesOverprintSimulation()
+    {
+        QFETCH(bool, enabled);
+        QVERIFY(!::Mu::Model::DocumentSettings { }.overprintSimulation);
+        QVERIFY(!::Mu::Generator::Config::RenderingSettings { }.overprintSimulation);
+        const bool original = MuPDFNGSettings::overprintSimulation();
+        MuPDFNGSettings::setOverprintSimulation(enabled);
+        const auto settings = ::Mu::Generator::Config::readWorkerSettings();
+        MuPDFNGSettings::setOverprintSimulation(original);
+        QCOMPARE(settings.rendering.overprintSimulation, enabled);
+        QCOMPARE(settings.documentSettings(0xFFFFFF).overprintSimulation, enabled);
+        auto previous = settings.rendering;
+        previous.overprintSimulation = !enabled;
+        QVERIFY(::Mu::Generator::Config::renderingOutputChanged(previous, settings.rendering));
+    }
+
     void clampsUnknownIdleTrimLevel()
     {
         ::Mu::Generator::Config::RenderingSettings rendering { 4, 6, 2, false, 64LL * 1024 * 1024, 99 };

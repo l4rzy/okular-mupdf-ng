@@ -160,6 +160,13 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="kcfg_OverprintSimulation">
+            <property name="text">
+             <string>Simulate overprinting</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

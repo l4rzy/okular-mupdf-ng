@@ -41,6 +41,9 @@
     </entry>
   </group>
   <group name="Rendering">
+    <entry key="OverprintSimulation" type="Bool">
+      <default>false</default>
+    </entry>
     <entry key="GraphicsAntialiasingBits" type="Enum">
       <default>Medium</default>
       <choices>

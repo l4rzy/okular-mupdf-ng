@@ -1,0 +1,68 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >>
+/ExtGState <<
+ /OP1 << /Type /ExtGState /OP true /op true /OPM 1 >>
+ /OP0 << /Type /ExtGState /OP true /op true /OPM 0 >>
+ /KO << /Type /ExtGState /OP false /op false /OPM 1 >>
+>>
+/ColorSpace << /Spot [/Separation /FixtureYellow /DeviceCMYK
+ << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0 1 0] /N 1 >>] >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 2031 >>
+stream
+BT /F1 22 Tf 0 0 0 rg 40 750 Td (Overprint simulation test) Tj ET
+BT /F1 11 Tf 0 0 0 rg 40 724 Td (Toggle General > Rendering Quality > Simulate overprinting in Okular.) Tj ET
+BT /F1 11 Tf 0 0 0 rg 40 707 Td (Compare the overlap in the left samples with the knockout controls on the right.) Tj ET
+BT /F1 14 Tf 0 0 0 rg 48 674 Td (OVERPRINT) Tj ET
+BT /F1 14 Tf 0 0 0 rg 330 674 Td (KNOCKOUT CONTROL) Tj ET
+BT /F1 12 Tf 0 0 0 rg 48 661 Td (Process CMYK - OPM 1) Tj ET
+BT /F1 12 Tf 0 0 0 rg 330 661 Td (Process CMYK - OPM 1) Tj ET
+q /KO gs 1 0 0 0 k 48 550 130 75 re f /OP1 gs 0 0 1 0 k 88 570 130 75 re f Q
+q /KO gs 1 0 0 0 k 330 550 130 75 re f /KO gs 0 0 1 0 k 370 570 130 75 re f Q
+BT /F1 9 Tf 0 0 0 rg 48 532 Td (ON: green overlap. OFF: yellow overlap.) Tj ET
+BT /F1 9 Tf 0 0 0 rg 330 532 Td (Always: yellow overlap.) Tj ET
+BT /F1 12 Tf 0 0 0 rg 48 481 Td (Process CMYK - OPM 0) Tj ET
+BT /F1 12 Tf 0 0 0 rg 330 481 Td (Process CMYK - OPM 0) Tj ET
+q /KO gs 1 0 0 0 k 48 370 130 75 re f /OP0 gs 0 0 1 0 k 88 390 130 75 re f Q
+q /KO gs 1 0 0 0 k 330 370 130 75 re f /KO gs 0 0 1 0 k 370 390 130 75 re f Q
+BT /F1 9 Tf 0 0 0 rg 48 352 Td (ON and OFF: yellow overlap.) Tj ET
+BT /F1 9 Tf 0 0 0 rg 330 352 Td (Always: yellow overlap.) Tj ET
+BT /F1 12 Tf 0 0 0 rg 48 301 Td (Spot yellow - Separation color) Tj ET
+BT /F1 12 Tf 0 0 0 rg 330 301 Td (Spot yellow - Separation color) Tj ET
+q /KO gs 1 0 0 0 k 48 190 130 75 re f /OP1 gs /Spot cs 1 scn 88 210 130 75 re f Q
+q /KO gs 1 0 0 0 k 330 190 130 75 re f /KO gs /Spot cs 1 scn 370 210 130 75 re f Q
+BT /F1 9 Tf 0 0 0 rg 48 172 Td (ON: green overlap. OFF: yellow overlap.) Tj ET
+BT /F1 9 Tf 0 0 0 rg 330 172 Td (Always: yellow overlap.) Tj ET
+BT /F1 10 Tf 0 0 0 rg 40 90 Td (OPM 1 preserves zero CMYK components; OPM 0 paints all process components.) Tj ET
+BT /F1 10 Tf 0 0 0 rg 40 73 Td (Each sample paints yellow over cyan. No transparency or blend modes are used.) Tj ET
+BT /F1 10 Tf 0 0 0 rg 40 56 Td (Preview only: the printer handles the original PDF overprint instructions.) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Title (Overprint simulation test) /Creator (okular-mupdf-ng test fixture) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000556 00000 n 
+0000002638 00000 n 
+0000002708 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+2804
+%%EOF

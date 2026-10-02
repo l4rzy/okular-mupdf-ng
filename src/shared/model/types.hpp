@@ -402,6 +402,8 @@ struct DocumentSettings {
     EpubLayoutSettings epub;
     /// Whether the PDF engine may execute embedded form JavaScript.
     bool formJavaScriptEnabled = false;
+    /// Simulate PDF overprinting when rasterizing pages for viewing.
+    bool overprintSimulation = false;
 };
 
 /// Document metadata values and basic document identity.

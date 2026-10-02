@@ -97,6 +97,104 @@ private slots:
             error.c_str());
     }
 
+    void testOverprintSimulation_data()
+    {
+        QTest::addColumn<bool>("spot");
+        QTest::newRow("process colors") << false;
+        QTest::newRow("spot color") << true;
+    }
+
+    void testOverprintSimulation()
+    {
+        QFETCH(bool, spot);
+        // Cyan beneath an overprinting yellow rectangle: the overlap should
+        // retain cyan when simulated, rather than knock it out.
+        const QByteArray content = spot
+            ? QByteArray("1 0 0 0 k 10 10 60 60 re f /OP gs /Spot cs 1 scn 40 40 50 50 re f")
+            : QByteArray("1 0 0 0 k 10 10 60 60 re f /OP gs 0 0 1 0 k 40 40 50 50 re f");
+        const QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << "
+            "/ExtGState << /OP << /Type /ExtGState /OP true /op true /OPM 1 >> >> "
+                + (spot ? QByteArray("/ColorSpace << /Spot [/Separation /Yellow /DeviceCMYK "
+                                     "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0 1 0] /N 1 >>] >> ")
+                        : QByteArray())
+                + ">> /Contents 4 0 R >>",
+            "<< /Length " + QByteArray::number(content.size()) + " >>\nstream\n" + content + "\nendstream"
+        };
+        QByteArray pdf("%PDF-1.7\n");
+        QList<qsizetype> offsets;
+        for (qsizetype i = 0; i < objects.size(); ++i) {
+            offsets.append(pdf.size());
+            pdf += QByteArray::number(i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
+        }
+        const qsizetype xref = pdf.size();
+        pdf += "xref\n0 5\n0000000000 65535 f \n";
+        for (qsizetype offset : offsets)
+            pdf += QByteArray::number(offset).rightJustified(10, '0') + " 00000 n \n";
+        pdf += "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n" + QByteArray::number(xref) + "\n%%EOF\n";
+        const QString path = m_tempDir.filePath(spot ? "spot-overprint.pdf" : "process-overprint.pdf");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(pdf), pdf.size());
+        file.close();
+
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, path));
+        ::Mu::Model::DocumentSettings settings;
+        settings.paperColorRgb = 0xF0E0D0;
+        document.setSettings(settings);
+        constexpr int width = 100;
+        constexpr int stride = width * 4;
+        std::vector<std::uint8_t> disabled(width * stride);
+        std::string error;
+        QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, disabled.data(), stride, &error),
+                 error.c_str());
+        settings.overprintSimulation = true;
+        document.setSettings(settings);
+        std::vector<std::uint8_t> enabled(width * stride);
+        QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, enabled.data(), stride, &error),
+                 error.c_str());
+        const auto overlap = static_cast<std::size_t>((50 * width + 50) * 4);
+        QVERIFY(enabled[overlap] + 30 < disabled[overlap]);
+        QCOMPARE(enabled[overlap + 3], std::uint8_t(255));
+        // Paper stays opaque; CMYK simulation can round-trip RGB slightly.
+        QVERIFY(std::abs(int(enabled[0]) - 0xF0) <= 5);
+        QVERIFY(std::abs(int(enabled[1]) - 0xE0) <= 5);
+        QVERIFY(std::abs(int(enabled[2]) - 0xD0) <= 5);
+        QCOMPARE(enabled[3], std::uint8_t(255));
+        constexpr int paddedStride = stride + 12;
+        std::vector<std::uint8_t> padded(width * paddedStride, 0xAB);
+        QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, padded.data(), paddedStride, &error),
+                 error.c_str());
+        for (int y = 0; y < width; ++y) {
+            for (int x = 0; x < stride; ++x)
+                QCOMPARE(padded[static_cast<std::size_t>(y * paddedStride + x)],
+                         enabled[static_cast<std::size_t>(y * stride + x)]);
+            for (int x = stride; x < paddedStride; ++x)
+                QCOMPARE(padded[static_cast<std::size_t>(y * paddedStride + x)], std::uint8_t(0xAB));
+        }
+        constexpr int tileSize = 40;
+        std::vector<std::uint8_t> tile(tileSize * tileSize * 4);
+        QVERIFY2(document.renderToBuffer(
+                     { 0, width, width, Mu::Worker::Engine::DocumentBase::RenderTile { 30, 30, tileSize, tileSize } },
+                     tile.data(),
+                     tileSize * 4,
+                     &error),
+                 error.c_str());
+        for (int y = 0; y < tileSize; ++y)
+            for (int x = 0; x < tileSize * 4; ++x)
+                QCOMPARE(tile[static_cast<std::size_t>(y * tileSize * 4 + x)],
+                         enabled[static_cast<std::size_t>((y + 30) * stride + 30 * 4 + x)]);
+        settings.overprintSimulation = false;
+        document.setSettings(settings);
+        std::vector<std::uint8_t> restored(width * stride);
+        QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, restored.data(), stride, &error),
+                 error.c_str());
+        QVERIFY(restored == disabled);
+    }
+
     void testRenderRejectsInvalidDimensionsAndIsDeterministic()
     {
         Mu::Worker::Engine::PdfDocument document;
