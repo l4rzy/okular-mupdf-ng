@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 extern "C" {
@@ -197,6 +198,8 @@ private:
                                     pdf_obj* node,
                                     std::vector<EmbeddedFile>& output,
                                     int depth,
+                                    std::unordered_set<pdf_obj*>& visited,
+                                    std::size_t& remainingEntries,
                                     std::size_t& remainingBytes,
                                     std::size_t& remainingFiles,
                                     bool* resourceLimit);

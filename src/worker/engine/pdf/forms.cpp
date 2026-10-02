@@ -4,6 +4,7 @@
 #include "engine/pdf/document.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -29,13 +30,28 @@ namespace {
 // climb past that boundary into an unrelated container field.
 pdf_obj* resolveFieldHead(fz_context* context, pdf_obj* field)
 {
-    while (field && !pdf_dict_get(context, field, PDF_NAME(T))) {
-        pdf_obj* parent = pdf_dict_get(context, field, PDF_NAME(Parent));
+    // Validate the entire parent chain: field-name loading also visits parents
+    // above the nearest named field. Fixed storage is safe across fz_throw.
+    std::array<pdf_obj*, 128> visited { };
+    std::size_t count = 0;
+    pdf_obj* head = nullptr;
+    while (field) {
+        pdf_obj* resolved = pdf_resolve_indirect(context, field);
+        if (!pdf_is_dict(context, resolved))
+            fz_throw(context, FZ_ERROR_FORMAT, "form field parent is not a dictionary");
+        if (std::find(visited.begin(), visited.begin() + count, resolved) != visited.begin() + count)
+            fz_throw(context, FZ_ERROR_FORMAT, "cyclic form field parents");
+        if (count == visited.size())
+            fz_throw(context, FZ_ERROR_LIMIT, "resource limit: form field parent depth exceeded");
+        visited[count++] = resolved;
+        if (!head && pdf_dict_get(context, resolved, PDF_NAME(T)))
+            head = field;
+        pdf_obj* parent = pdf_dict_get(context, resolved, PDF_NAME(Parent));
         if (!parent)
-            break;
+            return head ? head : field;
         field = parent;
     }
-    return field;
+    return head;
 }
 
 FormValue formValue(const FormField& field)
@@ -128,15 +144,21 @@ void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<std::str
     if (!value)
         return;
     // /V is a string for single-select fields and an array for multi-select
-    // fields. Flatten both forms before matching them to option/export values.
-    if (pdf_is_array(context, value)) {
-        for (int i = 0; i < pdf_array_len(context, value); ++i)
-            appendChoiceValue(context, pdf_array_get(context, value, i), selected);
-        return;
+    // fields. Nested arrays are invalid; never recursively follow PDF values.
+    const bool array = pdf_is_array(context, value);
+    const int count = array ? pdf_array_len(context, value) : 1;
+    if (count > static_cast<int>(Limit::MaxFormSelectedIndices))
+        fz_throw(context, FZ_ERROR_LIMIT, "resource limit: form selected choices count exceeded");
+    for (int index = 0; index < count; ++index) {
+        pdf_obj* item = array ? pdf_array_get(context, value, index) : value;
+        if (!pdf_is_string(context, item))
+            fz_throw(context, FZ_ERROR_FORMAT, "form choice value is not a string");
+        const char* text = pdf_to_text_string(context, item);
+        const std::size_t length = std::strlen(text);
+        if (length > Limit::MaxFormFieldStringBytes)
+            fz_throw(context, FZ_ERROR_LIMIT, "resource limit: form choice value exceeds limit");
+        selected.emplace_back(text, length);
     }
-    const char* text = pdf_to_text_string(context, value);
-    if (text)
-        selected.emplace_back(text);
 }
 
 const char* choiceOption(fz_context* context, pdf_obj* field, int index, bool useExportValues)
@@ -445,8 +467,6 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                     selectedValues.clear();
                     appendChoiceValue(
                         m_context, pdf_dict_get_inheritable(m_context, fieldHead, PDF_NAME(V)), selectedValues);
-                    if (selectedValues.size() > Limit::MaxFormSelectedIndices)
-                        fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form selected choices count exceeded");
                     for (const auto& selected : selectedValues) {
                         for (std::size_t i = 0; i < formField.choices.size(); ++i) {
                             if (formField.choices[i] == selected

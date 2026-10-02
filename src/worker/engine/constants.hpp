@@ -52,6 +52,7 @@ inline constexpr float DestinationTopMarginPoints = 16.0f;
 // --- PDF Embedded Files ---
 inline constexpr std::size_t MaxEmbeddedBytes = 16U * 1024U * 1024U;
 inline constexpr int MaxEmbeddedTreeDepth = 32;
+inline constexpr std::size_t MaxEmbeddedTreeEntries = 1'000;
 
 // --- PDF Annotations & Signatures ---
 inline constexpr const char* SignatureAppearanceFontFileName = "Allura-Regular.ttf";

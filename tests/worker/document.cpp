@@ -29,6 +29,25 @@ void declareAcroForm(fz_context* context, pdf_document* document)
     pdf_dict_put_drop(context, catalog, PDF_NAME(AcroForm), acroForm);
 }
 
+// Write objects directly so malformed graphs are not repaired by a PDF writer.
+bool writePdfObjects(const QString& path, const QList<QByteArray>& objects)
+{
+    QByteArray data("%PDF-1.7\n");
+    QList<qsizetype> offsets;
+    for (qsizetype index = 0; index < objects.size(); ++index) {
+        offsets.push_back(data.size());
+        data += QByteArray::number(index + 1) + " 0 obj\n" + objects[index] + "\nendobj\n";
+    }
+    const qsizetype xref = data.size();
+    data += "xref\n0 " + QByteArray::number(objects.size() + 1) + "\n0000000000 65535 f \n";
+    for (const auto offset : offsets)
+        data += QByteArray::number(offset).rightJustified(10, '0') + " 00000 n \n";
+    data += "trailer\n<< /Size " + QByteArray::number(objects.size() + 1) + " /Root 1 0 R >>\nstartxref\n"
+        + QByteArray::number(xref) + "\n%%EOF\n";
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
+}
+
 std::vector<std::uint8_t>
 renderPdfPage(const ::Mu::Worker::Engine::PdfDocument& doc, int page, int width, int height, std::string* error)
 {
@@ -148,6 +167,148 @@ private slots:
             QCOMPARE(files.size(), static_cast<std::size_t>(expectedFiles));
             if (!nullLimit)
                 QCOMPARE(limit, expectedFiles < annotationCount);
+        }
+    }
+
+    void formGraphLimits_data()
+    {
+        QTest::addColumn<QByteArray>("field");
+        QTest::addColumn<QList<QByteArray>>("extraObjects");
+        QTest::addColumn<bool>("accepted");
+        QTest::addColumn<int>("selectedCount");
+        const QByteArray named("/T (Field) ");
+        QTest::newRow("single-value") << named + "/V (one)" << QList<QByteArray> { } << true << 1;
+        QTest::newRow("flat-values") << named + "/V [(one) (two)]" << QList<QByteArray> { } << true << 2;
+        QTest::newRow("missing-value") << named << QList<QByteArray> { } << true << 0;
+        QTest::newRow("null-value") << named + "/V null" << QList<QByteArray> { } << true << 0;
+        QTest::newRow("nested-array") << named + "/V [[(one)]]" << QList<QByteArray> { } << false << 0;
+        QTest::newRow("self-cycle-value") << named + "/V 8 0 R" << QList<QByteArray> { "[8 0 R]" } << false << 0;
+        QTest::newRow("two-node-cycle-value")
+            << named + "/V 8 0 R" << QList<QByteArray> { "[9 0 R]", "[8 0 R]" } << false << 0;
+        QTest::newRow("non-string-value") << named + "/V [42]" << QList<QByteArray> { } << false << 0;
+        const int valueLimit = static_cast<int>(::Mu::Limit::MaxFormSelectedIndices);
+        for (int count : { valueLimit, valueLimit + 1 }) {
+            QByteArray values("/V [");
+            for (int index = 0; index < count; ++index)
+                values += "(one) ";
+            values += "]";
+            QTest::newRow(count == valueLimit ? "value-count-at-limit" : "value-count-over-limit")
+                << named + values << QList<QByteArray> { } << (count == valueLimit) << count;
+        }
+        const int stringLimit = static_cast<int>(::Mu::Limit::MaxFormFieldStringBytes);
+        QTest::newRow("value-string-over-limit")
+            << named + "/V [(" + QByteArray(stringLimit + 1, 'x') + ")]" << QList<QByteArray> { } << false << 0;
+        QTest::newRow("self-cycle-parent") << QByteArray("/Parent 4 0 R") << QList<QByteArray> { } << false << 0;
+        QTest::newRow("two-node-cycle-parent")
+            << QByteArray("/Parent 8 0 R") << QList<QByteArray> { "<< /Parent 4 0 R >>" } << false << 0;
+        QTest::newRow("named-cycle-parent") << named + "/Parent 4 0 R" << QList<QByteArray> { } << false << 0;
+        QTest::newRow("non-dictionary-parent") << named + "/Parent 8 0 R" << QList<QByteArray> { "42" } << false << 0;
+        for (int depth : { 128, 129 }) {
+            QList<QByteArray> parents;
+            for (int index = 0; index < depth - 1; ++index)
+                parents.push_back(index == depth - 2 ? QByteArray("<< /T (Owner) >>")
+                                                     : "<< /Parent " + QByteArray::number(index + 9) + " 0 R >>");
+            QTest::newRow(depth == 128 ? "parent-depth-at-limit" : "parent-depth-over-limit")
+                << QByteArray("/Parent 8 0 R") << parents << (depth == 128) << 0;
+        }
+    }
+
+    void formGraphLimits()
+    {
+        QFETCH(QByteArray, field);
+        QFETCH(QList<QByteArray>, extraObjects);
+        QFETCH(bool, accepted);
+        QFETCH(int, selectedCount);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("form-graph.pdf");
+        QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>",
+            "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [4 0 R] >>",
+            "<< /Type /Annot /Subtype /Widget /FT /Ch /Ff 131072 /Opt [(one) (two)] " + field
+                + " /Rect [50 50 150 90] /AP << /N 7 0 R >> >>",
+            "<< /Fields [4 0 R] >>",
+            "null",
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 100 40] /Resources << >> /Length 0 >>\nstream\nendstream"
+        };
+        objects.append(extraObjects);
+        QVERIFY(writePdfObjects(path, objects));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "form-graph.pdf", &error), error.c_str());
+        const auto* exceptionTop = document.context()->error.top;
+        for (int repeat = 0; repeat < 2; ++repeat) {
+            error.clear();
+            const auto details = document.pageDetails(0, &error);
+            QCOMPARE(document.context()->error.top, exceptionTop);
+            QCOMPARE(error.empty(), accepted);
+            QCOMPARE(details.formFields.size(), accepted ? 1u : 0u);
+            if (accepted)
+                QCOMPARE(details.formFields.front().currentChoices.size(), static_cast<std::size_t>(selectedCount));
+        }
+    }
+
+    void embeddedTreeGraphLimits_data()
+    {
+        QTest::addColumn<QList<QByteArray>>("nodes");
+        QTest::addColumn<bool>("limited");
+        QTest::newRow("empty-leaf") << QList<QByteArray> { "<< /Names [] >>" } << false;
+        QTest::newRow("self-cycle") << QList<QByteArray> { "<< /Kids [4 0 R] >>" } << true;
+        QTest::newRow("branching-cycle") << QList<QByteArray> { "<< /Kids [4 0 R 4 0 R] >>" } << true;
+        QTest::newRow("two-node-cycle") << QList<QByteArray> { "<< /Kids [5 0 R] >>", "<< /Kids [4 0 R] >>" } << true;
+        QTest::newRow("shared-child") << QList<QByteArray> { "<< /Kids [5 0 R 5 0 R] >>", "<< /Names [] >>" } << true;
+        const int depthLimit = ::Mu::Worker::Engine::Constant::MaxEmbeddedTreeDepth;
+        for (int depth : { depthLimit, depthLimit + 1 }) {
+            QList<QByteArray> nodes;
+            for (int index = 0; index <= depth; ++index)
+                nodes.push_back(index == depth ? QByteArray("<< /Names [] >>")
+                                               : "<< /Kids [" + QByteArray::number(index + 5) + " 0 R] >>");
+            QTest::newRow(depth == depthLimit ? "depth-at-limit" : "depth-over-limit") << nodes << (depth > depthLimit);
+        }
+        const int entryLimit = static_cast<int>(::Mu::Worker::Engine::Constant::MaxEmbeddedTreeEntries);
+        // Invalid children and nameless files must still consume the work budget.
+        for (bool names : { false, true }) {
+            for (int count : { entryLimit - 1, entryLimit }) {
+                QByteArray node(names ? "<< /Names [" : "<< /Kids [");
+                for (int index = 0; index < count; ++index)
+                    node += names ? "(ignored) null " : "null ";
+                node += "] >>";
+                const QByteArray row =
+                    QByteArray(names ? "names-" : "kids-") + (count == entryLimit - 1 ? "at-limit" : "over-limit");
+                QTest::newRow(row.constData()) << QList<QByteArray> { node } << (count == entryLimit);
+            }
+        }
+    }
+
+    void embeddedTreeGraphLimits()
+    {
+        QFETCH(QList<QByteArray>, nodes);
+        QFETCH(bool, limited);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("attachment-graph.pdf");
+        QList<QByteArray> objects { "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 4 0 R >> >>",
+                                    "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> >>" };
+        objects.append(nodes);
+        QVERIFY(writePdfObjects(path, objects));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "attachment-graph.pdf", &error), error.c_str());
+        const auto* exceptionTop = document.context()->error.top;
+        for (bool nullLimit : { false, true, false }) {
+            bool resourceLimit = false;
+            const auto files = document.embeddedFiles(1024, 10, nullLimit ? nullptr : &resourceLimit, &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QVERIFY(files.empty());
+            if (!nullLimit)
+                QCOMPARE(resourceLimit, limited);
+            QCOMPARE(document.context()->error.top, exceptionTop);
         }
     }
 

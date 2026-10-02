@@ -46,6 +46,8 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
     std::vector<EmbeddedFile> result;
     std::size_t remainingBytes = maxBytes;
     std::size_t remainingFiles = maxFiles;
+    std::size_t remainingEntries = Constant::MaxEmbeddedTreeEntries;
+    std::unordered_set<pdf_obj*> visited;
     volatile bool pageLimitExceeded = false;
 
     fz_try(m_context)
@@ -56,7 +58,8 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
         pdf_obj* names = root ? pdf_dict_gets(m_context, root, "Names") : nullptr;
         pdf_obj* tree = names ? pdf_dict_gets(m_context, names, "EmbeddedFiles") : nullptr;
 
-        collectEmbeddedTree(m_context, tree, result, 0, remainingBytes, remainingFiles, limit);
+        collectEmbeddedTree(
+            m_context, tree, result, 0, visited, remainingEntries, remainingBytes, remainingFiles, limit);
 
         // Step 2: Collect page-level file attachment annotations across all pages.
         // Skip the walk entirely when the name-tree phase already tripped the
@@ -266,30 +269,48 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
 // Name Tree Traversal
 // =============================================================================
 
-// EmbFile tree walk. "Names" arrays hold alternating name/stream pairs, so
-// entries are visited two at a time; "Kids" recurse with a depth cap to bound
-// hostile trees.
+// "Names" arrays hold alternating name/stream pairs. Bound both depth and
+// total work, including entries that contain no files.
 void PdfDocument::collectEmbeddedTree(fz_context* context,
                                       pdf_obj* node,
                                       std::vector<EmbeddedFile>& output,
                                       int depth,
+                                      std::unordered_set<pdf_obj*>& visited,
+                                      std::size_t& remainingEntries,
                                       std::size_t& remainingBytes,
                                       std::size_t& remainingFiles,
                                       bool* resourceLimit)
 {
-    if (!node || !pdf_is_dict(context, node) || depth > Constant::MaxEmbeddedTreeDepth
-        || (resourceLimit && *resourceLimit))
+    if (*resourceLimit)
         return;
+    if (depth > Constant::MaxEmbeddedTreeDepth || remainingEntries == 0) {
+        *resourceLimit = true;
+        return;
+    }
+    --remainingEntries;
+    if (!node)
+        return;
+    node = pdf_resolve_indirect(context, node);
+    if (!pdf_is_dict(context, node))
+        return;
+    if (!visited.insert(node).second) {
+        *resourceLimit = true;
+        return;
+    }
 
     // Process leaf Names array with [key1, value1, key2, value2, ...] pairs
     if (pdf_obj* names = pdf_dict_gets(context, node, "Names"); names && pdf_is_array(context, names)) {
         const int length = pdf_array_len(context, names);
         for (int index = 1; index < length; index += 2) {
+            if (remainingEntries == 0) {
+                *resourceLimit = true;
+                return;
+            }
+            --remainingEntries;
             EmbeddedFile file = parseFilespec(context, pdf_array_get(context, names, index), remainingBytes);
 
             if (file.contentTooLarge || file.data.size() > remainingBytes || remainingFiles == 0) {
-                if (resourceLimit)
-                    *resourceLimit = true;
+                *resourceLimit = true;
                 return;
             }
 
@@ -305,11 +326,13 @@ void PdfDocument::collectEmbeddedTree(fz_context* context,
     // sibling trips the budget instead of resolving every remaining child.
     if (pdf_obj* kids = pdf_dict_gets(context, node, "Kids"); kids && pdf_is_array(context, kids)) {
         const int length = pdf_array_len(context, kids);
-        for (int index = 0; index < length && !(resourceLimit && *resourceLimit); ++index)
+        for (int index = 0; index < length && !*resourceLimit; ++index)
             collectEmbeddedTree(context,
                                 pdf_array_get(context, kids, index),
                                 output,
                                 depth + 1,
+                                visited,
+                                remainingEntries,
                                 remainingBytes,
                                 remainingFiles,
                                 resourceLimit);
