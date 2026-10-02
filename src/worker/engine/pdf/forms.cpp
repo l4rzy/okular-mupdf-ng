@@ -123,31 +123,6 @@ bool hasJavaScriptClickAction(fz_context* context, pdf_obj* field)
     return actionContainsJavaScript(context, action, visited, 0);
 }
 
-bool collectFormMutations(PdfDocument* document, std::vector<DocumentBase::FieldMutation>* mutations)
-{
-    if (!mutations)
-        return true;
-
-    // A single logical field may have widgets on several pages. Re-read every
-    // page after MuPDF updates appearances so callers receive the final state
-    // of every affected widget, not only the widget that was edited.
-    mutations->clear();
-    for (int currentPage = 0; currentPage < document->pageCount(); ++currentPage) {
-        std::string detailsError;
-        const auto details = document->pageDetails(currentPage, &detailsError);
-        if (!detailsError.empty()) {
-            fz_warn(
-                document->context(), "could not collect form fields on page %d: %s", currentPage, detailsError.c_str());
-            continue;
-        }
-        for (const auto& fieldState : details.formFields) {
-            if (fieldState.type != FormFieldType::PushButton)
-                mutations->push_back({ currentPage, fieldState.pdfObjectNumber, formValue(fieldState) });
-        }
-    }
-    return true;
-}
-
 void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<std::string>& selected)
 {
     if (!value)
@@ -194,6 +169,45 @@ void updateAllPages(fz_context* context, fz_document* document, int pageCount)
 }
 
 } // namespace
+
+bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations)
+{
+    if (!mutations)
+        return true;
+
+    // Shared fields and JavaScript can affect widgets on any page. Collect
+    // only form fields; annotations, signatures, and links are unrelated.
+    mutations->clear();
+    for (int currentPage = 0; currentPage < pageCount(); ++currentPage) {
+        std::string fieldsError;
+        std::vector<FormField> fields;
+        fz_page* nativePage = loadPage(currentPage, &fieldsError);
+        if (nativePage) {
+            fz_try(m_context)
+            {
+                const fz_rect bounds = fz_bound_page(m_context, nativePage);
+                fields = extractPageFormFields(nativePage, bounds, currentPage, &fieldsError);
+            }
+            fz_always(m_context)
+            {
+                fz_drop_page(m_context, nativePage);
+            }
+            fz_catch(m_context)
+            {
+                fieldsError = fz_convert_error(m_context, nullptr);
+            }
+        }
+        if (!fieldsError.empty()) {
+            fz_warn(m_context, "could not collect form fields on page %d: %s", currentPage, fieldsError.c_str());
+            continue;
+        }
+        for (const auto& field : fields) {
+            if (field.type != FormFieldType::PushButton)
+                mutations->push_back({ currentPage, field.pdfObjectNumber, formValue(field) });
+        }
+    }
+    return true;
+}
 
 std::vector<FormField>
 PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, int page, std::string* error) const
@@ -668,7 +682,7 @@ bool PdfDocument::updateFormField(int page,
     // any field changes that the action committed before it failed.
     updateAllPages(m_context, m_document, pageCount());
     clearPageCache();
-    return collectFormMutations(this, mutations);
+    return collectFormMutations(mutations);
 }
 
 bool PdfDocument::resetForm(int page,
@@ -742,7 +756,7 @@ bool PdfDocument::resetForm(int page,
         return false;
     }
 
-    return collectFormMutations(this, mutations);
+    return collectFormMutations(mutations);
 }
 
 bool PdfDocument::clickFormButton(int page,
@@ -832,7 +846,7 @@ bool PdfDocument::clickFormButton(int page,
     // Button scripts can change fields and appearances anywhere in the document.
     updateAllPages(m_context, m_document, pageCount());
     clearPageCache();
-    return collectFormMutations(this, mutations);
+    return collectFormMutations(mutations);
 }
 
 } // namespace Mu::Worker::Engine

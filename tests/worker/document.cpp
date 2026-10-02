@@ -842,6 +842,87 @@ private slots:
         QVERIFY(QString::fromStdString(error).contains(QStringLiteral("maximum length")));
     }
 
+    void formMutationsCollectOnlyEditableWidgets_data()
+    {
+        QTest::addColumn<bool>("shared");
+        QTest::addColumn<bool>("extras");
+        QTest::newRow("single-widget") << false << false;
+        QTest::newRow("shared-widgets") << true << false;
+        QTest::newRow("shared-with-unrelated-data") << true << true;
+    }
+
+    void formMutationsCollectOnlyEditableWidgets()
+    {
+        QFETCH(bool, shared);
+        QFETCH(bool, extras);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        // Three pages: an edited widget, an optional sibling of the same
+        // logical field, and a page without fields. Extras exercise extraction
+        // parity with annotations, links, signatures, and a push button present.
+        const QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [8 0 R " + QByteArray(extras ? "11 0 R 12 0 R" : "")
+                + "] /DR << /Font << /Helv 14 0 R >> >> >> >>",
+            "<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 13 0 R /Annots [6 0 R "
+                + QByteArray(extras ? "9 0 R 10 0 R 11 0 R 12 0 R" : "") + "] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 13 0 R /Annots ["
+                + QByteArray(shared ? "7 0 R" : "") + "] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 13 0 R >>",
+            "<< /Type /Annot /Subtype /Widget /Parent 8 0 R /P 3 0 R /Rect [10 10 90 30] >>",
+            "<< /Type /Annot /Subtype /Widget /Parent 8 0 R /P 4 0 R /Rect [10 10 90 30] >>",
+            "<< /FT /Tx /T (Shared) /V (initial) /DA (/Helv 10 Tf 0 g) /Kids [6 0 R "
+                + QByteArray(shared ? "7 0 R" : "") + "] >>",
+            "<< /Type /Annot /Subtype /Text /Rect [10 40 30 60] /Contents (note) >>",
+            "<< /Type /Annot /Subtype /Link /Rect [40 40 60 60] /A << /S /URI /URI (https://example.com) >> >>",
+            "<< /Type /Annot /Subtype /Widget /FT /Sig /T (Signature) /P 3 0 R /Rect [10 65 40 85] >>",
+            "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (Button) /P 3 0 R /Rect [50 65 90 85] >>",
+            "<< /Length 0 >>\nstream\n\nendstream",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+        };
+        QByteArray data("%PDF-1.7\n");
+        QByteArray xref("0000000000 65535 f \n");
+        for (qsizetype i = 0; i < objects.size(); ++i) {
+            xref += QByteArray::number(data.size()).rightJustified(10, '0') + " 00000 n \n";
+            data += QByteArray::number(i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
+        }
+        const auto xrefOffset = data.size();
+        data += "xref\n0 15\n" + xref + "trailer\n<< /Size 15 /Root 1 0 R >>\nstartxref\n"
+            + QByteArray::number(xrefOffset) + "\n%%EOF\n";
+        QFile file(dir.filePath(QStringLiteral("mutations.pdf")));
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        QCOMPARE(file.write(data), data.size());
+        QVERIFY(file.flush());
+
+        std::string error;
+        ::Mu::Worker::Engine::PdfDocument document;
+        QVERIFY2(document.openFd(::dup(file.handle()), "mutations.pdf", &error), error.c_str());
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(document.updateFormField(0, 6, ::Mu::Model::FormTextValue { "updated" }, &mutations, &error),
+                 error.c_str());
+        QCOMPARE(mutations.size(), shared ? size_t(2) : size_t(1));
+        for (std::size_t i = 0; i < mutations.size(); ++i) {
+            QCOMPARE(mutations[i].page, static_cast<int>(i));
+            QCOMPARE(mutations[i].objectNumber, 6 + static_cast<int>(i));
+            const auto* value = std::get_if<::Mu::Model::FormTextValue>(&mutations[i].actualValue);
+            QVERIFY(value);
+            QCOMPARE(value->text, std::string("updated"));
+            const auto details = document.pageDetails(static_cast<int>(i), &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(details.formFields.front().text, value->text);
+            if (extras && i == 0) {
+                QVERIFY(!details.annotations.empty());
+                QCOMPARE(details.links.size(), size_t(1));
+                QCOMPARE(details.signatures.size(), size_t(1));
+                QCOMPARE(details.formFields.size(), size_t(2));
+                QCOMPARE(details.formFields.back().type, ::Mu::Model::FormFieldType::PushButton);
+            }
+        }
+        QVERIFY(document.pageDetails(2, &error).formFields.empty());
+        QVERIFY2(error.empty(), error.c_str());
+    }
+
     void formJavaScriptCalculatesDependentField()
     {
         QFile file(QStringLiteral(FORM_JS_PDF_PATH));
@@ -874,6 +955,13 @@ private slots:
         });
         QVERIFY(total != details.formFields.end());
         QCOMPARE(total->text, std::string("71.82"));
+        const auto totalMutation = std::find_if(mutations.begin(), mutations.end(), [&](const auto& mutation) {
+            return mutation.objectNumber == total->pdfObjectNumber;
+        });
+        QVERIFY(totalMutation != mutations.end());
+        const auto* totalValue = std::get_if<::Mu::Model::FormTextValue>(&totalMutation->actualValue);
+        QVERIFY(totalValue);
+        QCOMPARE(totalValue->text, total->text);
 
         const auto discount = std::find_if(details.formFields.begin(), details.formFields.end(), [](const auto& field) {
             return field.partialName == "DiscountPercent";

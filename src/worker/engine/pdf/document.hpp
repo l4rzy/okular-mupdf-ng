@@ -170,6 +170,9 @@ private:
     [[nodiscard]] std::vector<FormField>
     extractPageFormFields(fz_page* page, const fz_rect& bounds, int pageIndex, std::string* error) const;
 
+    /// Collects canonical values across all pages after a form mutation.
+    bool collectFormMutations(std::vector<FieldMutation>* mutations);
+
     /// Parses links from a MuPDF page handle.
     [[nodiscard]] std::vector<Link> extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error) const;
 
