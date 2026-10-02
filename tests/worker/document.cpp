@@ -1,4 +1,5 @@
 #include "engine/pdf/document.hpp"
+#include "engine/constants.hpp"
 #include "genpdf.hpp"
 #include "runtime/command_service.hpp"
 #include "shared/model/types.hpp"
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 #include <fcntl.h>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -42,6 +44,112 @@ renderPdfPage(const ::Mu::Worker::Engine::PdfDocument& doc, int page, int width,
 class TestDocument : public QObject {
     Q_OBJECT
 private slots:
+
+    void embeddedFileLimits_data()
+    {
+        QTest::addColumn<int>("annotationCount");
+        QTest::addColumn<int>("maxBytes");
+        QTest::addColumn<int>("maxFiles");
+        QTest::addColumn<bool>("nameTree");
+        QTest::addColumn<int>("expectedFiles");
+        QTest::newRow("byte-limit") << 2 << 7 << 2 << false << 0;
+        QTest::newRow("file-limit") << 2 << 16 << 1 << false << 0;
+        QTest::newRow("exact-budgets") << 2 << 16 << 2 << false << 2;
+        QTest::newRow("annotation-limit")
+            << static_cast<int>(::Mu::Worker::Engine::Constant::MaxPageAnnotations + 1) << 16 << 2 << false << 0;
+        QTest::newRow("name-tree-partial") << 2 << 8 << 2 << true << 1;
+    }
+
+    void embeddedFileLimits()
+    {
+        QFETCH(int, annotationCount);
+        QFETCH(int, maxBytes);
+        QFETCH(int, maxFiles);
+        QFETCH(bool, nameTree);
+        QFETCH(int, expectedFiles);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath("attachments.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        fz_context* context = document.context();
+        QVERIFY(context);
+        createMultiPagePDF(context, source, 1);
+        QFile sourceFile(source);
+        QVERIFY(sourceFile.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY2(document.openFd(::dup(sourceFile.handle()), "attachments.pdf", &error), error.c_str());
+
+        pdf_document* pdf = pdf_specifics(context, document.document());
+        pdf_obj* volatile entries = nullptr;
+        pdf_obj* volatile annotation = nullptr;
+        pdf_obj* volatile filespec = nullptr;
+        fz_buffer* volatile content = nullptr;
+        fz_page* volatile page = nullptr;
+        fz_try(context)
+        {
+            content = fz_new_buffer_from_copied_data(context, reinterpret_cast<const unsigned char*>("contents"), 8);
+            filespec = pdf_add_embedded_file(context, pdf, "attachment.txt", "text/plain", content, 0, 0, 0);
+            entries = pdf_new_array(context, pdf, annotationCount);
+            for (int index = 0; index < annotationCount; ++index) {
+                if (nameTree) {
+                    pdf_array_push_drop(context, entries, pdf_new_text_string(context, "attachment.txt"));
+                    pdf_array_push(context, entries, filespec);
+                } else {
+                    // Direct insertion keeps the annotation-limit fixture linear.
+                    annotation = pdf_new_dict(context, pdf, 3);
+                    pdf_dict_put(context,
+                                 annotation,
+                                 PDF_NAME(Subtype),
+                                 annotationCount > 2 ? PDF_NAME(Text) : PDF_NAME(FileAttachment));
+                    pdf_dict_put_rect(context, annotation, PDF_NAME(Rect), { 0, 0, 1, 1 });
+                    pdf_dict_put(context, annotation, PDF_NAME(FS), filespec);
+                    pdf_array_push_drop(context, entries, pdf_add_object(context, pdf, annotation));
+                    pdf_drop_obj(context, annotation);
+                    annotation = nullptr;
+                }
+            }
+            if (nameTree)
+                pdf_dict_putp(context,
+                              pdf_dict_get(context, pdf_trailer(context, pdf), PDF_NAME(Root)),
+                              "Names/EmbeddedFiles/Names",
+                              entries);
+            else
+                pdf_dict_put(context, pdf_lookup_page_obj(context, pdf, 0), PDF_NAME(Annots), entries);
+            page = fz_load_page(context, document.document(), 0);
+        }
+        fz_always(context)
+        {
+            pdf_drop_obj(context, annotation);
+            pdf_drop_obj(context, entries);
+            pdf_drop_obj(context, filespec);
+            fz_drop_buffer(context, content);
+        }
+        fz_catch(context)
+        {
+            error = fz_caught_message(context);
+        }
+        QVERIFY2(page, error.c_str());
+        const auto dropPage = [context](fz_page* ownedPage) {
+            fz_drop_page(context, ownedPage);
+        };
+        const std::unique_ptr<fz_page, decltype(dropPage)> ownedPage(page, dropPage);
+        const int pageRefs = page->refs;
+        const auto* exceptionTop = context->error.top;
+        // Exercise both forms of the optional limit output, repeatedly on one context.
+        for (bool nullLimit : { false, true, false }) {
+            bool limit = false;
+            const auto files = document.embeddedFiles(static_cast<std::size_t>(maxBytes),
+                                                      static_cast<std::size_t>(maxFiles),
+                                                      nullLimit ? nullptr : &limit,
+                                                      &error);
+            QCOMPARE(context->error.top, exceptionTop);
+            QCOMPARE(page->refs, pageRefs);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(files.size(), static_cast<std::size_t>(expectedFiles));
+            if (!nullLimit)
+                QCOMPARE(limit, expectedFiles < annotationCount);
+        }
+    }
 
     void serviceStartsWithClosedDocument()
     {

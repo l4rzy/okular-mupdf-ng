@@ -30,8 +30,9 @@ using namespace ::Mu::Model;
 std::vector<EmbeddedFile>
 PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* resourceLimit, std::string* error) const
 {
-    if (resourceLimit)
-        *resourceLimit = false;
+    bool localResourceLimit = false;
+    bool* limit = resourceLimit ? resourceLimit : &localResourceLimit;
+    *limit = false;
 
     if (!m_document || m_locked) {
         fail(error, "document is unavailable");
@@ -45,6 +46,7 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
     std::vector<EmbeddedFile> result;
     std::size_t remainingBytes = maxBytes;
     std::size_t remainingFiles = maxFiles;
+    volatile bool pageLimitExceeded = false;
 
     fz_try(m_context)
     {
@@ -54,13 +56,13 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
         pdf_obj* names = root ? pdf_dict_gets(m_context, root, "Names") : nullptr;
         pdf_obj* tree = names ? pdf_dict_gets(m_context, names, "EmbeddedFiles") : nullptr;
 
-        collectEmbeddedTree(m_context, tree, result, 0, remainingBytes, remainingFiles, resourceLimit);
+        collectEmbeddedTree(m_context, tree, result, 0, remainingBytes, remainingFiles, limit);
 
         // Step 2: Collect page-level file attachment annotations across all pages.
         // Skip the walk entirely when the name-tree phase already tripped the
         // budget; the remaining budget is zero and partial results are kept.
         fz_page* volatile nativePage = nullptr;
-        for (int page = 0; page < m_pageCount && !(resourceLimit && *resourceLimit); ++page) {
+        for (int page = 0; page < m_pageCount && !*limit; ++page) {
             nativePage = fz_load_page(m_context, m_document, page);
             std::size_t visitedAnnots = 0;
             fz_try(m_context)
@@ -72,9 +74,9 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
                     // annotations never consume the byte budget but each costs
                     // dictionary reads. Same order as MaxPageAnnotations.
                     if (++visitedAnnots > Constant::MaxPageAnnotations) {
-                        if (resourceLimit)
-                            *resourceLimit = true;
-                        return { };
+                        *limit = true;
+                        pageLimitExceeded = true;
+                        break;
                     }
                     if (pdf_annot_type(m_context, annotation) != PDF_ANNOT_FILE_ATTACHMENT)
                         continue;
@@ -84,9 +86,9 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
                     EmbeddedFile file = parseFilespec(m_context, filespec, remainingBytes);
 
                     if (file.contentTooLarge || file.data.size() > remainingBytes || remainingFiles == 0) {
-                        if (resourceLimit)
-                            *resourceLimit = true;
-                        return { };
+                        *limit = true;
+                        pageLimitExceeded = true;
+                        break;
                     }
 
                     if (!file.name.empty()) {
@@ -113,6 +115,10 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
         return { };
     }
 
+    // Return only after both exception frames have unwound and the page has
+    // been dropped. Page limits discard results; name-tree limits keep them.
+    if (pageLimitExceeded)
+        return { };
     return result;
 }
 
