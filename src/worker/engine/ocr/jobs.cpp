@@ -7,7 +7,6 @@
 #include <exception>
 
 #include "engine/constants.hpp"
-#include "engine/ocr/ocr.hpp"
 #include "shared/logging.hpp"
 #include "sys/sys.hpp"
 
@@ -18,7 +17,14 @@ namespace Mu::Worker::Engine {
 // =============================================================================
 
 OcrJobs::OcrJobs(std::size_t limit)
+    : OcrJobs(limit, runOcr, Constant::OcrWatchdogTicks)
+{
+}
+
+OcrJobs::OcrJobs(std::size_t limit, decltype(&runOcr) runner, int watchdogTicks)
     : m_limit(limit)
+    , m_runner(runner)
+    , m_watchdogTicks(watchdogTicks)
 {
     // Create Linux eventfd for cross-thread non-blocking poll loop wakeups
     auto event = ::Mu::Worker::Sys::createEventFd();
@@ -47,8 +53,8 @@ int OcrJobs::eventFd() const noexcept
 // =============================================================================
 
 // Spawns an isolated background worker thread per job. Entries move from
-// Queued -> Running or Cancelled under SharedState::mutex; non-cancelled
-// completions move into completedResults before their eventfd notification.
+// Queued -> Running or Cancelled under SharedState::mutex; completions still
+// registered in activeJobs are stored before their eventfd notification.
 std::optional<std::uint64_t>
 OcrJobs::submit(int inputFd, std::string password, int page, std::string language, float dpi)
 {
@@ -76,6 +82,8 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
     try {
         worker = std::thread([state,
                               cookie,
+                              runner = m_runner,
+                              watchdogTicks = m_watchdogTicks,
                               id,
                               page,
                               inputFd = ownedInput.get(),
@@ -96,11 +104,11 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
                 it->second.status = JobStatus::Running;
             }
 
-            // 60-second watchdog timer: bounds OCR work even when a malformed
-            // page makes MuPDF/Tesseract spend unusually long in a device
-            // callback.
-            std::jthread deadline([cookie](std::stop_token watchdogStop) {
-                for (int tick = 0; tick < Constant::OcrWatchdogTicks && !watchdogStop.stop_requested(); ++tick)
+            // The production watchdog requests cancellation after 60 seconds
+            // even when a malformed page makes MuPDF/Tesseract spend unusually
+            // long in a device callback.
+            std::jthread deadline([cookie, watchdogTicks](std::stop_token watchdogStop) {
+                for (int tick = 0; tick < watchdogTicks && !watchdogStop.stop_requested(); ++tick)
                     std::this_thread::sleep_for(std::chrono::milliseconds(Constant::OcrWatchdogTickMs));
                 if (!watchdogStop.stop_requested())
                     cookie->cancel();
@@ -108,25 +116,30 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
 
             // Run isolated synchronous OCR page recognition (adopts and closes
             // inputFd)
-            auto result = runOcr(inputFd, password, page, language, dpi, cookie.get());
+            auto result = runner(inputFd, password, page, language, dpi, cookie.get());
             deadline.request_stop();
+            deadline.join();
 
-            // Atomically remove the active entry, store a non-cancelled result,
-            // and queue its eventfd notification under the same mutex.
+            // Join before checking the cookie so a racing watchdog cannot
+            // cancel after the result is classified. Partial text is discarded.
+            if (cookie->isCancelled() || result.status == Model::OcrStatus::Cancelled) {
+                result.status = Model::OcrStatus::Cancelled;
+                result.boxes.clear();
+            }
+
+            // Watchdog cancellation is a terminal result the host must consume.
+            // Host cancellation removes entries in cancelAll(), so an absent
+            // entry suppresses abandoned completions under this same mutex.
             {
                 std::lock_guard lock(state->mutex);
                 auto it = state->activeJobs.find(id);
                 if (it != state->activeJobs.end()) {
-                    const bool cancelled = it->second.status == JobStatus::Cancelled || cookie->isCancelled()
-                        || result.status == Model::OcrStatus::Cancelled;
                     const int completedPage = it->second.page;
                     state->activeJobs.erase(it);
-                    if (!cancelled) {
-                        state->completedResults.emplace(id, std::move(result));
-                        state->notifications.push_back({ id, completedPage });
-                        if (state->event.get() >= 0) {
-                            (void)::eventfd_write(state->event.get(), 1);
-                        }
+                    state->completedResults.emplace(id, std::move(result));
+                    state->notifications.push_back({ id, completedPage });
+                    if (state->event.get() >= 0) {
+                        (void)::eventfd_write(state->event.get(), 1);
                     }
                 }
             }

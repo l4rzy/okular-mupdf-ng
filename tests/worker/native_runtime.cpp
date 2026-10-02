@@ -103,6 +103,39 @@ int runTestWorkerNativeRuntime()
     assert(completedJobs.take(*completedJob).has_value());
     assert(!completedJobs.take(*completedJob).has_value());
 
+    // A watchdog-cancelled job must notify the host and free capacity after
+    // take(), so the next page can run. No PDF or Tesseract is needed.
+    const auto runner = +[](int fd, const std::string&, int page, const std::string&, float, CancellationCookie* cookie)
+        -> ::Mu::Model::OcrResult {
+        FileDescriptor inputFd(fd);
+        if (page == 0) {
+            const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while (!cookie->isCancelled() && std::chrono::steady_clock::now() < until)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        // Success with partial text deliberately exercises cancellation's
+        // override of the runner result.
+        return { ::Mu::Model::OcrStatus::Success, { { "text", 0, 0, 1, 1, true } } };
+    };
+    OcrJobs watchdogJobs(1, runner, 1);
+    const ::Mu::Model::OcrStatus expectedStatuses[] = { ::Mu::Model::OcrStatus::Cancelled,
+                                                        ::Mu::Model::OcrStatus::Success };
+    for (int page = 0; page < 2; ++page) {
+        const int fd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+        assert(fd >= 0);
+        const auto id = watchdogJobs.submit(fd, { }, page, "eng", 225.0f);
+        assert(id);
+        auto completionDeadline = MonotonicDeadline::fromMilliseconds(3000);
+        assert(waitForFd(watchdogJobs.eventFd(), POLLIN, completionDeadline, &error) == IoResult::Complete);
+        const auto notifications = watchdogJobs.drainNotifications();
+        assert(notifications.size() == 1 && notifications.front().id == *id && notifications.front().page == page);
+        const auto result = watchdogJobs.take(*id);
+        assert(result && result->status == expectedStatuses[page]);
+        assert(result->boxes.size() == (page == 0 ? 0U : 1U));
+        assert(!watchdogJobs.take(*id));
+        assert(watchdogJobs.drainNotifications().empty());
+    }
+
     // take() and cancelAll() must use the same lock order. Run them together
     // repeatedly so a future change cannot reintroduce the lock inversion.
     for (int iteration = 0; iteration < 256; ++iteration) {

@@ -16,7 +16,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include "engine/cancellation_cookie.hpp"
+#include "engine/ocr/ocr.hpp"
 #include "shared/model/types.hpp"
 #include "sys/sys.hpp"
 
@@ -33,8 +33,9 @@ enum class JobStatus : std::uint8_t { Queued, Running, Cancelled };
  * 2. Each job executes in an isolated private Fitz context.
  * 3. Notifies the main worker loop by writing an 8-byte counter to an eventfd descriptor.
  * 4. Job entries move from Queued to Running or Cancelled under one mutex. A
- *    non-cancelled completion is removed from activeJobs, stored as a result,
- *    and then announced through the eventfd notification queue.
+ *    completion still registered in activeJobs is stored as a result and then
+ *    announced through the eventfd notification queue, including watchdog
+ *    cancellation. Host cancellation removes entries to discard their results.
  */
 class OcrJobs {
 public:
@@ -45,6 +46,8 @@ public:
     };
 
     explicit OcrJobs(std::size_t limit = 8);
+    /// Allows deterministic execution and a shorter watchdog in runtime tests.
+    OcrJobs(std::size_t limit, decltype(&runOcr) runner, int watchdogTicks);
     ~OcrJobs();
 
     OcrJobs(const OcrJobs&) = delete;
@@ -90,6 +93,8 @@ private:
     };
 
     std::size_t m_limit;
+    decltype(&runOcr) m_runner;
+    int m_watchdogTicks;
     std::shared_ptr<SharedState> m_state = std::make_shared<SharedState>();
 };
 
