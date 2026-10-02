@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-02 13:31-0500\n"
-"PO-Revision-Date: 2026-10-02 13:31-0500\n"
+"POT-Creation-Date: 2026-10-02 18:15-0500\n"
+"PO-Revision-Date: 2026-10-02 18:15-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
 "Language: vi\n"
@@ -337,184 +337,205 @@ msgstr "Không có cơ sở dữ liệu NSS"
 msgid "Manage Certificates - %1"
 msgstr "Quản lý chứng chỉ - %1"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:36
-#: src/generator/config/certmanager/manager_dialog.cpp:120
+#: src/generator/config/certmanager/manager_dialog.cpp:39
+#: src/generator/config/certmanager/manager_dialog.cpp:123
 #: src/generator/mupdfng.cpp:721
 msgid "Unknown"
 msgstr "Không xác định"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:52
+#: src/generator/config/certmanager/manager_dialog.cpp:55
 msgid "Add Certificate"
 msgstr "Thêm chứng chỉ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:53
+#: src/generator/config/certmanager/manager_dialog.cpp:56
 msgid "Delete Selected"
 msgstr "Xóa mục đã chọn"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:54
+#: src/generator/config/certmanager/manager_dialog.cpp:57
 msgid "Close"
 msgstr "Đóng"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:58
+#: src/generator/config/certmanager/manager_dialog.cpp:61
 msgid "Manage NSS Certificates"
 msgstr "Quản lý chứng chỉ NSS"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:62
+#: src/generator/config/certmanager/manager_dialog.cpp:65
 msgid "Nickname"
 msgstr "Biệt danh"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:63
+#: src/generator/config/certmanager/manager_dialog.cpp:66
 msgid "Subject"
 msgstr "Chủ thể"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:64
+#: src/generator/config/certmanager/manager_dialog.cpp:67
 msgid "Issuer"
 msgstr "Đơn vị cấp"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:65
+#: src/generator/config/certmanager/manager_dialog.cpp:68
 msgid "Algorithm"
 msgstr "Thuật toán"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:66
+#: src/generator/config/certmanager/manager_dialog.cpp:69
 msgid "Valid From"
 msgstr "Có hiệu lực từ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:67
+#: src/generator/config/certmanager/manager_dialog.cpp:70
 msgid "Valid Until"
 msgstr "Có hiệu lực đến"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:81
+#: src/generator/config/certmanager/manager_dialog.cpp:84
 msgid "Signing certificates in this NSS database:"
 msgstr "Chứng chỉ ký trong cơ sở dữ liệu NSS này:"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:110
+#: src/generator/config/certmanager/manager_dialog.cpp:113
 msgid "Certificate Database"
 msgstr "Cơ sở dữ liệu chứng chỉ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:141
+#: src/generator/config/certmanager/manager_dialog.cpp:144
 msgid "Import from File..."
 msgstr "Nhập từ tệp..."
 
-#: src/generator/config/certmanager/manager_dialog.cpp:142
+#: src/generator/config/certmanager/manager_dialog.cpp:145
 msgid "Paste PEM Certificate..."
 msgstr "Dán chứng chỉ PEM..."
 
-#: src/generator/config/certmanager/manager_dialog.cpp:143
+#: src/generator/config/certmanager/manager_dialog.cpp:146
 msgid "Create Self-Signed Certificate..."
 msgstr "Tạo chứng chỉ tự ký..."
 
-#: src/generator/config/certmanager/manager_dialog.cpp:169
+#: src/generator/config/certmanager/manager_dialog.cpp:171
+msgid "Creating certificate..."
+msgstr "Đang tạo chứng chỉ..."
+
+#: src/generator/config/certmanager/manager_dialog.cpp:172
+#: src/generator/config/certmanager/manager_dialog.cpp:189
 msgid "Create Certificate"
 msgstr "Tạo chứng chỉ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:181
-#: src/generator/config/certmanager/manager_dialog.cpp:188
-#: src/generator/config/certmanager/manager_dialog.cpp:193
-#: src/generator/config/certmanager/manager_dialog.cpp:210
-#: src/generator/config/certmanager/manager_dialog.cpp:251
-#: src/generator/config/certmanager/manager_dialog.cpp:270
+#: src/generator/config/certmanager/manager_dialog.cpp:201
+#: src/generator/config/certmanager/manager_dialog.cpp:208
+#: src/generator/config/certmanager/manager_dialog.cpp:213
+#: src/generator/config/certmanager/manager_dialog.cpp:230
+#: src/generator/config/certmanager/manager_dialog.cpp:271
+#: src/generator/config/certmanager/manager_dialog.cpp:290
 msgid "Import Certificate"
 msgstr "Nhập chứng chỉ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:183
+#: src/generator/config/certmanager/manager_dialog.cpp:203
 msgid "PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"
 msgstr "Gói PKCS#12 (*.p12 *.pfx);;Chứng chỉ PEM (*.pem);;Tất cả tệp (*)"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:201
+#: src/generator/config/certmanager/manager_dialog.cpp:221
 msgid "PKCS#12 Password"
 msgstr "Mật khẩu PKCS#12"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:202
+#: src/generator/config/certmanager/manager_dialog.cpp:222
 msgid "Bundle password:"
 msgstr "Mật khẩu gói:"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:231
+#: src/generator/config/certmanager/manager_dialog.cpp:251
 msgid "Paste PEM Certificate"
 msgstr "Dán chứng chỉ PEM"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:234
+#: src/generator/config/certmanager/manager_dialog.cpp:254
 msgid "Paste a PEM certificate here..."
 msgstr "Dán chứng chỉ PEM vào đây..."
 
-#: src/generator/config/certmanager/manager_dialog.cpp:251
+#: src/generator/config/certmanager/manager_dialog.cpp:271
 msgid "The certificate data is empty"
 msgstr "Dữ liệu chứng chỉ đang trống"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:258
+#: src/generator/config/certmanager/manager_dialog.cpp:278
 msgid "Certificate Nickname"
 msgstr "Biệt danh chứng chỉ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:259
-#: src/generator/config/certmanager/self_signed_dialog.cpp:57
+#: src/generator/config/certmanager/manager_dialog.cpp:279
+#: src/generator/config/certmanager/self_signed_dialog.cpp:60
 msgid "Nickname:"
 msgstr "Biệt danh:"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:290
-#: src/generator/config/certmanager/manager_dialog.cpp:297
+#: src/generator/config/certmanager/manager_dialog.cpp:310
+#: src/generator/config/certmanager/manager_dialog.cpp:317
 msgid "Delete Certificate"
 msgstr "Xóa chứng chỉ"
 
-#: src/generator/config/certmanager/manager_dialog.cpp:291
+#: src/generator/config/certmanager/manager_dialog.cpp:311
 msgid "Delete certificate \"%1\" from the NSS database?"
 msgstr "Xóa chứng chỉ \"%1\" khỏi cơ sở dữ liệu NSS?"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:53
+#: src/generator/config/certmanager/self_signed_dialog.cpp:56
 msgid "Create Self-Signed Certificate"
 msgstr "Tạo chứng chỉ tự ký"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:55
+#: src/generator/config/certmanager/self_signed_dialog.cpp:58
 msgid "Certificate identity"
 msgstr "Thông tin định danh chứng chỉ"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:58
+#: src/generator/config/certmanager/self_signed_dialog.cpp:61
 msgid "Email:"
 msgstr "Email:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:59
+#: src/generator/config/certmanager/self_signed_dialog.cpp:62
 msgid "Common Name:"
 msgstr "Tên thường dùng:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:60
+#: src/generator/config/certmanager/self_signed_dialog.cpp:63
 msgid "Organization:"
 msgstr "Tổ chức:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:61
+#: src/generator/config/certmanager/self_signed_dialog.cpp:64
 msgid "Organizational Unit:"
 msgstr "Đơn vị tổ chức:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:62
+#: src/generator/config/certmanager/self_signed_dialog.cpp:65
 msgid "Locality:"
 msgstr "Thành phố:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:63
+#: src/generator/config/certmanager/self_signed_dialog.cpp:66
 msgid "State or Province:"
 msgstr "Bang hoặc tỉnh:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:64
+#: src/generator/config/certmanager/self_signed_dialog.cpp:67
 msgid "Country (2 letters):"
 msgstr "Quốc gia (2 chữ cái):"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:74
+#: src/generator/config/certmanager/self_signed_dialog.cpp:77
 msgid "Validity and key"
 msgstr "Thời hạn và khóa"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:99
+#: src/generator/config/certmanager/self_signed_dialog.cpp:102
 msgid "Valid from:"
 msgstr "Có hiệu lực từ:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:100
+#: src/generator/config/certmanager/self_signed_dialog.cpp:103
 msgid "Valid until:"
 msgstr "Có hiệu lực đến:"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:101
-msgid "Signing key:"
-msgstr "Khóa ký:"
-
-#: src/generator/config/certmanager/self_signed_dialog.cpp:101
+#: src/generator/config/certmanager/self_signed_dialog.cpp:106
 msgid "RSA 2048"
 msgstr "RSA 2048"
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:104
+#: src/generator/config/certmanager/self_signed_dialog.cpp:107
+msgid "RSA 3072"
+msgstr "RSA 3072"
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:108
+msgid "RSA 4096"
+msgstr "RSA 4096"
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:109
+msgid "ECDSA P-256"
+msgstr "ECDSA P-256"
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:110
+msgid "Choose the signing key for the new certificate."
+msgstr "Chọn khóa ký cho chứng chỉ mới."
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:111
+msgid "Signing key:"
+msgstr "Khóa ký:"
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:114
 msgid "Create"
 msgstr "Tạo"
 

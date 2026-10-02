@@ -15,6 +15,7 @@
 #include <cms.h>
 #include <pk11pub.h>
 #include <prerror.h>
+#include <prtime.h>
 #pragma pop_macro("slots")
 
 namespace Mu::Plugin::Crypto {
@@ -105,6 +106,11 @@ CmsResult createDetachedCmsFromDigest(const QString& certNickname,
     NSSCMSSignerInfo* signer = NSS_CMSSignerInfo_Create(message.get(), cert.get(), SEC_OID_SHA256);
     if (!signer)
         return signingFailure(QStringLiteral("Could not create CMS signer information"));
+    // NSS's bare-digest path emits raw ECDSA r||s instead of CMS DER.
+    // Signed attributes use its DER-encoding path and bind the content digest.
+    if (SECOID_GetAlgorithmTag(&cert->subjectPublicKeyInfo.algorithm) == SEC_OID_ANSIX962_EC_PUBLIC_KEY
+        && NSS_CMSSignerInfo_AddSigningTime(signer, PR_Now()) != SECSuccess)
+        return signingFailure(QStringLiteral("Could not add CMS signing attributes"));
     if (NSS_CMSSignerInfo_IncludeCerts(signer, NSSCMSCM_CertChain, Internal::PdfCmsCertUsage) != SECSuccess)
         return signingFailure(QStringLiteral("Could not include CMS certificate chain"));
     if (NSS_CMSSignedData_AddSignerInfo(signedData, signer) != SECSuccess)

@@ -8,12 +8,13 @@
 
 #include "plugin/crypto/certificate_database.hpp"
 
+class QComboBox;
 class QDateTimeEdit;
 class QLineEdit;
 
 namespace Mu::Generator {
 
-/// Collects the subject and validity fields for a new RSA self-signed cert.
+/// Collects the subject and validity fields for a new self-signed signing cert.
 ///
 /// This dialog only gathers input. Certificate generation and NSS persistence
 /// are performed by CertificateDatabase after the dialog is accepted.
@@ -35,6 +36,7 @@ private:
     QLineEdit* m_state;
     QLineEdit* m_country;
     QLineEdit* m_email;
+    QComboBox* m_signingKey;
     QDateTimeEdit* m_validFrom;
     QDateTimeEdit* m_validUntil;
     // Used in the title so operations identify which NSS database is edited.

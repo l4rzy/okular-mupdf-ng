@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <KLocalizedString>
 #include <QTest>
 
+#include <QComboBox>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -13,6 +15,7 @@
 #include <string_view>
 
 #include "generator/config/certmanager/dialog_utils.hpp"
+#include "generator/config/certmanager/self_signed_dialog.hpp"
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
 #include "shared/model/validation.hpp"
@@ -21,6 +24,35 @@ class TestGeneratorConfig : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void initTestCase() { KLocalizedString::setApplicationDomain("okular_mupdfng"); }
+
+    void selectsSigningKey_data()
+    {
+        using Mu::Plugin::Crypto::CertificateDatabase::SigningKey;
+        QTest::addColumn<int>("index");
+        QTest::addColumn<int>("key");
+        QTest::newRow("RSA-2048") << 0 << static_cast<int>(SigningKey::Rsa2048);
+        QTest::newRow("RSA-3072") << 1 << static_cast<int>(SigningKey::Rsa3072);
+        QTest::newRow("RSA-4096") << 2 << static_cast<int>(SigningKey::Rsa4096);
+        QTest::newRow("ECDSA-P256") << 3 << static_cast<int>(SigningKey::EcdsaP256);
+    }
+
+    void selectsSigningKey()
+    {
+        QFETCH(int, index);
+        QFETCH(int, key);
+        Mu::Generator::SelfSignedCertificateDialog dialog(QStringLiteral("test-db"));
+        auto* combo = dialog.findChild<QComboBox*>(QStringLiteral("signingKey"));
+        QVERIFY(combo);
+        QCOMPARE(combo->count(), 4);
+        QCOMPARE(dialog.certificateOptions().signingKey, Mu::Plugin::Crypto::CertificateDatabase::SigningKey::Rsa2048);
+        combo->setCurrentIndex(index);
+        QCOMPARE(static_cast<int>(dialog.certificateOptions().signingKey), key);
+        QVERIFY(!combo->toolTip().isEmpty());
+        for (const auto& line : combo->toolTip().split(QLatin1Char('\n')))
+            QVERIFY(line.toUcs4().size() <= 80);
+    }
 
     void formatsCertificateKeyAlgorithm()
     {
@@ -363,6 +395,6 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(TestGeneratorConfig)
+QTEST_MAIN(TestGeneratorConfig)
 
 #include "test_config.moc"

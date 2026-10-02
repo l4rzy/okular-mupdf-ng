@@ -362,10 +362,25 @@ private slots:
         QVERIFY(!result.cms.isEmpty());
     }
 
+    void createsSelfSignedCertificate_data()
+    {
+        using Mu::Plugin::Crypto::CertificateDatabase::SigningKey;
+        QTest::addColumn<int>("signingKey");
+        QTest::addColumn<int>("bits");
+        QTest::newRow("RSA-2048") << static_cast<int>(SigningKey::Rsa2048) << 2048;
+        QTest::newRow("RSA-3072") << static_cast<int>(SigningKey::Rsa3072) << 3072;
+        QTest::newRow("RSA-4096") << static_cast<int>(SigningKey::Rsa4096) << 4096;
+        QTest::newRow("ECDSA-P256") << static_cast<int>(SigningKey::EcdsaP256) << 256;
+    }
+
     void createsSelfSignedCertificate()
     {
+        using namespace Mu::Plugin::Crypto::CertificateDatabase;
+        QFETCH(int, signingKey);
+        QFETCH(int, bits);
         ::Mu::Plugin::Crypto::CertificateDatabase::SelfSignedCertificateOptions options;
-        options.nickname = QStringLiteral("okular-mupdf-generated");
+        options.signingKey = static_cast<SigningKey>(signingKey);
+        options.nickname = QStringLiteral("okular-mupdf-generated-%1").arg(signingKey);
         options.commonName = QStringLiteral("Generated, Signing + Certificate");
         options.organization = QStringLiteral("Okular \"MuPDF\"");
         options.country = QStringLiteral("CA");
@@ -380,15 +395,157 @@ private slots:
 
         const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
-        const auto certificate = findManagedCertificate(certificates, "okular-mupdf-generated");
+        const auto certificate = findManagedCertificate(certificates, options.nickname.toStdString());
         QVERIFY(certificate != certificates.cend());
         QCOMPARE(certificate->certificate.subjectCommonName, std::string("Generated, Signing + Certificate"));
         QCOMPARE(certificate->certificate.subjectEmail, std::string("signer+test@example.org"));
         QCOMPARE(certificate->certificate.issuerDistinguishedName, certificate->certificate.subjectDistinguishedName);
 
+        QCOMPARE(certificate->certificate.publicKeyStrength, bits);
+        QCOMPARE(certificate->certificate.publicKeyType,
+                 static_cast<std::int32_t>(bits == 256 ? Mu::Model::PublicKeyAlgorithm::Ec
+                                                       : Mu::Model::PublicKeyAlgorithm::Rsa));
+        QByteArray keyIdBytes;
+        Mu::Plugin::Crypto::NssSlot signingSlot(PK11_GetInternalKeySlot());
+        QVERIFY(signingSlot);
+        {
+            Mu::Plugin::Crypto::NssCertificate native(
+                CERT_FindCertByNickname(CERT_GetDefaultCertDB(), options.nickname.toUtf8().constData()));
+            QVERIFY(native);
+            SECItem* keyId = PK11_GetLowLevelKeyIDForCert(signingSlot.get(), native.get(), nullptr);
+            QVERIFY(keyId);
+            keyIdBytes = QByteArray(reinterpret_cast<const char*>(keyId->data), static_cast<int>(keyId->len));
+            SECITEM_FreeItem(keyId, PR_TRUE);
+            QVERIFY(
+                CERT_VerifySignedDataWithPublicKeyInfo(&native->signatureWrap, &native->subjectPublicKeyInfo, nullptr)
+                == SECSuccess);
+            QCOMPARE(SECOID_GetAlgorithmTag(&native->signatureWrap.signatureAlgorithm),
+                     bits == 256 ? SEC_OID_ANSIX962_ECDSA_SHA256_SIGNATURE : SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION);
+            if (bits == 256) {
+                Mu::Plugin::Crypto::NssPublicKey key(CERT_ExtractPublicKey(native.get()));
+                QVERIFY(key);
+                QCOMPARE(QByteArray(reinterpret_cast<const char*>(key->u.ec.DEREncodedParams.data),
+                                    static_cast<int>(key->u.ec.DEREncodedParams.len)),
+                         QByteArray::fromHex("06082a8648ce3d030107"));
+                QCOMPARE(native->signatureWrap.signatureAlgorithm.parameters.len, 0U);
+            }
+        }
+
+        // Verify the generated identity through the complete PDF signing path.
+        const QString path = QStringLiteral(TEST_SIGNATURE_PDF_DIR "/pdfreference1.0.pdf");
+        QFile source(path);
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, source, path));
+        QTemporaryFile output;
+        QVERIFY(output.open());
+        std::string workerError;
         QVERIFY2(
-            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
-            qPrintable(error));
+            document.signFd(Mu::Model::SignRequest { .file = { },
+                                                     .page = 0,
+                                                     .rectangle = { .1, .1, .5, .2 },
+                                                     .certificateNickname = options.nickname.toStdString(),
+                                                     .certificateSubjectCommonName = options.commonName.toStdString(),
+                                                     .existingFieldObjectNumber = -1,
+                                                     .appearance = { } },
+                            createCms,
+                            ::dup(output.handle()),
+                            nullptr,
+                            &workerError),
+            workerError.c_str());
+        QVERIFY(output.flush());
+        QFile signedSource(output.fileName());
+        Mu::Worker::Engine::PdfDocument signedDocument;
+        QVERIFY(openDocument(signedDocument, signedSource, output.fileName()));
+        const auto details = signedDocument.pageDetails(0);
+        const auto signedField = std::find_if(details.signatures.cbegin(),
+                                              details.signatures.cend(),
+                                              [](const auto& field) { return field.signedField; });
+        QVERIFY(signedField != details.signatures.cend());
+        auto field = *signedField;
+        Mu::Plugin::Crypto::validateDetachedPdfSignature(field, signedSource);
+        QCOMPARE(field.signatureStatus, Mu::Model::SignatureStatus::Valid);
+        QCOMPARE(field.hashAlgorithm, Mu::Model::HashAlgorithm::Sha256);
+        QVERIFY(signedSource.seek(0));
+        QByteArray tampered = signedSource.readAll();
+        tampered[0] = '!';
+        QBuffer tamperedSource(&tampered);
+        QVERIFY(tamperedSource.open(QIODevice::ReadOnly));
+        auto invalidField = *signedField;
+        Mu::Plugin::Crypto::validateDetachedPdfSignature(invalidField, tamperedSource);
+        QCOMPARE(invalidField.signatureStatus,
+                 bits == 256 ? Mu::Model::SignatureStatus::DigestMismatch : Mu::Model::SignatureStatus::Invalid);
+
+        if (!QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty()) {
+            QTemporaryDir artifacts;
+            QVERIFY(artifacts.isValid());
+            QFile cmsFile(artifacts.filePath(QStringLiteral("signature.der")));
+            QVERIFY(cmsFile.open(QIODevice::WriteOnly));
+            QCOMPARE(cmsFile.write(reinterpret_cast<const char*>(field.cmsSignature.data()),
+                                   static_cast<qint64>(field.cmsSignature.size())),
+                     static_cast<qint64>(field.cmsSignature.size()));
+            cmsFile.close();
+            QFile contentFile(artifacts.filePath(QStringLiteral("content.bin")));
+            QVERIFY(contentFile.open(QIODevice::WriteOnly));
+            for (std::size_t i : { std::size_t(0), std::size_t(2) }) {
+                QVERIFY(signedSource.seek(field.byteRange[i]));
+                const auto content = signedSource.read(field.byteRange[i + 1]);
+                QCOMPARE(content.size(), field.byteRange[i + 1]);
+                QCOMPARE(contentFile.write(content), content.size());
+            }
+            contentFile.close();
+            QVERIFY(runOpenSsl({ "cms",
+                                 "-verify",
+                                 "-binary",
+                                 "-inform",
+                                 "DER",
+                                 "-in",
+                                 cmsFile.fileName(),
+                                 "-content",
+                                 contentFile.fileName(),
+                                 "-noverify",
+                                 "-out",
+                                 artifacts.filePath("verified.bin") }));
+        }
+
+        // Export/import preserves the key, including EC private-key parameters.
+        QTemporaryDir bundleDir;
+        QVERIFY(bundleDir.isValid());
+        const QString bundlePath = bundleDir.filePath(QStringLiteral("identity.p12"));
+        QVERIFY(runPk12util(
+            { "-o", bundlePath, "-n", options.nickname, "-d", QStringLiteral("sql:") + m_nssDb.path(), "-W", "pass" }));
+        QVERIFY2(deleteCertificate(m_nssDb.path(), certificate->identity, &error), qPrintable(error));
+        SECItem keyId { siBuffer,
+                        reinterpret_cast<unsigned char*>(keyIdBytes.data()),
+                        static_cast<unsigned int>(keyIdBytes.size()) };
+        Mu::Plugin::Crypto::NssPrivateKey removedKey(PK11_FindKeyByKeyID(signingSlot.get(), &keyId, nullptr));
+        QVERIFY(!removedKey);
+        QFile bundle(bundlePath);
+        QVERIFY(bundle.open(QIODevice::ReadOnly));
+        QVERIFY2(importPkcs12(m_nssDb.path(), bundle.readAll(), QStringLiteral("pass"), &error), qPrintable(error));
+        QByteArray importedContent = QByteArrayLiteral("imported signing identity");
+        const auto digestBytes = QCryptographicHash::hash(importedContent, QCryptographicHash::Sha256);
+        std::array<std::uint8_t, 32> importedDigest { };
+        std::memcpy(importedDigest.data(), digestBytes.constData(), importedDigest.size());
+        const auto cms = createCms(importedDigest, options.nickname.toStdString());
+        QCOMPARE(cms.result, Mu::Model::SigningResult::Success);
+        Mu::Model::SignatureField importedField;
+        importedField.signedField = true;
+        importedField.cmsSignature = cms.cmsSignature;
+        importedField.byteRange = { 0, importedContent.size(), importedContent.size(), 0 };
+        QBuffer importedSource(&importedContent);
+        QVERIFY(importedSource.open(QIODevice::ReadOnly));
+        Mu::Plugin::Crypto::validateDetachedPdfSignature(importedField, importedSource);
+        QCOMPARE(importedField.signatureStatus, Mu::Model::SignatureStatus::Valid);
+        const auto imported = listCertificates(m_nssDb.path(), &error);
+        const auto restored = findManagedCertificate(imported, options.nickname.toStdString());
+        QVERIFY(restored != imported.cend());
+        QCOMPARE(restored->certificate.publicKeyStrength, bits);
+        QVERIFY2(deleteCertificate(m_nssDb.path(), restored->identity, &error), qPrintable(error));
+        removedKey.reset(PK11_FindKeyByKeyID(signingSlot.get(), &keyId, nullptr));
+        QVERIFY(!removedKey);
+        Mu::Plugin::Crypto::NssCertificate removed(
+            CERT_FindCertByNickname(CERT_GetDefaultCertDB(), options.nickname.toUtf8().constData()));
+        QVERIFY(!removed);
     }
 
     void deletesCertificateByInternalSlotIdentity()
@@ -792,6 +949,44 @@ private slots:
         QVERIFY2(
             ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
             qPrintable(error));
+    }
+
+    void rejectsUnsupportedSigningKey_data()
+    {
+        QTest::addColumn<int>("key");
+        QTest::newRow("negative") << -1;
+        QTest::newRow("unknown") << 4;
+        QTest::newRow("large") << 999;
+    }
+
+    void rejectsUnsupportedSigningKey()
+    {
+        using namespace Mu::Plugin::Crypto::CertificateDatabase;
+        QFETCH(int, key);
+        const auto countKeys = [] {
+            Mu::Plugin::Crypto::NssSlot slot(PK11_GetInternalKeySlot());
+            SECKEYPrivateKeyList* keys = PK11_ListPrivateKeysInSlot(slot.get());
+            int count = 0;
+            if (keys) {
+                for (auto* node = PR_LIST_HEAD(&keys->list); node != &keys->list; node = PR_NEXT_LINK(node))
+                    ++count;
+                SECKEY_DestroyPrivateKeyList(keys);
+            }
+            return count;
+        };
+        const auto certificatesBefore = listCertificates(m_nssDb.path());
+        const int keysBefore = countKeys();
+        SelfSignedCertificateOptions options;
+        options.nickname = QStringLiteral("unsupported-key");
+        options.commonName = options.nickname;
+        options.validFrom = QDateTime::currentDateTime().addSecs(-60);
+        options.validUntil = options.validFrom.addYears(1);
+        options.signingKey = static_cast<SigningKey>(key);
+        QString error;
+        QVERIFY(!createSelfSignedCertificate(m_nssDb.path(), options, &error));
+        QVERIFY(error.contains(QStringLiteral("unsupported")));
+        QCOMPARE(listCertificates(m_nssDb.path()).size(), certificatesBefore.size());
+        QCOMPARE(countKeys(), keysBefore);
     }
 
     void rejectsInvalidSelfSignedCertificateInput()

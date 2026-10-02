@@ -27,6 +27,8 @@ struct CertificateRecord {
     CertificateIdentity identity;
 };
 
+enum class SigningKey { Rsa2048, Rsa3072, Rsa4096, EcdsaP256 };
+
 struct SelfSignedCertificateOptions {
     /// Persistent nickname used to identify the certificate in NSS.
     QString nickname;
@@ -48,6 +50,7 @@ struct SelfSignedCertificateOptions {
     QDateTime validUntil;
     /// Optional email address placed in the certificate subject.
     QString email;
+    SigningKey signingKey = SigningKey::Rsa2048;
 };
 
 /// Lists internal-slot certificates with private keys from the selected persistent NSS database.
@@ -62,7 +65,7 @@ bool importPkcs12(const QString& databasePath,
                   const QByteArray& data,
                   const QString& password,
                   QString* error = nullptr);
-/// Generates and stores a persistent self-signed RSA signing certificate.
+/// Generates and stores a persistent self-signed signing certificate.
 bool createSelfSignedCertificate(const QString& databasePath,
                                  const SelfSignedCertificateOptions& options,
                                  QString* error = nullptr);

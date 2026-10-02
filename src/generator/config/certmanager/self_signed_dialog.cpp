@@ -4,7 +4,9 @@
 #include "self_signed_dialog.hpp"
 
 #include "dialog_utils.hpp"
+#include "generator/config/tooltip.hpp"
 
+#include <QComboBox>
 #include <QDateTimeEdit>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -45,6 +47,7 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     , m_state(new QLineEdit(this))
     , m_country(new QLineEdit(this))
     , m_email(new QLineEdit(this))
+    , m_signingKey(new QComboBox(this))
     , m_validFrom(new QDateTimeEdit(QDateTime::currentDateTime(), this))
     , m_validUntil(new QDateTimeEdit(QDateTime::currentDateTime().addYears(1), this))
     , m_databasePath(std::move(databasePath))
@@ -98,7 +101,14 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
 
     addValueRow(i18n("Valid from:"), m_validFrom);
     addValueRow(i18n("Valid until:"), m_validUntil);
-    addValueRow(i18n("Signing key:"), new QLabel(i18n("RSA 2048"), validityGroup));
+    using Plugin::Crypto::CertificateDatabase::SigningKey;
+    m_signingKey->setObjectName(QStringLiteral("signingKey"));
+    m_signingKey->addItem(i18n("RSA 2048"), static_cast<int>(SigningKey::Rsa2048));
+    m_signingKey->addItem(i18n("RSA 3072"), static_cast<int>(SigningKey::Rsa3072));
+    m_signingKey->addItem(i18n("RSA 4096"), static_cast<int>(SigningKey::Rsa4096));
+    m_signingKey->addItem(i18n("ECDSA P-256"), static_cast<int>(SigningKey::EcdsaP256));
+    m_signingKey->setToolTip(Config::wrapToolTip(i18n("Choose the signing key for the new certificate.")));
+    addValueRow(i18n("Signing key:"), m_signingKey);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(i18n("Create"));
@@ -119,9 +129,17 @@ SelfSignedCertificateDialog::certificateOptions() const
 {
     // Preserve field order required by SelfSignedCertificateOptions; no NSS
     // operation is performed while the dialog is merely being inspected.
-    return { m_nickname->text(),       m_commonName->text(), m_organization->text(), m_organizationalUnit->text(),
-             m_locality->text(),       m_state->text(),      m_country->text(),      m_validFrom->dateTime(),
-             m_validUntil->dateTime(), m_email->text() };
+    return { m_nickname->text(),
+             m_commonName->text(),
+             m_organization->text(),
+             m_organizationalUnit->text(),
+             m_locality->text(),
+             m_state->text(),
+             m_country->text(),
+             m_validFrom->dateTime(),
+             m_validUntil->dateTime(),
+             m_email->text(),
+             static_cast<Plugin::Crypto::CertificateDatabase::SigningKey>(m_signingKey->currentData().toInt()) };
 }
 
 } // namespace Mu::Generator

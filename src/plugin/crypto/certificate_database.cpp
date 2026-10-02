@@ -327,6 +327,16 @@ bool checkSelfSignedOptions(const SelfSignedCertificateOptions& options,
     *nickname = options.nickname.trimmed();
     *commonName = options.commonName.trimmed();
     *country = options.country.trimmed();
+    switch (options.signingKey) {
+    case SigningKey::Rsa2048:
+    case SigningKey::Rsa3072:
+    case SigningKey::Rsa4096:
+    case SigningKey::EcdsaP256:
+        break;
+    default:
+        setError(error, QStringLiteral("The signing key type is unsupported"));
+        return false;
+    }
     const QString email = options.email.trimmed();
     const QList<QString> subjectValues { *nickname,
                                          *commonName,
@@ -407,21 +417,36 @@ QByteArray buildDistinguishedNameBytes(const SelfSignedCertificateOptions& optio
     return distinguishedName.join(QStringLiteral(", ")).toUtf8();
 }
 
-bool generateRsaKeypair(SlotHandle& slot, PrivateKeyHandle* privateKey, PublicKeyHandle* publicKey, QString* error)
+bool generateSigningKeypair(
+    SlotHandle& slot, SigningKey signingKey, PrivateKeyHandle* privateKey, PublicKeyHandle* publicKey, QString* error)
 {
     // Generate both halves as persistent token objects because NSS signing
     // later resolves the private key through the stored certificate.
     PK11RSAGenParams rsaParameters { 2048, 0x10001 };
+    if (signingKey == SigningKey::Rsa3072)
+        rsaParameters.keySizeInBits = 3072;
+    else if (signingKey == SigningKey::Rsa4096)
+        rsaParameters.keySizeInBits = 4096;
+    // DER OBJECT IDENTIFIER for prime256v1 (secp256r1 / NIST P-256).
+    unsigned char curveBytes[] { 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07 };
+    SECItem curveParameters { siBuffer, curveBytes, sizeof(curveBytes) };
+    const bool ec = signingKey == SigningKey::EcdsaP256;
     SECKEYPublicKey* pubKey = nullptr;
     SECKEYPrivateKey* privKey =
-        PK11_GenerateKeyPair(slot.get(), CKM_RSA_PKCS_KEY_PAIR_GEN, &rsaParameters, &pubKey, PR_TRUE, PR_TRUE, nullptr);
+        PK11_GenerateKeyPair(slot.get(),
+                             ec ? CKM_EC_KEY_PAIR_GEN : CKM_RSA_PKCS_KEY_PAIR_GEN,
+                             ec ? static_cast<void*>(&curveParameters) : static_cast<void*>(&rsaParameters),
+                             &pubKey,
+                             PR_TRUE,
+                             PR_TRUE,
+                             nullptr);
     privateKey->reset(privKey);
     publicKey->reset(pubKey);
     if (!privKey || !pubKey) {
         // The helper consumes both handles; key generation already failed, so
         // its cleanup status is intentionally not reported.
         (void)::Mu::Plugin::Crypto::deleteTokenKeypair(std::move(*privateKey), std::move(*publicKey));
-        setError(error, QStringLiteral("Could not generate the RSA signing key"));
+        setError(error, QStringLiteral("Could not generate the signing key"));
         return false;
     }
     return true;
@@ -464,7 +489,11 @@ bool encodeSignAndImport(SlotHandle& slot,
     SECAlgorithmID signatureAlgorithm { };
     SECItem derCertificate { siBuffer, nullptr, 0 };
     bool encoded = arena.get()
-        && SECOID_SetAlgorithmID(arena.get(), &signatureAlgorithm, SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION, nullptr)
+        && SECOID_SetAlgorithmID(arena.get(),
+                                 &signatureAlgorithm,
+                                 privateKey->keyType == ecKey ? SEC_OID_ANSIX962_ECDSA_SHA256_SIGNATURE
+                                                              : SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION,
+                                 nullptr)
             == SECSuccess;
     if (encoded) {
         unsignedHandle->signature = signatureAlgorithm;
@@ -707,7 +736,7 @@ bool createSelfSignedCertificate(const QString& databasePath,
     }
     PrivateKeyHandle privateKeyHandle;
     PublicKeyHandle publicKeyHandle;
-    if (!generateRsaKeypair(slot, &privateKeyHandle, &publicKeyHandle, error))
+    if (!generateSigningKeypair(slot, options.signingKey, &privateKeyHandle, &publicKeyHandle, error))
         return false;
 
     Plugin::Crypto::NssSubjectPublicKeyInfo publicKeyInfo(SECKEY_CreateSubjectPublicKeyInfo(publicKeyHandle.get()));

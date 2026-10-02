@@ -6,16 +6,19 @@
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFutureWatcher>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
+#include <QtConcurrentRun>
 
 #include <KLocalizedString>
 
@@ -163,9 +166,26 @@ void CertificateManagerDialog::createSelfSignedCertificate()
     SelfSignedCertificateDialog dialog(m_databasePath, this);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    QString error;
-    if (!Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(
-            m_databasePath, dialog.certificateOptions(), &error)) {
+    // RSA key generation can take seconds. Keep the GUI responsive while the
+    // modal progress dialog prevents concurrent certificate-manager edits.
+    QProgressDialog progress(i18n("Creating certificate..."), QString { }, 0, 0, this);
+    progress.setWindowTitle(i18n("Create Certificate"));
+    progress.setCancelButton(nullptr);
+    progress.setWindowFlag(Qt::WindowCloseButtonHint, false);
+    using CreationResult = std::pair<bool, QString>;
+    QFutureWatcher<CreationResult> watcher;
+    connect(&watcher, &QFutureWatcher<CreationResult>::finished, &progress, &QDialog::accept);
+    watcher.setFuture(QtConcurrent::run([path = m_databasePath, options = dialog.certificateOptions()] {
+        QString error;
+        const bool created = Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(path, options, &error);
+        return CreationResult { created, error };
+    }));
+    progress.exec();
+    // Even if application shutdown ends the modal loop, the task must finish
+    // before the generator (and its NSS adapter code) can be unloaded.
+    watcher.waitForFinished();
+    const auto [created, error] = watcher.result();
+    if (!created) {
         showWarning(i18n("Create Certificate"), error);
         return;
     }

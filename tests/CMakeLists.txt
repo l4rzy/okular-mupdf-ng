@@ -179,9 +179,10 @@ add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp
 target_include_directories(test_plugin_workerclientstate PRIVATE ../src)
 target_link_libraries(test_plugin_workerclientstate PRIVATE mupdf_plugin_worker)
 
-add_layer_test(test_generator_config generator/test_config.cpp generator)
+add_layer_test(test_generator_config generator/test_config.cpp generator
+    ../src/generator/config/certmanager/self_signed_dialog.cpp)
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
-target_link_libraries(test_generator_config PRIVATE Qt6::Gui mupdf_generator_settings)
+target_link_libraries(test_generator_config PRIVATE Qt6::Gui KF6::I18n mupdf_generator_settings)
 
 add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
 target_include_directories(test_generator_signaturepreview PRIVATE ../src)

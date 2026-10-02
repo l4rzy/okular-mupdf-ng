@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-02 13:46-0500\n"
+"POT-Creation-Date: 2026-10-02 18:15-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -315,184 +315,205 @@ msgstr ""
 msgid "Manage Certificates - %1"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:36
-#: src/generator/config/certmanager/manager_dialog.cpp:120
+#: src/generator/config/certmanager/manager_dialog.cpp:39
+#: src/generator/config/certmanager/manager_dialog.cpp:123
 #: src/generator/mupdfng.cpp:721
 msgid "Unknown"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:52
+#: src/generator/config/certmanager/manager_dialog.cpp:55
 msgid "Add Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:53
+#: src/generator/config/certmanager/manager_dialog.cpp:56
 msgid "Delete Selected"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:54
+#: src/generator/config/certmanager/manager_dialog.cpp:57
 msgid "Close"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:58
+#: src/generator/config/certmanager/manager_dialog.cpp:61
 msgid "Manage NSS Certificates"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:62
+#: src/generator/config/certmanager/manager_dialog.cpp:65
 msgid "Nickname"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:63
+#: src/generator/config/certmanager/manager_dialog.cpp:66
 msgid "Subject"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:64
+#: src/generator/config/certmanager/manager_dialog.cpp:67
 msgid "Issuer"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:65
+#: src/generator/config/certmanager/manager_dialog.cpp:68
 msgid "Algorithm"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:66
+#: src/generator/config/certmanager/manager_dialog.cpp:69
 msgid "Valid From"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:67
+#: src/generator/config/certmanager/manager_dialog.cpp:70
 msgid "Valid Until"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:81
+#: src/generator/config/certmanager/manager_dialog.cpp:84
 msgid "Signing certificates in this NSS database:"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:110
+#: src/generator/config/certmanager/manager_dialog.cpp:113
 msgid "Certificate Database"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:141
+#: src/generator/config/certmanager/manager_dialog.cpp:144
 msgid "Import from File..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:142
+#: src/generator/config/certmanager/manager_dialog.cpp:145
 msgid "Paste PEM Certificate..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:143
+#: src/generator/config/certmanager/manager_dialog.cpp:146
 msgid "Create Self-Signed Certificate..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:169
+#: src/generator/config/certmanager/manager_dialog.cpp:171
+msgid "Creating certificate..."
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:172
+#: src/generator/config/certmanager/manager_dialog.cpp:189
 msgid "Create Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:181
-#: src/generator/config/certmanager/manager_dialog.cpp:188
-#: src/generator/config/certmanager/manager_dialog.cpp:193
-#: src/generator/config/certmanager/manager_dialog.cpp:210
-#: src/generator/config/certmanager/manager_dialog.cpp:251
-#: src/generator/config/certmanager/manager_dialog.cpp:270
+#: src/generator/config/certmanager/manager_dialog.cpp:201
+#: src/generator/config/certmanager/manager_dialog.cpp:208
+#: src/generator/config/certmanager/manager_dialog.cpp:213
+#: src/generator/config/certmanager/manager_dialog.cpp:230
+#: src/generator/config/certmanager/manager_dialog.cpp:271
+#: src/generator/config/certmanager/manager_dialog.cpp:290
 msgid "Import Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:183
+#: src/generator/config/certmanager/manager_dialog.cpp:203
 msgid "PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:201
+#: src/generator/config/certmanager/manager_dialog.cpp:221
 msgid "PKCS#12 Password"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:202
+#: src/generator/config/certmanager/manager_dialog.cpp:222
 msgid "Bundle password:"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:231
+#: src/generator/config/certmanager/manager_dialog.cpp:251
 msgid "Paste PEM Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:234
+#: src/generator/config/certmanager/manager_dialog.cpp:254
 msgid "Paste a PEM certificate here..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:251
+#: src/generator/config/certmanager/manager_dialog.cpp:271
 msgid "The certificate data is empty"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:258
+#: src/generator/config/certmanager/manager_dialog.cpp:278
 msgid "Certificate Nickname"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:259
-#: src/generator/config/certmanager/self_signed_dialog.cpp:57
+#: src/generator/config/certmanager/manager_dialog.cpp:279
+#: src/generator/config/certmanager/self_signed_dialog.cpp:60
 msgid "Nickname:"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:290
-#: src/generator/config/certmanager/manager_dialog.cpp:297
+#: src/generator/config/certmanager/manager_dialog.cpp:310
+#: src/generator/config/certmanager/manager_dialog.cpp:317
 msgid "Delete Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:291
+#: src/generator/config/certmanager/manager_dialog.cpp:311
 msgid "Delete certificate \"%1\" from the NSS database?"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:53
+#: src/generator/config/certmanager/self_signed_dialog.cpp:56
 msgid "Create Self-Signed Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:55
+#: src/generator/config/certmanager/self_signed_dialog.cpp:58
 msgid "Certificate identity"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:58
+#: src/generator/config/certmanager/self_signed_dialog.cpp:61
 msgid "Email:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:59
+#: src/generator/config/certmanager/self_signed_dialog.cpp:62
 msgid "Common Name:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:60
+#: src/generator/config/certmanager/self_signed_dialog.cpp:63
 msgid "Organization:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:61
+#: src/generator/config/certmanager/self_signed_dialog.cpp:64
 msgid "Organizational Unit:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:62
+#: src/generator/config/certmanager/self_signed_dialog.cpp:65
 msgid "Locality:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:63
+#: src/generator/config/certmanager/self_signed_dialog.cpp:66
 msgid "State or Province:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:64
+#: src/generator/config/certmanager/self_signed_dialog.cpp:67
 msgid "Country (2 letters):"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:74
+#: src/generator/config/certmanager/self_signed_dialog.cpp:77
 msgid "Validity and key"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:99
+#: src/generator/config/certmanager/self_signed_dialog.cpp:102
 msgid "Valid from:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:100
+#: src/generator/config/certmanager/self_signed_dialog.cpp:103
 msgid "Valid until:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:101
-msgid "Signing key:"
-msgstr ""
-
-#: src/generator/config/certmanager/self_signed_dialog.cpp:101
+#: src/generator/config/certmanager/self_signed_dialog.cpp:106
 msgid "RSA 2048"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:104
+#: src/generator/config/certmanager/self_signed_dialog.cpp:107
+msgid "RSA 3072"
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:108
+msgid "RSA 4096"
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:109
+msgid "ECDSA P-256"
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:110
+msgid "Choose the signing key for the new certificate."
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:111
+msgid "Signing key:"
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:114
 msgid "Create"
 msgstr ""
 

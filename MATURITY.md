@@ -34,8 +34,8 @@ promise that every input or workflow has been tested.
 | PDF layers (optional content) | 🟡 Partial | Worker visibility and text tests; Qt model, IPC, and plugin response validation tests |
 | PDF annotations | 🟡 Partial | Generator proxy and worker tests |
 | Printing and document export | 🟡 Partial | Export integration; printing has no direct automated test |
-| NSS certificate manager | 🟣 Experimental | NSS runtime and certificate tests |
-| PDF signature verification and signing | 🟣 Experimental | Signature validation and worker tests |
+| NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
+| PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
 | PDF form filling | 🟣 Experimental | Generator proxy and worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
