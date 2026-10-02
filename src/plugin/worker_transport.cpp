@@ -650,7 +650,7 @@ OcrResult WorkerTransport::ocrResult(quint64 id)
     if (!response || response->error)
         return { };
     if (auto* result = std::get_if<OcrResponse>(&response->payload))
-        return result->result;
+        return std::move(result->result);
     return { };
 }
 
