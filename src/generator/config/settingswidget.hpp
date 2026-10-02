@@ -20,6 +20,7 @@ public:
     void updateCustomCssButtonText();
 
 private:
+    void setupToolTips();
     void updateManageCertificatesButton();
     /// Refreshes the signature preview from the widgets' pending state so it
     /// tracks unapplied changes.

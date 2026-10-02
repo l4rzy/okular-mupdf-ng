@@ -3,15 +3,19 @@
 
 #include "generator/config/settingswidget.hpp"
 
+#include <KLineEdit>
 #include <KLocalizedString>
 #include <QApplication>
 #include <QTimer>
 #include <QWindow>
 
+#include <initializer_list>
+
 #include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/config/signature_preview.hpp"
+#include "generator/config/tooltip.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 #include "ui_settingswidget.h"
@@ -23,11 +27,12 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     , m_mupdfsw(new Ui_MuPDFNGSettingsWidgetBase)
 {
     m_mupdfsw->setupUi(this);
+    setupToolTips();
 
 #ifndef MU_WORKER_ENABLE_FORM_JAVASCRIPT
     m_mupdfsw->kcfg_PdfFormJavaScriptEnabled->setEnabled(false);
     m_mupdfsw->kcfg_PdfFormJavaScriptEnabled->setToolTip(
-        i18n("PDF form JavaScript support was disabled when this application was built."));
+        Config::wrapToolTip(i18n("PDF form JavaScript support was disabled when this application was built.")));
 #endif
 
     auto* gfxAA = m_mupdfsw->kcfg_GraphicsAntialiasingBits;
@@ -139,11 +144,6 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     triggerMode->addItem(i18n("5 characters"), MuPDFNGSettings::EnumOcrTriggerMode::Five);
     triggerMode->addItem(i18n("20 characters"), MuPDFNGSettings::EnumOcrTriggerMode::Twenty);
     triggerMode->addItem(i18n("∞ (Always)"), MuPDFNGSettings::EnumOcrTriggerMode::Always);
-    const QString ocrTriggerToolTip =
-        i18n("Automatically run OCR when the page contains fewer extracted characters than the selected threshold.\n"
-             "Choose \"Never\" to disable automatic OCR or \"Always\" to run OCR on every page.");
-    triggerMode->setToolTip(ocrTriggerToolTip);
-    m_mupdfsw->labelOcrTriggerMode->setToolTip(ocrTriggerToolTip);
 
     m_mupdfsw->defaultLabel->setText(Plugin::Crypto::defaultSystemNssDbPath());
 
@@ -172,6 +172,71 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
         CertificateManagerDialog dialog(databasePath, this);
         dialog.exec();
     });
+}
+
+void MuPDFNGSettingsWidget::setupToolTips()
+{
+    // Translate and wrap once so each control and its label show identical help.
+    const auto setToolTip = [](std::initializer_list<QWidget*> widgets, const QString& text) {
+        const QString wrapped = Config::wrapToolTip(text);
+        for (QWidget* widget : widgets)
+            widget->setToolTip(wrapped);
+    };
+    setToolTip(
+        { m_mupdfsw->kcfg_GraphicsAntialiasingBits, m_mupdfsw->labelGraphicsAA },
+        i18n("Smooth the edges of vector graphics. Higher levels improve smoothness but require more processing."));
+    setToolTip({ m_mupdfsw->kcfg_TextAntialiasingBits, m_mupdfsw->labelTextAA },
+               i18n("Smooth the edges of text. Higher levels improve smoothness but require more processing."));
+    setToolTip({ m_mupdfsw->kcfg_ImageRenderingQuality, m_mupdfsw->labelImageQuality },
+               i18n("Choose the balance between image rendering speed and quality."));
+    setToolTip({ m_mupdfsw->kcfg_ImageInterpolation }, i18n("Smooth images when scaling them to reduce jagged edges."));
+    setToolTip({ m_mupdfsw->kcfg_MemoryLimit, m_mupdfsw->labelMemoryUsage },
+               i18n("Limit the worker’s rendering cache memory. This is not a limit on total process memory usage."));
+    setToolTip({ m_mupdfsw->kcfg_IdleTrimLevel, m_mupdfsw->labelIdleTrim },
+               i18n("Choose how eagerly the worker releases cached memory while idle."));
+    setToolTip({ m_mupdfsw->kcfg_SandboxEnforcement, m_mupdfsw->labelSandboxEnforcement },
+               i18n("Strict refuses to process documents unless the worker sandbox is fully hardened on this host."));
+    setToolTip({ m_mupdfsw->kcfg_NotifyDegradedSandbox },
+               i18n("Show a notification when the worker sandbox cannot provide its full protection."));
+    setToolTip({ m_mupdfsw->kcfg_PdfFormJavaScriptEnabled },
+               i18n("Run JavaScript embedded in PDF forms. Disabled by default; enable only for documents you trust."));
+    setToolTip({ m_mupdfsw->kcfg_OcrLanguage, m_mupdfsw->labelOcrLang },
+               i18n("Select an installed Tesseract model for recognizing text in scanned pages. OCR is disabled when "
+                    "no usable model is available."));
+    setToolTip({ m_mupdfsw->kcfg_OcrQuality, m_mupdfsw->labelOcrQuality },
+               i18n("Choose OCR resolution. Higher resolution requires more processing."));
+    setToolTip(
+        { m_mupdfsw->kcfg_OcrTriggerMode, m_mupdfsw->labelOcrTriggerMode },
+        i18n("Automatically run OCR when the page contains fewer extracted characters than the selected threshold."));
+    setToolTip({ m_mupdfsw->kcfg_OcrNotify }, i18n("Show notifications about OCR progress and results."));
+    setToolTip({ m_mupdfsw->kcfg_UseDefaultCertDB, m_mupdfsw->defaultLabel },
+               i18n("Use the default NSS certificate database for signing and validating signatures."));
+    setToolTip({ m_mupdfsw->customRadioButton, m_mupdfsw->kcfg_dBCertificatePath },
+               i18n("Use an existing local NSS certificate database directory for signing and validating signatures."));
+    setToolTip(
+        { m_mupdfsw->manageCertificatesButton },
+        i18n("Open the certificate manager for the active NSS database to add, inspect, or delete certificates."));
+    setToolTip({ m_mupdfsw->kcfg_UseOcsp },
+               i18n("Check certificate revocation while validating signatures. An unreachable OCSP responder does not "
+                    "invalidate signatures."));
+    setToolTip({ m_mupdfsw->kcfg_SignatureProfile, m_mupdfsw->labelSignatureProfile },
+               i18n("Choose the appearance of signatures added to the document."));
+    setToolTip({ m_mupdfsw->kcfg_SignatureUseUtc },
+               i18n("Render the signature appearance timestamp in UTC instead of local time."));
+    setToolTip({ m_mupdfsw->kcfg_SignatureDrawBorder }, i18n("Draw a border around the signed signature appearance."));
+    setToolTip({ m_mupdfsw->signaturePreviewLabel },
+               i18n("Preview the selected signature profile and time format using sample identity data."));
+    setToolTip({ m_mupdfsw->kcfg_EpubFontSize, m_mupdfsw->labelEpubFontSize },
+               i18n("Set the base font size for EPUB text."));
+    setToolTip({ m_mupdfsw->kcfg_EpubFontFamily, m_mupdfsw->labelEpubFontFamily },
+               i18n("Choose the base font family for EPUB text. Default uses the document’s font selection."));
+    setToolTip({ m_mupdfsw->kcfg_EpubPageSize, m_mupdfsw->labelEpubPageSize },
+               i18n("Choose the page dimensions used to lay out EPUB content."));
+    setToolTip({ m_mupdfsw->customCssButton, m_mupdfsw->kcfg_EpubCustomCss },
+               i18n("Customize EPUB appearance with CSS rules."));
+    const QString databaseToolTip = m_mupdfsw->kcfg_dBCertificatePath->toolTip();
+    m_mupdfsw->kcfg_dBCertificatePath->lineEdit()->setToolTip(databaseToolTip);
+    m_mupdfsw->kcfg_dBCertificatePath->button()->setToolTip(databaseToolTip);
 }
 
 void MuPDFNGSettingsWidget::updateCustomCssButtonText()

@@ -212,9 +212,6 @@
             </property>
             <item>
              <widget class="QLabel" name="labelIdleTrim">
-              <property name="toolTip">
-               <string>How eagerly the worker releases cached memory while idle. Off disables idle trimming.</string>
-              </property>
               <property name="text">
                <string>Idle Memory Trim</string>
               </property>
@@ -241,9 +238,6 @@
             </item>
             <item>
              <widget class="QComboBox" name="kcfg_IdleTrimLevel">
-              <property name="toolTip">
-               <string>How eagerly the worker releases cached memory while idle. Off disables idle trimming.</string>
-              </property>
              </widget>
             </item>
            </layout>
@@ -270,9 +264,6 @@
             </property>
             <item>
              <widget class="QLabel" name="labelSandboxEnforcement">
-              <property name="toolTip">
-               <string>Strict refuses to process documents unless the worker sandbox is fully hardened on this host.</string>
-              </property>
               <property name="text">
                <string>Sandbox Enforcement</string>
               </property>
@@ -299,9 +290,6 @@
             </item>
             <item>
              <widget class="QComboBox" name="kcfg_SandboxEnforcement">
-              <property name="toolTip">
-               <string>Strict refuses to process documents unless the worker sandbox is fully hardened on this host.</string>
-              </property>
              </widget>
             </item>
            </layout>
@@ -315,9 +303,6 @@
           </item>
           <item>
            <widget class="QCheckBox" name="kcfg_PdfFormJavaScriptEnabled">
-            <property name="toolTip">
-             <string>Run JavaScript embedded in PDF forms. Disabled by default; enable only for documents you trust.</string>
-            </property>
             <property name="text">
              <string>Enable JavaScript support</string>
             </property>
@@ -553,9 +538,6 @@
           </item>
           <item>
            <widget class="QCheckBox" name="kcfg_UseOcsp">
-            <property name="toolTip">
-             <string>Check certificate revocation via OCSP responders while validating signatures. Requires network access; an unreachable responder does not invalidate signatures.</string>
-            </property>
             <property name="text">
              <string>Check certificate revocation via OCSP (requires network)</string>
             </property>
@@ -621,9 +603,6 @@
           </item>
           <item>
            <widget class="QCheckBox" name="kcfg_SignatureUseUtc">
-            <property name="toolTip">
-             <string>Render the signature appearance timestamp in UTC instead of local time.</string>
-            </property>
             <property name="text">
              <string>Use UTC time for signatures</string>
             </property>
@@ -631,9 +610,6 @@
           </item>
           <item>
            <widget class="QCheckBox" name="kcfg_SignatureDrawBorder">
-            <property name="toolTip">
-             <string>Draw a 1px border around the signed signature appearance.</string>
-            </property>
             <property name="text">
              <string>Draw signature border</string>
             </property>
