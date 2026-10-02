@@ -221,6 +221,16 @@ SignResponse WorkerClient::sign(const SignRequest& r, const QString& password, c
                 SignResponse { SigningResult::GenericError, "worker is unavailable" });
 }
 
+std::optional<Model::LayersResponse> WorkerClient::layers() const
+{
+    return sync([&](WorkerTransport* transport) { return transport->layers(); });
+}
+
+std::optional<Model::LayersResponse> WorkerClient::setLayer(const Model::SetLayerRequest& request) const
+{
+    return sync([&](WorkerTransport* transport) { return transport->setLayer(request); });
+}
+
 bool WorkerClient::setSettings(const DocumentSettings& settings)
 {
     return sync([&](WorkerTransport* transport) { return transport->settings(settings); });

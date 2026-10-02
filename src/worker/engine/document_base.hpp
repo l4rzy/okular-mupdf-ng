@@ -162,6 +162,10 @@ public:
     // PDF-Specific Features (Default "not supported" implementations)
     // -------------------------------------------------------------------------
 
+    /// Default optional-content UI; empty for documents without layer controls.
+    [[nodiscard]] virtual std::vector<Model::LayerEntry> layers(std::string* error = nullptr) const;
+    [[nodiscard]] virtual bool setLayer(std::int32_t id, bool selected, std::string* error = nullptr);
+
     /// Adds a new annotation to a page (PDF only).
     [[nodiscard]] virtual bool
     addAnnotation(int page, const Annotation& annotation, std::int32_t* objectNumber, std::string* error = nullptr);

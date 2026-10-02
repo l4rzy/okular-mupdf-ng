@@ -496,6 +496,28 @@ bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std:
     return isValidHandle(request.handle.value, "annotation handle is empty or too large", reason);
 }
 
+bool isValidLayersResponse(const LayersResponse& response) noexcept
+{
+    if (response.generation == 0 || response.entries.size() > Limit::MaxLayerEntries)
+        return false;
+    std::size_t textBytes = 0;
+    std::int32_t previousDepth = -1;
+    for (std::size_t i = 0; i < response.entries.size(); ++i) {
+        const auto& entry = response.entries[i];
+        if (entry.id != static_cast<std::int32_t>(i) || entry.depth < 0 || entry.depth > Limit::MaxLayerDepth
+            || entry.depth > previousDepth + 1 || entry.name.size() > Limit::MaxLayerNameBytes
+            || !hasNoEmbeddedNul(entry.name)
+            || (entry.type != LayerType::Label && entry.type != LayerType::CheckBox
+                && entry.type != LayerType::RadioButton))
+            return false;
+        textBytes += entry.name.size();
+        if (textBytes > Limit::MaxLayerTextBytes)
+            return false;
+        previousDepth = entry.depth;
+    }
+    return true;
+}
+
 bool isValidSignRequest(const SignRequest& request, std::string_view* reason)
 {
     if (!isValidFileTransfer(request.file, reason))

@@ -86,6 +86,8 @@ public:
     std::vector<Model::Font> fonts(int page);
     std::vector<Model::EmbeddedFile> embeddedFiles();
     std::vector<Model::OutlineNode> synopsis();
+    std::optional<Model::LayersResponse> layers();
+    std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request);
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys);
     std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation);
     bool modifyAnnotation(int page, const QString& handle, const Model::Annotation& annotation, bool appearance);

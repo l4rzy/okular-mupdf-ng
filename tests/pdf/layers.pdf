@@ -1,0 +1,134 @@
+%PDF-1.7
+% ASCII layer fixture
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /PageMode /UseOC /OCProperties << /OCGs [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R] /D << /Name (Layer test defaults) /BaseState /OFF /ON [6 0 R 8 0 R 9 0 R 11 0 R 13 0 R] /OFF [7 0 R 10 0 R 12 0 R] /Order [6 0 R 7 0 R 8 0 R [9 0 R 10 0 R] [(Exclusive choice) 11 0 R 12 0 R] 13 0 R] /RBGroups [[11 0 R 12 0 R]] /Locked [13 0 R] >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /Properties << /Red 6 0 R /Blue 7 0 R /Parent 8 0 R /ChildA 9 0 R /ChildB 10 0 R /VariantA 11 0 R /VariantB 12 0 R /Locked 13 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 3867 >>
+stream
+BT /F1 24 Tf 0.12 0.16 0.22 rg 1 0 0 1 48 748 Tm (PDF layer test fixture) Tj ET
+BT /F1 11 Tf 0.12 0.16 0.22 rg 1 0 0 1 48 722 Tm (Open with the official Poppler backend, then open the Layers sidebar.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 48 704 Tm (Eight layers: default visibility, nesting, radio choices, and a locked layer.) Tj ET
+q 0.94 0.95 0.97 rg 48 552 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 60 643 Tm (1. Red - initially ON) Tj ET
+q 0.94 0.95 0.97 rg 322 552 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 643 Tm (2. Blue - initially OFF) Tj ET
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 72 588 Tm (Red layer is hidden) Tj ET
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 346 588 Tm (Blue layer is hidden) Tj ET
+/OC /Red BDC
+q 0.78 0.12 0.18 rg 62 572 214 50 re f Q
+BT /F1 12 Tf 1 1 1 rg 1 0 0 1 72 592 Tm (RED IS VISIBLE) Tj ET
+EMC
+/OC /Blue BDC
+q 0.10 0.32 0.78 rg 336 572 214 50 re f Q
+BT /F1 12 Tf 1 1 1 rg 1 0 0 1 346 592 Tm (BLUE IS VISIBLE) Tj ET
+EMC
+q 0.94 0.95 0.97 rg 48 408 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 60 499 Tm (3. Nested parent - initially ON) Tj ET
+q 0.94 0.95 0.97 rg 322 408 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 499 Tm (Nested-layer checks) Tj ET
+/OC /Parent BDC
+q 0.25 0.35 0.45 RG 2 w 62 421 214 61 re S Q
+/OC /ChildA BDC
+q 0.13 0.48 0.30 rg 70 429 96 43 re f Q
+BT /F1 11 Tf 1 1 1 rg 1 0 0 1 78 446 Tm (CHILD A) Tj ET
+EMC
+/OC /ChildB BDC
+q 0.55 0.24 0.67 rg 172 429 96 43 re f Q
+BT /F1 11 Tf 1 1 1 rg 1 0 0 1 180 446 Tm (CHILD B) Tj ET
+EMC
+EMC
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 472 Tm (Child A starts ON; Child B starts OFF.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 453 Tm (Turn the parent OFF: both disappear.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 434 Tm (Child marks require parent AND child ON.) Tj ET
+q 0.94 0.95 0.97 rg 48 264 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 60 355 Tm (4. Exclusive choice - A initially ON) Tj ET
+q 0.94 0.95 0.97 rg 322 264 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 355 Tm (Radio-group checks) Tj ET
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 72 300 Tm (Neither variant is visible) Tj ET
+/OC /VariantA BDC
+q 0.08 0.43 0.52 rg 62 284 214 50 re f Q
+BT /F1 12 Tf 1 1 1 rg 1 0 0 1 72 304 Tm (VARIANT A) Tj ET
+EMC
+/OC /VariantB BDC
+q 0.72 0.32 0.08 rg 62 284 214 50 re f Q
+BT /F1 12 Tf 1 1 1 rg 1 0 0 1 72 304 Tm (VARIANT B) Tj ET
+EMC
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 328 Tm (Select Variant B: Variant A turns OFF.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 309 Tm (Select Variant A: Variant B turns OFF.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 290 Tm (Both may be OFF; both must not be ON.) Tj ET
+q 0.94 0.95 0.97 rg 48 120 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 60 211 Tm (5. Locked layer - initially ON) Tj ET
+q 0.94 0.95 0.97 rg 322 120 242 112 re f Q
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 211 Tm (Locked-layer checks) Tj ET
+BT /F1 12 Tf 0.12 0.16 0.22 rg 1 0 0 1 72 156 Tm (Locked layer is hidden) Tj ET
+/OC /Locked BDC
+q 0.24 0.30 0.36 rg 62 140 214 50 re f Q
+BT /F1 12 Tf 1 1 1 rg 1 0 0 1 72 160 Tm (LOCKED IS VISIBLE) Tj ET
+EMC
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 184 Tm (The locked layer should stay visible.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 165 Tm (Its visibility control should be disabled.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 334 146 Tm (All gray cards and instructions are static.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 48 85 Tm (Default: red, parent frame, Child A, Variant A, and locked patch visible.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 48 67 Tm (Default: blue, Child B, and Variant B hidden. Toggle each and check immediate redraw.) Tj ET
+BT /F1 10 Tf 0.12 0.16 0.22 rg 1 0 0 1 48 49 Tm (Reopen without saving to check defaults. This fixture contains no JavaScript.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /OCG /Name (Red \(initially on\)) /Intent /View >>
+endobj
+7 0 obj
+<< /Type /OCG /Name (Blue \(initially off\)) /Intent /View >>
+endobj
+8 0 obj
+<< /Type /OCG /Name (Nested parent \(initially on\)) /Intent /View >>
+endobj
+9 0 obj
+<< /Type /OCG /Name (Child A \(initially on\)) /Intent /View >>
+endobj
+10 0 obj
+<< /Type /OCG /Name (Child B \(initially off\)) /Intent /View >>
+endobj
+11 0 obj
+<< /Type /OCG /Name (Variant A) /Intent /View >>
+endobj
+12 0 obj
+<< /Type /OCG /Name (Variant B) /Intent /View >>
+endobj
+13 0 obj
+<< /Type /OCG /Name (Locked reference \(always on\)) /Intent /View >>
+endobj
+14 0 obj
+<< /Title (PDF optional content layer test) /Creator (okular-mupdf-ng test fixture) >>
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000031 00000 n 
+0000000424 00000 n 
+0000000481 00000 n 
+0000000740 00000 n 
+0000000810 00000 n 
+0000004728 00000 n 
+0000004803 00000 n 
+0000004880 00000 n 
+0000004965 00000 n 
+0000005044 00000 n 
+0000005125 00000 n 
+0000005190 00000 n 
+0000005255 00000 n 
+0000005341 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R /Info 14 0 R >>
+startxref
+5444
+%%EOF

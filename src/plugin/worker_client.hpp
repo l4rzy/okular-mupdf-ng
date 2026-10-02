@@ -76,6 +76,8 @@ public:
     std::vector<Model::Font> fonts(int page) const;
     std::vector<Model::EmbeddedFile> embeddedFiles() const;
     std::vector<Model::OutlineNode> synopsis() const;
+    std::optional<Model::LayersResponse> layers() const;
+    std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request) const;
     bool setSettings(const Model::DocumentSettings& settings);
     bool saveToFile(const QString& target);
     bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);

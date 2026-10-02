@@ -31,6 +31,7 @@ promise that every input or workflow has been tested.
 | Export ePUB to PDF | 🟡 Partial | Worker and IPC integration |
 | OCR for scanned PDF pages | 🟡 Partial | Worker and plugin integration tests |
 | Outlines, links, and navigation | 🟡 Partial | Worker tests; EPUB link and outline tests 
+| PDF layers (optional content) | 🟡 Partial | Worker visibility and text tests; Qt model, IPC, and plugin response validation tests |
 | PDF annotations | 🟡 Partial | Generator proxy and worker tests |
 | Printing and document export | 🟡 Partial | Export integration; printing has no direct automated test |
 | NSS certificate manager | 🟣 Experimental | NSS runtime and certificate tests |
@@ -42,6 +43,10 @@ promise that every input or workflow has been tested.
 
 ## Known limitations
 
+- PDF layers use the default configuration for viewing in the current session.
+  Alternate configurations and layer-toggle links are not supported. Layer
+  choices do not change saved defaults or printing; automatic OCR pauses while
+  layer visibility differs from the defaults.
 - MuPDF's ePUB support is limited compared with its PDF support, so some ePUB
   content or behavior may not be handled fully.
 - XFDF coordinates are serialized in the page's rotated display frame, which

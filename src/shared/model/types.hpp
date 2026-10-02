@@ -854,6 +854,31 @@ struct MetadataRequest {
 /// Requests the document outline.
 struct SynopsisRequest { };
 
+/// One entry in the default PDF optional-content configuration UI.
+enum class LayerType : std::uint8_t { Label, CheckBox, RadioButton };
+
+struct LayerEntry {
+    std::int32_t id = -1;
+    std::int32_t depth = 0;
+    std::string name;
+    LayerType type = LayerType::Label;
+    bool selected = false;
+    bool locked = false;
+};
+
+struct LayersRequest { };
+
+struct SetLayerRequest {
+    std::uint64_t generation = 0;
+    std::int32_t id = -1;
+    bool selected = false;
+};
+
+struct LayersResponse {
+    std::uint64_t generation = 0;
+    std::vector<LayerEntry> entries;
+};
+
 /// Requests font metadata for a page.
 struct FontsRequest {
     std::int32_t page = -1;
@@ -984,7 +1009,9 @@ using RequestPayload = std::variant<PingRequest,
                                     FormUpdateRequest,
                                     FormResetRequest,
                                     ExportPdfAsyncRequest,
-                                    FormButtonClickRequest>;
+                                    FormButtonClickRequest,
+                                    LayersRequest,
+                                    SetLayerRequest>;
 
 /// Correlated request envelope sent over the control channel.
 struct RequestMessage {
@@ -1084,7 +1111,8 @@ using ResponsePayload = std::variant<std::monostate,
                                      AnnotationResponse,
                                      PingResponse,
                                      SignResponse,
-                                     FormUpdateResponse>;
+                                     FormUpdateResponse,
+                                     LayersResponse>;
 
 struct ResponseMessage {
     /// Identifier matching the request that produced this response.

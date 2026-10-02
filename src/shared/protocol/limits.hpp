@@ -65,6 +65,12 @@ inline constexpr std::size_t MaxAnnotationInkPoints = 100'000;
 inline constexpr std::size_t MaxAnnotationExtensionDepth = 16;
 inline constexpr std::size_t MaxAnnotationExtensionEntries = 10'000;
 
+// --- PDF Layer UI Limits ---
+inline constexpr std::size_t MaxLayerEntries = 10'000;
+inline constexpr std::int32_t MaxLayerDepth = 64;
+inline constexpr std::size_t MaxLayerNameBytes = 64 * 1024;
+inline constexpr std::size_t MaxLayerTextBytes = 1024 * 1024;
+
 // --- Form Fields Limits ---
 inline constexpr std::size_t MaxPageFormFields = 10'000;
 inline constexpr std::size_t MaxOpenFormFields = 100'000;

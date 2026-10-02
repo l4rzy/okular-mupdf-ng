@@ -123,6 +123,9 @@ add_layer_test(test_plugin_epubcache plugin/test_epubcache.cpp plugin)
 target_include_directories(test_plugin_epubcache PRIVATE ../src)
 target_link_libraries(test_plugin_epubcache PRIVATE Qt6::Core mupdf_plugin_cache)
 
+add_layer_test(test_plugin_layerresponse plugin/test_layer_response.cpp plugin)
+target_include_directories(test_plugin_layerresponse PRIVATE ../src)
+
 add_layer_test(test_plugin_renderimage plugin/test_render_image.cpp plugin)
 target_include_directories(test_plugin_renderimage PRIVATE ../src)
 target_link_libraries(test_plugin_renderimage PRIVATE Qt6::Gui mupdf_plugin_util)
@@ -155,6 +158,13 @@ foreach(runtime_test IN ITEMS
         TIMEOUT 45
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endforeach()
+
+add_layer_test(test_generator_layers generator/test_layers_model.cpp generator)
+target_link_libraries(test_generator_layers PRIVATE mupdf_generator_adapters)
+# SettingsCore uses an unqualified include for its generated export header.
+find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
+target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
+target_compile_definitions(test_generator_layers PRIVATE TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
 
 add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generator)
 target_include_directories(test_generator_placeholder PRIVATE ../src)

@@ -247,6 +247,9 @@ private:
         std::vector<::Mu::Model::PageLinks> pages;
     };
 
+    [[nodiscard]] ResponseMessage layers(const RequestMessage& request);
+    [[nodiscard]] ResponseMessage setLayer(const RequestMessage& request, const Model::SetLayerRequest& payload);
+
     // Private Handler Methods
     [[nodiscard]] std::string annotationHandle(int page, std::int32_t objectNumber);
     [[nodiscard]] std::string formFieldHandle(int page, std::int32_t objectNumber);

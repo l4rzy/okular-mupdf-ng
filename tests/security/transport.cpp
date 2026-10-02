@@ -59,6 +59,46 @@ private slots:
         QVERIFY(!::Mu::IPC::ZppCodec::decode(*bytes, &decoded, &error));
     }
 
+    void layersRoundTrip()
+    {
+        using namespace ::Mu;
+        std::string error;
+        for (const Model::RequestPayload& payload :
+             { Model::RequestPayload { Model::LayersRequest { } },
+               Model::RequestPayload { Model::SetLayerRequest { 7, 1, true } } }) {
+            const auto bytes = IPC::ZppCodec::encode(Model::RequestMessage { 1, payload }, &error);
+            QVERIFY2(bytes.has_value(), error.c_str());
+            Model::RequestMessage decoded;
+            QVERIFY2(IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
+            QCOMPARE(decoded.payload.index(), payload.index());
+            if (const auto* change = std::get_if<Model::SetLayerRequest>(&decoded.payload)) {
+                QCOMPARE(change->generation, std::uint64_t(7));
+                QCOMPARE(change->id, 1);
+                QVERIFY(change->selected);
+            }
+        }
+        const Model::LayersResponse layers { 7,
+                                             { { 0, 0, "Group", Model::LayerType::Label, false, false },
+                                               { 1, 1, "Layer", Model::LayerType::RadioButton, true, true } } };
+        auto bytes = IPC::ZppCodec::encode(Model::ResponseMessage { 1, layers, std::nullopt }, &error);
+        QVERIFY2(bytes.has_value(), error.c_str());
+        Model::ResponseMessage decoded;
+        QVERIFY2(IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
+        const auto* result = std::get_if<Model::LayersResponse>(&decoded.payload);
+        QVERIFY(result);
+        QCOMPARE(result->generation, layers.generation);
+        QCOMPARE(result->entries.size(), std::size_t(2));
+        const auto& entry = result->entries[1];
+        QCOMPARE(entry.id, 1);
+        QCOMPARE(entry.depth, 1);
+        QCOMPARE(entry.name, std::string("Layer"));
+        QCOMPARE(entry.type, Model::LayerType::RadioButton);
+        QVERIFY(entry.selected);
+        QVERIFY(entry.locked);
+        (*bytes)[4] = std::byte { 3 };
+        QVERIFY(!IPC::ZppCodec::decode(*bytes, &decoded, &error));
+    }
+
     void frameLayoutAndOverflowBoundaries()
     {
         QCOMPARE(sizeof(::Mu::IPC::FrameBufferHeader), size_t(64));

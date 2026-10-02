@@ -16,11 +16,13 @@
 #include <QByteArray>
 #include <QtCore/qglobal.h>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <utility>
 
 #include "generator/config/settings.hpp"
+#include "generator/layers_model.hpp"
 #include "generator/placeholder.hpp"
 #include "generator/printing.hpp"
 #include "generator/proxy/annotation.hpp"
@@ -80,6 +82,7 @@ public:
 
     // Okular Generator Func: returns embedded files as Okular objects.
     const QList<Okular::EmbeddedFile*>* embeddedFiles() const override;
+    QAbstractItemModel* layersModel() const override;
     // Okular Generator Func: reports the supported save options.
     bool supportsOption(SaveOption option) const override;
     // Okular Generator Func: saves the current document through the worker.
@@ -152,6 +155,8 @@ private:
     // Reads the paper color Okular's accessibility settings request (white
     // when the Paper render mode is off) and records it for the next push.
     void refreshPaperColor();
+    void loadLayers();
+    void refreshLayerText(std::uint64_t revision);
     // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
     // mirroring the poppler generator's GeneratorExtraDescription.
     QString generatorExtraDescription() const;
@@ -201,6 +206,11 @@ private:
     // Owns asynchronous OCR scheduling, focus tracking, and result retention;
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
+
+    std::unique_ptr<LayersModel> m_layersModel;
+    // Render/extraction threads must discard results from previous visibility.
+    std::atomic<std::uint64_t> m_layerRevision { 0 };
+    std::atomic<bool> m_defaultLayerVisibility { true };
 
     std::unique_ptr<Okular::DocumentSynopsis> m_synopsis;
     mutable std::unique_ptr<QList<Okular::EmbeddedFile*>> m_embeddedFilesCache;

@@ -103,6 +103,9 @@ bool isValidAnnotationModifyRequest(const AnnotationModifyRequest& request, std:
 /// Validates an annotation removal request before handle lookup.
 bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std::string_view* reason = nullptr);
 
+/// Validates a bounded default-layer UI with contiguous document-scoped entry IDs.
+bool isValidLayersResponse(const LayersResponse& response) noexcept;
+
 /// Validates signing fields independent of the open document and backend.
 bool isValidSignRequest(const SignRequest& request, std::string_view* reason = nullptr);
 

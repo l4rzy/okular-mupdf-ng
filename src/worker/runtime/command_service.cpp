@@ -1078,6 +1078,29 @@ ResponseMessage CommandService::synopsis(const RequestMessage& r)
     return success(r.id, OutlineResponse { std::move(nodes) });
 }
 
+ResponseMessage CommandService::layers(const RequestMessage& request)
+{
+    if (!hasOpenDocument())
+        return failure(request.id, ErrorCode::NotOpen, "layers", "no document is open");
+    std::string error;
+    auto entries = m_document->layers(&error);
+    if (!error.empty())
+        return failure(request.id, ErrorCode::Internal, "layers", error);
+    return success(request.id, Model::LayersResponse { m_linkGeneration, std::move(entries) });
+}
+
+ResponseMessage CommandService::setLayer(const RequestMessage& request, const Model::SetLayerRequest& payload)
+{
+    if (!hasOpenDocument())
+        return failure(request.id, ErrorCode::NotOpen, "set-layer", "no document is open");
+    if (payload.generation != m_linkGeneration)
+        return failure(request.id, ErrorCode::InvalidRequest, "set-layer", "stale layer generation");
+    std::string error;
+    if (!m_document->setLayer(payload.id, payload.selected, &error))
+        return failure(request.id, ErrorCode::InvalidRequest, "set-layer", error);
+    return layers(request);
+}
+
 ResponseMessage CommandService::fonts(const RequestMessage& r, const FontsRequest& f)
 {
     if (!hasOpenDocument())
@@ -1222,6 +1245,8 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
             [&](const TextBoxesRequest& payload) { return textBoxes(request, payload); },
             [&](const MetadataRequest& payload) { return documentInfo(request, payload); },
             [&](const SynopsisRequest&) { return synopsis(request); },
+            [&](const Model::LayersRequest&) { return layers(request); },
+            [&](const Model::SetLayerRequest& payload) { return setLayer(request, payload); },
             [&](const FontsRequest& payload) { return fonts(request, payload); },
             [&](const SettingsRequest& payload) { return settings(request, payload); },
             [&](const EmbeddedFilesRequest&) { return embeddedFiles(request); },

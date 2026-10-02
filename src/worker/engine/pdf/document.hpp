@@ -85,6 +85,8 @@ public:
     [[nodiscard]] DocumentSettings settings() const noexcept override;
     void setSettings(const DocumentSettings& settings) noexcept override;
     [[nodiscard]] ResolvedLink resolveLink(const std::string& uri, std::string* error = nullptr) const override;
+    [[nodiscard]] std::vector<Model::LayerEntry> layers(std::string* error = nullptr) const override;
+    [[nodiscard]] bool setLayer(std::int32_t id, bool selected, std::string* error = nullptr) override;
     /// Discards the temporary link resolution cache used during incremental page-link aggregation.
     void discardResolvedLinkCache() noexcept override;
     [[nodiscard]] std::vector<Link> extractLinks(int page, std::string* error = nullptr) const override;

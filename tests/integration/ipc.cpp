@@ -74,6 +74,46 @@ private slots:
 
     // End-to-end: a document MuPDF had to repair is reported across IPC.
     // End-to-end: the Okular paper color reaches the worker renderer.
+    void layersFlowThroughIpc()
+    {
+        using namespace Mu::Model;
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(QStringLiteral(TEST_SIGNATURE_PDF_DIR "/layers.pdf"), { }, pages), OpenStatus::Success);
+        const auto original = m_client.layers();
+        QVERIFY(original);
+        QCOMPARE(original->entries.size(), std::size_t(9));
+        const auto blue = std::find_if(original->entries.begin(), original->entries.end(), [](const auto& e) {
+            return e.name == "Blue (initially off)";
+        });
+        QVERIFY(blue != original->entries.end());
+        QVERIFY(!blue->selected);
+        const auto image = m_client.render(0, 612, 792);
+        QVERIFY(!image.isNull());
+        const auto changed = m_client.setLayer({ original->generation, blue->id, true });
+        QVERIFY(changed);
+        QVERIFY(changed->entries[static_cast<std::size_t>(blue->id)].selected);
+        QVERIFY(imageHash(image) != imageHash(m_client.render(0, 612, 792)));
+        QVERIFY(!m_client.setLayer({ original->generation + 1, blue->id, false }));
+        const auto locked =
+            std::find_if(original->entries.begin(), original->entries.end(), [](const auto& e) { return e.locked; });
+        QVERIFY(locked != original->entries.end());
+        QVERIFY(!m_client.setLayer({ original->generation, locked->id, false }));
+        QVERIFY(m_client.layers()->entries[static_cast<std::size_t>(blue->id)].selected);
+        QVERIFY(m_client.close());
+        QCOMPARE(m_client.open(QStringLiteral(TEST_SIGNATURE_PDF_DIR "/layers.pdf"), { }, pages), OpenStatus::Success);
+        const auto reopened = m_client.layers();
+        QVERIFY(reopened);
+        QVERIFY(reopened->generation != original->generation);
+        QVERIFY(!reopened->entries[static_cast<std::size_t>(blue->id)].selected);
+        QVERIFY(!m_client.setLayer({ original->generation, blue->id, true }));
+        QVERIFY(m_client.close());
+        QCOMPARE(m_client.open(m_epub, { }, pages, DocumentType::Epub), OpenStatus::Success);
+        const auto epubLayers = m_client.layers();
+        QVERIFY(epubLayers);
+        QVERIFY(epubLayers->entries.empty());
+        QVERIFY(m_client.close());
+    }
+
     void paperColorFlowsThroughIpc()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;

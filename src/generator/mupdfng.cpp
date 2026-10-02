@@ -569,6 +569,8 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         }
     }
 
+    loadLayers();
+
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
     m_formsDirty = false;
@@ -799,6 +801,9 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
 void Main::clearWorkerDerivedState()
 {
     m_synopsis.reset();
+    m_layersModel.reset();
+    ++m_layerRevision;
+    m_defaultLayerVisibility = true;
     clearEmbeddedFilesCache();
     if (m_formCoordinator) {
         m_formCoordinator->clear();
@@ -907,7 +912,7 @@ void Main::observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount)
 {
     if (m_placeholder.isActive())
         return;
-    if (m_document.type == Model::DocumentType::Epub)
+    if (m_document.type == Model::DocumentType::Epub || !m_defaultLayerVisibility.load())
         return;
     const Okular::Document* doc = document();
     if (!doc)
@@ -965,6 +970,19 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
         m_worker.close();
         return false;
     }
+
+    if (m_document.type == Model::DocumentType::Pdf) {
+        const auto layers = m_worker.layers();
+        if (!layers
+            || (m_layersModel
+                && !m_layersModel->restoreLayers(
+                    *layers, [this](const Model::SetLayerRequest& request) { return m_worker.setLayer(request); }))
+            || (!m_layersModel && !layers->entries.empty())) {
+            m_worker.close();
+            return false;
+        }
+    }
+    ++m_layerRevision;
 
     // Phase 3: reconcile UI from the clean source while both proxies stay
     // unavailable, so no user edit can re-dirty mid-rebuild with stale handles.
@@ -1188,9 +1206,9 @@ Okular::FontInfo::List Main::fontsForPage(int page)
 // Okular Generator Func: renders a page or tile for Okular.
 QImage Main::image(Okular::PixmapRequest* request)
 {
-    // Place holder for future render cancellation, right now it's a dummy
-    const auto shouldAbort = [] {
-        return false;
+    const auto revision = m_layerRevision.load();
+    const auto shouldAbort = [this, request, revision] {
+        return request->shouldAbortRender() || revision != m_layerRevision.load();
     };
 
     if (shouldAbort())
@@ -1260,9 +1278,80 @@ QImage Main::image(Okular::PixmapRequest* request)
     return { };
 }
 
+void Main::loadLayers()
+{
+    // A new model per document also drops Okular's previous model connections.
+    m_layersModel.reset();
+    ++m_layerRevision;
+    m_defaultLayerVisibility = true;
+    if (m_document.type != Model::DocumentType::Pdf)
+        return;
+    const auto layers = m_worker.layers();
+    if (!layers) {
+        Q_EMIT warning(i18n("The PDF layers could not be loaded."), WarningMs);
+        return;
+    }
+    if (layers->entries.empty())
+        return;
+    m_layersModel = std::make_unique<LayersModel>([this](const Model::SetLayerRequest& request) {
+        if (!workerReady())
+            return std::optional<Model::LayersResponse> { };
+        return m_worker.setLayer(request);
+    });
+    connect(m_layersModel.get(), &LayersModel::changeFailed, this, [this] {
+        Q_EMIT warning(i18n("The PDF layer visibility could not be changed."), WarningMs);
+    });
+    connect(m_layersModel.get(), &LayersModel::visibilityChanged, this, [this] {
+        ++m_layerRevision;
+        m_defaultLayerVisibility = m_layersModel->isDefaultVisibility();
+        m_ocrController->reset();
+        refreshLayerText(m_layerRevision.load());
+    });
+
+    if (!m_layersModel->resetLayers(*layers)) {
+        m_layersModel.reset();
+        Q_EMIT warning(i18n("The PDF layers could not be loaded."), WarningMs);
+    }
+}
+
+void Main::refreshLayerText(std::uint64_t revision)
+{
+    if (revision != m_layerRevision.load())
+        return;
+    // Wait asynchronously for Okular to deliver any already-finished extraction
+    // before clearing it; a queued completion must not restore old layer text.
+    if (!canGenerateTextPage()) {
+        QTimer::singleShot(10, this, [this, revision] { refreshLayerText(revision); });
+        return;
+    }
+    QMutexLocker locker(userMutex());
+    if (const auto* currentDocument = document()) {
+        auto* mutableDocument = const_cast<Okular::Document*>(currentDocument);
+        resetLayerSearches(*mutableDocument);
+        for (auto* page : std::as_const(m_okularPages)) {
+            mutableDocument->setPageTextSelection(
+                page->number(), std::unique_ptr<Okular::RegularAreaRect> { }, QColor());
+            page->setTextPage(nullptr);
+        }
+    }
+}
+
+QAbstractItemModel* Main::layersModel() const
+{
+    return m_layersModel && m_layersModel->rowCount() != 0 ? m_layersModel.get() : nullptr;
+}
+
 // Okular Generator Func: extracts native text or starts/reads OCR.
 Okular::TextPage* Main::textPage(Okular::TextRequest* request)
 {
+    const auto revision = m_layerRevision.load();
+    const auto finish = [this, request, revision](Okular::TextPage* page) {
+        if (request->shouldAbortExtraction() || revision != m_layerRevision.load()) {
+            delete page;
+            return static_cast<Okular::TextPage*>(nullptr);
+        }
+        return page;
+    };
     if (request->shouldAbortExtraction())
         return nullptr;
     if (m_placeholder.isActive())
@@ -1274,14 +1363,16 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             return nullptr;
         const std::vector<Model::TextBox> workerBoxes =
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
-        return Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height());
+        return finish(Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height()));
     }
 
     // Text extraction never blocks on recognition: when OCR is wanted the page
     // is queued and its TextPage arrives later through signalTextGenerationDone,
     // while the retained result serves hosts that request the page again.
-    if (const auto ready = m_ocrController->takeReady(pageNum))
-        return Conversion::ocrTextPage(*ready);
+    if (m_defaultLayerVisibility.load()) {
+        if (const auto ready = m_ocrController->takeReady(pageNum))
+            return finish(Conversion::ocrTextPage(*ready));
+    }
     if (workerReady()) {
         const std::vector<Model::TextBox> workerBoxes =
             m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
@@ -1289,15 +1380,19 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         const Config::OcrTarget ocrTarget = Config::ocrTargetFor(m_document.hash, ocrSettings);
         const auto ocrConfig = Config::ocrConfigFor(
             ocrTarget, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings);
-        const bool useOcr = Plugin::OCR::Controller::shouldTrigger(
-            ocrConfig.force, ocrConfig.autoTrigger, ocrConfig.triggerThreshold, workerBoxes.size());
+        const bool useOcr = m_defaultLayerVisibility.load()
+            && Plugin::OCR::Controller::shouldTrigger(
+                                ocrConfig.force, ocrConfig.autoTrigger, ocrConfig.triggerThreshold, workerBoxes.size());
         QMetaObject::invokeMethod(
             this,
-            [this, pageNum, nativeTextBoxCount = workerBoxes.size()] { observeOcrFocus(pageNum, nativeTextBoxCount); },
+            [this, pageNum, revision, nativeTextBoxCount = workerBoxes.size()] {
+                if (revision == m_layerRevision.load())
+                    observeOcrFocus(pageNum, nativeTextBoxCount);
+            },
             Qt::QueuedConnection);
         if (useOcr)
             return nullptr;
-        return Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height());
+        return finish(Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height()));
     }
     return nullptr;
 }

@@ -31,6 +31,16 @@ bool DocumentBase::fail(std::string* error, std::string_view message)
 // Default Implementations for Format-Specific Operations
 // =============================================================================
 
+std::vector<Model::LayerEntry> DocumentBase::layers(std::string*) const
+{
+    return { };
+}
+
+bool DocumentBase::setLayer(std::int32_t, bool, std::string* error)
+{
+    return fail(error, "layers are not supported for this document type");
+}
+
 bool DocumentBase::addAnnotation(int, const Annotation&, std::int32_t*, std::string* error)
 {
     return fail(error, "annotations are not supported for this document type");

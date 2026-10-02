@@ -97,6 +97,136 @@ private slots:
             error.c_str());
     }
 
+    void layersPreserveSiblingDepths_data()
+    {
+        QTest::addColumn<int>("extraDepth");
+        QTest::newRow("direct children") << 0;
+        QTest::newRow("one unnamed group") << 1;
+        QTest::newRow("two unnamed groups") << 2;
+    }
+
+    void layersPreserveSiblingDepths()
+    {
+        QFETCH(int, extraDepth);
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, QStringLiteral(TEST_SIGNATURE_PDF_DIR "/layers.pdf")));
+        fz_context* context = document.context();
+        pdf_document* pdf = pdf_specifics(context, document.document());
+        pdf_obj* defaults = pdf_dict_getp(context, pdf_trailer(context, pdf), "Root/OCProperties/D");
+        pdf_obj* order = pdf_dict_get(context, defaults, PDF_NAME(Order));
+        for (int i = 0; i < extraDepth; ++i) {
+            pdf_obj* wrapper = pdf_new_array(context, pdf, 1);
+            pdf_array_push(context, wrapper, pdf_array_get(context, order, 3));
+            pdf_array_put(context, order, 3, wrapper);
+            pdf_drop_obj(context, wrapper);
+        }
+        // Rebuild MuPDF's UI after changing /Order.
+        pdf_select_layer_config(context, pdf, -1);
+        std::string error;
+        const auto entries = document.layers(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(entries.size(), std::size_t(9));
+        QCOMPARE(entries[2].depth, 0);
+        QCOMPARE(entries[3].depth, 1);
+        QCOMPARE(entries[4].depth, 1);
+        QCOMPARE(entries[5].depth, 0);
+        QCOMPARE(entries[6].depth, 1);
+        QCOMPARE(entries[7].depth, 1);
+    }
+
+    void layersRespectVisibilityAndUiRules()
+    {
+        using namespace Mu::Model;
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, QStringLiteral(TEST_SIGNATURE_PDF_DIR "/layers.pdf")));
+        std::string error;
+        auto entries = document.layers(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(entries.size(), std::size_t(9));
+        const auto findId = [&](const std::string& name) {
+            const auto it = std::find_if(entries.begin(), entries.end(), [&](const auto& e) { return e.name == name; });
+            return it == entries.end() ? -1 : it->id;
+        };
+        const int red = findId("Red (initially on)");
+        const int blue = findId("Blue (initially off)");
+        const int parent = findId("Nested parent (initially on)");
+        const int childB = findId("Child B (initially off)");
+        const int variantA = findId("Variant A");
+        const int variantB = findId("Variant B");
+        const int locked = findId("Locked reference (always on)");
+        const int label = findId("Exclusive choice");
+        QVERIFY(red >= 0 && blue >= 0 && parent >= 0 && childB >= 0);
+        QVERIFY(variantA >= 0 && variantB >= 0 && locked >= 0 && label >= 0);
+        QCOMPARE(entries[static_cast<std::size_t>(childB)].depth, 1);
+        QCOMPARE(entries[static_cast<std::size_t>(variantB)].type, LayerType::RadioButton);
+        QVERIFY(entries[static_cast<std::size_t>(locked)].locked);
+        const auto render = [&] {
+            QImage image(612, 792, QImage::Format_RGBA8888);
+            if (!document.renderToBuffer({ 0, 612, 792, std::nullopt },
+                                         image.bits(),
+                                         static_cast<std::size_t>(image.bytesPerLine()),
+                                         &error))
+                return QImage { };
+            return image;
+        };
+        const auto original = render();
+        QVERIFY(!original.isNull());
+        QVERIFY(document.isPageCached(0));
+        const auto text = [&] {
+            std::string value;
+            for (const auto& box : document.textBoxes(0, 72, 72, 10000))
+                value += box.text;
+            return value;
+        };
+        QVERIFY(text().find("BLUE") == std::string::npos);
+        QVERIFY2(document.setLayer(blue, true, &error), error.c_str());
+        QVERIFY(!document.isPageCached(0));
+        const auto withBlue = render();
+        QVERIFY(withBlue.pixelColor(340, 210).blue() > withBlue.pixelColor(340, 210).red());
+        QVERIFY(text().find("BLUE") != std::string::npos);
+        QVERIFY(document.setLayer(childB, true, &error));
+        QVERIFY(document.setLayer(parent, false, &error));
+        const auto withoutParent = render();
+        QCOMPARE(withoutParent.pixelColor(75, 350), original.pixelColor(340, 350));
+        QVERIFY(document.setLayer(variantB, true, &error));
+        entries = document.layers();
+        QVERIFY(!entries[static_cast<std::size_t>(variantA)].selected);
+        QVERIFY(entries[static_cast<std::size_t>(variantB)].selected);
+        for (int id : { -1, 999, locked, label }) {
+            error.clear();
+            QVERIFY(!document.setLayer(id, false, &error));
+            QVERIFY(!error.empty());
+        }
+        QVERIFY(document.setLayer(blue, false));
+        QVERIFY(document.setLayer(childB, false));
+        QVERIFY(document.setLayer(parent, true));
+        QVERIFY(document.setLayer(variantA, true));
+        QCOMPARE(render(), original);
+
+        // Tiled rendering must use the same visibility state as a full page.
+        QVERIFY(document.setLayer(red, false));
+        const auto full = render();
+        QImage tile(240, 112, QImage::Format_RGBA8888);
+        QVERIFY(
+            document.renderToBuffer({ 0, 612, 792, Mu::Worker::Engine::DocumentBase::RenderTile { 48, 128, 240, 112 } },
+                                    tile.bits(),
+                                    static_cast<std::size_t>(tile.bytesPerLine())));
+        QCOMPARE(tile, full.copy(48, 128, 240, 112));
+
+        // Viewing state must not change saved defaults.
+        const QString saved = m_tempDir.filePath(QStringLiteral("layers-saved.pdf"));
+        QFile output(saved);
+        QVERIFY(output.open(QIODevice::ReadWrite));
+        QVERIFY(document.saveFd(::dup(output.handle())));
+        output.close();
+        Mu::Worker::Engine::PdfDocument reopened;
+        QVERIFY(openDocument(reopened, saved));
+        QVERIFY(reopened.layers()[static_cast<std::size_t>(red)].selected);
+        document.close();
+        QVERIFY(openDocument(document, m_textPath));
+        QVERIFY(document.layers().empty());
+    }
+
     void testOverprintSimulation_data()
     {
         QTest::addColumn<bool>("spot");

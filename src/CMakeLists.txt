@@ -156,6 +156,7 @@ add_library(mupdf_generator_adapters STATIC
   generator/proxy/form/coordinator.cpp
   generator/proxy/certificate_store.cpp
   generator/printing.cpp
+  generator/layers_model.cpp
 )
 target_include_directories(mupdf_generator_adapters PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

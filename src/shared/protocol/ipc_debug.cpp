@@ -317,7 +317,14 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                     field(out, "key", key);
             } else if constexpr (std::is_same_v<T, Model::SynopsisRequest>)
                 out << "synopsis";
-            else if constexpr (std::is_same_v<T, Model::FontsRequest>) {
+            else if constexpr (std::is_same_v<T, Model::LayersRequest>)
+                out << "layers";
+            else if constexpr (std::is_same_v<T, Model::SetLayerRequest>) {
+                out << "set-layer";
+                field(out, "generation", value.generation);
+                field(out, "id", value.id);
+                field(out, "selected", value.selected);
+            } else if constexpr (std::is_same_v<T, Model::FontsRequest>) {
                 out << "fonts";
                 field(out, "page", value.page);
             } else if constexpr (std::is_same_v<T, Model::EmbeddedFilesRequest>)
@@ -445,6 +452,8 @@ inline std::string_view responseName(const Model::ResponsePayload& payload)
                 return "metadata";
             else if constexpr (std::is_same_v<T, Model::OutlineResponse>)
                 return "outline";
+            else if constexpr (std::is_same_v<T, Model::LayersResponse>)
+                return "layers";
             else if constexpr (std::is_same_v<T, Model::FontsResponse>)
                 return "fonts";
             else if constexpr (std::is_same_v<T, Model::EmbeddedFilesResponse>)
@@ -515,6 +524,9 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                         << " mime=" << std::quoted(value.metadata.mimeType);
                     for (const auto& [key, item] : value.metadata.values)
                         out << ' ' << std::quoted(key) << '=' << std::quoted(item);
+                } else if constexpr (std::is_same_v<T, Model::LayersResponse>) {
+                    Detail::field(out, "generation", value.generation);
+                    Detail::field(out, "entries", value.entries.size());
                 } else if constexpr (std::is_same_v<T, Model::OutlineResponse>)
                     out << " count=" << value.nodes.size();
                 else if constexpr (std::is_same_v<T, Model::FontsResponse>) {

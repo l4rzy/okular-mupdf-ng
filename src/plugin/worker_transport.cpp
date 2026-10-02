@@ -698,6 +698,26 @@ std::vector<OutlineNode> WorkerTransport::synopsis()
     return { };
 }
 
+std::optional<Model::LayersResponse> WorkerTransport::layers()
+{
+    auto response = call(LayersRequest { });
+    if (response && !response->error) {
+        if (auto* layers = std::get_if<LayersResponse>(&response->payload); layers && isValidLayersResponse(*layers))
+            return std::move(*layers);
+    }
+    return std::nullopt;
+}
+
+std::optional<Model::LayersResponse> WorkerTransport::setLayer(const Model::SetLayerRequest& request)
+{
+    auto response = call(request);
+    if (response && !response->error) {
+        if (auto* layers = std::get_if<LayersResponse>(&response->payload); layers && isValidLayersResponse(*layers))
+            return std::move(*layers);
+    }
+    return std::nullopt;
+}
+
 DocumentMetadata WorkerTransport::getDocumentInfo(const QStringList& keys)
 {
     std::vector<std::string> values;
