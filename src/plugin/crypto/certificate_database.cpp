@@ -554,25 +554,18 @@ bool importCertificate(const QString& databasePath, const QByteArray& data, cons
         setError(error, nssError());
         return false;
     }
+    // Resolve the key before writing: a rejected reimport must not delete an
+    // existing public-only certificate or change its nickname or trust.
+    PrivateKeyHandle key(PK11_FindKeyByDERCert(slot.get(), certificate.get(), nullptr));
+    if (!key) {
+        setError(error, QStringLiteral("The certificate has no associated private key"));
+        return false;
+    }
     const QByteArray name = nickname.trimmed().toUtf8();
     const SECStatus status =
         PK11_ImportCert(slot.get(), certificate.get(), CK_INVALID_HANDLE, name.constData(), PR_FALSE);
     if (status != SECSuccess) {
         setError(error, nssError());
-        return false;
-    }
-    PrivateKeyHandle key(PK11_FindKeyByDERCert(slot.get(), certificate.get(), nullptr));
-    if (!key) {
-        CertificateHandle imported = findCertificateInSlot(slot.get(), certificateFingerprint(certificate.get()));
-        if (imported) {
-            const SECStatus deleteStatus = deleteCertificateInSlot(slot.get(), imported.get());
-            if (deleteStatus != SECSuccess) {
-                setError(error,
-                         QStringLiteral("The certificate has no private key, and rollback failed: %1").arg(nssError()));
-                return false;
-            }
-        }
-        setError(error, QStringLiteral("The imported certificate has no associated private key"));
         return false;
     }
     return true;

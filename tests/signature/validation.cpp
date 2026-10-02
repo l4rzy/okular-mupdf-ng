@@ -5,6 +5,7 @@
 #include "genpdf.hpp"
 #include "plugin/crypto/certificate_database.hpp"
 #include "plugin/crypto/nss.hpp"
+#include "plugin/crypto/nss_handles.hpp"
 #include "plugin/crypto/nss_internal.hpp"
 
 #include <QBuffer>
@@ -652,10 +653,21 @@ private slots:
         QVERIFY2(error.contains(QStringLiteral("not active")), qPrintable(error));
     }
 
-    void publicOnlyCertificateImportRollback()
+    void rejectsPublicOnlyCertificateImport_data()
     {
+        QTest::addColumn<bool>("alreadyPresent");
+        QTest::addColumn<QString>("importNickname");
+        QTest::newRow("new certificate") << false << QStringLiteral("orphan-public-cert");
+        QTest::newRow("existing certificate") << true << QStringLiteral("orphan-public-cert");
+        QTest::newRow("existing certificate with different nickname") << true << QStringLiteral("renamed-public-cert");
+    }
+
+    void rejectsPublicOnlyCertificateImport()
+    {
+        QFETCH(bool, alreadyPresent);
+        QFETCH(QString, importNickname);
         if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
-            QSKIP("openssl is required for the public-only certificate rollback test");
+            QSKIP("openssl is required for the public-only certificate import test");
         QTemporaryDir source;
         QVERIFY(source.isValid());
         const QString keyPath = source.filePath(QStringLiteral("key.pem"));
@@ -681,23 +693,105 @@ private slots:
         certReader.close();
         QVERIFY(!certificateData.isEmpty());
 
+        CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
+        QVERIFY(certdb);
+        QByteArray originalDer;
+        CERTCertTrust originalTrust { };
+        if (alreadyPresent) {
+            QVERIFY(runCertutil({ QStringLiteral("-A"),
+                                  QStringLiteral("-d"),
+                                  QStringLiteral("sql:") + m_nssDb.path(),
+                                  QStringLiteral("-n"),
+                                  QStringLiteral("orphan-public-cert"),
+                                  QStringLiteral("-t"),
+                                  QStringLiteral("CT,C,C"),
+                                  QStringLiteral("-i"),
+                                  certPath }));
+            ::Mu::Plugin::Crypto::NssCertificate existing(CERT_FindCertByNickname(certdb, "orphan-public-cert"));
+            QVERIFY(existing);
+            originalDer = QByteArray(reinterpret_cast<const char*>(existing->derCert.data), existing->derCert.len);
+            QVERIFY(CERT_GetCertTrust(existing.get(), &originalTrust) == SECSuccess);
+        }
+
         QString error;
-        // This certificate's key lives outside NSS, so import must roll back.
+        // The key lives outside NSS; rejection must not mutate the database.
         const bool imported = ::Mu::Plugin::Crypto::CertificateDatabase::importCertificate(
-            m_nssDb.path(), certificateData, QStringLiteral("orphan-public-cert"), &error);
+            m_nssDb.path(), certificateData, importNickname, &error);
         QVERIFY(!imported);
         QVERIFY2(error.contains(QStringLiteral("has no associated private key")), qPrintable(error));
 
-        // Verify it was rolled back and is not listed as a signing cert
+        // Public-only certificates must never appear as signing identities.
         const auto signingCerts = ::Mu::Plugin::Crypto::signingCertificates();
         const auto it = std::find_if(signingCerts.cbegin(), signingCerts.cend(), [](const auto& cert) {
             return cert.nickname == "orphan-public-cert";
         });
         QVERIFY(it == signingCerts.cend());
-        CERTCertDBHandle* certdb = CERT_GetDefaultCertDB();
-        QVERIFY(certdb);
-        CERTCertificate* certificate = CERT_FindCertByNickname(certdb, "orphan-public-cert");
-        QVERIFY(!certificate);
+        ::Mu::Plugin::Crypto::NssCertificate certificate(CERT_FindCertByNickname(certdb, "orphan-public-cert"));
+        if (alreadyPresent) {
+            QVERIFY(certificate);
+            QCOMPARE(QByteArray(reinterpret_cast<const char*>(certificate->derCert.data), certificate->derCert.len),
+                     originalDer);
+            CERTCertTrust trust { };
+            QVERIFY(CERT_GetCertTrust(certificate.get(), &trust) == SECSuccess);
+            QCOMPARE(trust.sslFlags, originalTrust.sslFlags);
+            QCOMPARE(trust.emailFlags, originalTrust.emailFlags);
+            QCOMPARE(trust.objectSigningFlags, originalTrust.objectSigningFlags);
+            if (importNickname != QStringLiteral("orphan-public-cert")) {
+                ::Mu::Plugin::Crypto::NssCertificate renamed(
+                    CERT_FindCertByNickname(certdb, importNickname.toUtf8().constData()));
+                QVERIFY(!renamed);
+            }
+            QVERIFY(SEC_DeletePermCertificate(certificate.get()) == SECSuccess);
+        } else {
+            QVERIFY(!certificate);
+        }
+    }
+
+    void importsCertificateWithExistingPrivateKey()
+    {
+        const QString nickname = QStringLiteral("pem-existing-key");
+        ::Mu::Plugin::Crypto::CertificateDatabase::SelfSignedCertificateOptions options;
+        options.nickname = nickname;
+        options.commonName = QStringLiteral("PEM Existing Key Test");
+        options.validFrom = QDateTime::currentDateTime().addSecs(-60);
+        options.validUntil = options.validFrom.addYears(1);
+        QString error;
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::createSelfSignedCertificate(m_nssDb.path(), options, &error),
+            qPrintable(error));
+
+        QTemporaryDir source;
+        QVERIFY(source.isValid());
+        const QString certPath = source.filePath(QStringLiteral("certificate.pem"));
+        const QString database = QStringLiteral("sql:") + m_nssDb.path();
+        QVERIFY(runCertutil({ QStringLiteral("-L"),
+                              QStringLiteral("-d"),
+                              database,
+                              QStringLiteral("-n"),
+                              nickname,
+                              QStringLiteral("-a"),
+                              QStringLiteral("-o"),
+                              certPath }));
+        QFile file(certPath);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray certificateData = file.readAll();
+        QVERIFY(!certificateData.isEmpty());
+        // certutil -D removes only the certificate, retaining its token key.
+        QVERIFY(runCertutil({ QStringLiteral("-D"), QStringLiteral("-d"), database, QStringLiteral("-n"), nickname }));
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importCertificate(
+                     m_nssDb.path(), certificateData, nickname, &error),
+                 qPrintable(error));
+        const auto cms =
+            ::Mu::Plugin::Crypto::createDetachedCmsFromDigest(nickname, { }, std::array<std::uint8_t, 32> { });
+        QCOMPARE(cms.result, ::Mu::Model::SigningResult::Success);
+
+        const auto certificates = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto certificate = findManagedCertificate(certificates, nickname.toStdString());
+        QVERIFY(certificate != certificates.cend());
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), certificate->identity, &error),
+            qPrintable(error));
     }
 
     void rejectsInvalidSelfSignedCertificateInput()
