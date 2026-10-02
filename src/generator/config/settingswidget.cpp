@@ -6,6 +6,7 @@
 #include <KLineEdit>
 #include <KLocalizedString>
 #include <QApplication>
+#include <QLayout>
 #include <QTimer>
 #include <QWindow>
 
@@ -92,11 +93,16 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
 
     m_mupdfsw->kcfg_EpubCustomCss->setVisible(false);
     updateCustomCssButtonText();
-    // Freeze repaints while the 140px editor enters/leaves the layout so the
-    // tab shows a single clean frame instead of intermediate relayout flicker.
+    // Settle the nested layouts before repainting so queued layout requests
+    // cannot expose intermediate positions when the editor is shown or hidden.
     connect(m_mupdfsw->customCssButton, &QPushButton::toggled, this, [this](bool checked) {
         setUpdatesEnabled(false);
         m_mupdfsw->kcfg_EpubCustomCss->setVisible(checked);
+        for (QWidget* container = m_mupdfsw->kcfg_EpubCustomCss->parentWidget(); container;
+             container = container->parentWidget()) {
+            if (QLayout* layout = container->layout())
+                layout->activate();
+        }
         setUpdatesEnabled(true);
     });
     connect(m_mupdfsw->kcfg_EpubCustomCss,
