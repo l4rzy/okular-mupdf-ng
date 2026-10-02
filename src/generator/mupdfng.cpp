@@ -1484,6 +1484,9 @@ Okular::ExportFormat::List Main::exportFormats() const
     if (m_document.type == Model::DocumentType::Epub)
         formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
     if (m_document.type == Model::DocumentType::Pdf) {
+        const QMimeType pdf = QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"));
+        if (pdf.isValid())
+            formats.append(Okular::ExportFormat(i18n("Flattened PDF"), pdf));
         // Standard PDF annotations can be dumped to an XFDF interchange file.
         // Advertised as application/xml because XFDF lacks a portable MIME
         // registration on many systems; the file dialog then filters *.xml.
@@ -1498,7 +1501,15 @@ Okular::ExportFormat::List Main::exportFormats() const
 bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 {
     if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
-        if (m_document.type != Model::DocumentType::Epub || !workerReady())
+        if (!workerReady())
+            return false;
+        if (m_document.type == Model::DocumentType::Pdf) {
+            const bool success = m_worker.flattenPdfToFile(fileName);
+            if (success)
+                Q_EMIT notice(i18n("Export to flattened PDF finished."), NoticeMs);
+            return success;
+        }
+        if (m_document.type != Model::DocumentType::Epub)
             return false;
         // The background export runs in an isolated worker job, so the
         // document stays fully usable while it completes. Without a source

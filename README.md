@@ -104,6 +104,7 @@ and the source-tree layout.
 | **Cert Manager** | NSS certificate manager; generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
 | **Annotations export** | Export PDF annotations to XFDF | ✓ | ✗ |
+| **Flattened PDF export** | Bake annotations and form fields into PDF page content | ✓ | ✗ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
 | **Printing & Exporting** | Print & Export | ✓ | ✓ |
 | **PDF layers** | Toggle optional content in the Layers sidebar | ✓ | ✓ (PDF) |

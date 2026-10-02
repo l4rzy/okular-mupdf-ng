@@ -94,6 +94,7 @@ public:
     bool removeAnnotation(int page, const QString& handle);
     bool saveToFile(const QString& target);
     bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    bool flattenPdfToFile(const QString& target, const QVector<int>& pages = { });
     /// Submits an asynchronous background PDF export and returns its job id
     /// immediately; the output file is finalized when the worker reports
     /// completion via pdfExportFinished. Returns nullopt when no source path

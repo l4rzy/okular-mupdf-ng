@@ -188,6 +188,261 @@ private slots:
         QVERIFY2(content.startsWith("%PDF-"), content.constData());
     }
 
+    void flattenPreservesLiveEdits_data()
+    {
+        QTest::addColumn<bool>("form");
+        QTest::addColumn<bool>("encrypted");
+        QTest::newRow("highlight") << false << false;
+        QTest::newRow("filled-form") << true << false;
+        QTest::newRow("encrypted-highlight") << false << true;
+    }
+
+    void flattenPreservesLiveEdits()
+    {
+        QFETCH(bool, form);
+        QFETCH(bool, encrypted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath("source.pdf");
+        const QString target = directory.filePath("flattened.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        fz_context* context = document.context();
+        if (form)
+            createEditableTextFieldPDF(context, source);
+        else if (encrypted) {
+            const QString plain = directory.filePath("plain.pdf");
+            createTextPDF(context, plain);
+            pdf_document* pdf = pdf_open_document(context, QFile::encodeName(plain).constData());
+            pdf_write_options options = pdf_default_write_options;
+            options.do_encrypt = PDF_ENCRYPT_AES_128;
+            std::strcpy(options.upwd_utf8, "secret");
+            std::strcpy(options.opwd_utf8, "secret");
+            pdf_save_document(context, pdf, QFile::encodeName(source).constData(), &options);
+            pdf_drop_document(context, pdf);
+        } else
+            createTextPDF(context, source);
+        QFile input(source);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        const QByteArray original = input.readAll();
+        input.seek(0);
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "source.pdf", &error), error.c_str());
+        if (encrypted)
+            QVERIFY2(document.unlock("secret", &error), error.c_str());
+        const auto before = renderPdfPage(document, 0, 612, 792, &error);
+        if (form) {
+            const auto fields = document.pageDetails(0, &error).formFields;
+            QCOMPARE(fields.size(), size_t(1));
+            std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+            QVERIFY2(document.updateFormField(0,
+                                              fields.front().pdfObjectNumber,
+                                              ::Mu::Model::FormTextValue { "Flatten test" },
+                                              &mutations,
+                                              &error),
+                     error.c_str());
+        } else {
+            ::Mu::Model::Annotation annotation;
+            annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
+            annotation.uuid = "flatten-highlight";
+            annotation.x0 = .1;
+            annotation.y0 = .3;
+            annotation.x1 = .4;
+            annotation.y1 = .35;
+            annotation.color = 0xffffff00U;
+            annotation.extras.quads.push_back({ { .1, .3 }, { .4, .3 }, { .4, .35 }, { .1, .35 } });
+            std::int32_t object = -1;
+            QVERIFY2(document.addAnnotation(0, annotation, &object, &error), error.c_str());
+        }
+        const auto edited = renderPdfPage(document, 0, 612, 792, &error);
+        QVERIFY(!edited.empty());
+        QVERIFY(before != edited);
+        pdf_document* live = pdf_specifics(context, document.document());
+        QVERIFY(pdf_has_unsaved_changes(context, live));
+        const auto liveDetails = document.pageDetails(0, &error);
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        QVERIFY2(document.flattenPdfFd(fd, { }, &error), error.c_str());
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        QVERIFY(pdf_has_unsaved_changes(context, live));
+        QCOMPARE(renderPdfPage(document, 0, 612, 792, &error), edited);
+        QCOMPARE(document.pageDetails(0, &error).formFields.size(), liveDetails.formFields.size());
+        QCOMPARE(document.extractAnnotations(0, &error).size(), liveDetails.annotations.size());
+        input.seek(0);
+        QCOMPARE(input.readAll(), original);
+
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reloaded;
+        QVERIFY2(reloaded.openFd(::dup(output.handle()), "flattened.pdf", &error), error.c_str());
+        QVERIFY(!reloaded.isLocked());
+        QVERIFY(reloaded.pageDetails(0, &error).formFields.empty());
+        QVERIFY(reloaded.extractAnnotations(0, &error).empty());
+        const auto flattened = renderPdfPage(reloaded, 0, 612, 792, &error);
+        // Moving an appearance into page content can change raster rounding
+        // by up to two channel levels; missing or displaced content must fail.
+        QVERIFY(flattened.size() == edited.size());
+        QVERIFY(std::equal(flattened.begin(), flattened.end(), edited.begin(), [](auto actual, auto expected) {
+            return std::abs(static_cast<int>(actual) - static_cast<int>(expected)) <= 2;
+        }));
+        QVERIFY(!reloaded.textBoxes(0, 72, 72, 1000, true, &error).empty());
+
+        // A failed write must also leave the live annotations and fields intact.
+        const int fullFd = ::open("/dev/full", O_WRONLY);
+        QVERIFY(fullFd >= 0);
+        QVERIFY(!document.flattenPdfFd(fullFd, { }, &error));
+        QVERIFY(::fcntl(fullFd, F_GETFD) == -1 && errno == EBADF);
+        error.clear();
+        QCOMPARE(renderPdfPage(document, 0, 612, 792, &error), edited);
+        QVERIFY(pdf_has_unsaved_changes(context, live));
+        if (form) {
+            const auto field = document.pageDetails(0, &error).formFields.front();
+            std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+            QVERIFY(document.updateFormField(
+                0, field.pdfObjectNumber, ::Mu::Model::FormTextValue { "Still editable" }, &mutations, &error));
+        } else {
+            const auto annotations = document.extractAnnotations(0, &error);
+            QVERIFY(!annotations.empty());
+            QVERIFY(document.removeAnnotation(0, annotations.front().pdfObjectNumber, &error));
+        }
+    }
+
+    void flattenUnavailableDocument_data()
+    {
+        QTest::addColumn<QString>("state");
+        QTest::newRow("closed") << QStringLiteral("closed");
+        QTest::newRow("locked") << QStringLiteral("locked");
+        QTest::newRow("xfa") << QStringLiteral("xfa");
+    }
+
+    void flattenUnavailableDocument()
+    {
+        QFETCH(QString, state);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY(!document.flattenPdfFd(-1, { }, &error));
+        if (state != QLatin1String("closed")) {
+            const QString source = directory.filePath("source.pdf");
+            if (state == QLatin1String("locked"))
+                createEncryptedPDF(document.context(), source, QStringLiteral("secret"));
+            else
+                createTextPDF(document.context(), source);
+            QFile input(source);
+            QVERIFY(input.open(QIODevice::ReadOnly));
+            QVERIFY(document.openFd(::dup(input.handle()), "source.pdf", &error));
+            if (state == QLatin1String("xfa")) {
+                fz_context* context = document.context();
+                pdf_document* pdf = pdf_specifics(context, document.document());
+                pdf_obj* root = pdf_dict_get(context, pdf_trailer(context, pdf), PDF_NAME(Root));
+                pdf_obj* form = pdf_dict_put_dict(context, root, PDF_NAME(AcroForm), 1);
+                pdf_dict_put_text_string(context, form, PDF_NAME(XFA), "unsupported XFA data");
+            }
+        }
+        const int fd =
+            ::open(QFile::encodeName(directory.filePath("export.pdf")).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        error.clear();
+        QVERIFY(!document.flattenPdfFd(fd, { }, &error));
+        QVERIFY(!error.empty());
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        if (state == QLatin1String("xfa"))
+            QCOMPARE(document.metadata({ "hasXfaForm" }).values.at("hasXfaForm"), std::string("true"));
+    }
+
+    void flattenPreservesLayers()
+    {
+        ::Mu::Worker::Engine::PdfDocument document;
+        QFile input(QStringLiteral(TEST_SIGNATURE_PDF_DIR "/layers.pdf"));
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY(document.openFd(::dup(input.handle()), "layers.pdf", &error));
+        const auto layers = document.layers(&error);
+        QVERIFY(!layers.empty());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString target = directory.filePath("layers.pdf");
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        QVERIFY2(document.flattenPdfFd(fd, { }, &error), error.c_str());
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reloaded;
+        QVERIFY(reloaded.openFd(::dup(output.handle()), "layers.pdf", &error));
+        const auto exportedLayers = reloaded.layers(&error);
+        QCOMPARE(exportedLayers.size(), layers.size());
+        for (size_t index = 0; index < layers.size(); ++index) {
+            QCOMPARE(exportedLayers[index].name, layers[index].name);
+            QCOMPARE(exportedLayers[index].selected, layers[index].selected);
+        }
+        QCOMPARE(renderPdfPage(reloaded, 0, 612, 792, &error), renderPdfPage(document, 0, 612, 792, &error));
+    }
+
+    void flattenPageSelection_data()
+    {
+        QTest::addColumn<QList<int>>("selection");
+        QTest::addColumn<bool>("success");
+        QTest::newRow("all") << QList<int> { } << true;
+        QTest::newRow("one") << QList<int> { 1 } << true;
+        QTest::newRow("reordered") << QList<int> { 1, 0 } << true;
+        QTest::newRow("negative") << QList<int> { -1 } << false;
+        QTest::newRow("out-of-range") << QList<int> { 2 } << false;
+        QTest::newRow("too-many") << QList<int> { 0, 1, 0 } << false;
+    }
+
+    void flattenPageSelection()
+    {
+        QFETCH(QList<int>, selection);
+        QFETCH(bool, success);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        ::Mu::Worker::Engine::PdfDocument document;
+        const QString source = directory.filePath("pages.pdf");
+        createMultiPagePDF(document.context(), source, 2);
+        QFile input(source);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY(document.openFd(::dup(input.handle()), "pages.pdf", &error));
+        fz_set_metadata(document.context(), document.document(), "info:Title", "Flattened title");
+        fz_outline_iterator* iterator = fz_new_outline_iterator(document.context(), document.document());
+        char title[] = "Second page";
+        char uri[] = "#page=2";
+        fz_outline_item item { };
+        item.title = title;
+        item.uri = uri;
+        fz_outline_iterator_insert(document.context(), iterator, &item);
+        fz_drop_outline_iterator(document.context(), iterator);
+        pdf_page* page = pdf_load_page(document.context(), pdf_specifics(document.context(), document.document()), 1);
+        fz_link* link = fz_create_link(
+            document.context(), reinterpret_cast<fz_page*>(page), { 10, 10, 50, 50 }, "https://example.com/");
+        fz_drop_link(document.context(), link);
+        pdf_drop_page(document.context(), page);
+        const QString target = directory.filePath("export.pdf");
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        const std::vector<int> pages(selection.begin(), selection.end());
+        QCOMPARE(document.flattenPdfFd(fd, pages, &error), success);
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        QCOMPARE(document.pageCount(), 2);
+        QCOMPARE(document.outline().size(), size_t(1));
+        if (!success)
+            return;
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reloaded;
+        QVERIFY2(reloaded.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
+        QCOMPARE(reloaded.pageCount(), selection.isEmpty() ? 2 : static_cast<int>(selection.size()));
+        QCOMPARE(reloaded.metadata({ "title" }).values.at("title"), std::string("Flattened title"));
+        QCOMPARE(reloaded.outline().size(), size_t(1));
+        const int linkPage = selection.isEmpty() ? 1 : static_cast<int>(selection.indexOf(1));
+        QCOMPARE(reloaded.extractLinks(linkPage).size(), size_t(1));
+        for (int index = 0; index < reloaded.pageCount(); ++index) {
+            const int originalPage = selection.isEmpty() ? index : selection.at(index);
+            QCOMPARE(renderPdfPage(reloaded, index, 612, 792, &error),
+                     renderPdfPage(document, originalPage, 612, 792, &error));
+        }
+    }
+
     void highlightAddRendersAndRoundTrips()
     {
         QTemporaryDir directory;

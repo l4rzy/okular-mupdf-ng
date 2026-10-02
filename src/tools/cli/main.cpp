@@ -250,8 +250,11 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
 int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
-    if (Mu::Plugin::Util::documentTypeForFile(file) != Mu::Model::DocumentType::Epub) {
-        reportError(QStringLiteral("PDF export only supports EPUB documents"));
+    const auto type = options.flatten ? Mu::Model::DocumentType::Pdf : Mu::Model::DocumentType::Epub;
+    if (Mu::Plugin::Util::documentTypeForFile(file) != type) {
+        reportError(options.flatten
+                        ? QStringLiteral("flattened PDF export only supports PDF documents")
+                        : QStringLiteral("PDF export only supports EPUB documents; use --flatten for PDF input"));
         return ExitJobFailed;
     }
     if (options.useLayout) {
@@ -267,8 +270,7 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
         }
         info(QStringLiteral("Applied Okular EPUB layout settings"));
     }
-    const qsizetype pageCount =
-        openDocument(client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Epub);
+    const qsizetype pageCount = openDocument(client, file, QString::fromStdString(options.shared.password), type);
     if (pageCount < 0)
         return ExitJobFailed;
     QVector<int> pages;
@@ -285,9 +287,10 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
                          QStringLiteral("page"),
                          QStringLiteral("pages")))
              .arg(file));
-    // withReferences=true selects the EPUB export path (metadata, links, TOC),
-    // matching Main::exportTo in the generator; false would be a plain page copy.
-    if (!client.savePdfToFile(QString::fromStdString(options.output), pages, /*withReferences=*/true)) {
+    const QString output = QString::fromStdString(options.output);
+    const bool success = options.flatten ? client.flattenPdfToFile(output, pages)
+                                         : client.savePdfToFile(output, pages, /*withReferences=*/true);
+    if (!success) {
         reportError(QStringLiteral("export failed"));
         return ExitJobFailed;
     }

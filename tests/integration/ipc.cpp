@@ -14,6 +14,7 @@
 #include <QTest>
 
 #include <algorithm>
+#include <cstdlib>
 #include <optional>
 
 #include "plugin/util/temp_dir.hpp"
@@ -252,6 +253,54 @@ private slots:
         QVERIFY(output.open(QIODevice::ReadOnly));
         QVERIFY(output.read(5) == "%PDF-");
 
+        QVERIFY(m_client.close());
+    }
+
+    void flattenedExportIsAtomicAndIncludesLiveAnnotations()
+    {
+        QList<::Mu::Model::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, QString(), pages), ::Mu::Model::OpenStatus::Success);
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
+        annotation.uuid = "ipc-flatten";
+        annotation.x0 = .1;
+        annotation.y0 = .3;
+        annotation.x1 = .4;
+        annotation.y1 = .35;
+        annotation.color = 0xffffff00U;
+        annotation.extras.quads.push_back({ { .1, .3 }, { .4, .3 }, { .4, .35 }, { .1, .35 } });
+        const auto handle = m_client.addAnnotation(0, annotation);
+        QVERIFY(handle.has_value());
+        const QImage edited = m_client.render(0, 612, 792);
+        QVERIFY(!edited.isNull());
+        const auto expected = imageHash(edited);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString target = directory.filePath("flattened.pdf");
+        QFile sentinel(target);
+        QVERIFY(sentinel.open(QIODevice::WriteOnly));
+        sentinel.write("existing destination");
+        sentinel.close();
+        QVERIFY(!m_client.flattenPdfToFile(target, { -1 }));
+        QVERIFY(sentinel.open(QIODevice::ReadOnly));
+        QCOMPARE(sentinel.readAll(), QByteArray("existing destination"));
+        sentinel.close();
+        QVERIFY(m_client.flattenPdfToFile(target));
+        QCOMPARE(imageHash(m_client.render(0, 612, 792)), expected);
+        QVERIFY(m_client.removeAnnotation(0, QString::fromStdString(handle->value)));
+        QVERIFY(m_client.close());
+        QCOMPARE(m_client.open(target, QString(), pages), ::Mu::Model::OpenStatus::Success);
+        QVERIFY(pages.front().annotations.empty());
+        QVERIFY(pages.front().formFields.empty());
+        const QImage flattened = m_client.render(0, 612, 792);
+        QCOMPARE(flattened.size(), edited.size());
+        QCOMPARE(flattened.sizeInBytes(), edited.sizeInBytes());
+        QVERIFY(std::equal(flattened.constBits(),
+                           flattened.constBits() + flattened.sizeInBytes(),
+                           edited.constBits(),
+                           [](auto actual, auto expected) {
+                               return std::abs(static_cast<int>(actual) - static_cast<int>(expected)) <= 2;
+                           }));
         QVERIFY(m_client.close());
     }
 

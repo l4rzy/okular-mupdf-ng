@@ -143,6 +143,100 @@ bool PdfDocument::saveFd(int fd, std::string* error)
     return saved;
 }
 
+// Flatten a grafted catalog rather than serializing or baking the live document.
+// The shared graft map preserves cyclic references, forms, outlines and resources,
+// while reading the current objects includes edits that have not been saved yet.
+bool PdfDocument::flattenPdfFd(int fd, const std::vector<int>& pages, std::string* error)
+{
+    if (fd < 0)
+        return fail(error, "output FD is invalid");
+    if (!m_document || m_locked) {
+        ::close(fd);
+        return fail(error, "document cannot be flattened");
+    }
+    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
+        ::close(fd);
+        return fail(error, "export page selection is too large");
+    }
+    for (const int page : pages) {
+        if (page < 0 || page >= m_pageCount) {
+            ::close(fd);
+            return fail(error, "export page is out of range");
+        }
+    }
+
+    FILE* volatile file = ::fdopen(fd, "wb");
+    if (!file) {
+        ::close(fd);
+        return fail(error, "could not adopt output FD");
+    }
+    fz_output* volatile output = nullptr;
+    pdf_document* volatile copy = nullptr;
+    pdf_graft_map* volatile map = nullptr;
+    volatile bool saved = false;
+    fz_try(m_context)
+    {
+        pdf_document* source = pdf_specifics(m_context, m_document);
+        copy = pdf_create_document(m_context);
+        copy->version = source->version;
+        map = pdf_new_graft_map(m_context, copy);
+        pdf_obj* sourceTrailer = pdf_trailer(m_context, source);
+        if (pdf_dict_getp(m_context, sourceTrailer, "Root/AcroForm/XFA"))
+            fz_throw(m_context, FZ_ERROR_ARGUMENT, "XFA forms cannot be flattened");
+        pdf_obj* copyTrailer = pdf_trailer(m_context, copy);
+        pdf_dict_put_drop(
+            m_context,
+            copyTrailer,
+            PDF_NAME(Root),
+            pdf_graft_mapped_object(m_context, map, pdf_dict_get(m_context, sourceTrailer, PDF_NAME(Root))));
+        pdf_obj* info = pdf_dict_get(m_context, sourceTrailer, PDF_NAME(Info));
+        if (info)
+            pdf_dict_put_drop(m_context, copyTrailer, PDF_NAME(Info), pdf_graft_mapped_object(m_context, map, info));
+        if (!pages.empty())
+            pdf_rearrange_pages(
+                m_context, copy, static_cast<int>(pages.size()), pages.data(), PDF_CLEAN_STRUCTURE_KEEP);
+        pdf_bake_document(m_context, copy, 1, 1);
+
+        // MuPDF can abandon a failed bake without rethrowing. Never publish an
+        // interactive document as a successful flattened export. Links remain.
+        if (pdf_dict_getp(m_context, pdf_trailer(m_context, copy), "Root/AcroForm"))
+            fz_throw(m_context, FZ_ERROR_GENERIC, "form flattening did not complete");
+        for (int page = 0; page < pdf_count_pages(m_context, copy); ++page) {
+            pdf_obj* annots = pdf_dict_get(m_context, pdf_lookup_page_obj(m_context, copy, page), PDF_NAME(Annots));
+            for (int index = 0; index < pdf_array_len(m_context, annots); ++index) {
+                pdf_obj* annot = pdf_array_get(m_context, annots, index);
+                if (!pdf_name_eq(m_context, pdf_dict_get(m_context, annot, PDF_NAME(Subtype)), PDF_NAME(Link)))
+                    fz_throw(m_context, FZ_ERROR_GENERIC, "annotation flattening did not complete");
+            }
+        }
+
+        pdf_write_options options = pdf_default_write_options;
+        options.do_garbage = 1;
+        options.do_encrypt = PDF_ENCRYPT_NONE;
+        output = fz_new_output_with_file_ptr(m_context, file);
+        pdf_write_document(m_context, copy, output, &options);
+        fz_flush_output(m_context, output);
+        if (::fflush(file) != 0 || ::fsync(::fileno(file)) != 0)
+            fz_throw(m_context, FZ_ERROR_GENERIC, "failed to flush flattened PDF output");
+        fz_close_output(m_context, output);
+        fz_drop_output(m_context, output);
+        output = nullptr;
+        file = nullptr;
+        saved = true;
+    }
+    fz_always(m_context)
+    {
+        pdf_drop_graft_map(m_context, map);
+        pdf_drop_document(m_context, copy);
+    }
+    fz_catch(m_context)
+    {
+        closeAndDropOutput(m_context, output, file);
+        fail(error, fz_caught_message(m_context));
+    }
+    return saved;
+}
+
 // =============================================================================
 // Page Subset PDF Export
 // =============================================================================

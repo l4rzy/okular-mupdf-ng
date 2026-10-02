@@ -923,6 +923,13 @@ struct SavePdfRequest {
     bool withReferences = false;
 };
 
+/// Bakes annotations and widgets into a copy of the live PDF document.
+struct FlattenPdfRequest {
+    FileTransfer file;
+    /// Empty selects all pages; otherwise zero-based pages in output order.
+    std::vector<std::int32_t> pages;
+};
+
 /// Exports the open document to PDF in a background job using an isolated
 /// copy of the source file, writing to a transferred output descriptor.
 /// The session document is untouched; completion is reported asynchronously.
@@ -1011,7 +1018,8 @@ using RequestPayload = std::variant<PingRequest,
                                     ExportPdfAsyncRequest,
                                     FormButtonClickRequest,
                                     LayersRequest,
-                                    SetLayerRequest>;
+                                    SetLayerRequest,
+                                    FlattenPdfRequest>;
 
 /// Correlated request envelope sent over the control channel.
 struct RequestMessage {

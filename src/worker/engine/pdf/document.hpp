@@ -110,6 +110,7 @@ public:
     [[nodiscard]] bool removeAnnotation(int page, std::int32_t objectNumber, std::string* error = nullptr) override;
     [[nodiscard]] bool saveFd(int fd, std::string* error = nullptr) override;
     [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
+    [[nodiscard]] bool flattenPdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
     [[nodiscard]] bool signFd(const Model::SignRequest& request,
                               CmsCallback callback,
                               int outputFd,

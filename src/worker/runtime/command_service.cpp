@@ -110,6 +110,10 @@ std::optional<ResponseMessage> validateInboundRequest(std::uint64_t id, const Re
                                           operation = "save_pdf";
                                           return isValidFileTransfer(request.file, &reason);
                                       },
+                                      [&](const FlattenPdfRequest& request) {
+                                          operation = "flatten_pdf";
+                                          return isValidFileTransfer(request.file, &reason);
+                                      },
                                       [&](const ExportPdfAsyncRequest& request) {
                                           operation = "export_pdf_async";
                                           return isValidFileTransfer(request.output, &reason)
@@ -396,6 +400,17 @@ ResponseMessage CommandService::saveFdResponse(std::uint64_t id, int fd)
     if (!m_document->saveFd(ownedFd.release(), &error))
         return failure(id, ErrorCode::Internal, "save", error);
 
+    return success(id);
+}
+
+ResponseMessage CommandService::flattenPdfFdResponse(std::uint64_t id, const FlattenPdfRequest& payload, int fd)
+{
+    Sys::FileDescriptor ownedFd(fd);
+    if (!hasOpenDocument())
+        return failure(id, ErrorCode::NotOpen, "flatten_pdf", "no document is open");
+    std::string error;
+    if (!m_document->flattenPdfFd(ownedFd.release(), payload.pages, &error))
+        return failure(id, ErrorCode::Internal, "flatten_pdf", error);
     return success(id);
 }
 
@@ -1210,6 +1225,11 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
                 return dispatchWithFd(payload.withReferences ? "export_pdf" : "save_pdf",
                                       payload.file.transferId,
                                       [&](int fd) { return savePdfFdResponse(request.id, payload, fd); });
+            },
+            [&](const FlattenPdfRequest& payload) {
+                return dispatchWithFd("flatten_pdf", payload.file.transferId, [&](int fd) {
+                    return flattenPdfFdResponse(request.id, payload, fd);
+                });
             },
             [&](const ExportPdfAsyncRequest& payload) {
                 ResponseMessage outErr;

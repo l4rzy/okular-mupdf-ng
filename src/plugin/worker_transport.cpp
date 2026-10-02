@@ -758,6 +758,12 @@ bool WorkerTransport::saveToFile(const QString& target)
     return writeFile(SaveRequest { }, target);
 }
 
+bool WorkerTransport::flattenPdfToFile(const QString& target, const QVector<int>& pages)
+{
+    std::vector<std::int32_t> pageList(pages.begin(), pages.end());
+    return writeFile(FlattenPdfRequest { { }, std::move(pageList) }, target);
+}
+
 bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences)
 {
     std::vector<std::int32_t> pageList;

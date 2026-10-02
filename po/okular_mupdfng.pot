@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-02 18:15-0500\n"
+"POT-Creation-Date: 2026-10-02 17:07-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,300 +18,300 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: src/generator/config/settingswidget.cpp:35
+#: src/generator/config/settingswidget.cpp:36
 msgid ""
 "PDF form JavaScript support was disabled when this application was built."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:40
-#: src/generator/config/settingswidget.cpp:48
-msgid "Disabled"
-msgstr ""
-
 #: src/generator/config/settingswidget.cpp:41
 #: src/generator/config/settingswidget.cpp:49
-msgid "Minimum"
+msgid "Disabled"
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:42
 #: src/generator/config/settingswidget.cpp:50
-msgid "Low"
+msgid "Minimum"
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:43
 #: src/generator/config/settingswidget.cpp:51
-msgid "Medium"
+msgid "Low"
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:44
 #: src/generator/config/settingswidget.cpp:52
+msgid "Medium"
+msgstr ""
+
+#: src/generator/config/settingswidget.cpp:45
+#: src/generator/config/settingswidget.cpp:53
 msgid "High"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:56
+#: src/generator/config/settingswidget.cpp:57
 msgid "Speed"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:57
-#: src/generator/config/settingswidget.cpp:71
+#: src/generator/config/settingswidget.cpp:58
+#: src/generator/config/settingswidget.cpp:72
 msgid "Balanced"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:58
+#: src/generator/config/settingswidget.cpp:59
 msgid "Quality"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:62
+#: src/generator/config/settingswidget.cpp:63
 msgid "32 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:63
+#: src/generator/config/settingswidget.cpp:64
 msgid "64 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:64
+#: src/generator/config/settingswidget.cpp:65
 msgid "128 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:65
+#: src/generator/config/settingswidget.cpp:66
 msgid "256 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:69
+#: src/generator/config/settingswidget.cpp:70
 msgid "Off"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:70
+#: src/generator/config/settingswidget.cpp:71
 msgid "Conservative"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:72
+#: src/generator/config/settingswidget.cpp:73
 msgid "Aggressive"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:76
+#: src/generator/config/settingswidget.cpp:77
 msgid "Relaxed"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:77
+#: src/generator/config/settingswidget.cpp:78
 msgid "Strict"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:81
+#: src/generator/config/settingswidget.cpp:82
 msgid "A5 (148 × 210 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:82
+#: src/generator/config/settingswidget.cpp:83
 msgid "6×9 (152 × 229 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:83
+#: src/generator/config/settingswidget.cpp:84
 msgid "B5 (176 × 250 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:84
+#: src/generator/config/settingswidget.cpp:85
 msgid "Letter (216 × 279 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:88
+#: src/generator/config/settingswidget.cpp:89
 msgid "Default"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:89
+#: src/generator/config/settingswidget.cpp:90
 msgid "Serif"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:90
+#: src/generator/config/settingswidget.cpp:91
 msgid "Sans-serif"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:91
+#: src/generator/config/settingswidget.cpp:92
 msgid "Monospace"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:137
+#: src/generator/config/settingswidget.cpp:143
 msgid "Speed (150dpi)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:138
+#: src/generator/config/settingswidget.cpp:144
 msgid "Balanced (225dpi)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:139
+#: src/generator/config/settingswidget.cpp:145
 msgid "Accuracy (300dpi)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:143
+#: src/generator/config/settingswidget.cpp:149
 msgid "0 (Never)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:144
+#: src/generator/config/settingswidget.cpp:150
 msgid "5 characters"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:145
+#: src/generator/config/settingswidget.cpp:151
 msgid "20 characters"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:146
+#: src/generator/config/settingswidget.cpp:152
 msgid "∞ (Always)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:152
+#: src/generator/config/settingswidget.cpp:158
 msgid "Complete"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:153
+#: src/generator/config/settingswidget.cpp:159
 msgid "Simple"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:187
+#: src/generator/config/settingswidget.cpp:193
 msgid ""
 "Smooth the edges of vector graphics. Higher levels improve smoothness but "
 "require more processing."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:189
+#: src/generator/config/settingswidget.cpp:195
 msgid ""
 "Smooth the edges of text. Higher levels improve smoothness but require more "
 "processing."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:191
+#: src/generator/config/settingswidget.cpp:197
 msgid "Choose the balance between image rendering speed and quality."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:192
+#: src/generator/config/settingswidget.cpp:198
 msgid "Smooth images when scaling them to reduce jagged edges."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:194
+#: src/generator/config/settingswidget.cpp:200
 msgid ""
 "Preview how overlapping inks appear in a PDF. This affects viewing only; "
 "printing is unchanged."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:196
+#: src/generator/config/settingswidget.cpp:202
 msgid ""
 "Limit the worker’s rendering cache memory. This is not a limit on total "
 "process memory usage."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:198
+#: src/generator/config/settingswidget.cpp:204
 msgid "Choose how eagerly the worker releases cached memory while idle."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:200
+#: src/generator/config/settingswidget.cpp:206
 msgid ""
 "Strict refuses to process documents unless the worker sandbox is fully "
 "hardened on this host."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:202
+#: src/generator/config/settingswidget.cpp:208
 msgid ""
 "Show a notification when the worker sandbox cannot provide its full "
 "protection."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:204
+#: src/generator/config/settingswidget.cpp:210
 msgid ""
 "Run JavaScript embedded in PDF forms. Disabled by default; enable only for "
 "documents you trust."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:206
+#: src/generator/config/settingswidget.cpp:212
 msgid ""
 "Select an installed Tesseract model for recognizing text in scanned pages. "
 "OCR is disabled when no usable model is available."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:209
+#: src/generator/config/settingswidget.cpp:215
 msgid "Choose OCR resolution. Higher resolution requires more processing."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:212
+#: src/generator/config/settingswidget.cpp:218
 msgid ""
 "Automatically run OCR when the page contains fewer extracted characters than "
 "the selected threshold."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:213
+#: src/generator/config/settingswidget.cpp:219
 msgid "Show notifications about OCR progress and results."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:215
+#: src/generator/config/settingswidget.cpp:221
 msgid ""
 "Use the default NSS certificate database for signing and validating "
 "signatures."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:217
+#: src/generator/config/settingswidget.cpp:223
 msgid ""
 "Use an existing local NSS certificate database directory for signing and "
 "validating signatures."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:220
+#: src/generator/config/settingswidget.cpp:226
 msgid ""
 "Open the certificate manager for the active NSS database to add, inspect, or "
 "delete certificates."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:222
+#: src/generator/config/settingswidget.cpp:228
 msgid ""
 "Check certificate revocation while validating signatures. An unreachable "
 "OCSP responder does not invalidate signatures."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:225
+#: src/generator/config/settingswidget.cpp:231
 msgid "Choose the appearance of signatures added to the document."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:227
+#: src/generator/config/settingswidget.cpp:233
 msgid "Render the signature appearance timestamp in UTC instead of local time."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:228
+#: src/generator/config/settingswidget.cpp:234
 msgid "Draw a border around the signed signature appearance."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:230
+#: src/generator/config/settingswidget.cpp:236
 msgid ""
 "Preview the selected signature profile and time format using sample identity "
 "data."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:232
+#: src/generator/config/settingswidget.cpp:238
 msgid "Set the base font size for EPUB text."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:234
+#: src/generator/config/settingswidget.cpp:240
 msgid ""
 "Choose the base font family for EPUB text. Default uses the document’s font "
 "selection."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:236
+#: src/generator/config/settingswidget.cpp:242
 msgid "Choose the page dimensions used to lay out EPUB content."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:238
+#: src/generator/config/settingswidget.cpp:244
 msgid "Customize EPUB appearance with CSS rules."
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:249
+#: src/generator/config/settingswidget.cpp:255
 msgid "Custom CSS (configured)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:249 rc.cpp:37
+#: src/generator/config/settingswidget.cpp:255 rc.cpp:37
 msgid "Custom CSS"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:257
+#: src/generator/config/settingswidget.cpp:263
 msgid "NSS database unavailable"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:259
+#: src/generator/config/settingswidget.cpp:265
 msgid "Manage Certificates - %1"
 msgstr ""
 
@@ -712,15 +712,23 @@ msgstr ""
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1492
+#: src/generator/mupdfng.cpp:1489
+msgid "Flattened PDF"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:1495
 msgid "Annotation File (XFDF)"
 msgstr ""
 
 #: src/generator/mupdfng.cpp:1509
+msgid "Export to flattened PDF finished."
+msgstr ""
+
+#: src/generator/mupdfng.cpp:1520
 msgid "Starting to export to PDF."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1525
+#: src/generator/mupdfng.cpp:1536
 msgid "Export to XFDF finished."
 msgstr ""
 

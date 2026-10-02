@@ -63,12 +63,14 @@ QCommandLineParser& setupOcrParser(QCommandLineParser& parser)
 
 QCommandLineParser& setupExportParser(QCommandLineParser& parser)
 {
-    parser.setApplicationDescription("Export a document through the MuPDF worker.\n"
-                                     "The format is inferred from the output suffix: .pdf exports an EPUB document "
-                                     "to PDF, .xfdf/.xml exports a PDF document's annotations as XFDF.");
+    parser.setApplicationDescription(
+        "Export a document through the MuPDF worker.\n"
+        "The format is inferred from the output suffix: .pdf exports an EPUB document "
+        "to PDF (or flattens a PDF with --flatten), .xfdf/.xml exports a PDF document's annotations as XFDF.");
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output file; alternative to the OUTPUT positional.", "file" });
     parser.addOption({ "pages", "Zero-based pages to export, e.g. 0,2,5 or 1-3. Default: all pages.", "list" });
+    parser.addOption({ "flatten", "Bake PDF annotations and form fields into static page content." });
     parser.addOption({ "use-layout",
                        "Apply the configured EPUB layout settings (font size, page size, font family, custom CSS) "
                        "before exporting." });
@@ -185,6 +187,11 @@ Command parseExport(const QStringList& args)
     if (parser.isSet("pages") && !parsePageList(parser.value("pages").toStdString(), options.pages, command.error))
         return command;
     options.useLayout = parser.isSet("use-layout");
+    options.flatten = parser.isSet("flatten");
+    if (options.flatten && (options.format != ExportFormat::Pdf || options.useLayout)) {
+        command.error = "--flatten requires PDF output and cannot be combined with --use-layout";
+        return command;
+    }
     if (!readSharedOptions(parser, options.shared, command.error))
         return command;
     return command;

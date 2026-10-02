@@ -50,6 +50,8 @@ struct ExportOptions {
     std::vector<int> pages;
     /// Apply the persisted EPUB layout settings before exporting.
     bool useLayout = false;
+    /// Bake PDF annotations and form widgets into static page content.
+    bool flatten = false;
     SharedOptions shared;
 };
 

@@ -205,6 +205,11 @@ bool WorkerClient::saveToFile(const QString& t)
     return sync([&](WorkerTransport* transport) { return transport->saveToFile(t); });
 }
 
+bool WorkerClient::flattenPdfToFile(const QString& target, const QVector<int>& pages)
+{
+    return sync([&](WorkerTransport* transport) { return transport->flattenPdfToFile(target, pages); });
+}
+
 bool WorkerClient::savePdfToFile(const QString& t, const QVector<int>& pages, bool withReferences)
 {
     return sync([&](WorkerTransport* transport) { return transport->savePdfToFile(t, pages, withReferences); });

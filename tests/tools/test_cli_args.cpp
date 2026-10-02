@@ -108,6 +108,28 @@ private slots:
         QVERIFY(command.exportOptions.useLayout);
     }
 
+    void exportFlattenOptions_data()
+    {
+        QTest::addColumn<QStringList>("arguments");
+        QTest::addColumn<bool>("valid");
+        QTest::newRow("default") << QStringList { "doc.pdf", "out.pdf" } << true;
+        QTest::newRow("flatten") << QStringList { "doc.pdf", "out.pdf", "--flatten" } << true;
+        QTest::newRow("selected") << QStringList { "doc.pdf", "out.pdf", "--flatten", "--pages", "0,2-4" } << true;
+        QTest::newRow("xfdf") << QStringList { "doc.pdf", "out.xfdf", "--flatten" } << false;
+        QTest::newRow("layout") << QStringList { "doc.pdf", "out.pdf", "--flatten", "--use-layout" } << false;
+    }
+
+    void exportFlattenOptions()
+    {
+        QFETCH(QStringList, arguments);
+        QFETCH(bool, valid);
+        QStringList argv { "mupdfng-cli", "export" };
+        argv.append(arguments);
+        const auto command = Cli::parseArgs(argv);
+        QCOMPARE(command.error.empty(), valid);
+        QCOMPARE(command.exportOptions.flatten, arguments.contains("--flatten"));
+    }
+
     void parsesImportCommand()
     {
         const Cli::Command command = Cli::parseArgs(

@@ -81,6 +81,7 @@ public:
     bool setSettings(const Model::DocumentSettings& settings);
     bool saveToFile(const QString& target);
     bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    bool flattenPdfToFile(const QString& target, const QVector<int>& pages = { });
     /// Submits an asynchronous background PDF export; returns the job id
     /// immediately. Completion arrives via the pdfExportFinished signal.
     std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages) const;

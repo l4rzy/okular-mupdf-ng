@@ -92,6 +92,38 @@ class TestToolsCliXfdf : public QObject {
 
 private slots:
 
+    void flattensPdfThroughCli()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString annotated = directory.filePath("annotated.pdf");
+        const QString xfdf = directory.filePath("notes.xfdf");
+        QFile notes(xfdf);
+        QVERIFY(notes.open(QIODevice::WriteOnly));
+        notes.write("<xfdf xmlns=\"http://ns.adobe.com/xfdf/\"><annots>"
+                    "<square page=\"0\" rect=\"72,72,144,144\" color=\"#FF0000\"/>"
+                    "</annots></xfdf>");
+        notes.close();
+        QString error;
+        QCOMPARE(runCli({ "import", QStringLiteral(TEST_PDF_PATH), xfdf, annotated }, nullptr, &error), 0);
+        const QString before = directory.filePath("before.xfdf");
+        QCOMPARE(runCli({ "export", annotated, before }, nullptr, &error), 0);
+        QVERIFY(countAnnotations(readFile(before)) > 0);
+        const QString flattened = directory.filePath("flattened.pdf");
+        QVERIFY2(runCli({ "export", annotated, flattened, "--flatten", "--pages", "0" }, nullptr, &error) == 0,
+                 qPrintable(error));
+        QVERIFY(readFile(flattened).startsWith("%PDF-"));
+        const QString after = directory.filePath("after.xfdf");
+        QCOMPARE(runCli({ "export", flattened, after }, nullptr, &error), 0);
+        QCOMPARE(countAnnotations(readFile(after)), 0);
+        QCOMPARE(runCli({ "export", annotated, before }, nullptr, &error), 0);
+        QVERIFY(countAnnotations(readFile(before)) > 0);
+
+        const QByteArray destination = readFile(flattened);
+        QVERIFY(runCli({ "export", annotated, flattened, "--flatten", "--pages", "999999" }, nullptr, &error) != 0);
+        QCOMPARE(readFile(flattened), destination);
+    }
+
     void exportsPdfAnnotationsAsWellFormedXfdf()
     {
         QTemporaryDir tempDir;
