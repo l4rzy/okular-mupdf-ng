@@ -22,6 +22,7 @@ jobs:
             ca-certificates \
             clang \
             cmake \
+            dejavu-fonts \
             kf6-extra-cmake-modules \
             file \
             freetype2-devel \
