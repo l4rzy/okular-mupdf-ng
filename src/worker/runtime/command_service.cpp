@@ -41,7 +41,8 @@ std::uint64_t objectKey(int page, std::int32_t objectNumber)
 std::size_t formStringBytes(const ::Mu::Model::FormField& field)
 {
     std::size_t bytes = field.partialName.size() + field.uiName.size() + field.fullyQualifiedName.size()
-        + field.groupName.size() + field.text.size() + field.onState.size();
+        + field.groupName.size() + field.text.size() + field.onState.size() + field.buttonCaption.size()
+        + (field.choices.size() + field.exportValues.size()) * sizeof(std::string);
     for (const auto& choice : field.choices)
         bytes += choice.size();
     for (const auto& exportValue : field.exportValues)
@@ -326,7 +327,7 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
     // or the document closes (closeDocument).
     m_document->setPageCacheSuspended(true);
     for (int page = 0; page < m_document->pageCount(); ++page) {
-        auto details = m_document->pageDetails(page, &error, false);
+        auto details = m_document->pageDetails(page, &error, false, Limit::MaxAggregateFormTextBytes - formTextBytes);
         if (!error.empty()) {
             closeDocument();
             return failure(
@@ -864,7 +865,8 @@ ResponseMessage CommandService::formUpdate(const RequestMessage& r, const FormUp
     std::vector<Engine::DocumentBase::FieldMutation> mutations;
     std::string error;
     if (!m_document->updateFormField(targetPage, targetObject, u.value, &mutations, &error))
-        return failure(r.id, ErrorCode::Internal, "form_update", error);
+        return failure(
+            r.id, isResourceLimitError(error) ? ErrorCode::ResourceLimit : ErrorCode::Internal, "form_update", error);
 
     return success(r.id, formUpdateResponse(mutations));
 }
@@ -881,7 +883,8 @@ ResponseMessage CommandService::formReset(const RequestMessage& r, const FormRes
     std::vector<Engine::DocumentBase::FieldMutation> mutations;
     std::string error;
     if (!m_document->resetForm(it->second.page, it->second.objectNumber, &mutations, &error))
-        return failure(r.id, ErrorCode::Internal, "form_reset", error);
+        return failure(
+            r.id, isResourceLimitError(error) ? ErrorCode::ResourceLimit : ErrorCode::Internal, "form_reset", error);
 
     return success(r.id, formUpdateResponse(mutations));
 }
@@ -898,7 +901,10 @@ ResponseMessage CommandService::formButtonClick(const RequestMessage& r, const F
     std::vector<Engine::DocumentBase::FieldMutation> mutations;
     std::string error;
     if (!m_document->clickFormButton(it->second.page, it->second.objectNumber, &mutations, &error))
-        return failure(r.id, ErrorCode::Internal, "form_button_click", error);
+        return failure(r.id,
+                       isResourceLimitError(error) ? ErrorCode::ResourceLimit : ErrorCode::Internal,
+                       "form_button_click",
+                       error);
 
     return success(r.id, formUpdateResponse(mutations));
 }

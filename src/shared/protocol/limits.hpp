@@ -20,11 +20,11 @@ inline constexpr std::uint32_t MaxSharedFrameBytes = 128U * 1024U * 1024U;
 inline constexpr std::size_t MaxFrameSlotCount = 8;
 
 // --- Serialization & Protocol Decoding Limits ---
-inline constexpr std::uint64_t MaxString = 1U * 1024U * 1024U;
+inline constexpr std::uint64_t MaxString = 1024U * 1024U;
 inline constexpr std::size_t MaxDepth = 32;
 // zpp applies this limit to each decoded container allocation, not to the
 // aggregate allocation of a complete message.
-inline constexpr std::size_t MaxContainerAllocationBytes = 64U * 1024U * 1024U;
+inline constexpr std::size_t MaxContainerAllocationBytes = 32U * 1024U * 1024U;
 
 // --- Rendering & Geometry Limits ---
 inline constexpr int MaxRenderDimension = 16'384;
@@ -53,31 +53,35 @@ inline constexpr std::size_t MaxEpubCustomCssCharacters = 1000;
 inline constexpr std::size_t MaxEpubCustomCssBase64Bytes = 8192;
 
 // --- Annotation Geometry & Extras Limits ---
-inline constexpr std::size_t MaxAnnotationsPerPage = 100'000;
-inline constexpr std::size_t MaxAnnotationsPerDocument = 100'000;
-inline constexpr std::size_t MaxAnnotationPoints = 10'000;
-inline constexpr std::size_t MaxAnnotationQuads = 10'000;
-inline constexpr std::size_t MaxAnnotationInkPaths = 10'000;
+// Leave room for heavily marked-up pages and detailed freehand strokes.
+inline constexpr std::size_t MaxAnnotationsPerPage = 2048;
+inline constexpr std::size_t MaxAnnotationsPerDocument = 32'768;
+inline constexpr std::size_t MaxAnnotationPoints = 4096;
+inline constexpr std::size_t MaxAnnotationQuads = 4096;
+inline constexpr std::size_t MaxAnnotationInkPaths = 1024;
 inline constexpr std::size_t MaxAnnotationCalloutPoints = 3;
-inline constexpr std::size_t MaxAnnotationInkPoints = 100'000;
+inline constexpr std::size_t MaxAnnotationInkPoints = 32'768;
 
 // --- Annotation Metadata Extension Limits ---
-inline constexpr std::size_t MaxAnnotationExtensionDepth = 16;
-inline constexpr std::size_t MaxAnnotationExtensionEntries = 10'000;
+inline constexpr std::size_t MaxAnnotationExtensionDepth = 8;
+inline constexpr std::size_t MaxAnnotationExtensionEntries = 2048;
 
 // --- PDF Layer UI Limits ---
-inline constexpr std::size_t MaxLayerEntries = 10'000;
-inline constexpr std::int32_t MaxLayerDepth = 64;
-inline constexpr std::size_t MaxLayerNameBytes = 64 * 1024;
-inline constexpr std::size_t MaxLayerTextBytes = 1024 * 1024;
+inline constexpr std::size_t MaxLayerEntries = 8192;
+inline constexpr std::int32_t MaxLayerDepth = 32;
+inline constexpr std::size_t MaxLayerNameBytes = 2048;
+inline constexpr std::size_t MaxLayerTextBytes = 256 * 1024;
 
 // --- Form Fields Limits ---
-inline constexpr std::size_t MaxPageFormFields = 10'000;
-inline constexpr std::size_t MaxOpenFormFields = 100'000;
+// Generous bounds for ordinary interactive forms; counts include repeated widgets
+// and the document text budget includes every copied name, value, and option,
+// plus choice/export string objects (including empty options).
+inline constexpr std::size_t MaxPageFormFields = 512;
+inline constexpr std::size_t MaxOpenFormFields = 32'768;
 inline constexpr std::size_t MaxFormFieldStringBytes = 64 * 1024;
 inline constexpr std::size_t MaxAggregateFormTextBytes = 4 * 1024 * 1024;
-inline constexpr std::size_t MaxFormChoices = 10'000;
-inline constexpr std::size_t MaxFormSelectedIndices = 1'000;
+inline constexpr std::size_t MaxFormChoices = 2048;
+inline constexpr std::size_t MaxFormSelectedIndices = 256;
 inline constexpr std::size_t MaxHandleBytes = 128;
 inline constexpr std::size_t MaxFormFieldHandleBytes = MaxHandleBytes;
 inline constexpr std::size_t MaxFormNameBytes = 1024;

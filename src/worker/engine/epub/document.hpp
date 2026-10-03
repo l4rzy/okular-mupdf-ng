@@ -75,7 +75,10 @@ public:
     [[nodiscard]] PageGeometry pageGeometry(int page, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Annotation> extractAnnotations(int page, std::string* error = nullptr) const override;
     [[nodiscard]] PageDetails
-    pageDetails(int page, std::string* error = nullptr, bool includeLinks = true) const override;
+    pageDetails(int page,
+                std::string* error = nullptr,
+                bool includeLinks = true,
+                std::size_t formTextByteLimit = ::Mu::Limit::MaxAggregateFormTextBytes) const override;
     [[nodiscard]] bool renderToBuffer(const RenderRequest& request,
                                       void* dstPixels,
                                       std::size_t dstStride,

@@ -31,7 +31,7 @@ std::vector<Annotation> EpubDocument::extractAnnotations(int, std::string*) cons
     return { };
 }
 
-DocumentBase::PageDetails EpubDocument::pageDetails(int page, std::string* error, bool includeLinks) const
+DocumentBase::PageDetails EpubDocument::pageDetails(int page, std::string* error, bool includeLinks, std::size_t) const
 {
     if (!includeLinks) {
         PageDetails details;

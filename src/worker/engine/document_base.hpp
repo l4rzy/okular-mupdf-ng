@@ -12,6 +12,7 @@
 
 #include "engine/signer.hpp"
 #include "shared/model/types.hpp"
+#include "shared/protocol/limits.hpp"
 
 namespace Mu::Worker::Engine {
 
@@ -121,9 +122,12 @@ public:
     /// Extracts all annotations present on a given page index.
     [[nodiscard]] virtual std::vector<Annotation> extractAnnotations(int page, std::string* error = nullptr) const = 0;
 
-    /// Queries page geometry, annotations, signatures, and links in a single optimized pass.
+    /// Queries page details, bounding copied form text by the caller's remaining document budget.
     [[nodiscard]] virtual PageDetails
-    pageDetails(int page, std::string* error = nullptr, bool includeLinks = true) const = 0;
+    pageDetails(int page,
+                std::string* error = nullptr,
+                bool includeLinks = true,
+                std::size_t formTextByteLimit = ::Mu::Limit::MaxAggregateFormTextBytes) const = 0;
 
     /// Renders a page or page tile directly into a pre-allocated target pixel buffer (RGBA8888).
     [[nodiscard]] virtual bool renderToBuffer(const RenderRequest& request,

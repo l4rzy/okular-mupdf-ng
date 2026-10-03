@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -144,7 +145,51 @@ bool hasJavaScriptClickAction(fz_context* context, pdf_obj* field)
     return actionContainsJavaScript(context, action, visited, count, 0);
 }
 
-void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<std::string>& selected)
+// Charge each owning copy, even when several widgets reference the same PDF string.
+std::string copyFormText(fz_context* context, const char* text, std::size_t maxLength, std::size_t& remainingBytes)
+{
+    if (!text)
+        return { };
+    const std::size_t length = std::strlen(text);
+    if (length > maxLength)
+        fz_throw(context, FZ_ERROR_LIMIT, "resource limit: form string exceeds limit");
+    if (length > remainingBytes)
+        fz_throw(context, FZ_ERROR_LIMIT, "resource limit: document form text size exceeded");
+    remainingBytes -= length;
+    return std::string(text, length);
+}
+
+// Empty choices still allocate string objects. Charge their storage before
+// reserving exactly the bounded option count, avoiding vector growth overhead.
+void reserveFormChoices(fz_context* context, std::vector<std::string>& choices, int count, std::size_t& remainingBytes)
+{
+    const std::size_t bytes = static_cast<std::size_t>(count) * sizeof(std::string);
+    if (bytes > remainingBytes)
+        fz_throw(context, FZ_ERROR_LIMIT, "resource limit: document form text size exceeded");
+    remainingBytes -= bytes;
+    choices.reserve(static_cast<std::size_t>(count));
+}
+
+std::string copyFieldName(fz_context* context, pdf_obj* field, std::size_t& remainingBytes)
+{
+    char* name = pdf_load_field_name(context, field);
+    if (!name)
+        return { };
+    const std::size_t length = std::strlen(name);
+    if (length > Limit::MaxFormNameBytes || length > remainingBytes) {
+        fz_free(context, name);
+        fz_throw(context, FZ_ERROR_LIMIT, "resource limit: form name or document form text size exceeds limit");
+    }
+    remainingBytes -= length;
+    // All MuPDF calls that can throw are complete before establishing ownership.
+    const auto freeName = [context](char* value) {
+        fz_free(context, value);
+    };
+    const std::unique_ptr<char, decltype(freeName)> ownedName(name, freeName);
+    return std::string(name, length);
+}
+
+void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<const char*>& selected)
 {
     if (!value)
         return;
@@ -162,7 +207,7 @@ void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<std::str
         const std::size_t length = std::strlen(text);
         if (length > Limit::MaxFormFieldStringBytes)
             fz_throw(context, FZ_ERROR_LIMIT, "resource limit: form choice value exceeds limit");
-        selected.emplace_back(text, length);
+        selected.push_back(text);
     }
 }
 
@@ -196,7 +241,7 @@ void updateAllPages(fz_context* context, fz_document* document, int pageCount)
 
 } // namespace
 
-bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations)
+bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations, std::string* error)
 {
     if (!mutations)
         return true;
@@ -204,15 +249,17 @@ bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations)
     // Shared fields and JavaScript can affect widgets on any page. Collect
     // only form fields; annotations, signatures, and links are unrelated.
     mutations->clear();
+    std::size_t remainingBytes = Limit::MaxAggregateFormTextBytes;
     for (int currentPage = 0; currentPage < pageCount(); ++currentPage) {
         std::string fieldsError;
         std::vector<FormField> fields;
+        std::size_t pageBytes = remainingBytes;
         fz_page* nativePage = loadPage(currentPage, &fieldsError);
         if (nativePage) {
             fz_try(m_context)
             {
                 const fz_rect bounds = fz_bound_page(m_context, nativePage);
-                fields = extractPageFormFields(nativePage, bounds, currentPage, &fieldsError);
+                fields = extractPageFormFields(nativePage, bounds, currentPage, pageBytes, &fieldsError);
             }
             fz_always(m_context)
             {
@@ -224,9 +271,14 @@ bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations)
             }
         }
         if (!fieldsError.empty()) {
+            if (fieldsError.starts_with("resource limit:")) {
+                mutations->clear();
+                return fail(error, fieldsError.c_str());
+            }
             fz_warn(m_context, "could not collect form fields on page %d: %s", currentPage, fieldsError.c_str());
             continue;
         }
+        remainingBytes = pageBytes;
         for (const auto& field : fields) {
             if (field.type != FormFieldType::PushButton)
                 mutations->push_back({ currentPage, field.pdfObjectNumber, formValue(field) });
@@ -235,8 +287,8 @@ bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations)
     return true;
 }
 
-std::vector<FormField>
-PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, int page, std::string* error) const
+std::vector<FormField> PdfDocument::extractPageFormFields(
+    fz_page* nativePage, const fz_rect& bounds, int page, std::size_t& remainingBytes, std::string* error) const
 {
     if (!m_hasAcroForm)
         return { };
@@ -260,20 +312,10 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
 
     std::vector<FormField> result;
     FormField formField;
-    std::vector<const char*> optionPointers;
-    std::vector<const char*> exportPointers;
-    std::vector<std::string> selectedValues;
+    std::vector<const char*> selectedValues;
 
-    const auto safeText = [this](pdf_obj* object, std::size_t maxLen) -> std::string {
-        if (!object)
-            return { };
-        const char* str = pdf_to_text_string(m_context, object);
-        if (!str)
-            return { };
-        const std::size_t len = std::strlen(str);
-        if (len > maxLen)
-            fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form string exceeds limit");
-        return std::string(str, len);
+    const auto safeText = [this, &remainingBytes](pdf_obj* object, std::size_t maxLen) -> std::string {
+        return copyFormText(m_context, pdf_to_text_string(m_context, object), maxLen, remainingBytes);
     };
 
     // Keep the widget object number and inherited logical field number separate:
@@ -282,9 +324,6 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
     fz_try(m_context)
     {
         for (pdf_annot* widget = firstWidget; widget; widget = pdf_next_widget(m_context, widget)) {
-            if (result.size() >= Limit::MaxPageFormFields)
-                fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: page form field limit exceeded");
-
             const auto widgetType = pdf_widget_type(m_context, widget);
             // Skip signature widgets (handled separately by extractPageSignatures)
             // and unknown widget types.
@@ -292,6 +331,8 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                 && widgetType != PDF_WIDGET_TYPE_RADIOBUTTON && widgetType != PDF_WIDGET_TYPE_COMBOBOX
                 && widgetType != PDF_WIDGET_TYPE_LISTBOX && widgetType != PDF_WIDGET_TYPE_BUTTON)
                 continue;
+            if (result.size() >= Limit::MaxPageFormFields)
+                fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: page form field limit exceeded");
 
             pdf_obj* field = pdf_annot_obj(m_context, widget);
             if (!field)
@@ -308,33 +349,17 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
 
             pdf_obj* fieldHead = resolveFieldHead(m_context, field);
             formField.fieldObjectNumber = pdf_to_num(m_context, fieldHead);
-            if (char* ownerName = pdf_load_field_name(m_context, fieldHead)) {
-                const std::size_t ownerNameLength = std::strlen(ownerName);
-                if (ownerNameLength > Limit::MaxFormNameBytes) {
-                    fz_free(m_context, ownerName);
-                    fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form group name exceeds limit");
-                }
-                formField.groupName = std::string(ownerName, ownerNameLength);
-                fz_free(m_context, ownerName);
-            }
+            formField.groupName = copyFieldName(m_context, fieldHead, remainingBytes);
 
             formField.partialName =
                 safeText(pdf_dict_get_inheritable(m_context, field, PDF_NAME(T)), Limit::MaxFormNameBytes);
             formField.uiName =
                 safeText(pdf_dict_get_inheritable(m_context, field, PDF_NAME(TU)), Limit::MaxFormFieldStringBytes);
 
-            if (char* name = pdf_load_field_name(m_context, field)) {
-                const std::size_t len = std::strlen(name);
-                if (len > Limit::MaxFormNameBytes) {
-                    fz_free(m_context, name);
-                    fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form field name exceeds limit");
-                }
-                formField.fullyQualifiedName = std::string(name, len);
-                fz_free(m_context, name);
-            }
-            if (formField.groupName.empty()) {
-                formField.groupName = formField.fullyQualifiedName;
-            }
+            formField.fullyQualifiedName = copyFieldName(m_context, field, remainingBytes);
+            if (formField.groupName.empty())
+                formField.groupName = copyFormText(
+                    m_context, formField.fullyQualifiedName.c_str(), Limit::MaxFormNameBytes, remainingBytes);
 
             const int annotationFlags = pdf_dict_get_int(m_context, field, PDF_NAME(F));
 
@@ -368,10 +393,7 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
             } else if (widgetType == PDF_WIDGET_TYPE_TEXT) {
                 formField.type = FormFieldType::Text;
                 if (const char* val = pdf_field_value(m_context, field)) {
-                    const std::size_t len = std::strlen(val);
-                    if (len > Limit::MaxFormFieldStringBytes)
-                        fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form field text exceeds limit");
-                    formField.text = std::string(val, len);
+                    formField.text = copyFormText(m_context, val, Limit::MaxFormFieldStringBytes, remainingBytes);
                 }
                 formField.maximumLength = pdf_text_widget_max_len(m_context, widget);
                 formField.multiline = (fieldFlags & PDF_TX_FIELD_IS_MULTILINE) != 0;
@@ -382,7 +404,8 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                 // the on-state name so the plugin can identify the active value.
                 if (pdf_obj* onStateObj = pdf_button_field_on_state(m_context, field)) {
                     if (const char* onState = pdf_to_name(m_context, onStateObj))
-                        formField.onState = onState;
+                        formField.onState =
+                            copyFormText(m_context, onState, Limit::MaxFormFieldStringBytes, remainingBytes);
                 }
                 pdf_obj* valObj = pdf_dict_get(m_context, field, PDF_NAME(AS));
                 if (valObj) {
@@ -397,7 +420,8 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                 // the widget's declared on-state; Off means unselected.
                 if (pdf_obj* onStateObj = pdf_button_field_on_state(m_context, field)) {
                     if (const char* onState = pdf_to_name(m_context, onStateObj))
-                        formField.onState = onState;
+                        formField.onState =
+                            copyFormText(m_context, onState, Limit::MaxFormFieldStringBytes, remainingBytes);
                 }
                 pdf_obj* asObj = pdf_dict_get(m_context, field, PDF_NAME(AS));
                 const char* asState = asObj ? pdf_to_name(m_context, asObj) : nullptr;
@@ -420,15 +444,13 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                 if (numOpts > 0) {
                     if (numOpts > static_cast<int>(Limit::MaxFormChoices))
                         fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form choices count exceeded");
-                    optionPointers.resize(static_cast<std::size_t>(numOpts));
-                    pdf_choice_widget_options(m_context, widget, 0, optionPointers.data());
-                    for (const char* opt : optionPointers) {
-                        if (opt) {
-                            const std::size_t len = std::strlen(opt);
-                            if (len > Limit::MaxFormFieldStringBytes)
-                                fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: choice string exceeds limit");
-                            formField.choices.push_back(std::string(opt, len));
-                        }
+                    // Read and charge one option at a time; the bulk API would
+                    // materialize every PDF string before the budget can reject it.
+                    reserveFormChoices(m_context, formField.choices, numOpts, remainingBytes);
+                    for (int index = 0; index < numOpts; ++index) {
+                        const char* option = choiceOption(m_context, field, index, false);
+                        formField.choices.push_back(
+                            copyFormText(m_context, option, Limit::MaxFormFieldStringBytes, remainingBytes));
                     }
                 }
 
@@ -436,21 +458,23 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                 if (numExports > 0) {
                     if (numExports != numOpts)
                         fz_throw(m_context, FZ_ERROR_FORMAT, "form export values count does not match choices count");
-                    exportPointers.resize(static_cast<std::size_t>(numExports));
-                    pdf_choice_widget_options(m_context, widget, 1, exportPointers.data());
                     bool hasDistinctExports = false;
-                    for (std::size_t i = 0; i < exportPointers.size(); ++i) {
-                        if (exportPointers[i]) {
-                            const std::size_t len = std::strlen(exportPointers[i]);
-                            if (len > Limit::MaxFormFieldStringBytes)
-                                fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: export string exceeds limit");
-                            if (i < formField.choices.size() && formField.choices[i] != exportPointers[i])
-                                hasDistinctExports = true;
-                            formField.exportValues.push_back(std::string(exportPointers[i], len));
+                    for (int index = 0; index < numExports; ++index) {
+                        const char* value = choiceOption(m_context, field, index, true);
+                        if (formField.choices[static_cast<std::size_t>(index)] != value) {
+                            hasDistinctExports = true;
+                            break;
                         }
                     }
-                    if (!hasDistinctExports && formField.exportValues.size() == formField.choices.size()) {
-                        formField.exportValues.clear();
+                    // Identical exports are omitted from the model. Avoid copying
+                    // them into a second array only to discard it afterwards.
+                    if (hasDistinctExports) {
+                        reserveFormChoices(m_context, formField.exportValues, numExports, remainingBytes);
+                        for (int index = 0; index < numExports; ++index) {
+                            const char* value = choiceOption(m_context, field, index, true);
+                            formField.exportValues.push_back(
+                                copyFormText(m_context, value, Limit::MaxFormFieldStringBytes, remainingBytes));
+                        }
                     }
                 }
 
@@ -483,10 +507,7 @@ PdfDocument::extractPageFormFields(fz_page* nativePage, const fz_rect& bounds, i
                 }
 
                 if (const char* val = pdf_field_value(m_context, field)) {
-                    const std::size_t len = std::strlen(val);
-                    if (len > Limit::MaxFormFieldStringBytes)
-                        fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: form choice text value exceeds limit");
-                    formField.text = std::string(val, len);
+                    formField.text = copyFormText(m_context, val, Limit::MaxFormFieldStringBytes, remainingBytes);
                 }
             }
 
@@ -705,7 +726,7 @@ bool PdfDocument::updateFormField(int page,
     // any field changes that the action committed before it failed.
     updateAllPages(m_context, m_document, pageCount());
     clearPageCache();
-    return collectFormMutations(mutations);
+    return collectFormMutations(mutations, error);
 }
 
 bool PdfDocument::resetForm(int page,
@@ -779,7 +800,7 @@ bool PdfDocument::resetForm(int page,
         return false;
     }
 
-    return collectFormMutations(mutations);
+    return collectFormMutations(mutations, error);
 }
 
 bool PdfDocument::clickFormButton(int page,
@@ -869,7 +890,7 @@ bool PdfDocument::clickFormButton(int page,
     // Button scripts can change fields and appearances anywhere in the document.
     updateAllPages(m_context, m_document, pageCount());
     clearPageCache();
-    return collectFormMutations(mutations);
+    return collectFormMutations(mutations, error);
 }
 
 } // namespace Mu::Worker::Engine

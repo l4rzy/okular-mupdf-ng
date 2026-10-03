@@ -53,6 +53,37 @@ bool writePdfObjects(const QString& path, const QList<QByteArray>& objects)
     return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
 }
 
+// Widgets inherit the same field and indirect strings, so repeated references
+// exercise the cost of C++ copies without making the PDF fixture itself large.
+bool writeFormBudgetPdf(const QString& path, const QByteArray& field, int stringLength, int widgets, int pages = 1)
+{
+    QByteArray widgetRefs;
+    for (int index = 0; index < widgets; ++index)
+        widgetRefs += QByteArray::number(10 + index) + " 0 R ";
+    QByteArray pageRefs("3 0 R ");
+    for (int index = 1; index < pages; ++index)
+        pageRefs += QByteArray::number(9 + widgets + index) + " 0 R ";
+    const QByteArray page("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [" + widgetRefs
+                          + "] >>");
+    QList<QByteArray> objects {
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>",
+        "<< /Type /Pages /Count " + QByteArray::number(pages) + " /Kids [" + pageRefs + "] >>",
+        page,
+        "<< /T (f) " + field + " /Kids [" + widgetRefs + "] >>",
+        "<< /Fields [4 0 R] >>",
+        "null",
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 100 40] /Resources << >> /Length 0 >>\nstream\nendstream",
+        "(" + QByteArray(stringLength, 'x') + ")",
+        "(" + QByteArray(stringLength, 'y') + ")"
+    };
+    for (int index = 0; index < widgets; ++index)
+        objects.push_back("<< /Type /Annot /Subtype /Widget /Parent 4 0 R " + field
+                          + " /Rect [50 50 150 90] /AP << /N 7 0 R >> >>");
+    for (int index = 1; index < pages; ++index)
+        objects.push_back(page);
+    return writePdfObjects(path, objects);
+}
+
 std::vector<std::uint8_t>
 renderPdfPage(const ::Mu::Worker::Engine::PdfDocument& doc, int page, int width, int height, std::string* error)
 {
@@ -478,6 +509,207 @@ private slots:
             if (accepted)
                 QCOMPARE(details.formFields.front().currentChoices.size(), static_cast<std::size_t>(selectedCount));
         }
+    }
+
+    void formCountLimits_data()
+    {
+        QTest::addColumn<int>("widgets");
+        QTest::addColumn<int>("choices");
+        QTest::addColumn<bool>("accepted");
+        const int widgetLimit = static_cast<int>(::Mu::Limit::MaxPageFormFields);
+        const int choiceLimit = static_cast<int>(::Mu::Limit::MaxFormChoices);
+        QTest::newRow("widgets-at-limit") << widgetLimit << 0 << true;
+        QTest::newRow("widgets-over-limit") << widgetLimit + 1 << 0 << false;
+        QTest::newRow("choices-at-limit") << 1 << choiceLimit << true;
+        QTest::newRow("choices-over-limit") << 1 << choiceLimit + 1 << false;
+    }
+
+    void formCountLimits()
+    {
+        QFETCH(int, widgets);
+        QFETCH(int, choices);
+        QFETCH(bool, accepted);
+        QByteArray field("/FT /Ch /Ff 131072 /Opt [");
+        for (int index = 0; index < choices; ++index)
+            field += "8 0 R ";
+        field += "]";
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("form-count.pdf");
+        QVERIFY(writeFormBudgetPdf(path, field, 1, widgets));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "form-count.pdf", &error), error.c_str());
+        const auto details = document.pageDetails(0, &error, false);
+        QCOMPARE(details.formFields.size(), accepted ? static_cast<std::size_t>(widgets) : 0u);
+        if (accepted) {
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(details.formFields.front().choices.size(), static_cast<std::size_t>(choices));
+        } else {
+            QVERIFY2(error.starts_with("resource limit:"), error.c_str());
+        }
+    }
+
+    void documentFormCountLimits_data()
+    {
+        QTest::addColumn<int>("pages");
+        QTest::addColumn<bool>("accepted");
+        const int pages = static_cast<int>(::Mu::Limit::MaxOpenFormFields / ::Mu::Limit::MaxPageFormFields);
+        QTest::newRow("document-widgets-at-limit") << pages << true;
+        QTest::newRow("document-widgets-over-limit") << pages + 1 << false;
+    }
+
+    void documentFormCountLimits()
+    {
+        QFETCH(int, pages);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("document-form-count.pdf");
+        QVERIFY(writeFormBudgetPdf(path, "/FT /Tx", 0, ::Mu::Limit::MaxPageFormFields, pages));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Runtime::CommandService service({ });
+        const auto response = service.openFdResponse(1, ::dup(file.handle()), "form-count.pdf");
+        QCOMPARE(response.error.has_value(), !accepted);
+        if (response.error)
+            QCOMPARE(response.error->code, ::Mu::Model::ErrorCode::ResourceLimit);
+    }
+
+    void formTextBudget_data()
+    {
+        QTest::addColumn<QByteArray>("field");
+        QTest::addColumn<int>("stringLength");
+        QTest::addColumn<int>("widgets");
+        QTest::addColumn<qulonglong>("byteLimit");
+        QTest::addColumn<bool>("accepted");
+        // The inherited group, partial, and fully qualified names cost three bytes per widget.
+        QTest::newRow("names-at-budget") << QByteArray("/FT /Tx") << 4 << 1 << qulonglong(3) << true;
+        QTest::newRow("names-over-budget") << QByteArray("/FT /Tx") << 4 << 1 << qulonglong(2) << false;
+        for (const auto& entry : { std::pair { "text", QByteArray("/FT /Tx /V 8 0 R") },
+                                   std::pair { "label", QByteArray("/FT /Tx /TU 8 0 R") },
+                                   std::pair { "caption", QByteArray("/FT /Btn /Ff 65536 /MK << /CA 8 0 R >>") } }) {
+            QTest::newRow((QByteArray(entry.first) + "-at-budget").constData())
+                << entry.second << 4 << 1 << qulonglong(7) << true;
+            QTest::newRow((QByteArray(entry.first) + "-over-budget").constData())
+                << entry.second << 4 << 1 << qulonglong(6) << false;
+        }
+        const qulonglong choiceStorage = 2 * sizeof(std::string);
+        const QByteArray choices("/FT /Ch /Ff 131072 /Opt [8 0 R 8 0 R]");
+        QTest::newRow("choices-at-budget") << choices << 4 << 1 << qulonglong(11 + choiceStorage) << true;
+        QTest::newRow("choices-over-budget") << choices << 4 << 1 << qulonglong(10 + choiceStorage) << false;
+        const QByteArray exports("/FT /Ch /Ff 131072 /Opt [[9 0 R 8 0 R] [9 0 R 8 0 R]]");
+        QTest::newRow("exports-at-budget") << exports << 4 << 1 << qulonglong(19 + 2 * choiceStorage) << true;
+        QTest::newRow("exports-over-budget") << exports << 4 << 1 << qulonglong(18 + 2 * choiceStorage) << false;
+        QTest::newRow("widgets-at-budget") << QByteArray("/FT /Tx /V 8 0 R") << 4 << 2 << qulonglong(14) << true;
+        QTest::newRow("widgets-over-budget") << QByteArray("/FT /Tx /V 8 0 R") << 4 << 2 << qulonglong(13) << false;
+        QByteArray hostileChoices("/FT /Ch /Ff 131072 /Opt [");
+        for (std::size_t index = 0; index < ::Mu::Limit::MaxFormChoices; ++index)
+            hostileChoices += "8 0 R ";
+        hostileChoices += "]";
+        QTest::newRow("large-empty-choices") << hostileChoices << 0 << int(::Mu::Limit::MaxPageFormFields)
+                                             << qulonglong(::Mu::Limit::MaxAggregateFormTextBytes) << false;
+        QTest::newRow("large-aliased-choices") << hostileChoices << int(::Mu::Limit::MaxFormFieldStringBytes) << 1
+                                               << qulonglong(::Mu::Limit::MaxAggregateFormTextBytes) << false;
+    }
+
+    void formTextBudget()
+    {
+        QFETCH(QByteArray, field);
+        QFETCH(int, stringLength);
+        QFETCH(int, widgets);
+        QFETCH(qulonglong, byteLimit);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("form-budget.pdf");
+        QVERIFY(writeFormBudgetPdf(path, field, stringLength, widgets));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "form-budget.pdf", &error), error.c_str());
+        const auto* exceptionTop = document.context()->error.top;
+        for (int repeat = 0; repeat < 2; ++repeat) {
+            error.clear();
+            const auto details = document.pageDetails(0, &error, false, byteLimit);
+            QCOMPARE(details.formFields.size(), accepted ? static_cast<size_t>(widgets) : 0u);
+            QCOMPARE(error.empty(), accepted);
+            if (!accepted)
+                QVERIFY2(error.starts_with("resource limit:"), error.c_str());
+            QCOMPARE(document.context()->error.top, exceptionTop);
+        }
+        if (!accepted) {
+            const auto details = document.pageDetails(0, nullptr, false, byteLimit);
+            QCOMPARE(details.geometry.widthPoints, 0.0);
+        }
+    }
+
+    void formTextBudgetStopsBeforeReadingLaterChoices()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("unread-form-choice.pdf");
+        QVERIFY(writeFormBudgetPdf(path, "/FT /Ch /Ff 131072 /Opt [8 0 R 8 0 R 9 0 R]", 4, 1));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "choices.pdf", &error), error.c_str());
+        (void)document.pageGeometry(0, &error);
+        fz_context* context = document.context();
+        pdf_document* pdf = pdf_specifics(context, document.document());
+        fz_try(context)
+        {
+            pdf_obj* fields = pdf_dict_getp(context, pdf_trailer(context, pdf), "Root/AcroForm/Fields");
+            pdf_obj* options = pdf_dict_get(context, pdf_array_get(context, fields, 0), PDF_NAME(Opt));
+            (void)pdf_to_text_string(context, pdf_array_get(context, options, 0));
+        }
+        fz_catch(context)
+        {
+            error = fz_caught_message(context);
+        }
+        QVERIFY2(error.empty(), error.c_str());
+        // The third choice needs I/O. Exhausting the budget on the second copy
+        // must stop before reading it, rather than materializing the whole array.
+        const auto seek = pdf->file->seek;
+        pdf->file->seek = failPdfSeek;
+        const auto details = document.pageDetails(0, &error, false, 10 + 3 * sizeof(std::string));
+        pdf->file->seek = seek;
+        QVERIFY(details.formFields.empty());
+        QVERIFY2(error.starts_with("resource limit:"), error.c_str());
+    }
+
+    void documentFormTextBudget_data()
+    {
+        QTest::addColumn<int>("pages");
+        QTest::newRow("one-page") << 1;
+        QTest::newRow("two-pages") << 2;
+    }
+
+    void documentFormTextBudget()
+    {
+        QFETCH(int, pages);
+        QByteArray field("/FT /Ch /Ff 131072 /Opt [");
+        const auto choices = ::Mu::Limit::MaxAggregateFormTextBytes / (2 * ::Mu::Limit::MaxFormFieldStringBytes);
+        for (std::size_t index = 0; index < choices; ++index)
+            field += "8 0 R ";
+        field += "]";
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("document-form-budget.pdf");
+        QVERIFY(writeFormBudgetPdf(path, field, ::Mu::Limit::MaxFormFieldStringBytes, 1, pages));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Runtime::CommandService service({ });
+        const auto response = service.openFdResponse(1, ::dup(file.handle()), "form-budget.pdf");
+        QCOMPARE(response.error.has_value(), pages == 2);
+        if (response.error)
+            QCOMPARE(response.error->code, ::Mu::Model::ErrorCode::ResourceLimit);
+        else
+            QCOMPARE(std::get<::Mu::Model::OpenResponse>(response.payload).pages.size(), size_t(1));
     }
 
     void embeddedTreeGraphLimits_data()

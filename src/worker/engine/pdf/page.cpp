@@ -289,28 +289,30 @@ std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_re
 // Combined Page Details (Single-Pass Geometry, Annotations, Links, Signatures)
 // =============================================================================
 
-DocumentBase::PageDetails PdfDocument::pageDetails(int page, std::string* error, bool includeLinks) const
+DocumentBase::PageDetails
+PdfDocument::pageDetails(int page, std::string* error, bool includeLinks, std::size_t formTextByteLimit) const
 {
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
         return { };
 
     PageDetails result;
+    std::string extractionError;
     fz_try(m_context)
     {
         const fz_rect bounds = fz_bound_page(m_context, nativePage);
         result.geometry = geometryFromPage(nativePage, bounds);
-        result.annotations = extractPageAnnotations(nativePage, bounds, error);
-        if (error && !error->empty())
-            fz_throw(m_context, FZ_ERROR_GENERIC, "annotation extraction failed: %s", error->c_str());
+        result.annotations = extractPageAnnotations(nativePage, bounds, &extractionError);
+        if (!extractionError.empty())
+            fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
         result.signatures = extractPageSignatures(nativePage, bounds);
         if (includeLinks)
-            result.links = extractPageLinks(nativePage, bounds, error);
-        if (error && !error->empty())
-            fz_throw(m_context, FZ_ERROR_GENERIC, "link extraction failed: %s", error->c_str());
-        result.formFields = extractPageFormFields(nativePage, bounds, page, error);
-        if (error && !error->empty())
-            fz_throw(m_context, FZ_ERROR_GENERIC, "form extraction failed: %s", error->c_str());
+            result.links = extractPageLinks(nativePage, bounds, &extractionError);
+        if (!extractionError.empty())
+            fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
+        result.formFields = extractPageFormFields(nativePage, bounds, page, formTextByteLimit, &extractionError);
+        if (!extractionError.empty())
+            fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
     }
     fz_always(m_context)
     {
