@@ -5,15 +5,20 @@
 
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
+#include <signal.h>
 #include <string>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <thread>
+#include <time.h>
 #include <unistd.h>
 
+#include "sys/operation_budget.hpp"
 #include "sys/sandbox.hpp"
 
 namespace {
@@ -235,16 +240,174 @@ bool forbiddenOperationIsKilled(const std::string& allowedDirectory, ForbiddenOp
     return WIFSIGNALED(childStatus);
 }
 
+#ifdef __linux__
+enum class BudgetProbe {
+    RepeatedOperations,
+    CpuRunaway,
+    ElapsedRunaway,
+    ConcurrentOperations,
+    BackgroundRunaway,
+    InvalidBudget,
+    UnavailableTimer,
+};
+
+std::chrono::nanoseconds threadCpuTime()
+{
+    timespec time { };
+    if (::clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time) != 0)
+        _exit(2);
+    return std::chrono::seconds(time.tv_sec) + std::chrono::nanoseconds(time.tv_nsec);
+}
+
+void consumeCpu(std::chrono::milliseconds duration)
+{
+    const auto end = threadCpuTime() + duration;
+    while (threadCpuTime() < end) { }
+}
+
+int runBudgetProbe(BudgetProbe probe)
+{
+    using namespace std::chrono_literals;
+    using Mu::Worker::Sys::OperationBudget;
+    const pid_t pid = ::fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        const auto status = Mu::Worker::Sandbox::activate({ });
+        if (!status.resourceLimits)
+            _exit(3);
+#ifdef MUPDF_HAVE_LIBSECCOMP
+        if (!status.seccomp)
+            _exit(4);
+#endif
+        switch (probe) {
+        case BudgetProbe::RepeatedOperations:
+            // Total CPU exceeds one allowance; every operation is below it.
+            for (int index = 0; index < 12; ++index) {
+                const OperationBudget budget(100ms, 500ms);
+                consumeCpu(15ms);
+            }
+            // Deleted timers must not kill subsequent idle or CPU work.
+            std::this_thread::sleep_for(550ms);
+            consumeCpu(150ms);
+            break;
+        case BudgetProbe::CpuRunaway: {
+            const OperationBudget budget(80ms, 2s);
+            consumeCpu(1s);
+            _exit(5);
+        }
+        case BudgetProbe::ElapsedRunaway: {
+            const OperationBudget budget(1s, 80ms);
+            std::this_thread::sleep_for(1s);
+            _exit(5);
+        }
+        case BudgetProbe::ConcurrentOperations: {
+            const OperationBudget budget(80ms, 2s);
+            std::thread background([] {
+                const OperationBudget jobBudget(500ms, 2s);
+                consumeCpu(220ms);
+            });
+            // Another thread exceeds our allowance without charging our CPU.
+            background.join();
+            consumeCpu(10ms);
+            break;
+        }
+        case BudgetProbe::BackgroundRunaway: {
+            std::atomic<bool> ready = false;
+            std::thread background([&ready] {
+                const OperationBudget jobBudget(80ms, 2s);
+                ready = true;
+                consumeCpu(1s);
+            });
+            while (!ready)
+                std::this_thread::yield();
+            // Finishing a foreground operation must not disarm the job's timer.
+            {
+                const OperationBudget budget(80ms, 2s);
+            }
+            background.join();
+            _exit(5);
+        }
+        case BudgetProbe::UnavailableTimer: {
+            const rlimit limit { 0, 0 };
+            if (::setrlimit(RLIMIT_SIGPENDING, &limit) != 0)
+                _exit(6);
+            const OperationBudget budget(1s, 1s);
+            _exit(5);
+        }
+        case BudgetProbe::InvalidBudget: {
+            const OperationBudget budget(0ms, 1s);
+            _exit(5);
+        }
+        }
+        _exit(0);
+    }
+
+    // Bound the test itself if enforcement is broken; never strand a child.
+    const auto deadline = std::chrono::steady_clock::now() + 5s;
+    int status = 0;
+    do {
+        const pid_t waited = ::waitpid(pid, &status, WNOHANG);
+        if (waited == pid)
+            return status;
+        if (waited < 0 && errno != EINTR)
+            break;
+        std::this_thread::sleep_for(10ms);
+    } while (std::chrono::steady_clock::now() < deadline);
+    ::kill(pid, SIGKILL);
+    (void)::waitpid(pid, &status, 0);
+    return -1;
+}
+#endif
+
 } // namespace
 
 class TestSandbox : public QObject {
     Q_OBJECT
 
 private slots:
+    void testOperationBudgets_data();
+    void testOperationBudgets();
     void testFilesystemAndNetworkRestrictions();
     void testMissingOptionalDirectoryDoesNotDisableLandlock();
     void testMissingDefaultDirectoryKeepsLandlock();
 };
+
+void TestSandbox::testOperationBudgets_data()
+{
+#ifdef __linux__
+    QTest::addColumn<int>("probe");
+    QTest::addColumn<int>("expectedSignal");
+    QTest::addColumn<int>("expectedExit");
+    QTest::newRow("repeated-and-cleanup") << int(BudgetProbe::RepeatedOperations) << 0 << 0;
+    QTest::newRow("cpu-runaway") << int(BudgetProbe::CpuRunaway) << SIGKILL << 0;
+    QTest::newRow("elapsed-runaway") << int(BudgetProbe::ElapsedRunaway) << SIGKILL << 0;
+    QTest::newRow("concurrent-independent-cpu") << int(BudgetProbe::ConcurrentOperations) << 0 << 0;
+    QTest::newRow("background-runaway") << int(BudgetProbe::BackgroundRunaway) << SIGKILL << 0;
+    QTest::newRow("timer-allocation-fails-closed") << int(BudgetProbe::UnavailableTimer) << 0 << EXIT_FAILURE;
+    QTest::newRow("invalid-budget-fails-closed") << int(BudgetProbe::InvalidBudget) << 0 << EXIT_FAILURE;
+#endif
+}
+
+void TestSandbox::testOperationBudgets()
+{
+#ifndef __linux__
+    QSKIP("Operation budgets are Linux-only");
+#else
+    QFETCH(int, probe);
+    QFETCH(int, expectedSignal);
+    QFETCH(int, expectedExit);
+    const int status = runBudgetProbe(static_cast<BudgetProbe>(probe));
+    QVERIFY2(status >= 0, "budget probe failed or exceeded its test deadline");
+    if (expectedSignal) {
+        QVERIFY(WIFSIGNALED(status));
+        QCOMPARE(WTERMSIG(status), expectedSignal);
+    } else {
+        QVERIFY(WIFEXITED(status));
+        QCOMPARE(WEXITSTATUS(status), expectedExit);
+    }
+#endif
+}
 
 void TestSandbox::testFilesystemAndNetworkRestrictions()
 {

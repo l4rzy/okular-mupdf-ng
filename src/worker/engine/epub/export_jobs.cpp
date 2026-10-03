@@ -11,6 +11,7 @@
 
 #include "engine/epub/document.hpp"
 #include "shared/logging.hpp"
+#include "sys/operation_budget.hpp"
 
 namespace Mu::Worker::Engine {
 
@@ -70,6 +71,7 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                               pages = std::move(pages),
                               inputFd = ownedInput.get(),
                               outputFd = ownedOutput.get()] {
+            const Sys::OperationBudget budget;
             std::string error;
             bool success = false;
             {

@@ -77,8 +77,8 @@ inline constexpr std::uint32_t SignatureNameSuffixMask = 0xFFFFFF;
 
 // --- Sandbox Resource Limits ---
 inline constexpr std::size_t SandboxAddressSpaceBytes = 4ULL * 1024ULL * 1024ULL * 1024ULL;
-inline constexpr int SandboxCpuSoftSeconds = 60;
-inline constexpr int SandboxCpuHardSeconds = 120;
+inline constexpr int OperationCpuSeconds = 60;
+inline constexpr int OperationElapsedSeconds = 120;
 
 } // namespace Mu::Worker::Engine::Constant
 

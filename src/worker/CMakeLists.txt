@@ -35,6 +35,7 @@ set(mupdf_worker_core_SRCS
     engine/ocr/jobs.cpp
     engine/signer.cpp
     sys/sys.cpp
+    sys/operation_budget.cpp
 )
 
 add_library(mupdf_worker_core OBJECT ${mupdf_worker_core_SRCS})

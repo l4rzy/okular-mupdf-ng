@@ -207,7 +207,7 @@ target_include_directories(test_generator_xfdf PRIVATE ../src)
 target_link_libraries(test_generator_xfdf PRIVATE mupdf_generator_adapters KF6::I18n)
 
 # Security policy checks execute in a child because sandbox activation is irreversible.
-add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp)
+add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp ../src/worker/sys/operation_budget.cpp)
 target_include_directories(test_security_sandbox PRIVATE ../src ../src/worker ${SECCOMP_INCLUDE_DIRS})
 target_link_libraries(test_security_sandbox PRIVATE ${SECCOMP_LIBRARIES})
 if(SECCOMP_FOUND)

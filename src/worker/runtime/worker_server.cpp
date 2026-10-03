@@ -13,6 +13,7 @@
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 #include "shared/transport/poll.hpp"
+#include "sys/operation_budget.hpp"
 #include "sys/sys.hpp"
 
 using namespace Mu;
@@ -52,7 +53,10 @@ WorkerServer::WorkerServer(std::string socketPath,
 {
 }
 
-WorkerServer::~WorkerServer() = default;
+WorkerServer::~WorkerServer()
+{
+    disconnectClient();
+}
 
 bool WorkerServer::listen(std::string* error)
 {
@@ -88,6 +92,7 @@ bool WorkerServer::acceptClient(std::string* error, IPC::IoResult* result)
 
 void WorkerServer::disconnectClient()
 {
+    const Sys::OperationBudget budget;
     m_commandService.reset();
     m_client.reset();
 }
@@ -126,6 +131,7 @@ bool WorkerServer::writeResponse(const ResponseMessage& response, std::string* e
 
 bool WorkerServer::processFrame(std::string* error, std::optional<std::vector<std::byte>> deferred)
 {
+    const Sys::OperationBudget budget;
     // Step 1: Decode incoming request frame.
     // Frames buffered by a nested operation (e.g. the sign round trip) were
     // already received in order, so dispatch them before reading anything new.
@@ -210,6 +216,7 @@ bool WorkerServer::writeExportNotifications(std::string* error)
 
 bool WorkerServer::writePageLinks(std::string* error)
 {
+    const Sys::OperationBudget budget;
     // CommandService advances one page at a time. It returns a notification only
     // after the current generation completes or encounters a terminal error.
     const auto notification = m_commandService->processPageLinks();
@@ -348,6 +355,7 @@ int WorkerServer::run(std::string* error)
         if (ready == 0 && !m_commandService->hasPendingPageLinks()) {
             const auto idleDuration =
                 std::chrono::ceil<std::chrono::milliseconds>(std::chrono::steady_clock::now() - pollStart);
+            const Sys::OperationBudget budget;
             m_commandService->maybeIdleTrim(idleDuration);
         }
 

@@ -227,7 +227,7 @@ void tryClearAmbientCapabilities()
 
 } // namespace
 
-/// Applies the configured Linux memory, CPU, and release-only core-dump limits.
+/// Applies the configured Linux memory and release-only core-dump limits.
 bool applyResourceLimits(Status& status)
 {
 #ifdef __linux__
@@ -255,13 +255,6 @@ bool applyResourceLimits(Status& status)
         ok = false;
     }
 
-    // Cap CPU execution time (RLIMIT_CPU = 60s soft / 120s hard)
-    // Protects against infinite loop rendering bombs.
-    struct rlimit rlCpu { Engine::Constant::SandboxCpuSoftSeconds, Engine::Constant::SandboxCpuHardSeconds };
-    if (::setrlimit(RLIMIT_CPU, &rlCpu) != 0) {
-        recordErrno(status, "RLIMIT_CPU");
-        ok = false;
-    }
     status.resourceLimits = ok;
     return ok;
 #else
@@ -597,6 +590,16 @@ bool activateSeccomp(Status& status)
 #endif
 #ifdef __NR_tgkill
         __NR_tgkill,
+#endif
+// Per-operation CPU and elapsed timers deliver SIGKILL on exhaustion.
+#ifdef __NR_timer_create
+        __NR_timer_create,
+#endif
+#ifdef __NR_timer_settime
+        __NR_timer_settime,
+#endif
+#ifdef __NR_timer_delete
+        __NR_timer_delete,
 #endif
 #ifdef __NR_timerfd_create
         __NR_timerfd_create,

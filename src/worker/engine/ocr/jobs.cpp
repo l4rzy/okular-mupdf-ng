@@ -8,6 +8,7 @@
 
 #include "engine/constants.hpp"
 #include "shared/logging.hpp"
+#include "sys/operation_budget.hpp"
 #include "sys/sys.hpp"
 
 namespace Mu::Worker::Engine {
@@ -90,6 +91,7 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
                               password = std::move(password),
                               language = std::move(language),
                               dpi]() mutable {
+            const Sys::OperationBudget budget;
             // Transition to Running if not cancelled before thread startup
             {
                 std::lock_guard lock(state->mutex);

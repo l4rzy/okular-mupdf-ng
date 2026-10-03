@@ -15,7 +15,8 @@ using Status = ::Mu::Model::SandboxStatus;
 
 /// Applies Linux resource limits to the worker process.
 ///
-/// All Linux builds cap virtual memory at 4 GiB and CPU time at 60/120 seconds.
+/// All Linux builds cap virtual memory at 4 GiB. CPU and elapsed time are
+/// bounded separately for each operation by Sys::OperationBudget.
 /// Release builds additionally disable core dumps and mark the process non-dumpable
 /// to avoid exposing document contents or keys after a crash.
 bool applyResourceLimits(Status& status);
