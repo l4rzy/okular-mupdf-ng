@@ -169,7 +169,11 @@ target_link_libraries(test_generator_layers PRIVATE mupdf_generator_adapters KF6
 # SettingsCore uses an unqualified include for its generated export header.
 find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
 target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
-target_compile_definitions(test_generator_layers PRIVATE TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
+target_compile_definitions(test_generator_layers PRIVATE
+    TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf"
+    TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
+    TEST_WORKER_DIR="$<TARGET_FILE_DIR:okular-mupdf-worker>")
+add_dependencies(test_generator_layers okularGenerator_mupdfng okular-mupdf-worker)
 
 add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
 target_include_directories(test_generator_ocr PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
