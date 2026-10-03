@@ -256,13 +256,22 @@ private slots:
         QVERIFY(m_client.close());
     }
 
-    void flattenedExportIsAtomicAndIncludesLiveAnnotations()
+    void pdfOutputIsAtomicAndIncludesLiveAnnotations_data()
     {
+        QTest::addColumn<bool>("flatten");
+        QTest::newRow("flatten") << true;
+        QTest::newRow("print") << false;
+    }
+
+    void pdfOutputIsAtomicAndIncludesLiveAnnotations()
+    {
+        QFETCH(bool, flatten);
         QList<::Mu::Model::PageInfo> pages;
         QCOMPARE(m_client.open(m_pdf, QString(), pages), ::Mu::Model::OpenStatus::Success);
         ::Mu::Model::Annotation annotation;
         annotation.subtype = ::Mu::Model::AnnotationType::Highlight;
-        annotation.uuid = "ipc-flatten";
+        annotation.uuid = "ipc-pdf-output";
+        annotation.flags = ::Mu::Model::annotationFlagValue(::Mu::Model::AnnotationFlag::Print);
         annotation.x0 = .1;
         annotation.y0 = .3;
         annotation.x1 = .4;
@@ -281,11 +290,15 @@ private slots:
         QVERIFY(sentinel.open(QIODevice::WriteOnly));
         sentinel.write("existing destination");
         sentinel.close();
-        QVERIFY(!m_client.flattenPdfToFile(target, { -1 }));
+        const auto savePdf = [&](const QVector<int>& selectedPages) {
+            return flatten ? m_client.flattenPdfToFile(target, selectedPages)
+                           : m_client.savePdfToFile(target, selectedPages);
+        };
+        QVERIFY(!savePdf({ -1 }));
         QVERIFY(sentinel.open(QIODevice::ReadOnly));
         QCOMPARE(sentinel.readAll(), QByteArray("existing destination"));
         sentinel.close();
-        QVERIFY(m_client.flattenPdfToFile(target));
+        QVERIFY(savePdf({ }));
         QCOMPARE(imageHash(m_client.render(0, 612, 792)), expected);
         QVERIFY(m_client.removeAnnotation(0, QString::fromStdString(handle->value)));
         QVERIFY(m_client.close());
@@ -369,7 +382,7 @@ private slots:
         QVERIFY(!m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("export.pdf")), { }).has_value());
 
         // The FD channel must be clean: a synchronous FD-based operation works.
-        QVERIFY(m_client.savePdfToFile(outputDirectory.filePath(QStringLiteral("print.pdf")), { }, false));
+        QVERIFY(m_client.savePdfToFile(outputDirectory.filePath(QStringLiteral("print.pdf")), { }));
         QVERIFY(QFile(outputDirectory.filePath(QStringLiteral("print.pdf"))).open(QIODevice::ReadOnly));
 
         // No export notification was queued by the failed submission.
@@ -399,8 +412,16 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void epubExportPdfOverIpc_data()
+    {
+        QTest::addColumn<bool>("withReferences");
+        QTest::newRow("print") << false;
+        QTest::newRow("export") << true;
+    }
+
     void epubExportPdfOverIpc()
     {
+        QFETCH(bool, withReferences);
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
@@ -408,7 +429,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export.pdf"));
-        QVERIFY(m_client.savePdfToFile(outputPath, { }, true));
+        QVERIFY(m_client.savePdfToFile(outputPath, { }, withReferences));
 
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));
@@ -418,6 +439,11 @@ private slots:
         QVERIFY2(exported.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
         output.close();
         QCOMPARE(exported.pageCount(), pages.size());
+        QCOMPARE(!exported.outline(&error).empty(), withReferences);
+        if (!withReferences) {
+            for (int page = 0; page < exported.pageCount(); ++page)
+                QVERIFY(exported.extractLinks(page, &error).empty());
+        }
 
         QVERIFY(m_client.close());
     }

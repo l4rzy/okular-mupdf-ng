@@ -37,7 +37,6 @@ using ::Mu::Model::AnnotationModifyRequest;
 using ::Mu::Model::AnnotationRemoveRequest;
 using ::Mu::Model::DocumentType;
 using ::Mu::Model::ExportPdfAsyncRequest;
-using ::Mu::Model::FlattenPdfRequest;
 using ::Mu::Model::FontsRequest;
 using ::Mu::Model::FormButtonClickRequest;
 using ::Mu::Model::FormResetRequest;
@@ -176,10 +175,7 @@ public:
     /// Saves document modifications back to an output file descriptor.
     [[nodiscard]] ResponseMessage saveFdResponse(std::uint64_t id, int fd);
 
-    /// Flattens the live PDF into an isolated copy; consumes fd on every path.
-    [[nodiscard]] ResponseMessage flattenPdfFdResponse(std::uint64_t id, const FlattenPdfRequest& payload, int fd);
-
-    /// Saves page-subset PDF via plain copy or the format-specific export path (withReferences).
+    /// Writes printable pages, a flattened PDF, or format-specific PDF export.
     [[nodiscard]] ResponseMessage savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd);
 
     /// Submits a background PDF export job using an isolated document copy.

@@ -42,131 +42,15 @@ const char* pdfInfoKey(std::string_view name)
 
 bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string* error)
 {
-    // The output descriptor is consumed on every path; EPUB page selection is
-    // copied before the writer starts owning its output stream.
-    if (fd < 0)
-        return fail(error, "output FD is invalid");
-    // A selection longer than the page count must contain duplicates, which
-    // only multiply render work and output size. Reject it before copying.
-    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
-        ::close(fd);
-        return fail(error, "export page selection is too large");
-    }
-
-    if (!m_document || !m_context) {
-        ::close(fd);
-        return fail(error, "document cannot be exported to PDF");
-    }
-    for (const int pageNumber : pages) {
-        if (pageNumber < 0 || pageNumber >= m_pageCount) {
-            ::close(fd);
-            return fail(error, "export page is out of range");
-        }
-    }
-
-    FILE* volatile file = ::fdopen(fd, "wb");
-    if (!file) {
-        ::close(fd);
-        return fail(error, "could not adopt output FD");
-    }
-
-    fz_document_writer* volatile writer = nullptr;
-    fz_page* volatile page = nullptr;
-    fz_device* volatile device = nullptr;
-    volatile bool saved = false;
-
-    std::vector<int> targetPages = pages;
-    std::string pageError;
-    if (targetPages.empty()) {
-        targetPages.reserve(static_cast<std::size_t>(m_pageCount));
-        for (int pageNumber = 0; pageNumber < m_pageCount; ++pageNumber)
-            targetPages.push_back(pageNumber);
-    }
-
-    fz_try(m_context)
-    {
-        fz_output* output = fz_new_output_with_file_ptr(m_context, file);
-
-        // The writer takes ownership of output immediately, including when
-        // construction throws. Do not drop output or close FILE* afterwards.
-        fz_try(m_context)
-        {
-            writer = fz_new_pdf_writer_with_output(m_context, output, Constant::EpubPdfWriterOptions);
-        }
-        fz_catch(m_context)
-        {
-            // The failed constructor already dropped its output and closed the
-            // FILE*; forget the FILE* so the outer fz_catch cannot close it twice.
-            file = nullptr;
-            fz_rethrow(m_context);
-        }
-        // The writer now owns both output and FILE*.
-        file = nullptr;
-
-        const auto layout = layoutGeometry();
-        if (layout.paperWidth <= 0 || layout.paperHeight <= 0)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "EPUB page size is invalid");
-
-        // Write each paginated EPUB reflow page as a vector PDF page
-        const fz_rect mediaBox { 0, 0, layout.paperWidth, layout.paperHeight };
-        for (const int pageNumber : targetPages) {
-            fz_rect bounds { };
-            pageError.clear();
-            page = loadPageWithBounds(pageNumber, &bounds, &pageError);
-            if (!page) {
-                fz_throw(m_context,
-                         FZ_ERROR_GENERIC,
-                         "%s",
-                         pageError.empty() ? "could not load EPUB page for PDF export" : pageError.c_str());
-            }
-
-            const float pageWidth = bounds.x1 - bounds.x0;
-            const float pageHeight = bounds.y1 - bounds.y0;
-            if (pageWidth <= 0 || pageHeight <= 0)
-                fz_throw(m_context, FZ_ERROR_GENERIC, "EPUB page bounds are invalid");
-
-            const fz_matrix transform =
-                fz_concat(fz_translate(-bounds.x0, -bounds.y0),
-                          fz_scale(layout.paperWidth / pageWidth, layout.paperHeight / pageHeight));
-            device = fz_begin_page(m_context, writer, mediaBox);
-            fz_run_page(m_context, page, device, transform, nullptr);
-            fz_end_page(m_context, writer);
-            device = nullptr;
-
-            fz_drop_page(m_context, page);
-            page = nullptr;
-        }
-
-        fz_close_document_writer(m_context, writer);
-        fz_drop_document_writer(m_context, writer);
-        writer = nullptr;
-        saved = true;
-    }
-    fz_always(m_context)
-    {
-        if (page)
-            fz_drop_page(m_context, page);
-    }
-    fz_catch(m_context)
-    {
-        // If writer construction succeeded, dropping it also closes its output
-        // and the adopted FILE*; the inner fz_catch above owns the construction
-        // failure case. Only a FILE* orphaned by fdopen without an fz_output
-        // (OOM between the two) needs the direct close here.
-        if (writer) {
-            fz_drop_document_writer(m_context, writer);
-            writer = nullptr;
-        }
-        if (file)
-            ::fclose(file);
-        fail(error, fz_caught_message(m_context));
-    }
-
-    return saved;
+    return writePdfFd(fd, pages, false, error);
 }
 
-// Export a PDF with proper TOC and Links built
 bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error)
+{
+    return writePdfFd(fd, pages, true, error);
+}
+
+bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withReferences, std::string* error)
 {
     if (fd < 0)
         return fail(error, "output FD is invalid");
@@ -204,9 +88,11 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
     // Map source EPUB pages to their first destination occurrence. This keeps
     // internal links valid even when a caller supplies a page subset.
     std::unordered_map<int, int> destinationPages;
-    destinationPages.reserve(targetPages.size());
-    for (std::size_t index = 0; index < targetPages.size(); ++index)
-        destinationPages.emplace(targetPages[index], static_cast<int>(index));
+    if (withReferences) {
+        destinationPages.reserve(targetPages.size());
+        for (std::size_t index = 0; index < targetPages.size(); ++index)
+            destinationPages.emplace(targetPages[index], static_cast<int>(index));
+    }
 
     // Source table of contents flattened in document order, with internal
     // destinations mapped to destination page indexes. Built outside fz_try;
@@ -221,7 +107,7 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
     // which only reads it; it must not be scoped to the block that fills it.
     std::vector<OutlineNode> outlineNodes;
     std::vector<FlatOutline> flatOutline;
-    {
+    if (withReferences) {
         std::string outlineError;
         outlineNodes = outline(&outlineError);
         if (!outlineError.empty())
@@ -360,164 +246,167 @@ bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages
             contents = nullptr;
         }
 
-        // Pass 2: create links. pdf_create_link resolves internal destinations
-        // against the destination page tree immediately, so a forward link
-        // would fail while pages are still being inserted; all pages must
-        // exist before any link is created.
-        const float quietNaN = std::numeric_limits<float>::quiet_NaN();
-        int destinationIndex = 0;
-        for (const int pageNumber : targetPages) {
-            fz_rect bounds { };
-            pageError.clear();
-            page = loadPageWithBounds(pageNumber, &bounds, &pageError);
-            if (!page) {
-                // The destination page still exists; keep indexes aligned and
-                // skip only its links.
-                ++destinationIndex;
-                continue;
-            }
-
-            // Link extraction is intentionally best-effort: malformed source
-            // link data must not make the visible page fail to export.
-            links = extractPageLinks(page, bounds, &pageError);
-            fz_drop_page(m_context, page);
-            page = nullptr;
-            if (!pageError.empty())
-                links.clear();
-
-            destinationPage = pdf_load_page(m_context, destination, destinationIndex);
-            for (const auto& link : links) {
-                if (!link.target.valid)
+        if (withReferences) {
+            // Pass 2: create links. pdf_create_link resolves internal destinations
+            // against the destination page tree immediately, so a forward link
+            // would fail while pages are still being inserted; all pages must
+            // exist before any link is created.
+            const float quietNaN = std::numeric_limits<float>::quiet_NaN();
+            int destinationIndex = 0;
+            for (const int pageNumber : targetPages) {
+                fz_rect bounds { };
+                pageError.clear();
+                page = loadPageWithBounds(pageNumber, &bounds, &pageError);
+                if (!page) {
+                    // The destination page still exists; keep indexes aligned and
+                    // skip only its links.
+                    ++destinationIndex;
                     continue;
-
-                fz_rect linkRect {
-                    static_cast<float>(link.left * layout.paperWidth),
-                    static_cast<float>(link.top * layout.paperHeight),
-                    static_cast<float>(link.right * layout.paperWidth),
-                    static_cast<float>(link.bottom * layout.paperHeight),
-                };
-                if (!std::isfinite(linkRect.x0) || !std::isfinite(linkRect.y0) || !std::isfinite(linkRect.x1)
-                    || !std::isfinite(linkRect.y1))
-                    continue;
-                linkRect.x0 = std::clamp(linkRect.x0, 0.0f, layout.paperWidth);
-                linkRect.y0 = std::clamp(linkRect.y0, 0.0f, layout.paperHeight);
-                linkRect.x1 = std::clamp(linkRect.x1, 0.0f, layout.paperWidth);
-                linkRect.y1 = std::clamp(linkRect.y1, 0.0f, layout.paperHeight);
-                if (linkRect.x1 <= linkRect.x0 || linkRect.y1 <= linkRect.y0)
-                    continue;
-
-                const char* uri = nullptr;
-                if (link.target.external) {
-                    if (link.target.uri.empty())
-                        continue;
-                    uri = link.target.uri.c_str();
-                } else {
-                    const auto target = destinationPages.find(link.target.viewport.page);
-                    if (target == destinationPages.end())
-                        continue;
-                    const fz_link_dest destinationUri =
-                        fz_make_link_dest_xyz(0, target->second, quietNaN, quietNaN, quietNaN);
-                    generatedUri = pdf_new_uri_from_explicit_dest(m_context, destinationUri);
-                    uri = generatedUri;
                 }
 
-                // pdf_create_link returns a caller-owned reference on top of the
-                // page's own; drop it or the link leaks once the page is freed.
-                fz_drop_link(m_context, pdf_create_link(m_context, destinationPage, linkRect, uri));
-                if (generatedUri) {
-                    fz_free(m_context, generatedUri);
-                    generatedUri = nullptr;
-                }
-            }
+                // Link extraction is intentionally best-effort: malformed source
+                // link data must not make the visible page fail to export.
+                links = extractPageLinks(page, bounds, &pageError);
+                fz_drop_page(m_context, page);
+                page = nullptr;
+                if (!pageError.empty())
+                    links.clear();
 
-            pdf_drop_page(m_context, destinationPage);
-            destinationPage = nullptr;
-            ++destinationIndex;
-        }
+                destinationPage = pdf_load_page(m_context, destination, destinationIndex);
+                for (const auto& link : links) {
+                    if (!link.target.valid)
+                        continue;
 
-        // Pass 3: build the outline from the source table of contents.
-        // Outline destinations are resolved immediately against the page
-        // tree, so this must also run after all pages exist. Best-effort: a
-        // failed build keeps pages and links and only drops the TOC.
-        if (!flatOutline.empty()) {
-            struct OpenFrame {
-                std::size_t entry;
-                bool hasChildren;
-            };
+                    fz_rect linkRect {
+                        static_cast<float>(link.left * layout.paperWidth),
+                        static_cast<float>(link.top * layout.paperHeight),
+                        static_cast<float>(link.right * layout.paperWidth),
+                        static_cast<float>(link.bottom * layout.paperHeight),
+                    };
+                    if (!std::isfinite(linkRect.x0) || !std::isfinite(linkRect.y0) || !std::isfinite(linkRect.x1)
+                        || !std::isfinite(linkRect.y1))
+                        continue;
+                    linkRect.x0 = std::clamp(linkRect.x0, 0.0f, layout.paperWidth);
+                    linkRect.y0 = std::clamp(linkRect.y0, 0.0f, layout.paperHeight);
+                    linkRect.x1 = std::clamp(linkRect.x1, 0.0f, layout.paperWidth);
+                    linkRect.y1 = std::clamp(linkRect.y1, 0.0f, layout.paperHeight);
+                    if (linkRect.x1 <= linkRect.x0 || linkRect.y1 <= linkRect.y0)
+                        continue;
 
-            // Declared before the nested fz_try: a skipped destructor on the
-            // error longjmp path would leak the frame stack.
-            std::vector<OpenFrame> openFrames;
-            fz_outline_iterator* volatile iterator = pdf_new_outline_iterator(m_context, destination);
-            fz_try(m_context)
-            {
-                // Drives the destination outline iterator like MuPDF's
-                // pdfmerge tool: each insert runs in the state the previous
-                // step left (empty root, dangling MOD_BELOW below a fresh
-                // item, or MOD_AFTER behind the previously emitted node).
-
-                const auto fillItem = [&](fz_outline_item* item, const FlatOutline& entry) {
-                    item->title = entry.node->title.empty() ? nullptr : const_cast<char*>(entry.node->title.c_str());
-                    item->is_open = entry.node->open ? 1 : 0;
-                    if (!entry.node->link.valid)
-                        return;
-                    if (entry.node->link.external) {
-                        if (!entry.node->link.uri.empty())
-                            item->uri = const_cast<char*>(entry.node->link.uri.c_str());
-                    } else if (entry.destIndex >= 0) {
-                        generatedUri = pdf_new_uri_from_explicit_dest(
-                            m_context, fz_make_link_dest_xyz(0, entry.destIndex, quietNaN, quietNaN, quietNaN));
-                        item->uri = generatedUri;
+                    const char* uri = nullptr;
+                    if (link.target.external) {
+                        if (link.target.uri.empty())
+                            continue;
+                        uri = link.target.uri.c_str();
+                    } else {
+                        const auto target = destinationPages.find(link.target.viewport.page);
+                        if (target == destinationPages.end())
+                            continue;
+                        const fz_link_dest destinationUri =
+                            fz_make_link_dest_xyz(0, target->second, quietNaN, quietNaN, quietNaN);
+                        generatedUri = pdf_new_uri_from_explicit_dest(m_context, destinationUri);
+                        uri = generatedUri;
                     }
-                };
-                const auto releaseUri = [&] {
+
+                    // pdf_create_link returns a caller-owned reference on top of the
+                    // page's own; drop it or the link leaks once the page is freed.
+                    fz_drop_link(m_context, pdf_create_link(m_context, destinationPage, linkRect, uri));
                     if (generatedUri) {
                         fz_free(m_context, generatedUri);
                         generatedUri = nullptr;
                     }
-                };
-                const auto popFrame = [&] {
-                    const OpenFrame frame = openFrames.back();
-                    const FlatOutline& entry = flatOutline[frame.entry];
-                    fz_outline_iterator_up(m_context, iterator);
-                    if (frame.hasChildren && !entry.node->open) {
-                        // Honor a collapsed source entry; expanded is the
-                        // automatic default for parents in PDF.
-                        fz_outline_item item { };
-                        fillItem(&item, entry);
-                        fz_outline_iterator_update(m_context, iterator, &item);
-                        releaseUri();
-                    }
-                    fz_outline_iterator_next(m_context, iterator);
-                    openFrames.pop_back();
+                }
+
+                pdf_drop_page(m_context, destinationPage);
+                destinationPage = nullptr;
+                ++destinationIndex;
+            }
+
+            // Pass 3: build the outline from the source table of contents.
+            // Outline destinations are resolved immediately against the page
+            // tree, so this must also run after all pages exist. Best-effort: a
+            // failed build keeps pages and links and only drops the TOC.
+            if (!flatOutline.empty()) {
+                struct OpenFrame {
+                    std::size_t entry;
+                    bool hasChildren;
                 };
 
-                for (std::size_t index = 0; index < flatOutline.size(); ++index) {
-                    const FlatOutline& entry = flatOutline[index];
-                    while (static_cast<std::int32_t>(openFrames.size()) > entry.depth)
+                // Declared before the nested fz_try: a skipped destructor on the
+                // error longjmp path would leak the frame stack.
+                std::vector<OpenFrame> openFrames;
+                fz_outline_iterator* volatile iterator = pdf_new_outline_iterator(m_context, destination);
+                fz_try(m_context)
+                {
+                    // Drives the destination outline iterator like MuPDF's
+                    // pdfmerge tool: each insert runs in the state the previous
+                    // step left (empty root, dangling MOD_BELOW below a fresh
+                    // item, or MOD_AFTER behind the previously emitted node).
+
+                    const auto fillItem = [&](fz_outline_item* item, const FlatOutline& entry) {
+                        item->title =
+                            entry.node->title.empty() ? nullptr : const_cast<char*>(entry.node->title.c_str());
+                        item->is_open = entry.node->open ? 1 : 0;
+                        if (!entry.node->link.valid)
+                            return;
+                        if (entry.node->link.external) {
+                            if (!entry.node->link.uri.empty())
+                                item->uri = const_cast<char*>(entry.node->link.uri.c_str());
+                        } else if (entry.destIndex >= 0) {
+                            generatedUri = pdf_new_uri_from_explicit_dest(
+                                m_context, fz_make_link_dest_xyz(0, entry.destIndex, quietNaN, quietNaN, quietNaN));
+                            item->uri = generatedUri;
+                        }
+                    };
+                    const auto releaseUri = [&] {
+                        if (generatedUri) {
+                            fz_free(m_context, generatedUri);
+                            generatedUri = nullptr;
+                        }
+                    };
+                    const auto popFrame = [&] {
+                        const OpenFrame frame = openFrames.back();
+                        const FlatOutline& entry = flatOutline[frame.entry];
+                        fz_outline_iterator_up(m_context, iterator);
+                        if (frame.hasChildren && !entry.node->open) {
+                            // Honor a collapsed source entry; expanded is the
+                            // automatic default for parents in PDF.
+                            fz_outline_item item { };
+                            fillItem(&item, entry);
+                            fz_outline_iterator_update(m_context, iterator, &item);
+                            releaseUri();
+                        }
+                        fz_outline_iterator_next(m_context, iterator);
+                        openFrames.pop_back();
+                    };
+
+                    for (std::size_t index = 0; index < flatOutline.size(); ++index) {
+                        const FlatOutline& entry = flatOutline[index];
+                        while (static_cast<std::int32_t>(openFrames.size()) > entry.depth)
+                            popFrame();
+                        fz_outline_item item { };
+                        fillItem(&item, entry);
+                        fz_outline_iterator_insert(m_context, iterator, &item);
+                        releaseUri();
+                        fz_outline_iterator_prev(m_context, iterator);
+                        fz_outline_iterator_down(m_context, iterator);
+                        openFrames.push_back(
+                            { index, index + 1 < flatOutline.size() && flatOutline[index + 1].depth > entry.depth });
+                    }
+                    while (!openFrames.empty())
                         popFrame();
-                    fz_outline_item item { };
-                    fillItem(&item, entry);
-                    fz_outline_iterator_insert(m_context, iterator, &item);
-                    releaseUri();
-                    fz_outline_iterator_prev(m_context, iterator);
-                    fz_outline_iterator_down(m_context, iterator);
-                    openFrames.push_back(
-                        { index, index + 1 < flatOutline.size() && flatOutline[index + 1].depth > entry.depth });
                 }
-                while (!openFrames.empty())
-                    popFrame();
-            }
-            fz_always(m_context)
-            {
-                if (iterator)
-                    fz_drop_outline_iterator(m_context, iterator);
-            }
-            fz_catch(m_context)
-            {
-                MU_LOG(warning,
-                       "Mu::Worker::Epub",
-                       std::string("PDF outline build failed: ") + fz_caught_message(m_context));
+                fz_always(m_context)
+                {
+                    if (iterator)
+                        fz_drop_outline_iterator(m_context, iterator);
+                }
+                fz_catch(m_context)
+                {
+                    MU_LOG(warning,
+                           "Mu::Worker::Epub",
+                           std::string("PDF outline build failed: ") + fz_caught_message(m_context));
+                }
             }
         }
 

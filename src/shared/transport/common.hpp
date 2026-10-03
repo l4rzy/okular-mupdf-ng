@@ -15,7 +15,7 @@
 
 namespace Mu::IPC {
 
-inline constexpr int PROTOCOL_VERSION = 4;
+inline constexpr int PROTOCOL_VERSION = 5;
 
 namespace Timeout {
 

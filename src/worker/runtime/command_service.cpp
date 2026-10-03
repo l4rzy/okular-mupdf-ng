@@ -107,11 +107,7 @@ std::optional<ResponseMessage> validateInboundRequest(std::uint64_t id, const Re
                                           return isValidFileTransfer(request.file, &reason);
                                       },
                                       [&](const SavePdfRequest& request) {
-                                          operation = "save_pdf";
-                                          return isValidFileTransfer(request.file, &reason);
-                                      },
-                                      [&](const FlattenPdfRequest& request) {
-                                          operation = "flatten_pdf";
+                                          operation = request.flatten ? "flatten_pdf" : "save_pdf";
                                           return isValidFileTransfer(request.file, &reason);
                                       },
                                       [&](const ExportPdfAsyncRequest& request) {
@@ -403,28 +399,23 @@ ResponseMessage CommandService::saveFdResponse(std::uint64_t id, int fd)
     return success(id);
 }
 
-ResponseMessage CommandService::flattenPdfFdResponse(std::uint64_t id, const FlattenPdfRequest& payload, int fd)
-{
-    Sys::FileDescriptor ownedFd(fd);
-    if (!hasOpenDocument())
-        return failure(id, ErrorCode::NotOpen, "flatten_pdf", "no document is open");
-    std::string error;
-    if (!m_document->flattenPdfFd(ownedFd.release(), payload.pages, &error))
-        return failure(id, ErrorCode::Internal, "flatten_pdf", error);
-    return success(id);
-}
-
 ResponseMessage CommandService::savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd)
 {
-    const char* method = payload.withReferences ? "export_pdf" : "save_pdf";
+    const char* method = payload.flatten ? "flatten_pdf" : "save_pdf";
     Sys::FileDescriptor ownedFd(fd);
     if (!hasOpenDocument()) {
         return failure(id, ErrorCode::NotOpen, method, "no document is open");
     }
+    if (payload.flatten && payload.withReferences)
+        return failure(id, ErrorCode::InvalidRequest, method, "flattening cannot include export references");
     std::string error;
-    const bool ok = payload.withReferences
-        ? m_document->savePdfFdWithReferences(ownedFd.release(), payload.pages, &error)
-        : m_document->savePdfFd(ownedFd.release(), payload.pages, &error);
+    bool ok = false;
+    if (payload.flatten)
+        ok = m_document->flattenPdfFd(ownedFd.release(), payload.pages, &error);
+    else if (payload.withReferences)
+        ok = m_document->savePdfFdWithReferences(ownedFd.release(), payload.pages, &error);
+    else
+        ok = m_document->savePdfFd(ownedFd.release(), payload.pages, &error);
     if (!ok)
         return failure(id, ErrorCode::Internal, method, error);
 
@@ -1222,14 +1213,9 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
                     "save", payload.file.transferId, [&](int fd) { return saveFdResponse(request.id, fd); });
             },
             [&](const SavePdfRequest& payload) {
-                return dispatchWithFd(payload.withReferences ? "export_pdf" : "save_pdf",
+                return dispatchWithFd(payload.flatten ? "flatten_pdf" : "save_pdf",
                                       payload.file.transferId,
                                       [&](int fd) { return savePdfFdResponse(request.id, payload, fd); });
-            },
-            [&](const FlattenPdfRequest& payload) {
-                return dispatchWithFd("flatten_pdf", payload.file.transferId, [&](int fd) {
-                    return flattenPdfFdResponse(request.id, payload, fd);
-                });
             },
             [&](const ExportPdfAsyncRequest& payload) {
                 ResponseMessage outErr;

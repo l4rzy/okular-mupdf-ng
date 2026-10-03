@@ -33,7 +33,7 @@ promise that every input or workflow has been tested.
 | Outlines, links, and navigation | 🟡 Partial | Worker tests; EPUB link and outline tests 
 | PDF layers (optional content) | 🟡 Partial | Worker visibility and text tests; Qt model, IPC, and plugin response validation tests |
 | PDF annotations | 🟡 Partial | Generator proxy and worker tests |
-| Printing and document export | 🟡 Partial | Export integration; printing has no direct automated test |
+| Printing and document export | 🟡 Partial | Export integration; print-output appearance, visibility, geometry and source-isolation tests; printer submission untested |
 | Flattened PDF export | 🟡 Partial | Worker appearance/source-isolation tests; IPC and CLI export integration |
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |

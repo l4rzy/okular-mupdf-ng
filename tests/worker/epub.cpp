@@ -653,8 +653,16 @@ private slots:
         QCOMPARE(hashOnlyMeta.values.at("hash"), allMeta.values.at("hash"));
     }
 
+    void testExportPdfRendersPagesAndLinks_data()
+    {
+        QTest::addColumn<bool>("withReferences");
+        QTest::newRow("print") << false;
+        QTest::newRow("export") << true;
+    }
+
     void testExportPdfRendersPagesAndLinks()
     {
+        QFETCH(bool, withReferences);
         QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         ::Mu::Worker::Engine::EpubDocument document;
@@ -668,7 +676,9 @@ private slots:
         const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        QVERIFY2(document.savePdfFdWithReferences(fullFd, { }, &error), error.c_str());
+        const bool saved = withReferences ? document.savePdfFdWithReferences(fullFd, { }, &error)
+                                          : document.savePdfFd(fullFd, { }, &error);
+        QVERIFY2(saved, error.c_str());
 
         QFile fullFile(fullPath);
         QVERIFY(fullFile.open(QIODevice::ReadOnly));
@@ -699,8 +709,13 @@ private slots:
             if (link.target.external && link.target.uri == "https://example.org/external")
                 external = true;
         }
-        QVERIFY(forwardInternal);
-        QVERIFY(external);
+        QCOMPARE(forwardInternal, withReferences);
+        QCOMPARE(external, withReferences);
+        QCOMPARE(!fullPdf.outline(&error).empty(), withReferences);
+        if (!withReferences) {
+            for (int page = 0; page < fullPdf.pageCount(); ++page)
+                QVERIFY(fullPdf.extractLinks(page, &error).empty());
+        }
     }
 
     void testExportPdfOutlineNesting()

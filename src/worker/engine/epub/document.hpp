@@ -96,10 +96,13 @@ public:
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
     [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
+
     [[nodiscard]] bool
     savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
 
 private:
+    [[nodiscard]] bool writePdfFd(int fd, const std::vector<int>& pages, bool withReferences, std::string* error);
+
     struct LayoutGeometry {
         float paperWidth = 0;
         float paperHeight = 0;

@@ -288,8 +288,8 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
                          QStringLiteral("pages")))
              .arg(file));
     const QString output = QString::fromStdString(options.output);
-    const bool success = options.flatten ? client.flattenPdfToFile(output, pages)
-                                         : client.savePdfToFile(output, pages, /*withReferences=*/true);
+    const bool success =
+        options.flatten ? client.flattenPdfToFile(output, pages) : client.savePdfToFile(output, pages, true);
     if (!success) {
         reportError(QStringLiteral("export failed"));
         return ExitJobFailed;

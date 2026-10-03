@@ -154,6 +154,9 @@ private:
     /// Suspends caching of freshly loaded pages (see DocumentBase).
     void setPageCacheSuspended(bool suspended) noexcept override;
 
+    /// Writes an isolated PDF copy with export or print appearance semantics.
+    bool writeBakedPdf(int fd, const std::vector<int>& pages, bool forPrinting, std::string* error);
+
     /// Updates the cached presence of the catalog AcroForm dictionary.
     void updateAcroFormPresence();
 

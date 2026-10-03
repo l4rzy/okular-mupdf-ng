@@ -361,14 +361,11 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 out << "save";
                 field(out, "transfer", value.file.transferId);
             } else if constexpr (std::is_same_v<T, Model::SavePdfRequest>) {
-                out << (value.withReferences ? "export-pdf" : "save-pdf");
+                out << (value.flatten ? "flatten-pdf" : "save-pdf");
                 field(out, "transfer", value.file.transferId);
                 field(out, "pages", value.pages.size());
+                field(out, "flatten", value.flatten);
                 field(out, "withReferences", value.withReferences);
-            } else if constexpr (std::is_same_v<T, Model::FlattenPdfRequest>) {
-                out << "flatten-pdf";
-                field(out, "transfer", value.file.transferId);
-                field(out, "pages", value.pages.size());
             } else if constexpr (std::is_same_v<T, Model::SignRequest>) {
                 out << "sign";
                 field(out, "transfer", value.file.transferId);

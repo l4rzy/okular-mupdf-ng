@@ -29,7 +29,7 @@ void declareAcroForm(fz_context* context, pdf_document* document)
     pdf_dict_put_drop(context, catalog, PDF_NAME(AcroForm), acroForm);
 }
 
-// Write objects directly so malformed graphs are not repaired by a PDF writer.
+// Preserve fixture streams and malformed graphs without PDF-writer repair.
 bool writePdfObjects(const QString& path, const QList<QByteArray>& objects)
 {
     QByteArray data("%PDF-1.7\n");
@@ -56,6 +56,43 @@ renderPdfPage(const ::Mu::Worker::Engine::PdfDocument& doc, int page, int width,
             { page, width, height, std::nullopt }, pixels.data(), static_cast<std::size_t>(width) * 4, error))
         return { };
     return pixels;
+}
+
+std::vector<std::uint8_t>
+renderPdfUsage(const ::Mu::Worker::Engine::PdfDocument& document, int pageNumber, const char* usage, std::string* error)
+{
+    fz_context* context = document.context();
+    pdf_page* volatile page = nullptr;
+    fz_pixmap* volatile pixmap = nullptr;
+    std::vector<std::uint8_t> pixels;
+    fz_try(context)
+    {
+        page = pdf_load_page(context, pdf_specifics(context, document.document()), pageNumber);
+        pixmap = pdf_new_pixmap_from_page_with_usage(
+            context, page, fz_identity, fz_device_rgb(context), 0, usage, FZ_CROP_BOX);
+        const auto size = static_cast<std::size_t>(fz_pixmap_stride(context, pixmap))
+            * static_cast<std::size_t>(fz_pixmap_height(context, pixmap));
+        const auto* samples = fz_pixmap_samples(context, pixmap);
+        pixels.assign(samples, samples + size);
+    }
+    fz_always(context)
+    {
+        fz_drop_pixmap(context, pixmap);
+        fz_drop_page(context, reinterpret_cast<fz_page*>(page));
+    }
+    fz_catch(context)
+    {
+        *error = fz_caught_message(context);
+    }
+    return pixels;
+}
+
+bool pixelsMatch(const std::vector<std::uint8_t>& actual, const std::vector<std::uint8_t>& expected)
+{
+    return !expected.empty() && actual.size() == expected.size()
+        && std::equal(actual.begin(), actual.end(), expected.begin(), [](auto a, auto b) {
+               return std::abs(static_cast<int>(a) - static_cast<int>(b)) <= 2;
+           });
 }
 
 } // namespace
@@ -347,6 +384,216 @@ private slots:
         const QByteArray content = pdfFile.read(32);
         pdfFile.close();
         QVERIFY2(content.startsWith("%PDF-"), content.constData());
+    }
+
+    void printAppearanceVisibility_data()
+    {
+        QTest::addColumn<QByteArray>("subtype");
+        QTest::addColumn<int>("flags");
+        QTest::addColumn<int>("rotation");
+        QTest::addColumn<int>("userUnit");
+        QTest::addColumn<bool>("layerPrints");
+        QTest::addColumn<bool>("drawn");
+        for (const QByteArray& subtype : { QByteArray("Square"), QByteArray("Widget") }) {
+            const auto row = [&](const char* name,
+                                 int flags,
+                                 bool drawn,
+                                 int rotation = 0,
+                                 int userUnit = 1,
+                                 bool layerPrints = true) {
+                const QByteArray label = subtype + "-" + name;
+                QTest::newRow(label.constData()) << subtype << flags << rotation << userUnit << layerPrints << drawn;
+            };
+            row("printable", PDF_ANNOT_IS_PRINT, true);
+            row("screen-only", 0, false);
+            row("hidden", PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_HIDDEN, false);
+            row("invisible", PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_INVISIBLE, false);
+            row("print-only", PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_NO_VIEW, true);
+            row("rotated", PDF_ANNOT_IS_PRINT, true, 90);
+            row("no-rotate", PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_NO_ROTATE, true, 90);
+            row("no-zoom", PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_NO_ZOOM, true, 270, 2);
+            row("no-rotate-no-zoom", PDF_ANNOT_IS_PRINT | PDF_ANNOT_IS_NO_ROTATE | PDF_ANNOT_IS_NO_ZOOM, true, 270, 2);
+            row("layer-print-off", PDF_ANNOT_IS_PRINT, false, 0, 1, false);
+        }
+        QTest::newRow("popup") << QByteArray("Popup") << int(PDF_ANNOT_IS_PRINT) << 0 << 1 << true << false;
+        QTest::newRow("attachment") << QByteArray("FileAttachment") << int(PDF_ANNOT_IS_PRINT) << 0 << 1 << true
+                                    << false;
+    }
+
+    void printAppearanceVisibility()
+    {
+        QFETCH(QByteArray, subtype);
+        QFETCH(int, flags);
+        QFETCH(int, rotation);
+        QFETCH(int, userUnit);
+        QFETCH(bool, layerPrints);
+        QFETCH(bool, drawn);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath("source.pdf");
+        const QString target = directory.filePath("print.pdf");
+        const QByteArray appearance("0.8 0.1 0.2 rg 0 0 60 20 re f\n");
+        const QByteArray content("0.2 0.3 0.4 rg 30 20 10 10 re f\n2 0 0 2 0 0 cm\n0 0 1 1 re W n\n");
+        QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R /OCProperties << /OCGs [8 0 R] "
+            "/D << /ON [8 0 R] /AS [<< /Event /Print /Category [/Print] /OCGs [8 0 R] >>] >> >> >>",
+            "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 160 120] /CropBox [20 10 140 110] /Rotate "
+                + QByteArray::number(rotation) + " /UserUnit " + QByteArray::number(userUnit)
+                + " /Resources << >> /Contents 6 0 R /Annots [4 0 R] >>",
+            "<< /Type /Annot /Subtype /" + subtype + " /FT /Tx /T (Field) /V (Old) /F " + QByteArray::number(flags)
+                + " /Rect [50 50 110 70] /OC 8 0 R /AP << /N 7 0 R >> >>",
+            "<< /Fields [4 0 R] >>",
+            "<< /Length " + QByteArray::number(content.size()) + " >>\nstream\n" + content + "endstream",
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 60 20] /Resources << >> /Length "
+                + QByteArray::number(appearance.size()) + " >>\nstream\n" + appearance + "endstream",
+            QByteArray("<< /Type /OCG /Name (Layer) /Usage << /Print << /PrintState /") + (layerPrints ? "ON" : "OFF")
+                + " >> >> >>"
+        };
+        QVERIFY(writePdfObjects(source, objects));
+        QFile file(source);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "source.pdf", &error), error.c_str());
+        const auto expected = renderPdfUsage(document, 0, "Print", &error);
+        const auto viewBefore = renderPdfUsage(document, 0, "View", &error);
+        QVERIFY2(!expected.empty() && error.empty(), error.c_str());
+        objects[2].replace("/Annots [4 0 R]", "/Annots []");
+        const QString baseline = directory.filePath("baseline.pdf");
+        QVERIFY(writePdfObjects(baseline, objects));
+        QFile baselineFile(baseline);
+        QVERIFY(baselineFile.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument blank;
+        QVERIFY2(blank.openFd(::dup(baselineFile.handle()), "baseline.pdf", &error), error.c_str());
+        QCOMPARE(expected != renderPdfUsage(blank, 0, "Print", &error), drawn);
+
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        QVERIFY2(document.savePdfFd(fd, { }, &error), error.c_str());
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        QCOMPARE(renderPdfUsage(document, 0, "View", &error), viewBefore);
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument printed;
+        QVERIFY2(printed.openFd(::dup(output.handle()), "print.pdf", &error), error.c_str());
+        const auto geometry = document.pageGeometry(0);
+        const auto printedGeometry = printed.pageGeometry(0);
+        QCOMPARE(printedGeometry.widthPoints, geometry.widthPoints);
+        QCOMPARE(printedGeometry.heightPoints, geometry.heightPoints);
+        QVERIFY(pixelsMatch(renderPdfUsage(printed, 0, "View", &error), expected));
+        QVERIFY(printed.pageDetails(0, &error).formFields.empty());
+        QVERIFY(printed.extractAnnotations(0, &error).empty());
+    }
+
+    void printLiveFormValues()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath("form.pdf");
+        const QString target = directory.filePath("print.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createEditableTextFieldPDF(document.context(), source);
+        QFile file(source);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto original = file.readAll();
+        file.seek(0);
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "form.pdf", &error), error.c_str());
+        const auto field = document.pageDetails(0, &error).formFields.front();
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(
+            document.updateFormField(
+                0, field.pdfObjectNumber, ::Mu::Model::FormTextValue { "Unsaved print value" }, &mutations, &error),
+            error.c_str());
+        const auto expected = renderPdfUsage(document, 0, "Print", &error);
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        QVERIFY2(document.savePdfFd(fd, { 0 }, &error), error.c_str());
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        QCOMPARE(document.pageDetails(0, &error).formFields.front().text, std::string("Unsaved print value"));
+        QCOMPARE(renderPdfUsage(document, 0, "Print", &error), expected);
+        QVERIFY(pdf_has_unsaved_changes(document.context(), pdf_specifics(document.context(), document.document())));
+        file.seek(0);
+        QCOMPARE(file.readAll(), original);
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument printed;
+        QVERIFY2(printed.openFd(::dup(output.handle()), "print.pdf", &error), error.c_str());
+        QVERIFY(pixelsMatch(renderPdfUsage(printed, 0, "View", &error), expected));
+        QVERIFY(!printed.textBoxes(0, 72, 72, 1000, true, &error).empty());
+        const int fullFd = ::open("/dev/full", O_WRONLY);
+        QVERIFY(fullFd >= 0);
+        QVERIFY(!document.savePdfFd(fullFd, { }, &error));
+        QVERIFY(!error.empty());
+        QVERIFY(::fcntl(fullFd, F_GETFD) == -1 && errno == EBADF);
+        error.clear();
+        QVERIFY2(document.updateFormField(
+                     0, field.pdfObjectNumber, ::Mu::Model::FormTextValue { "Still editable" }, &mutations, &error),
+                 error.c_str());
+    }
+
+    void printPageSelection_data()
+    {
+        QTest::addColumn<std::vector<int>>("pages");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("all") << std::vector<int> { } << true;
+        QTest::newRow("subset") << std::vector<int> { 1 } << true;
+        QTest::newRow("reordered") << std::vector<int> { 1, 0 } << true;
+        QTest::newRow("negative") << std::vector<int> { -1 } << false;
+        QTest::newRow("out-of-range") << std::vector<int> { 2 } << false;
+        QTest::newRow("too-many") << std::vector<int> { 0, 1, 0 } << false;
+    }
+
+    void printPageSelection()
+    {
+        QFETCH(std::vector<int>, pages);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath("source.pdf");
+        const QString target = directory.filePath("print.pdf");
+        const QByteArray pattern("1 0 0 rg 0 0 4 4 re f\n");
+        const QByteArray content("/Pattern cs /Tiles scn 0 0 80 60 re f\n");
+        const QByteArray second("0 0 1 rg 0 0 40 30 re f\n");
+        QVERIFY(writePdfObjects(
+            source,
+            { "<< /Type /Catalog /Pages 2 0 R /Names << /Private (unselected document metadata) >> >>",
+              "<< /Type /Pages /Count 2 /Kids [3 0 R 4 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 80 60] /Resources << /Pattern << /Tiles 7 0 R >> >> "
+              "/Contents 5 0 R >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 60 80] /Resources << >> /Contents 6 0 R >>",
+              "<< /Length " + QByteArray::number(content.size()) + " >>\nstream\n" + content + "endstream",
+              "<< /Length " + QByteArray::number(second.size()) + " >>\nstream\n" + second + "endstream",
+              "<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 8 8] /XStep 8 /YStep 8 "
+              "/Resources << >> /Length "
+                  + QByteArray::number(pattern.size()) + " >>\nstream\n" + pattern + "endstream" }));
+        QFile file(source);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "source.pdf", &error), error.c_str());
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        QCOMPARE(document.savePdfFd(fd, pages, &error), accepted);
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        if (!accepted) {
+            QVERIFY(!error.empty());
+            return;
+        }
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument printed;
+        QVERIFY2(printed.openFd(::dup(output.handle()), "print.pdf", &error), error.c_str());
+        if (pages.empty())
+            pages = { 0, 1 };
+        QCOMPARE(printed.pageCount(), static_cast<int>(pages.size()));
+        QVERIFY(!pdf_dict_getp(printed.context(),
+                               pdf_trailer(printed.context(), pdf_specifics(printed.context(), printed.document())),
+                               "Root/Names"));
+        for (std::size_t index = 0; index < pages.size(); ++index)
+            QVERIFY(pixelsMatch(renderPdfUsage(printed, static_cast<int>(index), "View", &error),
+                                renderPdfUsage(document, pages[index], "Print", &error)));
     }
 
     void flattenPreservesLiveEdits_data()

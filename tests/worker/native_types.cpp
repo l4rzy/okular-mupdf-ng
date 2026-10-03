@@ -76,6 +76,35 @@ private slots:
         QCOMPARE(decodedOcr->page, 3);
     }
 
+    void savePdfModesRoundTrip_data()
+    {
+        QTest::addColumn<bool>("flatten");
+        QTest::addColumn<bool>("withReferences");
+        QTest::newRow("print") << false << false;
+        QTest::newRow("flatten") << true << false;
+        QTest::newRow("epub-export") << false << true;
+    }
+
+    void savePdfModesRoundTrip()
+    {
+        QFETCH(bool, flatten);
+        QFETCH(bool, withReferences);
+        const Mu::Model::RequestMessage request {
+            48, Mu::Model::SavePdfRequest { { 19 }, { 2, 0 }, flatten, withReferences }
+        };
+        std::string error;
+        const auto encoded = Mu::IPC::ZppCodec::encode(request, &error);
+        QVERIFY2(encoded, error.c_str());
+        Mu::Model::RequestMessage decoded;
+        QVERIFY2(Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
+        const auto* result = std::get_if<Mu::Model::SavePdfRequest>(&decoded.payload);
+        QVERIFY(result);
+        QCOMPARE(result->file.transferId, std::uint64_t(19));
+        QCOMPARE(result->pages, std::vector<std::int32_t>({ 2, 0 }));
+        QCOMPARE(result->flatten, flatten);
+        QCOMPARE(result->withReferences, withReferences);
+    }
+
     void documentSettingsRoundTrip()
     {
         using namespace Mu;

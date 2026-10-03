@@ -917,24 +917,18 @@ struct SaveRequest {
 /// Saves selected pages to a transferred output descriptor as PDF.
 struct SavePdfRequest {
     FileTransfer file;
-    std::vector<std::int32_t> pages;
-    /// True builds the PDF via the format-specific export path (savePdfFdWithReferences);
-    /// false uses a plain page copy (savePdfFd).
-    bool withReferences = false;
-};
-
-/// Bakes annotations and widgets into a copy of the live PDF document.
-struct FlattenPdfRequest {
-    FileTransfer file;
     /// Empty selects all pages; otherwise zero-based pages in output order.
     std::vector<std::int32_t> pages;
+    /// True flattens PDF annotations and widgets; incompatible with withReferences.
+    bool flatten = false;
+    /// EPUB export includes links and bookmarks; printing leaves this false.
+    bool withReferences = false;
 };
 
 /// Exports the open document to PDF in a background job using an isolated
 /// copy of the source file, writing to a transferred output descriptor.
 /// The session document is untouched; completion is reported asynchronously.
-/// The format-specific export path (savePdfFdWithReferences) always applies,
-/// so the generated PDF carries pages, links, and the outline.
+/// EPUB export always includes pages, links, and the outline.
 struct ExportPdfAsyncRequest {
     /// Output descriptor receiving the generated PDF.
     FileTransfer output;
@@ -1018,8 +1012,7 @@ using RequestPayload = std::variant<PingRequest,
                                     ExportPdfAsyncRequest,
                                     FormButtonClickRequest,
                                     LayersRequest,
-                                    SetLayerRequest,
-                                    FlattenPdfRequest>;
+                                    SetLayerRequest>;
 
 /// Correlated request envelope sent over the control channel.
 struct RequestMessage {
