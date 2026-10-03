@@ -45,11 +45,13 @@ constexpr int AcceptTimeoutMs = 1000;
 WorkerServer::WorkerServer(std::string socketPath,
                            FdChannel* fdChannel,
                            Sandbox::Status sandbox,
-                           std::int64_t expectedPluginPid)
+                           std::int64_t expectedPluginPid,
+                           std::vector<std::string> tessDataDirectories)
     : m_socketPath(std::move(socketPath))
     , m_expectedPluginPid(expectedPluginPid)
     , m_fdChannel(fdChannel)
     , m_sandbox(std::move(sandbox))
+    , m_tessDataDirectories(std::move(tessDataDirectories))
 {
 }
 
@@ -86,6 +88,7 @@ bool WorkerServer::acceptClient(std::string* error, IPC::IoResult* result)
         .sandbox = m_sandbox,
         .fdChannel = m_fdChannel,
         .controlChannel = m_client.get(),
+        .tessDataDirectories = m_tessDataDirectories,
     });
     return true;
 }

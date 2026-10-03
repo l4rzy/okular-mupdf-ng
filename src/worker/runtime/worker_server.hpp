@@ -32,7 +32,11 @@ using ::Mu::IPC::FdChannel;
  */
 class WorkerServer {
 public:
-    WorkerServer(std::string socketPath, FdChannel* fdChannel, Sandbox::Status sandbox, std::int64_t expectedPluginPid);
+    WorkerServer(std::string socketPath,
+                 FdChannel* fdChannel,
+                 Sandbox::Status sandbox,
+                 std::int64_t expectedPluginPid,
+                 std::vector<std::string> tessDataDirectories);
     ~WorkerServer();
 
     WorkerServer(const WorkerServer&) = delete;
@@ -80,6 +84,7 @@ private:
     std::int64_t m_expectedPluginPid = -1;
     FdChannel* m_fdChannel = nullptr;
     Sandbox::Status m_sandbox;
+    std::vector<std::string> m_tessDataDirectories;
     CtrlChannel m_server;
     std::unique_ptr<CtrlChannel> m_client;
     std::unique_ptr<CommandService> m_commandService;

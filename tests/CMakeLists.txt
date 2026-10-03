@@ -58,11 +58,12 @@ target_compile_definitions(test_mupdf PRIVATE
     FORM_JS_CONTROLS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_controls.pdf"
     FORM_JS_PARTIAL_ERROR_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_partial_error.pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
     TESSDATA_DIR="${TESSDATA_DIR}")
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_mupdf PRIVATE MU_DEBUG_ENABLED)
 endif()
-add_dependencies(test_mupdf okular-mupdf-worker)
+add_dependencies(test_mupdf okular-mupdf-worker mupdfng-cli)
 
 add_test(NAME test_mupdf COMMAND test_mupdf)
 set_tests_properties(test_mupdf PROPERTIES

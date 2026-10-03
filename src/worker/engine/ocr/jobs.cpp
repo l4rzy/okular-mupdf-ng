@@ -56,8 +56,8 @@ int OcrJobs::eventFd() const noexcept
 // Spawns an isolated background worker thread per job. Entries move from
 // Queued -> Running or Cancelled under SharedState::mutex; completions still
 // registered in activeJobs are stored before their eventfd notification.
-std::optional<std::uint64_t>
-OcrJobs::submit(int inputFd, std::string password, int page, std::string language, float dpi)
+std::optional<std::uint64_t> OcrJobs::submit(
+    int inputFd, std::string password, int page, std::string language, float dpi, std::string tessDataDirectory)
 {
     // Owns the descriptor on every return/throw path; ownership transfers to the
     // worker thread only once it has started.
@@ -90,6 +90,7 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
                               inputFd = ownedInput.get(),
                               password = std::move(password),
                               language = std::move(language),
+                              tessDataDirectory = std::move(tessDataDirectory),
                               dpi]() mutable {
             const Sys::OperationBudget budget;
             // Transition to Running if not cancelled before thread startup
@@ -118,7 +119,7 @@ OcrJobs::submit(int inputFd, std::string password, int page, std::string languag
 
             // Run isolated synchronous OCR page recognition (adopts and closes
             // inputFd)
-            auto result = runner(inputFd, password, page, language, dpi, cookie.get());
+            auto result = runner(inputFd, password, page, language, dpi, cookie.get(), tessDataDirectory);
             deadline.request_stop();
             deadline.join();
 

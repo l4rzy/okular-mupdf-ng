@@ -1011,9 +1011,13 @@ ResponseMessage CommandService::ocrPage(const RequestMessage& r, const OcrPageRe
         return failure(r.id, ErrorCode::InvalidRequest, "ocr_page", "invalid page");
 
     auto language = o.language.empty() ? std::string("eng") : o.language;
+    const auto directory = Engine::findTessdataDirectory(language, m_session.tessDataDirectories);
+    if (!directory)
+        return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR model not found in configured data directories");
     // Recognition always runs in the background pool; the host collects the
     // result with a follow-up request once its completion notification arrives.
-    auto job = m_ocrJobs.submit(ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi));
+    auto job = m_ocrJobs.submit(
+        ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi), *directory);
     if (!job) {
         return failure(r.id, ErrorCode::ResourceLimit, "ocr_page", "too many jobs");
     }

@@ -134,6 +134,7 @@ int main(int argc, char* argv[])
 {
     std::vector<std::string> readOnlyDirectories { makeAbsolutePath(DefaultTessDataDirectory),
                                                    makeAbsolutePath(SignatureFontDirectory) };
+    std::vector<std::string> tessDataDirectories;
     auto options = makeWorkerOptions();
     cxxopts::ParseResult result;
     try {
@@ -150,9 +151,13 @@ int main(int argc, char* argv[])
             return 0;
         }
         if (result.count("tessdata-dir")) {
-            for (const auto& directory : result["tessdata-dir"].as<std::vector<std::string>>())
-                appendUniquePath(readOnlyDirectories, makeAbsolutePath(directory));
+            for (const auto& directory : result["tessdata-dir"].as<std::vector<std::string>>()) {
+                const auto path = makeAbsolutePath(directory);
+                appendUniquePath(tessDataDirectories, path);
+                appendUniquePath(readOnlyDirectories, path);
+            }
         }
+        appendUniquePath(tessDataDirectories, makeAbsolutePath(DefaultTessDataDirectory));
         if (result.count("sandbox-check")) {
             if (result.count("sandbox-check") > 1)
                 throw cxxopts::exceptions::incorrect_argument_type("sandbox-check may be specified only once");
@@ -204,7 +209,8 @@ int main(int argc, char* argv[])
     }
 
     // Step 3: Create and start control socket listener to service RPC commands.
-    ::Mu::Worker::Runtime::WorkerServer server(socketPath.c_str(), &fdChannel, { }, ::getppid());
+    ::Mu::Worker::Runtime::WorkerServer server(
+        socketPath.c_str(), &fdChannel, { }, ::getppid(), std::move(tessDataDirectories));
     if (!server.listen(&error)) {
         MU_LOG(critical, "Mu::Worker", std::string("failed to start control socket: ") + error);
         return 2;

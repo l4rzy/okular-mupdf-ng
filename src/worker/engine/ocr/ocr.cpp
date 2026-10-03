@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <unistd.h>
@@ -99,6 +100,40 @@ std::string tessdataLanguage(std::string language)
     return language.empty() ? "eng" : language;
 }
 
+std::optional<std::string> findTessdataDirectory(const std::string& language,
+                                                 const std::vector<std::string>& directories)
+{
+    const std::string normalized = tessdataLanguage(language);
+    std::vector<std::filesystem::path> models;
+    for (std::size_t start = 0; start < normalized.size();) {
+        const auto end = normalized.find('+', start);
+        const std::filesystem::path name(normalized.substr(start, end - start));
+        if (name.empty() || name.is_absolute())
+            return std::nullopt;
+        for (const auto& component : name) {
+            if (component == "..")
+                return std::nullopt;
+        }
+        models.emplace_back(name.string() + ".traineddata");
+        if (end == std::string::npos)
+            break;
+        start = end + 1;
+        if (start == normalized.size())
+            return std::nullopt;
+    }
+    for (const auto& directory : directories) {
+        if (directory.empty())
+            continue;
+        const bool available = std::all_of(models.begin(), models.end(), [&](const auto& model) {
+            std::error_code error;
+            return std::filesystem::is_regular_file(std::filesystem::path(directory) / model, error);
+        });
+        if (available)
+            return directory;
+    }
+    return std::nullopt;
+}
+
 // =============================================================================
 // Synchronous OCR Page Processing
 // =============================================================================
@@ -113,7 +148,8 @@ std::string tessdataLanguage(std::string language)
                               int pageNumber,
                               const std::string& language,
                               float dpi,
-                              CancellationCookie* cookie)
+                              CancellationCookie* cookie,
+                              const std::string& tessDataDirectory)
 {
     ::Mu::Model::OcrResult result;
     Mu::Worker::Sys::FileDescriptor fd(inputFd);
@@ -178,7 +214,7 @@ std::string tessdataLanguage(std::string language)
                                           { 0, 0, width, height },
                                           1,
                                           lang.c_str(),
-                                          TESSDATA_DIR,
+                                          tessDataDirectory.empty() ? TESSDATA_DIR : tessDataDirectory.c_str(),
                                           nullptr,
                                           nullptr);
             activeCookie->sync();

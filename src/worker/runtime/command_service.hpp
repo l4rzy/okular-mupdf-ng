@@ -84,6 +84,7 @@ struct SessionContext {
     Sandbox::Status sandbox;
     FdChannel* fdChannel = nullptr;
     CtrlChannel* controlChannel = nullptr;
+    std::vector<std::string> tessDataDirectories { };
 };
 
 /**

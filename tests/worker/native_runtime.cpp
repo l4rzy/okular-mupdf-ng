@@ -105,9 +105,15 @@ int runTestWorkerNativeRuntime()
 
     // A watchdog-cancelled job must notify the host and free capacity after
     // take(), so the next page can run. No PDF or Tesseract is needed.
-    const auto runner = +[](int fd, const std::string&, int page, const std::string&, float, CancellationCookie* cookie)
-        -> ::Mu::Model::OcrResult {
+    const auto runner = +[](int fd,
+                            const std::string&,
+                            int page,
+                            const std::string&,
+                            float,
+                            CancellationCookie* cookie,
+                            const std::string& directory) -> ::Mu::Model::OcrResult {
         FileDescriptor inputFd(fd);
+        assert(directory == "/test/tessdata");
         if (page == 0) {
             const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(2);
             while (!cookie->isCancelled() && std::chrono::steady_clock::now() < until)
@@ -123,7 +129,7 @@ int runTestWorkerNativeRuntime()
     for (int page = 0; page < 2; ++page) {
         const int fd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
         assert(fd >= 0);
-        const auto id = watchdogJobs.submit(fd, { }, page, "eng", 225.0f);
+        const auto id = watchdogJobs.submit(fd, { }, page, "eng", 225.0f, "/test/tessdata");
         assert(id);
         auto completionDeadline = MonotonicDeadline::fromMilliseconds(3000);
         assert(waitForFd(watchdogJobs.eventFd(), POLLIN, completionDeadline, &error) == IoResult::Complete);

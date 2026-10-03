@@ -61,8 +61,12 @@ public:
     /// Submits a background OCR job for a specific document page.
     /// Consumes `inputFd` on every path: rejection and pre-start cancellation
     /// close it here; a started job transfers it to runOcr for closure.
-    [[nodiscard]] std::optional<std::uint64_t>
-    submit(int inputFd, std::string password, int page, std::string language, float dpi);
+    [[nodiscard]] std::optional<std::uint64_t> submit(int inputFd,
+                                                      std::string password,
+                                                      int page,
+                                                      std::string language,
+                                                      float dpi,
+                                                      std::string tessDataDirectory = { });
 
     /// Drains all completed OCR job notifications.
     [[nodiscard]] std::vector<Notification> drainNotifications();
