@@ -41,7 +41,7 @@ bool lookupMetadataValue(
     }
     fz_always(context)
     {
-        if (!found && buffer)
+        if (!found)
             fz_free(context, buffer);
     }
     fz_catch(context)

@@ -145,8 +145,7 @@ EpubDocument::EpubDocument(std::size_t storeSize)
 EpubDocument::~EpubDocument()
 {
     close();
-    if (m_context)
-        fz_drop_context(m_context);
+    fz_drop_context(m_context);
 }
 
 // =============================================================================
@@ -218,10 +217,8 @@ bool EpubDocument::openFdWithAccelerator(int fd,
     }
     fz_always(m_context)
     {
-        if (acceleratorStream)
-            fz_drop_stream(m_context, acceleratorStream);
-        if (acceleratorBuffer)
-            fz_drop_buffer(m_context, acceleratorBuffer);
+        fz_drop_stream(m_context, acceleratorStream);
+        fz_drop_buffer(m_context, acceleratorBuffer);
     }
     fz_catch(m_context)
     {
@@ -252,8 +249,7 @@ std::vector<std::uint8_t> EpubDocument::exportAccelerator(std::string* error) co
     }
     fz_always(m_context)
     {
-        if (buffer)
-            fz_drop_buffer(m_context, buffer);
+        fz_drop_buffer(m_context, buffer);
     }
     fz_catch(m_context)
     {

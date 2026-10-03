@@ -245,39 +245,44 @@ std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_re
     if (width <= 0 || height <= 0)
         fz_throw(m_context, FZ_ERROR_GENERIC, "page has invalid bounds");
 
-    fz_link* volatile list = nullptr;
-    std::vector<Link> result;
-    fz_try(m_context)
     {
-        // Load link annotations from page content stream and annotation dictionaries
-        list = fz_load_links(m_context, nativePage);
-        for (fz_link* link = list; link; link = link->next) {
-            if (result.size() >= Constant::MaxPageLinks)
-                fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: page link limit exceeded");
+        fz_link* volatile list = nullptr;
+        std::vector<Link> result;
+        bool failed = false;
+        fz_try(m_context)
+        {
+            // Load link annotations from page content stream and annotation dictionaries
+            list = fz_load_links(m_context, nativePage);
+            for (fz_link* link = list; link; link = link->next) {
+                if (result.size() >= Constant::MaxPageLinks)
+                    fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: page link limit exceeded");
 
-            if (!link->uri)
-                continue;
+                if (!link->uri)
+                    continue;
 
-            Link value;
-            value.left = (link->rect.x0 - bounds.x0) / width;
-            value.top = (link->rect.y0 - bounds.y0) / height;
-            value.right = (link->rect.x1 - bounds.x0) / width;
-            value.bottom = (link->rect.y1 - bounds.y0) / height;
-            value.target = resolveLink(link->uri, error);
-            if (value.target.valid)
-                result.push_back(std::move(value));
+                Link value;
+                value.left = (link->rect.x0 - bounds.x0) / width;
+                value.top = (link->rect.y0 - bounds.y0) / height;
+                value.right = (link->rect.x1 - bounds.x0) / width;
+                value.bottom = (link->rect.y1 - bounds.y0) / height;
+                value.target = resolveLink(link->uri, error);
+                if (value.target.valid)
+                    result.push_back(std::move(value));
+            }
         }
-    }
-    fz_always(m_context)
-    {
-        if (list)
+        fz_always(m_context)
+        {
             fz_drop_link(m_context, list);
+        }
+        fz_catch(m_context)
+        {
+            failed = true;
+        }
+        if (!failed)
+            return result;
     }
-    fz_catch(m_context)
-    {
-        fz_rethrow(m_context);
-    }
-    return result;
+    // Destroy the owning vector before jumping to the caller's exception frame.
+    fz_rethrow(m_context);
 }
 
 // =============================================================================

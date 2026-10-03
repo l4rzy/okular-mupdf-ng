@@ -298,18 +298,12 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
     }
     fz_always(context)
     {
-        if (ocrDevice)
-            fz_drop_device(context, ocrDevice);
-        if (textDevice)
-            fz_drop_device(context, textDevice);
-        if (text)
-            fz_drop_stext_page(context, text);
-        if (page)
-            fz_drop_page(context, page);
-        if (document)
-            fz_drop_document(context, document);
-        if (stream)
-            fz_drop_stream(context, stream);
+        fz_drop_device(context, ocrDevice);
+        fz_drop_device(context, textDevice);
+        fz_drop_stext_page(context, text);
+        fz_drop_page(context, page);
+        fz_drop_document(context, document);
+        fz_drop_stream(context, stream);
     }
     fz_catch(context)
     {

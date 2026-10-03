@@ -182,27 +182,27 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
 {
     const std::size_t byteLimit = std::min(Constant::MaxEmbeddedBytes, remainingBytes);
 
-    EmbeddedFile result;
+    // Resolve all fallible metadata before constructing owning C++ values.
+    // A malformed indirect object can jump to embeddedFiles()'s exception
+    // frame; only POD locals may be live across that jump.
     if (!object || !pdf_is_dict(context, object))
-        return result;
+        return { };
 
     pdf_obj* filename = pdf_dict_gets(context, object, "UF");
     if (!filename)
         filename = pdf_dict_gets(context, object, "F");
 
     if (!filename || !pdf_is_string(context, filename))
-        return result;
+        return { };
 
-    if (const char* value = pdf_to_text_string(context, filename))
-        result.name = value;
+    const char* name = pdf_to_text_string(context, filename);
+    if (!name || !*name)
+        return { };
 
-    if (result.name.empty())
-        return result;
-
-    if (pdf_obj* description = pdf_dict_gets(context, object, "Desc");
-        description && pdf_is_string(context, description))
-        if (const char* value = pdf_to_text_string(context, description))
-            result.description = value;
+    pdf_obj* descriptionObject = pdf_dict_gets(context, object, "Desc");
+    const char* description = descriptionObject && pdf_is_string(context, descriptionObject)
+        ? pdf_to_text_string(context, descriptionObject)
+        : nullptr;
 
     pdf_obj* embedded = pdf_dict_gets(context, object, "EF");
     pdf_obj* streamObject =
@@ -211,17 +211,26 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
     if (!streamObject && embedded && pdf_is_dict(context, embedded))
         streamObject = pdf_dict_gets(context, embedded, "F");
 
+    std::int64_t size = 0;
+    Timestamp creationDate { }, modificationDate { };
+    pdf_obj* params = streamObject ? pdf_dict_gets(context, streamObject, "Params") : nullptr;
+    if (params && pdf_is_dict(context, params)) {
+        if (pdf_obj* sizeObject = pdf_dict_gets(context, params, "Size"); sizeObject && pdf_is_int(context, sizeObject))
+            size = pdf_to_int(context, sizeObject);
+
+        creationDate = parsePdfDate(context, pdf_dict_gets(context, params, "CreationDate"));
+        modificationDate = parsePdfDate(context, pdf_dict_gets(context, params, "ModDate"));
+    }
+
+    EmbeddedFile result;
+    result.name = name;
+    if (description)
+        result.description = description;
+    result.size = size;
+    result.creationDate = creationDate;
+    result.modificationDate = modificationDate;
     if (!streamObject)
         return result;
-
-    pdf_obj* params = pdf_dict_gets(context, streamObject, "Params");
-    if (params && pdf_is_dict(context, params)) {
-        if (pdf_obj* size = pdf_dict_gets(context, params, "Size"); size && pdf_is_int(context, size))
-            result.size = pdf_to_int(context, size);
-
-        result.creationDate = parsePdfDate(context, pdf_dict_gets(context, params, "CreationDate"));
-        result.modificationDate = parsePdfDate(context, pdf_dict_gets(context, params, "ModDate"));
-    }
 
     if (result.size > static_cast<std::int64_t>(byteLimit)) {
         result.contentTooLarge = true;
@@ -249,8 +258,7 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
     }
     fz_always(context)
     {
-        if (input)
-            fz_drop_stream(context, input);
+        fz_drop_stream(context, input);
     }
     fz_catch(context)
     {

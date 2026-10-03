@@ -54,10 +54,8 @@ struct RawSignatureField {
 
 void freeRawSignatureField(fz_context* context, RawSignatureField& field) noexcept
 {
-    if (field.fullyQualifiedName)
-        fz_free(context, field.fullyQualifiedName);
-    if (field.contents)
-        fz_free(context, field.contents);
+    fz_free(context, field.fullyQualifiedName);
+    fz_free(context, field.contents);
     field.fullyQualifiedName = nullptr;
     field.contents = nullptr;
 }
@@ -88,20 +86,20 @@ bool hasElement(std::uint8_t elements, SignatureElement element)
 }
 
 fz_display_list* signatureAppearanceWithCustomFont(fz_context* context,
+                                                   const char* fontPath,
                                                    fz_rect rectangle,
                                                    fz_text_language language,
                                                    const char* nickname,
                                                    const char* rightText,
                                                    int includeLogo)
 {
-    const std::string fontPath = std::string(SIGNATURE_FONT_DIR) + '/' + Constant::SignatureAppearanceFontFileName;
     // volatile, not fz_var: fz_var_imp is a no-op that LTO inlines away, so the
     // cleanup reads below would otherwise see indeterminate values.
     fz_font* volatile font = nullptr;
     volatile bool fontLoaded = false;
     fz_try(context)
     {
-        font = fz_new_font_from_file(context, "Allura", fontPath.c_str(), 0, 0);
+        font = fz_new_font_from_file(context, "Allura", fontPath, 0, 0);
         fontLoaded = font != nullptr;
     }
     fz_catch(context)
@@ -401,6 +399,8 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     std::string displayDate = !request.appearance.signingDisplayDate.empty() ? request.appearance.signingDisplayDate
                                                                              : formatSignatureDate(signingTime);
     std::string signatureText;
+    const std::string signatureFontPath =
+        std::string(SIGNATURE_FONT_DIR) + '/' + Constant::SignatureAppearanceFontFileName;
 
     fz_try(m_context)
     {
@@ -488,8 +488,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
             }
             fz_always(m_context)
             {
-                if (imgBuf)
-                    fz_drop_buffer(m_context, imgBuf);
+                fz_drop_buffer(m_context, imgBuf);
             }
             fz_catch(m_context)
             {
@@ -543,8 +542,8 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, graphic, nullptr, appearanceText, logo);
                 else if (hasElement(request.appearance.elements, SignatureElement::GraphicName))
-                    dlist =
-                        signatureAppearanceWithCustomFont(m_context, rect, lang, signerNickname, appearanceText, logo);
+                    dlist = signatureAppearanceWithCustomFont(
+                        m_context, signatureFontPath.c_str(), rect, lang, signerNickname, appearanceText, logo);
                 else
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, nullptr, nullptr, appearanceText, logo);
@@ -680,14 +679,11 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         fail(error, cms.details.empty() ? fz_caught_message(m_context) : cms.details.c_str());
     }
 
-    if (graphic)
-        fz_drop_image(m_context, graphic);
-    if (widget)
-        pdf_drop_annot(m_context, widget);
+    fz_drop_image(m_context, graphic);
+    pdf_drop_annot(m_context, widget);
     if (nativePage)
         pdf_drop_page(m_context, nativePage);
-    if (signer)
-        pdf_drop_signer(m_context, signer);
+    pdf_drop_signer(m_context, signer);
 
     if (saved && signingResult)
         *signingResult = SigningResult::Success;

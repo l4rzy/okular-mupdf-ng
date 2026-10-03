@@ -132,12 +132,9 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     }
     fz_always(m_context)
     {
-        if (dev)
-            fz_drop_device(m_context, dev);
-        if (pix)
-            fz_drop_pixmap(m_context, pix);
-        if (page)
-            fz_drop_page(m_context, page);
+        fz_drop_device(m_context, dev);
+        fz_drop_pixmap(m_context, pix);
+        fz_drop_page(m_context, page);
     }
     fz_catch(m_context)
     {
@@ -218,10 +215,8 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
     }
     fz_always(m_context)
     {
-        if (stext)
-            fz_drop_stext_page(m_context, stext);
-        if (pagePtr)
-            fz_drop_page(m_context, pagePtr);
+        fz_drop_stext_page(m_context, stext);
+        fz_drop_page(m_context, pagePtr);
     }
     fz_catch(m_context)
     {

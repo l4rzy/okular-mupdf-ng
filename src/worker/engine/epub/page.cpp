@@ -215,8 +215,7 @@ std::vector<Link> EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect
 
     fz_try(m_context)
     {
-        if (linkList)
-            fz_drop_link(m_context, linkList);
+        fz_drop_link(m_context, linkList);
     }
     fz_catch(m_context)
     {

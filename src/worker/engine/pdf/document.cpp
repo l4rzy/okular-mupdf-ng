@@ -39,8 +39,7 @@ PdfDocument::PdfDocument(std::size_t storeSize)
 PdfDocument::~PdfDocument()
 {
     close();
-    if (m_context)
-        fz_drop_context(m_context);
+    fz_drop_context(m_context);
 }
 
 // =============================================================================

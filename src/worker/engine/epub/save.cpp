@@ -311,10 +311,8 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
                     // pdf_create_link returns a caller-owned reference on top of the
                     // page's own; drop it or the link leaks once the page is freed.
                     fz_drop_link(m_context, pdf_create_link(m_context, destinationPage, linkRect, uri));
-                    if (generatedUri) {
-                        fz_free(m_context, generatedUri);
-                        generatedUri = nullptr;
-                    }
+                    fz_free(m_context, generatedUri);
+                    generatedUri = nullptr;
                 }
 
                 pdf_drop_page(m_context, destinationPage);
@@ -359,10 +357,8 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
                         }
                     };
                     const auto releaseUri = [&] {
-                        if (generatedUri) {
-                            fz_free(m_context, generatedUri);
-                            generatedUri = nullptr;
-                        }
+                        fz_free(m_context, generatedUri);
+                        generatedUri = nullptr;
                     };
                     const auto popFrame = [&] {
                         const OpenFrame frame = openFrames.back();
@@ -398,8 +394,7 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
                 }
                 fz_always(m_context)
                 {
-                    if (iterator)
-                        fz_drop_outline_iterator(m_context, iterator);
+                    fz_drop_outline_iterator(m_context, iterator);
                 }
                 fz_catch(m_context)
                 {
@@ -424,20 +419,14 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
     }
     fz_always(m_context)
     {
-        if (generatedUri)
-            fz_free(m_context, generatedUri);
+        fz_free(m_context, generatedUri);
         if (destinationPage)
             pdf_drop_page(m_context, destinationPage);
-        if (page)
-            fz_drop_page(m_context, page);
-        if (device)
-            fz_drop_device(m_context, device);
-        if (pageObject)
-            pdf_drop_obj(m_context, pageObject);
-        if (resources)
-            pdf_drop_obj(m_context, resources);
-        if (contents)
-            fz_drop_buffer(m_context, contents);
+        fz_drop_page(m_context, page);
+        fz_drop_device(m_context, device);
+        pdf_drop_obj(m_context, pageObject);
+        pdf_drop_obj(m_context, resources);
+        fz_drop_buffer(m_context, contents);
         if (destination)
             pdf_drop_document(m_context, destination);
     }

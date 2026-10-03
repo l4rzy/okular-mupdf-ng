@@ -93,22 +93,23 @@ pdf_obj* resetAction(fz_context* context, pdf_obj* field)
     return action;
 }
 
-bool actionContainsJavaScript(fz_context* context, pdf_obj* action, std::vector<pdf_obj*>& visited, std::size_t depth)
+bool actionContainsJavaScript(
+    fz_context* context, pdf_obj* action, std::array<pdf_obj*, 256>& visited, std::size_t& count, std::size_t depth)
 {
-    constexpr std::size_t MaxActionNodes = 256;
     constexpr std::size_t MaxActionDepth = 32;
-    if (!action || depth >= MaxActionDepth || visited.size() >= MaxActionNodes)
+    if (!action || depth >= MaxActionDepth || count >= visited.size())
         return false;
 
     action = pdf_resolve_indirect(context, action);
-    if (!action || std::find(visited.begin(), visited.end(), action) != visited.end())
+    const auto end = visited.begin() + count;
+    if (!action || std::find(visited.begin(), end, action) != end)
         return false;
-    visited.push_back(action);
+    visited[count++] = action;
 
     if (pdf_is_array(context, action)) {
         const int length = pdf_array_len(context, action);
-        for (int i = 0; i < length && visited.size() < MaxActionNodes; ++i) {
-            if (actionContainsJavaScript(context, pdf_array_get(context, action, i), visited, depth + 1))
+        for (int i = 0; i < length && count < visited.size(); ++i) {
+            if (actionContainsJavaScript(context, pdf_array_get(context, action, i), visited, count, depth + 1))
                 return true;
         }
         return false;
@@ -121,22 +122,26 @@ bool actionContainsJavaScript(fz_context* context, pdf_obj* action, std::vector<
         && pdf_dict_get(context, action, PDF_NAME(JS))) {
         return true;
     }
-    return actionContainsJavaScript(context, pdf_dict_get(context, action, PDF_NAME(Next)), visited, depth + 1);
+    return actionContainsJavaScript(context, pdf_dict_get(context, action, PDF_NAME(Next)), visited, count, depth + 1);
 }
 
 bool hasJavaScriptClickAction(fz_context* context, pdf_obj* field)
 {
     pdf_obj* additionalActions = pdf_dict_get(context, field, PDF_NAME(AA));
-    std::vector<pdf_obj*> visited;
+    // The caller catches MuPDF errors. Fixed POD storage needs no destructor
+    // when a malformed action jumps out of this helper.
+    std::array<pdf_obj*, 256> visited { };
+    std::size_t count = 0;
     if (additionalActions
-        && actionContainsJavaScript(context, pdf_dict_get(context, additionalActions, PDF_NAME(D)), visited, 0)) {
+        && actionContainsJavaScript(
+            context, pdf_dict_get(context, additionalActions, PDF_NAME(D)), visited, count, 0)) {
         return true;
     }
 
     pdf_obj* action = pdf_dict_get(context, field, PDF_NAME(A));
     if (!action && additionalActions)
         action = pdf_dict_get(context, additionalActions, PDF_NAME(U));
-    return actionContainsJavaScript(context, action, visited, 0);
+    return actionContainsJavaScript(context, action, visited, count, 0);
 }
 
 void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<std::string>& selected)
@@ -179,8 +184,7 @@ void updateAllPages(fz_context* context, fz_document* document, int pageCount)
         }
         fz_always(context)
         {
-            if (page)
-                fz_drop_page(context, page);
+            fz_drop_page(context, page);
         }
         fz_catch(context)
         {
@@ -682,8 +686,7 @@ bool PdfDocument::updateFormField(int page,
     }
     fz_always(m_context)
     {
-        if (newValue)
-            pdf_drop_obj(m_context, newValue);
+        pdf_drop_obj(m_context, newValue);
         fz_drop_page(m_context, nativePage);
     }
     fz_catch(m_context)

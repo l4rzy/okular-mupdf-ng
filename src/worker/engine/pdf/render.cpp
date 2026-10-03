@@ -140,10 +140,8 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
     }
     fz_always(m_context)
     {
-        if (device)
-            fz_drop_device(m_context, device);
-        if (pixmap)
-            fz_drop_pixmap(m_context, pixmap);
+        fz_drop_device(m_context, device);
+        fz_drop_pixmap(m_context, pixmap);
         fz_drop_separations(m_context, separations);
         fz_drop_page(m_context, nativePage);
     }
@@ -255,8 +253,7 @@ std::vector<TextBox> PdfDocument::textBoxes(
             }
             fz_drop_device(m_context, device);
         }
-        if (text)
-            fz_drop_stext_page(m_context, text);
+        fz_drop_stext_page(m_context, text);
         fz_drop_page(m_context, nativePage);
     }
     fz_catch(m_context)

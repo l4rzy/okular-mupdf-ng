@@ -46,12 +46,10 @@ std::vector<OutlineNode> PdfDocument::outline(std::string* error) const
     try {
         result = copyOutline(root, 0, &count, error);
     } catch (...) {
-        if (root)
-            fz_drop_outline(m_context, root);
+        fz_drop_outline(m_context, root);
         throw;
     }
-    if (root)
-        fz_drop_outline(m_context, root);
+    fz_drop_outline(m_context, root);
     if (error && !error->empty())
         return { };
 

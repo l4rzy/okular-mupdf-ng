@@ -48,7 +48,7 @@ bool lookupMetadataValue(
     {
         // The fz allocator owns this temporary buffer; free it on every path that
         // does not transfer its contents to the C++ string below.
-        if (!found && buffer)
+        if (!found)
             fz_free(context, buffer);
     }
     fz_catch(context)

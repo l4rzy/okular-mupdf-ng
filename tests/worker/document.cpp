@@ -20,6 +20,11 @@
 
 namespace {
 
+void failPdfSeek(fz_context* context, fz_stream*, std::int64_t, int)
+{
+    fz_throw(context, FZ_ERROR_SYSTEM, "injected PDF read failure");
+}
+
 void declareAcroForm(fz_context* context, pdf_document* document)
 {
     pdf_obj* catalog = pdf_dict_get(context, pdf_trailer(context, document), PDF_NAME(Root));
@@ -100,6 +105,193 @@ bool pixelsMatch(const std::vector<std::uint8_t>& actual, const std::vector<std:
 class TestDocument : public QObject {
     Q_OBJECT
 private slots:
+
+    void attachmentMetadataReadFailures_data()
+    {
+        QTest::addColumn<QByteArray>("metadata");
+        QTest::addColumn<QByteArray>("indirectObject");
+        QTest::newRow("description") << QByteArray("/Desc 7 0 R") << QByteArray("(description)");
+        QTest::newRow("embedded-dictionary") << QByteArray("/Desc (description) /EF 7 0 R") << QByteArray("<< >>");
+        QTest::newRow("stream-params") << QByteArray("/Desc (description) /EF << /F << /Params 7 0 R >> >>")
+                                       << QByteArray("<< /Size 0 >>");
+    }
+
+    void attachmentMetadataReadFailures()
+    {
+        QFETCH(QByteArray, metadata);
+        QFETCH(QByteArray, indirectObject);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("attachment-read-failure.pdf");
+        const QByteArray name(1024, 'n');
+        QVERIFY(writePdfObjects(path,
+                                { "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 5 0 R >> >>",
+                                  "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                  "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> >>",
+                                  "<< /Type /Filespec /F (" + name + ") " + metadata + " >>",
+                                  "<< /Names [(attachment) 4 0 R] >>",
+                                  "null",
+                                  indirectObject }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "attachment.pdf", &error), error.c_str());
+        fz_context* context = document.context();
+        pdf_document* pdf = pdf_specifics(context, document.document());
+        // Cache the tree and filename while leaving the failing metadata object
+        // unresolved. The old path allocated its C++ filename before this I/O.
+        fz_try(context)
+        {
+            pdf_obj* tree = pdf_dict_getp(context, pdf_trailer(context, pdf), "Root/Names/EmbeddedFiles");
+            pdf_obj* names = pdf_dict_get(context, tree, PDF_NAME(Names));
+            pdf_obj* filespec = pdf_array_get(context, names, 1);
+            (void)pdf_to_text_string(context, pdf_dict_get(context, filespec, PDF_NAME(F)));
+        }
+        fz_catch(context)
+        {
+            error = fz_caught_message(context);
+        }
+        QVERIFY2(error.empty(), error.c_str());
+        const auto* exceptionTop = context->error.top;
+        const auto seek = pdf->file->seek;
+        for (int repeat = 0; repeat < 4; ++repeat) {
+            error.clear();
+            pdf->file->seek = failPdfSeek;
+            const auto attachments = document.embeddedFiles(1024, 10, nullptr, &error);
+            pdf->file->seek = seek;
+            QVERIFY(attachments.empty());
+            QVERIFY2(error.find("injected PDF read failure") != std::string::npos, error.c_str());
+            QCOMPARE(context->error.top, exceptionTop);
+        }
+        error.clear();
+        const auto attachments = document.embeddedFiles(1024, 10, nullptr, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(attachments.size(), size_t(1));
+        QCOMPARE(attachments.front().name, name.toStdString());
+    }
+
+    void javaScriptActionReadFailures_data()
+    {
+        QTest::addColumn<QByteArray>("action");
+        const QByteArray chain("<< /S /Named /N /NextPage /Next 8 0 R >>");
+        QTest::newRow("primary") << QByteArray("/A ") + chain;
+        QTest::newRow("mouse-down") << QByteArray("/AA << /D ") + chain + " >>";
+        QTest::newRow("mouse-up") << QByteArray("/AA << /U ") + chain + " >>";
+    }
+
+    void javaScriptActionReadFailures()
+    {
+        QFETCH(QByteArray, action);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("action-read-failure.pdf");
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>",
+              "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [4 0 R] >>",
+              "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (Button) " + action
+                  + " /Rect [50 50 150 90] /AP << /N 7 0 R >> >>",
+              "<< /Fields [4 0 R] >>",
+              "null",
+              "<< /Type /XObject /Subtype /Form /BBox [0 0 100 40] /Resources << >> /Length 0 >>\nstream\nendstream",
+              "<< /S /JavaScript /JS (void 0;) >>" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "actions.pdf", &error), error.c_str());
+        // Load the widget with JS disabled, keeping its /Next target uncached.
+        (void)document.pageGeometry(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        auto settings = document.settings();
+        settings.formJavaScriptEnabled = true;
+        document.setSettings(settings);
+        fz_context* context = document.context();
+        pdf_document* pdf = pdf_specifics(context, document.document());
+        if (!pdf_js_supported(context, pdf))
+            QSKIP("JavaScript is disabled in this MuPDF build");
+        const auto* exceptionTop = context->error.top;
+        const auto seek = pdf->file->seek;
+        for (int repeat = 0; repeat < 4; ++repeat) {
+            error.clear();
+            pdf->file->seek = failPdfSeek;
+            const auto details = document.pageDetails(0, &error, false);
+            pdf->file->seek = seek;
+            QVERIFY(details.formFields.empty());
+            QVERIFY2(error.find("injected PDF read failure") != std::string::npos, error.c_str());
+            QCOMPARE(context->error.top, exceptionTop);
+        }
+        error.clear();
+        const auto details = document.pageDetails(0, &error, false);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(details.formFields.size(), size_t(1));
+        QCOMPARE(details.formFields.front().pushButtonAction, ::Mu::Model::FormPushButtonAction::JavaScript);
+    }
+
+    void pageLinkLimitUnwindsResults_data()
+    {
+        QTest::addColumn<int>("count");
+        const int limit = static_cast<int>(::Mu::Worker::Engine::Constant::MaxPageLinks);
+        QTest::newRow("empty") << 0;
+        QTest::newRow("at-limit") << limit;
+        QTest::newRow("over-limit") << limit + 1;
+    }
+
+    void pageLinkLimitUnwindsResults()
+    {
+        QFETCH(int, count);
+        const bool accepted = count <= static_cast<int>(::Mu::Worker::Engine::Constant::MaxPageLinks);
+        const size_t expectedCount = accepted ? static_cast<size_t>(count) : 0;
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("links.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        fz_context* context = document.context();
+        createMultiPagePDF(context, path, 1);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "links.pdf", &error), error.c_str());
+        (void)document.pageGeometry(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        pdf_page* volatile page = nullptr;
+        fz_try(context)
+        {
+            page = pdf_load_page(context, pdf_specifics(context, document.document()), 0);
+            // Inject a native list to test link extraction independently of the
+            // annotation-count limit. Each long URI owns heap storage.
+            for (int index = 0; index < count; ++index) {
+                fz_link* link = pdf_new_link(context,
+                                             page,
+                                             { 0, 0, 1, 1 },
+                                             "https://example.test/a-long-link-to-exercise-owned-uri-storage",
+                                             nullptr);
+                link->next = page->links;
+                page->links = link;
+            }
+        }
+        fz_always(context)
+        {
+            pdf_drop_page(context, page);
+        }
+        fz_catch(context)
+        {
+            error = fz_caught_message(context);
+        }
+        QVERIFY2(error.empty(), error.c_str());
+        const auto* exceptionTop = context->error.top;
+        const auto links = document.extractLinks(0, &error);
+        QCOMPARE(links.size(), expectedCount);
+        QCOMPARE(error, accepted ? std::string() : std::string("resource limit: page link limit exceeded"));
+        QCOMPARE(context->error.top, exceptionTop);
+        // Omitting error output must still discard the whole page on failure.
+        const auto details = document.pageDetails(0, nullptr);
+        QCOMPARE(details.links.size(), expectedCount);
+        QCOMPARE(details.geometry.widthPoints, accepted ? 1.0 : 0.0);
+        QCOMPARE(context->error.top, exceptionTop);
+    }
 
     void embeddedFileLimits_data()
     {
