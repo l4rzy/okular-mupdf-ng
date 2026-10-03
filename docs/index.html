@@ -201,7 +201,7 @@
             <tr>
               <td>PDF Forms</td>
               <td>AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons</td>
-              <td class="yes">Yes (incl. JS calculation &amp; button/field-event actions; no XFA)</td>
+              <td class="yes">Yes (incl. JS calculation &amp; button/field-event actions; XFA detected only)</td>
               <td class="yes">Yes (AcroForm; JS stored, not executed; XFA detected only)</td>
             </tr>
             <tr>
@@ -212,7 +212,7 @@
             </tr>
             <tr>
               <td>Cert Manager</td>
-              <td>NSS Certificate Manager</td>
+              <td>NSS certificate manager; generate RSA and ECDSA P-256 signing certificates</td>
               <td class="yes">Yes</td>
               <td class="no">No</td>
             </tr>
@@ -229,6 +229,12 @@
               <td class="no">No</td>
             </tr>
             <tr>
+              <td>Flattened PDF export</td>
+              <td>Bake annotations and form fields into PDF page content</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
+            </tr>
+            <tr>
               <td>Document Tools</td>
               <td>Text search, outline/TOC, links, fonts, metadata, embedded files</td>
               <td class="yes">Yes</td>
@@ -241,8 +247,14 @@
               <td class="yes">Yes</td>
             </tr>
             <tr>
+              <td>PDF layers</td>
+              <td>Toggle optional content in the Layers sidebar</td>
+              <td class="yes">Yes</td>
+              <td class="yes">Yes (PDF)</td>
+            </tr>
+            <tr>
               <td>OCR</td>
-              <td>Built-in Tesseract page OCR</td>
+              <td>Built-in Tesseract page OCR engine</td>
               <td class="yes">Yes</td>
               <td class="no">No</td>
             </tr>
