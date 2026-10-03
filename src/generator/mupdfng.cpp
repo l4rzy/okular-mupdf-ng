@@ -991,6 +991,11 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
     std::vector<Model::FormField> formFields;
     for (const auto& page : pages)
         formFields.insert(formFields.end(), page.formFields.begin(), page.formFields.end());
+    // Undo commands retain pointers to the annotations about to be deleted.
+    // Drop them while those objects are still alive, including commands that
+    // own annotations currently removed from their pages.
+    if (const auto* currentDocument = document())
+        const_cast<Okular::Document*>(currentDocument)->clearHistory();
     const bool formValuesChanged = m_formCoordinator->resetFields(formFields);
     {
         // Mirrors clearWorkerDerivedState: live pages require userMutex().
