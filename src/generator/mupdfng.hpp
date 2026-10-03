@@ -8,6 +8,7 @@
 #include <okular/core/document.h>
 #include <okular/core/fontinfo.h>
 #include <okular/core/generator.h>
+#include <okular/core/observer.h>
 #include <okular/core/version.h>
 #include <okular/interfaces/configinterface.h>
 #include <okular/interfaces/printinterface.h>
@@ -44,6 +45,7 @@ namespace Mu::Generator {
 ///    annotations are rebuilt from the reopened worker document.
 /// 4. Cancel asynchronous OCR work before document teardown or worker recovery.
 class Main : public Okular::Generator,
+             public Okular::DocumentObserver,
              public Okular::SaveInterface,
              public Okular::ConfigInterface,
              public Okular::PrintInterface {
@@ -126,11 +128,12 @@ protected:
     void addPages(KConfigDialog* dialog) override;
 
 private:
+    void notifyVisibleRectsChanged() override;
     std::pair<Okular::SigningResult, QString> signResult(const Okular::NewSignatureData& data,
                                                          const QString& rFilename);
 
     // Updates OCR scheduling from the pages currently visible in Okular.
-    void observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount);
+    void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     // Reopens the retained source after a worker restart and verifies that it
     // still represents the active Okular document. Sandbox enforcement is rechecked
     // before transferring document data to the worker.
@@ -206,6 +209,7 @@ private:
     // Owns asynchronous OCR scheduling, focus tracking, and result retention;
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
+    bool m_observingVisiblePages = false;
 
     std::unique_ptr<LayersModel> m_layersModel;
     // Render/extraction threads must discard results from previous visibility.

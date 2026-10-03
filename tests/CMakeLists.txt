@@ -170,6 +170,15 @@ find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core 
 target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
 target_compile_definitions(test_generator_layers PRIVATE TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
 
+add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
+target_include_directories(test_generator_ocr PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
+target_link_libraries(test_generator_ocr PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
+target_compile_definitions(test_generator_ocr PRIVATE
+    TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
+    TEST_WORKER_DIR="$<TARGET_FILE_DIR:okular-mupdf-worker>"
+    TESSDATA_DIR="${TESSDATA_DIR}")
+add_dependencies(test_generator_ocr okularGenerator_mupdfng okular-mupdf-worker)
+
 add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generator)
 target_include_directories(test_generator_placeholder PRIVATE ../src)
 target_link_libraries(test_generator_placeholder PRIVATE mupdf_generator_placeholder Qt6::Gui KF6::I18n)

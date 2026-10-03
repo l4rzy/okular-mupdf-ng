@@ -256,6 +256,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                 if (page < 0 || page >= m_okularPages.size())
                     return;
                 auto* textPage = Conversion::ocrTextPage(boxes);
+                m_okularPages.at(page)->setTextPage(textPage);
                 Q_EMIT signalTextGenerationDone(m_okularPages.at(page), textPage);
                 if (Config::readOcrSettings().notify
                     && source == Plugin::OCR::Controller::CompletionSource::OcrCompleted) {
@@ -309,6 +310,8 @@ void Main::scheduleCacheVacuum()
 // Okular Generator Func: stops worker activity and releases generator resources.
 Main::~Main()
 {
+    if (m_observingVisiblePages && document())
+        const_cast<Okular::Document*>(document())->removeObserver(this);
     // Cancel callbacks before removing queued events or releasing UI-owned data.
     m_ocrController->reset();
     QCoreApplication::removePostedEvents(this);
@@ -406,6 +409,7 @@ bool Main::reparseConfig()
         }
     }
 
+    observeOcrFocus();
     return changed;
 }
 
@@ -580,6 +584,10 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // A fully constructed document session is the only point where worker
     // operations may resume after a restart.
     m_worker.commitSessionReady();
+    if (!m_observingVisiblePages && document()) {
+        const_cast<Okular::Document*>(document())->addObserver(this);
+        m_observingVisiblePages = true;
+    }
     return Okular::Document::OpenSuccess;
 }
 
@@ -908,7 +916,12 @@ Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& ne
 }
 
 // Updates OCR scheduling from the pages currently visible in Okular.
-void Main::observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount)
+void Main::notifyVisibleRectsChanged()
+{
+    observeOcrFocus();
+}
+
+void Main::observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText)
 {
     if (m_placeholder.isActive())
         return;
@@ -932,7 +945,7 @@ void Main::observeOcrFocus(int observedPage, std::size_t nativeTextBoxCount)
         visiblePages,
         Config::ocrConfigFor(
             target, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings),
-        Plugin::OCR::NativeTextObservation { observedPage, nativeTextBoxCount });
+        std::move(nativeText));
 }
 
 bool Main::reopenWorkerDocument(bool markFormChangesDirty)
@@ -1065,6 +1078,9 @@ void Main::clearPageDisplayState(int page)
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
+    if (m_observingVisiblePages && document())
+        const_cast<Okular::Document*>(document())->removeObserver(this);
+    m_observingVisiblePages = false;
     // Step 1: Make queued OCR completions harmless before releasing page state.
     m_ocrController->reset();
     QCoreApplication::removePostedEvents(this);
@@ -1311,6 +1327,7 @@ void Main::loadLayers()
         m_defaultLayerVisibility = m_layersModel->isDefaultVisibility();
         m_ocrController->reset();
         refreshLayerText(m_layerRevision.load());
+        observeOcrFocus();
     });
 
     if (!m_layersModel->resetLayers(*layers)) {
@@ -1392,7 +1409,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
             this,
             [this, pageNum, revision, nativeTextBoxCount = workerBoxes.size()] {
                 if (revision == m_layerRevision.load())
-                    observeOcrFocus(pageNum, nativeTextBoxCount);
+                    observeOcrFocus(Plugin::OCR::NativeTextObservation { pageNum, nativeTextBoxCount });
             },
             Qt::QueuedConnection);
         if (useOcr)
