@@ -3,10 +3,12 @@
 
 #include "generator/layers_model.hpp"
 
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <QAbstractItemModelTester>
 #include <QMimeDatabase>
 #include <QSignalSpy>
-#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
 #include <okular/core/document.h>
@@ -46,11 +48,29 @@ std::optional<LayersResponse> setLayer(LayersResponse& state, const SetLayerRequ
 class TestLayersModel : public QObject {
     Q_OBJECT
 
+private:
+    QTemporaryDir m_root;
+
 private slots:
 
     void initTestCase()
     {
-        QStandardPaths::setTestModeEnabled(true);
+        QVERIFY(m_root.isValid());
+        qputenv("XDG_CONFIG_HOME", m_root.filePath("config").toUtf8());
+        qputenv("XDG_DATA_HOME", m_root.filePath("data").toUtf8());
+        qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
+        // Container runners may lack sandbox features required by Strict mode.
+        // This suite needs the real fixture and its native text, not the gate page.
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        KConfigGroup ocr(config, QStringLiteral("OCR"));
+        ocr.writeEntry("OcrTriggerMode", "Never");
+        config->sync();
+        // Select this build's backend and resolve its worker through PATH,
+        // including Release builds without an embedded build-tree worker path.
+        QCoreApplication::setLibraryPaths({ QStringLiteral(TEST_PLUGIN_ROOT) });
+        qputenv("PATH", QByteArray(TEST_WORKER_DIR) + ':' + qgetenv("PATH"));
         Okular::SettingsCore::instance(QStringLiteral("mupdfng-layer-test"));
     }
 
@@ -70,6 +90,10 @@ private slots:
         const QString path = QStringLiteral(TEST_LAYER_PDF);
         QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
                  Okular::Document::OpenSuccess);
+        QVERIFY(document.metaData(QStringLiteral("GeneratorExtraDescription"), { })
+                    .toString()
+                    .contains(QStringLiteral("MuPDF")));
+        QVERIFY(document.layersModel());
         QSignalSpy finished(&document, &Okular::Document::searchFinished);
         document.searchText(
             searchId, QStringLiteral("RED"), true, Qt::CaseSensitive, Okular::Document::AllDocument, false, Qt::yellow);

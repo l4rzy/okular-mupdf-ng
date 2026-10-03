@@ -164,7 +164,7 @@ foreach(runtime_test IN ITEMS
 endforeach()
 
 add_layer_test(test_generator_layers generator/test_layers_model.cpp generator)
-target_link_libraries(test_generator_layers PRIVATE mupdf_generator_adapters)
+target_link_libraries(test_generator_layers PRIVATE mupdf_generator_adapters KF6::ConfigCore)
 # SettingsCore uses an unqualified include for its generated export header.
 find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
 target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
