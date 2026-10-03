@@ -602,8 +602,7 @@ private slots:
         std::string error;
         ::Mu::IPC::FdChannel receiver;
         const auto socketPath = directory.filePath(QStringLiteral("fd.sock")).toStdString();
-        if (!receiver.listen(socketPath, &error))
-            QSKIP(qPrintable(QStringLiteral("FD socket unavailable: ") + QString::fromStdString(error)));
+        QVERIFY2(receiver.listen(socketPath, &error), error.c_str());
         ::Mu::IPC::FdChannel sender;
         QVERIFY(sender.connect(socketPath, &error));
         QVERIFY(receiver.accept(&error));
@@ -914,8 +913,7 @@ private slots:
 
         ::Mu::IPC::FdChannel receiver;
         const auto socketPath = directory.filePath(QStringLiteral("fd.sock")).toStdString();
-        if (!receiver.listen(socketPath, &error))
-            QSKIP(qPrintable(QStringLiteral("FD socket unavailable: ") + QString::fromStdString(error)));
+        QVERIFY2(receiver.listen(socketPath, &error), error.c_str());
         ::Mu::IPC::FdChannel sender;
         QVERIFY(sender.connect(socketPath, &error));
         QVERIFY(receiver.accept(&error));

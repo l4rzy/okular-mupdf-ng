@@ -3,7 +3,6 @@
 
 #include <QByteArray>
 #include <QFile>
-#include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStringList>
@@ -31,14 +30,6 @@ int runCli(const QStringList& arguments, QString* standardOutput = nullptr, QStr
     return cli.exitCode();
 }
 
-/// True when the CLI run failed only because no Tesseract data is available
-/// in this environment, in which case OCR integration tests must be skipped.
-bool missingTessData(const QString& standardError)
-{
-    return standardError.contains(QStringLiteral("worker rejected the OCR job"))
-        || standardError.contains(QStringLiteral("OCR failed"));
-}
-
 } // namespace
 
 class TestToolsCliOcr : public QObject {
@@ -48,6 +39,8 @@ private slots:
 
     void writesRecognizedTextToFile()
     {
+        if (!QFile::exists(QStringLiteral(TESSDATA_DIR "/eng.traineddata")))
+            QSKIP("English traineddata is not installed");
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
         const QString output = tempDir.filePath(QStringLiteral("page0.txt"));
@@ -58,9 +51,7 @@ private slots:
             { QStringLiteral("ocr"), QStringLiteral(TEST_PDF_PATH), QStringLiteral("0"), QStringLiteral("-o"), output },
             &standardOutput,
             &standardError);
-        if (code != 0 && missingTessData(standardError))
-            QSKIP("tesseract data not available");
-        QCOMPARE(code, 0);
+        QVERIFY2(code == 0, qPrintable(standardError));
 
         QFile file(output);
         QVERIFY(file.open(QIODevice::ReadOnly));
@@ -79,16 +70,18 @@ private slots:
         QVERIFY(tempDir.isValid());
         const QString copy = tempDir.filePath(QStringLiteral("copy.pdf"));
         QVERIFY(QFile::copy(QStringLiteral(TEST_PDF_PATH), copy));
-        const qint64 sizeBefore = QFileInfo(copy).size();
+        QFile file(copy);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray before = file.readAll();
+        file.close();
 
         QString standardError;
         const int code = runCli(
             { QStringLiteral("ocr"), copy, QStringLiteral("0"), QStringLiteral("-o"), copy }, nullptr, &standardError);
-        if (code != 0 && missingTessData(standardError))
-            QSKIP("tesseract data not available");
         QVERIFY(code != 0);
-        QVERIFY(standardError.contains(QStringLiteral("[ERROR]")));
-        QCOMPARE(QFileInfo(copy).size(), sizeBefore);
+        QVERIFY(standardError.contains(QStringLiteral("output must not be the input file")));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), before);
     }
 };
 

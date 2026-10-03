@@ -16,7 +16,7 @@ int runTestPluginSignature(int argc, char** argv);
 int runTestWorkerOcr(int argc, char** argv);
 int runTestWorkerEpub(int argc, char** argv);
 int runTestWorkerNativeTypes(int argc, char** argv);
-int runTestWorkerNativeRuntime();
+int runTestWorkerNativeRuntime(int argc, char** argv);
 int runTestIntegrationIpc(int argc, char** argv);
 
 namespace {
@@ -36,6 +36,7 @@ constexpr std::array tests {
     TestEntry { "test_worker_ocr", runTestWorkerOcr },
     TestEntry { "test_worker_epub", runTestWorkerEpub },
     TestEntry { "test_worker_native_types", runTestWorkerNativeTypes },
+    TestEntry { "test_worker_native_runtime", runTestWorkerNativeRuntime },
     TestEntry { "test_integration_ipc", runTestIntegrationIpc },
 };
 
@@ -59,10 +60,6 @@ int runAllMuPdfTests(char* programName)
             failures = 1;
     }
 
-    std::fprintf(stderr, "\n=== test_worker_native_runtime ===\n");
-    if (runTestWorkerNativeRuntime() != 0)
-        failures = 1;
-
     return failures;
 }
 
@@ -83,9 +80,6 @@ int main(int argc, char** argv)
     }
 
     const std::string_view suite = argv[2];
-    if (suite == "test_worker_native_runtime")
-        return runTestWorkerNativeRuntime();
-
     const TestRunner runner = findTestRunner(suite);
     if (!runner) {
         std::fprintf(stderr, "unknown test suite: %s\n", argv[2]);

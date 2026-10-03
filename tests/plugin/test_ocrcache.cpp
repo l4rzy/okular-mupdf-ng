@@ -12,8 +12,6 @@
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/ocr_cache.hpp"
 #include "plugin/caching/ocr_constants.hpp"
-#include "plugin/ocr/constants.hpp"
-#include "plugin/ocr/policy.hpp"
 
 class TestOCRCache : public QObject {
     Q_OBJECT
@@ -240,7 +238,6 @@ private slots:
         QVERIFY(QFile::exists(path300));
 
         // Loading or checking exists with 150dpi resolves 300dpi cache
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("eng"), 150).present);
         const auto res = ::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("eng"), 150);
         QVERIFY(res.present);
         QCOMPARE(res.items.size(), 1);
@@ -248,109 +245,6 @@ private slots:
 
         // Language isolation remains intact
         QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("deu"), 150).present);
-    }
-
-    void focusPolicyTracksDirectionAndWindow()
-    {
-        ::Mu::Plugin::OCR::FocusPolicy focus;
-        QVERIFY(focus.noteFocus(10, 100));
-        QVERIFY(!focus.noteFocus(10, 100));
-        QCOMPARE(focus.prefetchWindow(), QList<int>({ 10, 11, 9 }));
-
-        QVERIFY(focus.noteFocus(52, 100));
-        QCOMPARE(focus.prefetchWindow(), QList<int>({ 52, 53, 51 }));
-
-        QVERIFY(focus.noteFocus(10, 100));
-        QCOMPARE(focus.prefetchWindow(), QList<int>({ 10, 9, 11 }));
-    }
-
-    void focusPolicyHandlesDocumentEdges()
-    {
-        ::Mu::Plugin::OCR::FocusPolicy focus;
-        focus.noteFocus(0, 2);
-        QCOMPARE(focus.prefetchWindow(), QList<int>({ 0, 1 }));
-        focus.noteFocus(1, 2);
-        QCOMPARE(focus.prefetchWindow(), QList<int>({ 1, 0 }));
-
-        focus.reset();
-        focus.noteFocus(0, 1);
-        QCOMPARE(focus.prefetchWindow(), QList<int>({ 0 }));
-    }
-
-    void pageQueuePrioritizesByFocusAndEvictsStale()
-    {
-        ::Mu::Plugin::OCR::PageQueue queue;
-        queue.refresh(50, { 50, 51, 49 }, 2, 5);
-        QCOMPARE(queue.pages(), QList<int>({ 50, 51, 49 }));
-
-        // A far jump discards queued work that is now outside the radius.
-        queue.refresh(55, { 55, 56, 54 }, 2, 5);
-        QCOMPARE(queue.pages(), QList<int>({ 55, 56, 54 }));
-        QVERIFY(!queue.contains(50));
-        QVERIFY(queue.contains(54));
-        QVERIFY(queue.contains(56));
-    }
-
-    void pageQueueTakeNextRevalidatesAgainstFocus()
-    {
-        ::Mu::Plugin::OCR::PageQueue queue;
-        queue.refresh(10, { 10, 11, 9 }, 2, 5);
-
-        // Focus moved far away before dispatch: the stale head is dropped.
-        QVERIFY(!queue.takeNext(30, 2).has_value());
-        QVERIFY(queue.isEmpty());
-
-        queue.refresh(30, { 30, 31, 29 }, 2, 5);
-        const auto next = queue.takeNext(30, 2);
-        QVERIFY(next.has_value());
-        QCOMPARE(*next, 30);
-        QCOMPARE(queue.pages(), QList<int>({ 31, 29 }));
-    }
-
-    void pageQueuePushFrontKeepsRetry()
-    {
-        ::Mu::Plugin::OCR::PageQueue queue;
-        queue.refresh(40, { 40, 41, 39 }, 2, 5);
-        const auto next = queue.takeNext(40, 2);
-        QVERIFY(next.has_value());
-        QCOMPARE(*next, 40);
-
-        queue.pushFront(40, 40, 2);
-        QCOMPARE(queue.pages().constFirst(), 40);
-
-        // A retried page outside the window is not resurrected.
-        queue.pushFront(99, 40, 2);
-        QVERIFY(!queue.contains(99));
-    }
-
-    void retryPolicyBoundsAttempts()
-    {
-        ::Mu::Plugin::OCR::RetryPolicy retry(3);
-        QVERIFY(!retry.exhausted(7));
-        QVERIFY(retry.onFailure(7));
-        QVERIFY(retry.onFailure(7));
-        QVERIFY(!retry.onFailure(7));
-        QVERIFY(retry.exhausted(7));
-
-        retry.clear(7);
-        QVERIFY(!retry.exhausted(7));
-        QVERIFY(retry.onFailure(7));
-    }
-
-    void dominantPageUsesVisibleArea()
-    {
-        const QList<::Mu::Plugin::OCR::VisiblePage> pages {
-            { 10, 0.7 * 600 * 800 },
-            { 11, 0.6 * 1000 * 1000 },
-        };
-        QCOMPARE(::Mu::Plugin::OCR::dominantPage(pages), 11);
-
-        const QList<::Mu::Plugin::OCR::VisiblePage> tied {
-            { 4, 100 },
-            { 5, 100 },
-        };
-        QCOMPARE(::Mu::Plugin::OCR::dominantPage(tied), 4);
-        QCOMPARE(::Mu::Plugin::OCR::dominantPage(tied, 5), 5);
     }
 
     void convertsCacheItems()

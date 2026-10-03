@@ -46,7 +46,7 @@ private slots:
     {
         QFETCH(QString, mode);
         QFETCH(bool, enabled);
-        if (!QFile::exists(QStringLiteral(TESSDATA_DIR "/eng.traineddata")))
+        if (enabled && !QFile::exists(QStringLiteral(TESSDATA_DIR "/eng.traineddata")))
             QSKIP("English traineddata is not installed");
 
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
@@ -62,9 +62,10 @@ private slots:
         // Rasterize the words so the PDF has no native text to select.
         QImage scan(1000, 400, QImage::Format_RGB32);
         scan.fill(Qt::white);
-        QPainter scanPainter(&scan);
         QFont font(QStringLiteral("DejaVu Sans"));
         font.setPixelSize(70);
+        QVERIFY2(QFontMetrics(font).inFont(QChar('H')), "OCR fixture requires a Latin font, such as DejaVu Sans");
+        QPainter scanPainter(&scan);
         scanPainter.setFont(font);
         scanPainter.drawText(scan.rect(), Qt::AlignCenter, QStringLiteral("HELLO VIEWPORT"));
         scanPainter.end();

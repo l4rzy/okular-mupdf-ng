@@ -152,7 +152,8 @@ private slots:
         QCOMPARE(path, QDir::tempPath() + QStringLiteral("/okular-mupdf-ng-%1").arg(::getuid()));
         const QFileInfo info(path);
         QVERIFY(info.isDir());
-        QVERIFY(info.permissions() & (QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QCOMPARE(info.permissions() & (QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner),
+                 QFile::Permissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
         QCOMPARE(info.permissions()
                      & (QFile::ReadGroup | QFile::WriteGroup | QFile::ExeGroup | QFile::ReadOther | QFile::WriteOther
                         | QFile::ExeOther),
@@ -166,8 +167,7 @@ private slots:
         const QString name = dir.filePath(QStringLiteral("control.sock"));
         ::Mu::IPC::CtrlChannel server;
         std::string error;
-        if (!server.listen(QFile::encodeName(name).toStdString(), &error))
-            QSKIP(qPrintable(QStringLiteral("Local socket unavailable: ") + QString::fromStdString(error)));
+        QVERIFY2(server.listen(QFile::encodeName(name).toStdString(), &error), error.c_str());
         ::Mu::Model::RequestMessage request;
         bool requestDecoded = false;
         std::jthread acceptThread([&] {
@@ -219,8 +219,7 @@ private slots:
         std::string error;
         {
             ::Mu::IPC::CtrlChannel original;
-            if (!original.listen(path, &error))
-                QSKIP(qPrintable(QStringLiteral("Local socket unavailable: ") + QString::fromStdString(error)));
+            QVERIFY2(original.listen(path, &error), error.c_str());
             listener = std::move(original);
             QVERIFY(listener.valid());
             QVERIFY(!original.valid());
@@ -423,8 +422,7 @@ private slots:
         const QString path = dir.filePath(QStringLiteral("fd.sock"));
         ::Mu::IPC::FdChannel listener;
         std::string error;
-        if (!listener.listen(QFile::encodeName(path).toStdString(), &error))
-            QSKIP(qPrintable(QStringLiteral("FD socket unavailable: ") + QString::fromStdString(error)));
+        QVERIFY2(listener.listen(QFile::encodeName(path).toStdString(), &error), error.c_str());
 
         std::atomic_bool accepted { false };
         std::jthread acceptThread([&] { accepted = listener.accept(&error); });

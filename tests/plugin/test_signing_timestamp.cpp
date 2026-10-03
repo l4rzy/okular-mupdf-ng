@@ -26,12 +26,13 @@ private slots:
 
     void currentProducesConsistentTimestamp()
     {
+        const auto before = QDateTime::currentSecsSinceEpoch();
         const auto timestamp = SigningTimestamp::current();
-        QVERIFY(timestamp.epochSeconds > 0);
+        const auto after = QDateTime::currentSecsSinceEpoch();
+        QVERIFY(timestamp.epochSeconds >= before && timestamp.epochSeconds <= after);
         const QDateTime epoch = QDateTime::fromSecsSinceEpoch(timestamp.epochSeconds);
         // The display date must describe the same instant it was captured with.
-        QVERIFY(epoch.secsTo(QDateTime::currentDateTime()) < 60);
-        QVERIFY(!timestamp.displayDate.isEmpty());
+        QCOMPARE(timestamp.displayDate, SigningTimestamp::displayDate(epoch));
     }
 
     void currentUtcRendersUtcSuffix()

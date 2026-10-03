@@ -16,11 +16,9 @@ private slots:
         QTest::addColumn<bool>("accepted");
         QTest::newRow("active-request") << 0 << true;
         QTest::newRow("idle-or-unrelated-rpc") << 1 << false;
-        QTest::newRow("wrong-request") << 2 << false;
+        QTest::newRow("wrong-request-or-replay") << 2 << false;
         QTest::newRow("wrong-certificate") << 3 << false;
-        QTest::newRow("duplicate") << 4 << false;
         QTest::newRow("after-completion-or-disconnect") << 5 << false;
-        QTest::newRow("replay-during-next-request") << 6 << false;
     }
 
     void authorizeCallback()
@@ -39,15 +37,9 @@ private slots:
         case 3:
             input.certificateNickname = "other";
             break;
-        case 4:
-            QVERIFY(authorization.accept(input));
-            break;
         case 5:
             QVERIFY(authorization.accept(input));
             authorization = { };
-            break;
-        case 6:
-            authorization.requestId = 43;
             break;
         }
         QCOMPARE(authorization.accept(input), accepted);

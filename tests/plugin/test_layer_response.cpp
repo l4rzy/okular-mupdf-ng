@@ -59,7 +59,9 @@ private slots:
             entry.name.assign(Limit::MaxLayerNameBytes + 1, 'x');
             break;
         case 7:
-            layers.entries.resize(Limit::MaxLayerEntries + 1);
+            layers.entries.resize(Limit::MaxLayerEntries + 1, entry);
+            for (std::size_t i = 0; i < layers.entries.size(); ++i)
+                layers.entries[i].id = static_cast<std::int32_t>(i);
             break;
         case 8:
             entry.name.assign(Limit::MaxLayerNameBytes, 'x');

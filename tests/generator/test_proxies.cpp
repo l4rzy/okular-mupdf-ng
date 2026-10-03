@@ -279,6 +279,15 @@ private slots:
         std::unique_ptr<Okular::TextPage> page(::Mu::Generator::Conversion::textPage(boxes, 100.0, 200.0));
         QVERIFY(page != nullptr);
         QCOMPARE(page->text(), QStringLiteral("HelloWorld"));
+        Okular::RegularAreaRect hello;
+        hello.append({ 0.1, 0.1, 0.5, 0.2 });
+        QCOMPARE(page->text(&hello, Okular::TextPage::CentralPixelTextAreaInclusionBehaviour), QStringLiteral("Hello"));
+        Okular::RegularAreaRect world;
+        world.append({ 0.6, 0.1, 1.0, 0.2 });
+        QCOMPARE(page->text(&world, Okular::TextPage::CentralPixelTextAreaInclusionBehaviour), QStringLiteral("World"));
+        Okular::RegularAreaRect outside;
+        outside.append({ 0.1, 0.7, 0.5, 0.9 });
+        QVERIFY(page->text(&outside).isEmpty());
     }
 
     void plainTextAssembly()
@@ -457,7 +466,6 @@ private slots:
 
         proxy.setText(QStringLiteral("Bob"));
         QCOMPARE(proxy.text(), QStringLiteral("Bob"));
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void pushButtonActions()
@@ -538,9 +546,6 @@ private slots:
         QCOMPARE(javascriptActivation->handle, std::string("g1-f0-o46"));
         static_cast<void>(coordinator.activateButton(*javascriptActivation));
         QCOMPARE(clickCount, 3);
-
-        ::Mu::Plugin::s_mockResetForm = nullptr;
-        ::Mu::Plugin::s_mockClickFormButton = nullptr;
     }
 
     void formFieldCheckBoxProxyExposesProperties()
@@ -584,7 +589,6 @@ private slots:
         editableProxy.setState(false);
         QVERIFY(!editableProxy.state());
         QVERIFY(editableProxy.siblings().isEmpty());
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void formFieldRadioButtonProxyExposesProperties()
@@ -620,7 +624,6 @@ private slots:
 
         proxy.setState(false);
         QVERIFY(!proxy.state());
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void formFieldChoiceProxyExposesProperties()
@@ -676,7 +679,6 @@ private slots:
         QCOMPARE(listProxy.choiceType(), Okular::FormFieldChoice::ListBox);
         QVERIFY(listProxy.multiSelect());
         QCOMPARE(listProxy.currentChoices(), QList<int>({ 0, 2 }));
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void coordinatorAppliesCanonicalValuesToAffectedProxies()
@@ -728,8 +730,6 @@ private slots:
         QVERIFY(!r1.state());
         QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &r1, &r2 }));
         QCOMPARE(refreshedPages, (std::vector<int> { 0, 1 }));
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void coordinatorResetsFieldsAfterReopen()
@@ -809,8 +809,6 @@ private slots:
         coordinator.resetFields({ reopened });
         QVERIFY(coordinator.updateField("g2-f0-o77", ::Mu::Model::FormTextValue { "Keep2" }));
         QCOMPARE(unmatchedProxy.text(), QStringLiteral("Keep2"));
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void rebuildPageAnnotationsDiscardsDirtyState()
@@ -874,7 +872,6 @@ private slots:
 
         QCOMPARE(textProxy.text(), QStringLiteral("OriginalText"));
         QVERIFY(refreshedFields.empty());
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void coordinatorUpdateFieldReportsWhetherAnyProxyChanged()
@@ -926,8 +923,6 @@ private slots:
             return std::nullopt;
         };
         QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void coordinatorIgnoresUnchangedCanonicalValues()
@@ -1001,8 +996,6 @@ private slots:
         QVERIFY(coordinator.updateField(checkField.handle, ::Mu::Model::FormCheckValue { false }));
         QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy, &checkProxy }));
         QVERIFY(!checkProxy.state());
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void canonicalSelectionClearsExportTextOverride()
@@ -1057,8 +1050,6 @@ private slots:
         QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormChoiceSelection { }));
         QVERIFY(choiceProxy.editChoice().isEmpty());
         QVERIFY(choiceProxy.currentChoices().isEmpty());
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void coordinatorUnregisterDropsStaleEntries()
@@ -1096,8 +1087,6 @@ private slots:
         coordinator.registerField(field.handle, &freshProxy);
         QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Updated" }));
         QCOMPARE(freshProxy.text(), QStringLiteral("Updated"));
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void signatureInfoRejectsUnexpectedByteRangeSizes()
@@ -1154,8 +1143,6 @@ private slots:
         coordinator.setAvailable(false);
         textProxy.setText(QStringLiteral("UnavailableEdit"));
         QCOMPARE(textProxy.text(), QStringLiteral("OriginalText"));
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void documentWideRadioGroupingLinksAcrossPages()
@@ -1227,8 +1214,6 @@ private slots:
         // 3. Both proxies reflect canonical state
         QVERIFY(r2.state());
         QVERIFY(!r1.state());
-
-        ::Mu::Plugin::s_mockUpdateForm = nullptr;
     }
 
     void testPrintOptionsPage()

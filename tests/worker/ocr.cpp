@@ -140,10 +140,13 @@ private slots:
         const auto result = Mu::Worker::Engine::runOcr(fd, { }, 0, "eng", 225.0f);
         QCOMPARE(result.status, Mu::Model::OcrStatus::Success);
         QVERIFY(!result.boxes.empty());
+        QString recognized;
         for (const Mu::Model::TextBox& box : result.boxes) {
+            recognized += QString::fromStdString(box.text);
             QVERIFY(box.left >= 0.0 && box.left <= box.right && box.right <= 1.0);
             QVERIFY(box.top >= 0.0 && box.top <= box.bottom && box.bottom <= 1.0);
         }
+        QVERIFY2(recognized.contains(QStringLiteral("Hello"), Qt::CaseInsensitive), qPrintable(recognized));
     }
 
     void testCancelledOcrReturnsNoBoxes()

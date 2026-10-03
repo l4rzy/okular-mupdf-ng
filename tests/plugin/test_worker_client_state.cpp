@@ -39,7 +39,7 @@ private Q_SLOTS:
         QVERIFY(client.operational());
     }
 
-    void failedRecoveryIsTerminalUntilRestart()
+    void failedSessionGatesOperationsUntilReadyIsCommitted()
     {
         WorkerClient client;
         client.commitSessionReady();
@@ -49,7 +49,7 @@ private Q_SLOTS:
         QCOMPARE(client.state(), State::Failed);
         QVERIFY(!client.operational());
 
-        // Only an explicit restart returns to Ready.
+        // A newly committed session restores operational access.
         client.commitSessionReady();
         QCOMPARE(client.state(), State::Ready);
         QVERIFY(client.operational());

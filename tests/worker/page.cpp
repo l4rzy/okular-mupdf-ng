@@ -4,7 +4,6 @@
 #include "engine/pdf/document.hpp"
 #include "genpdf.hpp"
 
-#include <QCryptographicHash>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -87,6 +86,8 @@ private slots:
         std::string error;
         std::vector<std::uint8_t> buffer(400 * 600 * 4);
         QVERIFY2(document.renderToBuffer({ 0, 400, 600, std::nullopt }, buffer.data(), 400 * 4, &error), error.c_str());
+        // The fixture is a blank page: every RGBA byte must be opaque white.
+        QVERIFY(std::all_of(buffer.begin(), buffer.end(), [](auto byte) { return byte == 255; }));
 
         std::vector<std::uint8_t> tileBuffer(200 * 300 * 4);
         QVERIFY2(
@@ -95,6 +96,7 @@ private slots:
                                     200 * 4,
                                     &error),
             error.c_str());
+        QVERIFY(std::all_of(tileBuffer.begin(), tileBuffer.end(), [](auto byte) { return byte == 255; }));
     }
 
     void layersPreserveSiblingDepths_data()
@@ -342,11 +344,6 @@ private slots:
         QVERIFY(document.renderToBuffer({ 0, 120, 160, std::nullopt }, first.data(), 120 * 4));
         QVERIFY(document.renderToBuffer({ 0, 120, 160, std::nullopt }, second.data(), 120 * 4));
         QCOMPARE(first, second);
-        const QByteArray firstBytes(reinterpret_cast<const char*>(first.data()), static_cast<qsizetype>(first.size()));
-        const QByteArray secondBytes(reinterpret_cast<const char*>(second.data()),
-                                     static_cast<qsizetype>(second.size()));
-        QCOMPARE(QCryptographicHash::hash(firstBytes, QCryptographicHash::Sha256),
-                 QCryptographicHash::hash(secondBytes, QCryptographicHash::Sha256));
     }
 
     void testPageCacheReuseAndEviction()

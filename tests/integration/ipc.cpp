@@ -63,15 +63,14 @@ private slots:
 
         m_epub = QStringLiteral(TEST_EPUB_DIR "/sample.epub");
         ::Mu::Plugin::Caching::setRootForTesting(m_cacheRoot.path());
-        if (!m_client.start(QStringLiteral(WORKER_BUILD_PATH)))
-            QSKIP("worker IPC unavailable");
     }
 
-    void cleanupTestCase()
-    {
-        m_client.stop();
-        ::Mu::Plugin::Caching::clearRootForTesting();
-    }
+    void init() { QVERIFY2(m_client.start(QStringLiteral(WORKER_BUILD_PATH)), "worker IPC unavailable"); }
+
+    // Each case owns its worker, including unfinished asynchronous jobs.
+    void cleanup() { m_client.stop(); }
+
+    void cleanupTestCase() { ::Mu::Plugin::Caching::clearRootForTesting(); }
 
     // End-to-end: a document MuPDF had to repair is reported across IPC.
     // End-to-end: the Okular paper color reaches the worker renderer.

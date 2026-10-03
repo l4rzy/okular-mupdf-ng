@@ -237,7 +237,7 @@ bool forbiddenOperationIsKilled(const std::string& allowedDirectory, ForbiddenOp
     int childStatus = 0;
     if (::waitpid(pid, &childStatus, 0) != pid)
         return false;
-    return WIFSIGNALED(childStatus);
+    return WIFSIGNALED(childStatus) && WTERMSIG(childStatus) == SIGSYS;
 }
 
 #ifdef __linux__
@@ -459,10 +459,6 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
     QVERIFY(result.unpreservedClosed);
     QVERIFY(result.launcherPipeClosed);
 #endif
-
-    if (result.linuxNamespaceActive) {
-        QVERIFY(result.linuxNamespaceActive);
-    }
 
     if (result.landlockActive) {
         QVERIFY(result.allowedRead);

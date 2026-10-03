@@ -23,9 +23,19 @@
 class TestGeneratorConfig : public QObject {
     Q_OBJECT
 
+private:
+    QTemporaryDir m_root;
+
 private slots:
 
-    void initTestCase() { KLocalizedString::setApplicationDomain("okular_mupdfng"); }
+    void initTestCase()
+    {
+        QVERIFY(m_root.isValid());
+        qputenv("XDG_CONFIG_HOME", m_root.filePath("config").toUtf8());
+        qputenv("XDG_DATA_HOME", m_root.filePath("data").toUtf8());
+        qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
+        KLocalizedString::setApplicationDomain("okular_mupdfng");
+    }
 
     void selectsSigningKey_data()
     {
