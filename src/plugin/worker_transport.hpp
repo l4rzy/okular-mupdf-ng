@@ -80,7 +80,8 @@ public:
     /// in-flight background PDF export silently (result discarded, no signal).
     bool close();
     QImage render(int page, int width, int height, const QRect& rect);
-    std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false);
+    std::vector<Model::TextBox>
+    getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false, bool* success = nullptr);
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);
     Model::OcrResult ocrResult(quint64 id);
     bool cancelOcrJobs();

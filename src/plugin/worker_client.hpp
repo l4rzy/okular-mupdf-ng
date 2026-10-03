@@ -68,7 +68,8 @@ public:
                                Model::DocumentType type = Model::DocumentType::Pdf);
     bool close();
     QImage render(int page, int width, int height, const QRect& tile = { });
-    std::vector<Model::TextBox> getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false) const;
+    std::vector<Model::TextBox>
+    getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false, bool* success = nullptr) const;
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys = { }) const;
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi) const;
     Model::OcrResult ocrResult(quint64 jobId) const;

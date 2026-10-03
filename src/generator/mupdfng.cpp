@@ -1545,7 +1545,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     if (!format.mimeType().inherits(QStringLiteral("text/plain")) || !workerReady())
         return false;
 
-    QFile file(fileName);
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly))
         return false;
 
@@ -1554,12 +1554,19 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     for (int page = 0; page < pageCount; ++page) {
         if (!workerReady())
             return false;
-        const auto boxes = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true);
+        bool extracted = false;
+        const auto boxes =
+            m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true, &extracted);
+        if (!extracted)
+            return false;
         stream << Conversion::plainText(boxes);
         if (page + 1 < pageCount)
             stream << QLatin1Char('\n');
+        if (stream.status() != QTextStream::Ok)
+            return false;
     }
-    return true;
+    stream.flush();
+    return stream.status() == QTextStream::Ok && file.commit();
 }
 
 // Okular Generator Func: returns the annotation adapter used by Okular.

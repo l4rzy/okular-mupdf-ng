@@ -595,13 +595,18 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
     return createImage(frame->mapping, cleanupMappedFrame, mappedFrame);
 }
 
-std::vector<TextBox> WorkerTransport::getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots)
+std::vector<TextBox> WorkerTransport::getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots, bool* success)
 {
+    if (success)
+        *success = false;
     auto response = call(TextBoxesRequest { page, x, y, skipAnnots });
     if (!response || response->error)
         return { };
-    if (auto* boxes = std::get_if<TextBoxesResponse>(&response->payload))
+    if (auto* boxes = std::get_if<TextBoxesResponse>(&response->payload)) {
+        if (success)
+            *success = true;
         return std::move(boxes->boxes);
+    }
     return { };
 }
 

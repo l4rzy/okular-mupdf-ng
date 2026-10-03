@@ -115,6 +115,43 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void textExtractionReportsSuccess_data()
+    {
+        QTest::addColumn<int>("scenario");
+        QTest::addColumn<bool>("expectedSuccess");
+        QTest::newRow("text") << 0 << true;
+        QTest::newRow("blank") << 1 << true;
+        QTest::newRow("invalid-page") << 2 << false;
+        QTest::newRow("disconnected") << 3 << false;
+    }
+
+    void textExtractionReportsSuccess()
+    {
+        QFETCH(int, scenario);
+        QFETCH(bool, expectedSuccess);
+        bool success = true;
+        if (scenario == 3) {
+            ::Mu::Plugin::WorkerClient disconnected;
+            QVERIFY(disconnected.getTextBoxesForPage(0, 72, 72, true, &success).empty());
+            QVERIFY(!success);
+            return;
+        }
+        QString path = m_pdf;
+        if (scenario == 1) {
+            path = m_fixtureRoot.filePath(QStringLiteral("blank.pdf"));
+            fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+            QVERIFY(context);
+            createMultiPagePDF(context, path, 1);
+            fz_drop_context(context);
+        }
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(path, { }, pages), ::Mu::Model::OpenStatus::Success);
+        const auto boxes = m_client.getTextBoxesForPage(scenario == 2 ? -1 : 0, 72, 72, true, &success);
+        QCOMPARE(success, expectedSuccess);
+        QCOMPARE(boxes.empty(), scenario != 0);
+        QVERIFY(m_client.close());
+    }
+
     void paperColorFlowsThroughIpc()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;

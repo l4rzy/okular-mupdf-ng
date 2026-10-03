@@ -129,9 +129,12 @@ QImage WorkerClient::render(int p, int w, int h, const QRect& t)
     return sync([&](WorkerTransport* transport) { return transport->render(p, w, h, t); });
 }
 
-std::vector<TextBox> WorkerClient::getTextBoxesForPage(int p, qreal x, qreal y, bool skipAnnots) const
+std::vector<TextBox> WorkerClient::getTextBoxesForPage(int p, qreal x, qreal y, bool skipAnnots, bool* success) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->getTextBoxesForPage(p, x, y, skipAnnots); });
+    if (success)
+        *success = false;
+    return sync(
+        [&](WorkerTransport* transport) { return transport->getTextBoxesForPage(p, x, y, skipAnnots, success); });
 }
 
 std::optional<quint64> WorkerClient::startOcrPage(int p, const QString& l, int d) const
