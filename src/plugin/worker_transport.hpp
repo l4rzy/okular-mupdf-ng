@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "plugin/caching/epub_cache.hpp"
+#include "plugin/signing_authorization.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
@@ -205,6 +206,7 @@ private:
     // session around the live control FD; m_exportTimer is created lazily once.
     std::unique_ptr<QSocketNotifier> m_notifier;
     QString m_socketPath, m_fdSocketPath, m_tempPath, m_sourcePath;
+    SigningAuthorization m_signingAuthorization;
     QString m_activeSignPassword;
     Model::DocumentSettings m_settings;
     // Memoized EPUB cache path and the identity it was derived from.

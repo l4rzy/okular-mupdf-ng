@@ -732,7 +732,7 @@ struct FileTransfer {
 
 /// Input supplied to the plugin for one CMS signing round trip.
 struct SignInput {
-    /// Identifier matching the eventual signing response.
+    /// Identifier of the originating SignRequest.
     std::uint64_t jobId = 0;
     /// Nonce echoed by the signer to bind the response to this request.
     std::string nonce;

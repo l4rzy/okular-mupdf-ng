@@ -685,8 +685,8 @@ ResponseMessage CommandService::signFdResponse(const RequestMessage& request, co
         return failure(request.id, ErrorCode::InvalidRequest, "sign", "invalid page");
 
     // CMS signature callback bridging MuPDF signer to plugin NSS crypto engine.
-    auto callback = [this](const std::array<std::uint8_t, 32>& digest, const std::string& nickname) {
-        const auto jobId = ++m_nextSignJobId;
+    auto callback = [this, jobId = request.id](const std::array<std::uint8_t, 32>& digest,
+                                               const std::string& nickname) {
         return requestCmsSignature({ jobId, std::to_string(jobId), nickname, digest });
     };
 

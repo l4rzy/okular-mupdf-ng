@@ -7,6 +7,7 @@
 #include "plugin/crypto/nss.hpp"
 #include "plugin/crypto/nss_handles.hpp"
 #include "plugin/crypto/nss_internal.hpp"
+#include "plugin/worker_transport.hpp"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -440,6 +441,45 @@ private slots:
         QCOMPARE(result.result, ::Mu::Model::SigningResult::Success);
         QCOMPARE(digest, original);
         QVERIFY(!result.cms.isEmpty());
+    }
+
+    void transportSigning()
+    {
+        using namespace Mu;
+        Plugin::WorkerTransport transport;
+        QVERIFY(transport.start(QStringLiteral(WORKER_BUILD_PATH), { }, nullptr));
+        QTemporaryDir output;
+        QVERIFY(output.isValid());
+        const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR "/pdfreference1.0.pdf");
+        // Separate requests must each authorize exactly one callback, using the
+        // originating RPC id rather than a worker-local signing counter.
+        for (int i = 0; i < 2; ++i) {
+            QCOMPARE(transport.open(sourcePath, { }, nullptr), Model::OpenStatus::Success);
+            const QString target = output.filePath(QString::number(i) + QStringLiteral(".pdf"));
+            const auto result =
+                transport.signToFile(Model::SignRequest { .file = { },
+                                                          .page = 0,
+                                                          .rectangle = { .1, .1, .5, .2 },
+                                                          .certificateNickname = "okular-mupdf-test",
+                                                          .certificateSubjectCommonName = "Okular MuPDF Test Signer",
+                                                          .existingFieldObjectNumber = -1,
+                                                          .appearance = { } },
+                                     { },
+                                     target);
+            QCOMPARE(result.result, Model::SigningResult::Success);
+            QFile signedSource(target);
+            Worker::Engine::PdfDocument signedDocument;
+            QVERIFY(openDocument(signedDocument, signedSource, target));
+            const auto details = signedDocument.pageDetails(0);
+            const auto found = std::find_if(details.signatures.cbegin(),
+                                            details.signatures.cend(),
+                                            [](const auto& field) { return field.signedField; });
+            QVERIFY(found != details.signatures.cend());
+            auto field = *found;
+            Plugin::Crypto::validateDetachedPdfSignature(field, signedSource, false);
+            QCOMPARE(field.signatureStatus, Model::SignatureStatus::Valid);
+            transport.close();
+        }
     }
 
     void createsSelfSignedCertificate_data()

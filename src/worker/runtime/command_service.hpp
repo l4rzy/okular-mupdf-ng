@@ -312,7 +312,6 @@ private:
     std::uint64_t m_linkGeneration = 0;
     std::uint64_t m_nextFrameTransferId = 1;
     std::uint64_t m_nextFrameSlotId = 1;
-    std::uint64_t m_nextSignJobId = 0;
 
     // Buffer for requests received during synchronous nested operations
     std::deque<std::vector<std::byte>> m_deferredIncoming;

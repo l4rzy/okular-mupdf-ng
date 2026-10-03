@@ -318,6 +318,7 @@ void WorkerTransport::cleanupSession()
     m_epubCachePath.reset();
     m_epubCacheLayoutKey.reset();
     m_epubCacheSource.clear();
+    m_signingAuthorization = { };
     m_activeSignPassword.fill(u'\0');
     m_activeSignPassword.clear();
     m_inFlight = false;
@@ -999,6 +1000,9 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
         {
             // Re-enable idle notifications only after the response exchange
             // has fully restored the transport's serialized state.
+            transport->m_signingAuthorization = { };
+            transport->m_activeSignPassword.fill(u'\0');
+            transport->m_activeSignPassword.clear();
             transport->m_inFlight = false;
             if (transport->m_notifier && transport->isConnected()) {
                 transport->m_notifier->setEnabled(true);
@@ -1012,6 +1016,8 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
     // bounded by the control-write timeout.
     const auto id = m_nextId++;
     RequestMessage request { id, std::move(payload) };
+    if (const auto* sign = std::get_if<SignRequest>(&request.payload))
+        m_signingAuthorization = { id, sign->certificateNickname };
     MU_LOG(debug, "Plugin -> Worker", IPC::Debug::request(request, true));
     std::string e;
     if (!IPC::ZppCodec::writeMessage(m_ctrl, request, Timeout::ControlWriteMs, &e, "plugin"))
@@ -1100,8 +1106,13 @@ bool WorkerTransport::handleNotification(const NotificationMessage& notification
         return true;
     }
     if (auto* sign = std::get_if<SignInput>(&notification.payload)) {
+        if (!m_inFlight || !m_signingAuthorization.accept(*sign)) {
+            if (error)
+                *error = "unauthorized signing notification";
+            return false;
+        }
         const auto cms = Crypto::createDetachedCmsFromDigest(
-            QString::fromStdString(sign->certificateNickname), m_activeSignPassword, sign->digest);
+            QString::fromStdString(m_signingAuthorization.certificateNickname), m_activeSignPassword, sign->digest);
         SignReply reply { sign->jobId,
                           sign->nonce,
                           cms.result,
