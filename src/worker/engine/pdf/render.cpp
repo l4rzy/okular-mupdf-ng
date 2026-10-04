@@ -35,6 +35,8 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
     // device handles until the fz_always cleanup below completes.
     if (!dstPixels)
         return fail(error, "destination buffer is null");
+    if (request.cookie && request.cookie->abort)
+        return fail(error, "render cancelled");
 
     const int width = request.width;
     const int height = request.height;
@@ -116,8 +118,11 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         if (!m_settings.interpolateImages)
             fz_enable_device_hints(m_context, device, FZ_DONT_INTERPOLATE_IMAGES);
 
-        fz_cookie cookie { 0, 0, 0, 0, 0 };
-        fz_run_page(m_context, nativePage, device, tiled ? fz_identity : transform, &cookie);
+        fz_cookie cookie { };
+        fz_run_page(
+            m_context, nativePage, device, tiled ? fz_identity : transform, request.cookie ? request.cookie : &cookie);
+        if (request.cookie && request.cookie->abort)
+            fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
 
         fz_close_device(m_context, device);
 
@@ -141,6 +146,9 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
     }
     fz_always(m_context)
     {
+        // An aborted run drops partial drawing state instead of flushing it.
+        if (request.cookie && request.cookie->abort && device)
+            device->close_device = nullptr;
         fz_drop_device(m_context, device);
         fz_drop_pixmap(m_context, pixmap);
         fz_drop_separations(m_context, separations);

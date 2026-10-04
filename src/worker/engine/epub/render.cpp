@@ -28,6 +28,8 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     // rendering handles until the fz_always cleanup below completes.
     if (!dstPixels)
         return fail(error, "destination buffer is null");
+    if (request.cookie && request.cookie->abort)
+        return fail(error, "render cancelled");
     if (!m_document || !isValidRenderDimensions(request.width, request.height, request.tile.has_value()))
         return fail(error, "render dimensions are invalid");
 
@@ -52,6 +54,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     fz_matrix ctm = fz_identity;
     fz_pixmap* volatile pix = nullptr;
     fz_device* volatile dev = nullptr;
+    fz_display_list* volatile list = nullptr;
 
     fz_try(m_context)
     {
@@ -107,7 +110,22 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
                            static_cast<float>(m_settings.paperColorRgb & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
         dev = fz_new_draw_device(m_context, ctm, pix);
-        fz_run_page(m_context, page, dev, fz_identity, nullptr);
+        if (request.cookie) {
+            // MuPDF's EPUB page runner ignores cookies. Replay its drawing
+            // commands through the display-list API, which checks abort.
+            list = fz_new_display_list_from_page(m_context, page);
+            if (request.cookie->abort)
+                fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
+            // Replay uses page coordinates; include a pixel of antialiasing
+            // margin when culling commands outside the destination tile.
+            const fz_rect scissor =
+                fz_transform_rect(fz_expand_rect(fz_rect_from_irect(bbox), 1), fz_invert_matrix(ctm));
+            fz_run_display_list(m_context, list, dev, fz_identity, scissor, request.cookie);
+        } else {
+            fz_run_page(m_context, page, dev, fz_identity, nullptr);
+        }
+        if (request.cookie && request.cookie->abort)
+            fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
         fz_drop_device(m_context, dev);
         dev = nullptr;
@@ -133,8 +151,11 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     }
     fz_always(m_context)
     {
+        if (request.cookie && request.cookie->abort && dev)
+            dev->close_device = nullptr;
         fz_drop_device(m_context, dev);
         fz_drop_pixmap(m_context, pix);
+        fz_drop_display_list(m_context, list);
         fz_drop_page(m_context, page);
     }
     fz_catch(m_context)

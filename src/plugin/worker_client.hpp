@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -67,7 +68,11 @@ public:
                                QList<PageInfo>& pages,
                                Model::DocumentType type = Model::DocumentType::Pdf);
     bool close();
-    QImage render(int page, int width, int height, const QRect& tile = { });
+    /// Cancellation is checked on the calling thread and sets the active
+    /// render's shared MuPDF abort flag. The terminal response is still drained
+    /// on the transport thread, including any frame produced before cancellation.
+    QImage
+    render(int page, int width, int height, const QRect& tile = { }, const std::function<bool()>& shouldAbort = { });
     std::vector<Model::TextBox>
     getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false, bool* success = nullptr) const;
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys = { }) const;

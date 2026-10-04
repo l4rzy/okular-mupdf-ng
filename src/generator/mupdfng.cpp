@@ -104,8 +104,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
-    // Dummy flag to help with zooming artifacts
-    // setFeature(SupportsCancelling);
+    setFeature(SupportsCancelling);
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
@@ -1272,7 +1271,7 @@ QImage Main::image(Okular::PixmapRequest* request)
                          static_cast<int>(right - left),
                          static_cast<int>(bottom - top));
         }
-        QImage img = m_worker.render(pageNum, request->width(), request->height(), tile);
+        QImage img = m_worker.render(pageNum, request->width(), request->height(), tile, shouldAbort);
         if (shouldAbort())
             return { };
         if (img.isNull()) {

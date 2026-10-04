@@ -65,6 +65,7 @@ public:
         int width = 0;
         int height = 0;
         std::optional<RenderTile> tile;
+        fz_cookie* cookie = nullptr;
     };
 
     DocumentBase() = default;

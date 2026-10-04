@@ -284,6 +284,8 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "page", value.page);
                 field(out, "width", value.width);
                 field(out, "height", value.height);
+                if (value.cancelTransferId)
+                    field(out, "cancelTransfer", value.cancelTransferId);
                 if (value.tile)
                     field(out,
                           "tile",

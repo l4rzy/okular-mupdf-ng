@@ -13,6 +13,15 @@ function(add_layer_test target source label)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
+add_executable(test_render_worker support/render_worker.cpp ../src/worker/runtime/worker_server.cpp)
+set_target_properties(test_render_worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+target_include_directories(test_render_worker PRIVATE ../src ../src/worker ${MU_GENERATED_INCLUDE_DIR})
+target_link_libraries(test_render_worker PRIVATE mupdf_worker_core MuPDF::Engine)
+if(MU_DEBUG_BUILD)
+    target_compile_definitions(test_render_worker PRIVATE MU_DEBUG_ENABLED)
+    target_link_libraries(test_render_worker PRIVATE mupdf_ipc_debug)
+endif()
+
 add_executable(test_mupdf
     test_runner.cpp
     worker/document.cpp
@@ -58,12 +67,13 @@ target_compile_definitions(test_mupdf PRIVATE
     FORM_JS_CONTROLS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_controls.pdf"
     FORM_JS_PARTIAL_ERROR_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_partial_error.pdf"
     WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    RENDER_WORKER_BUILD_PATH="$<TARGET_FILE:test_render_worker>"
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
     TESSDATA_DIR="${TESSDATA_DIR}")
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_mupdf PRIVATE MU_DEBUG_ENABLED)
 endif()
-add_dependencies(test_mupdf okular-mupdf-worker mupdfng-cli)
+add_dependencies(test_mupdf okular-mupdf-worker mupdfng-cli test_render_worker)
 
 add_test(NAME test_mupdf COMMAND test_mupdf)
 set_tests_properties(test_mupdf PROPERTIES

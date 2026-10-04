@@ -256,6 +256,9 @@ private:
     [[nodiscard]] std::string annotationHandle(int page, std::int32_t objectNumber);
     [[nodiscard]] std::string formFieldHandle(int page, std::int32_t objectNumber);
     [[nodiscard]] bool hasOpenDocument() const noexcept;
+    /// Receives and initializes the cookie, leaving mapping ownership with the render handler.
+    [[nodiscard]] std::optional<ResponseMessage>
+    receiveRenderCookie(std::uint64_t requestId, std::uint64_t transferId, Sys::Mapping& mapping);
     [[nodiscard]] ResponseMessage ping(std::uint64_t id) const;
     [[nodiscard]] ResponseMessage annotationAdd(const RequestMessage& request, const AnnotationAddRequest& add);
     [[nodiscard]] ResponseMessage annotationModify(const RequestMessage& request,

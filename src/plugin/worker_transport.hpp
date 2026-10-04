@@ -79,7 +79,7 @@ public:
     /// Closes the open document and clears staged input. Abandons any
     /// in-flight background PDF export silently (result discarded, no signal).
     bool close();
-    QImage render(int page, int width, int height, const QRect& rect);
+    QImage render(int page, int width, int height, const QRect& rect, int cancellationFd = -1);
     std::vector<Model::TextBox>
     getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false, bool* success = nullptr);
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);

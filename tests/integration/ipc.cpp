@@ -8,16 +8,31 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
+#include <future>
 #include <optional>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <thread>
+#include <unistd.h>
 
 #include "plugin/util/temp_dir.hpp"
+#include "shared/transport/common.hpp"
+#include "shared/transport/frame_buffer.hpp"
+#include "sys/sys.hpp"
 
 extern "C" {
 #include <mupdf/pdf.h>
@@ -42,6 +57,38 @@ class TestIpc : public QObject {
         const QByteArray bytes(reinterpret_cast<const char*>(image.constBits()),
                                static_cast<qsizetype>(image.sizeInBytes()));
         return QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
+    }
+
+    // IPC images wrap pixels immediately after the shared frame header.
+    static std::uint64_t frameRequestId(const QImage& image)
+    {
+        return reinterpret_cast<const Mu::IPC::FrameBufferHeader*>(image.constBits()
+                                                                   - sizeof(Mu::IPC::FrameBufferHeader))
+            ->requestId;
+    }
+
+    // Locate the live worker control socket without exposing transport internals
+    // in the production API. Linux SO_PEERCRED identifies its process as well.
+    static int workerControlSocket(pid_t& workerPid)
+    {
+        const QString workerPath = QFileInfo(QStringLiteral(RENDER_WORKER_BUILD_PATH)).canonicalFilePath();
+        for (const auto& name :
+             QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
+            bool ok = false;
+            const int fd = name.toInt(&ok);
+            int type = 0;
+            socklen_t size = sizeof(type);
+            if (!ok || ::getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &size) != 0 || type != SOCK_STREAM)
+                continue;
+            ucred peer { };
+            size = sizeof(peer);
+            if (::getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &size) == 0
+                && QFileInfo(QStringLiteral("/proc/%1/exe").arg(peer.pid)).symLinkTarget() == workerPath) {
+                workerPid = peer.pid;
+                return fd;
+            }
+        }
+        return -1;
     }
 
 private slots:
@@ -558,6 +605,233 @@ private slots:
         for (int dimension = 24; dimension < 64; ++dimension) {
             const QImage image = m_client.render(0, dimension, dimension);
             QVERIFY2(!image.isNull(), "pooled frame fallback failed");
+        }
+        QVERIFY(m_client.close());
+    }
+
+    void cancelledRendersDrainSafely_data()
+    {
+        QTest::addColumn<bool>("epub");
+        QTest::addColumn<int>("finish");
+        QTest::newRow("pdf-next-render") << false << 0;
+        QTest::newRow("epub-next-render") << true << 0;
+        QTest::newRow("stop-after-cancellation") << false << 1;
+        QTest::newRow("worker-failure-after-cancellation") << false << 2;
+    }
+
+    void cancellableRenderMatchesOrdinary_data()
+    {
+        QTest::addColumn<bool>("epub");
+        QTest::addColumn<QSize>("size");
+        QTest::addColumn<QRect>("tile");
+        for (const bool epub : { false, true }) {
+            const QByteArray prefix = epub ? "epub-" : "pdf-";
+            QTest::newRow((prefix + "page").constData()) << epub << QSize(601, 803) << QRect { };
+            QTest::newRow((prefix + "tile").constData()) << epub << QSize(601, 803) << QRect(57, 91, 137, 193);
+            QTest::newRow((prefix + "letterboxed-tile").constData())
+                << epub << QSize(803, 401) << QRect(193, 37, 211, 137);
+        }
+    }
+
+    void cancellableRenderMatchesOrdinary()
+    {
+        QFETCH(bool, epub);
+        QFETCH(QSize, size);
+        QFETCH(QRect, tile);
+        using namespace Mu::Model;
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(epub ? m_epub : m_pdf, { }, pages, epub ? DocumentType::Epub : DocumentType::Pdf),
+                 OpenStatus::Success);
+        DocumentSettings settings;
+        settings.paperColorRgb = 0x112233;
+        QVERIFY(m_client.setSettings(settings));
+        const QImage expected = m_client.render(0, size.width(), size.height(), tile);
+        const QImage actual = m_client.render(0, size.width(), size.height(), tile, [] { return false; });
+        QVERIFY(!expected.isNull());
+        QVERIFY(!actual.isNull());
+        QCOMPARE(actual, expected);
+        QVERIFY(m_client.close());
+    }
+
+    void activeRenderCancellation_data()
+    {
+        QTest::addColumn<bool>("epub");
+        QTest::addColumn<bool>("tiled");
+        QTest::newRow("pdf-page") << false << false;
+        QTest::newRow("pdf-tile") << false << true;
+        QTest::newRow("epub-page") << true << false;
+        QTest::newRow("epub-tile") << true << true;
+    }
+
+    void activeRenderCancellation()
+    {
+        QFETCH(bool, epub);
+        QFETCH(bool, tiled);
+        const QString path =
+            m_fixtureRoot.filePath(epub ? QStringLiteral("expensive.epub") : QStringLiteral("expensive.pdf"));
+        QByteArray contents;
+        fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        if (epub) {
+            contents.append(
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body style=\"font-size:1px;line-height:1px\">");
+            contents.append(
+                QByteArray("<span style=\"color:blue\">i</span><span style=\"color:red\">i</span>").repeated(20000));
+            contents.append("</body></html>");
+            fz_archive* archive = fz_open_zip_archive(context, QFile::encodeName(m_epub).constData());
+            fz_zip_writer* zip = fz_new_zip_writer(context, QFile::encodeName(path).constData());
+            for (int i = 0; i < fz_count_archive_entries(context, archive); ++i) {
+                const char* name = fz_list_archive_entry(context, archive, i);
+                fz_buffer* buffer = std::string_view(name) == "OEBPS/chapter1.html"
+                    ? fz_new_buffer_from_copied_data(context,
+                                                     reinterpret_cast<const unsigned char*>(contents.constData()),
+                                                     static_cast<std::size_t>(contents.size()))
+                    : fz_read_archive_entry(context, archive, name);
+                fz_write_zip_entry(context, zip, name, buffer, 0);
+                fz_drop_buffer(context, buffer);
+            }
+            fz_close_zip_writer(context, zip);
+            fz_drop_zip_writer(context, zip);
+            fz_drop_archive(context, archive);
+        } else {
+            contents = QByteArray("0 0 612 792 re f\n").repeated(20000);
+            createTextPDF(context, path, contents.constData());
+        }
+        fz_drop_context(context);
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(
+            m_client.open(path, { }, pages, epub ? ::Mu::Model::DocumentType::Epub : ::Mu::Model::DocumentType::Pdf),
+            ::Mu::Model::OpenStatus::Success);
+        const QImage expected = m_client.render(0, 32, 32);
+        QVERIFY(!expected.isNull());
+
+        Mu::Worker::Sys::Mapping cookie;
+        bool sawProgress = false;
+        const auto started = std::chrono::steady_clock::now();
+        const auto shouldAbort = [&] {
+            if (!cookie) {
+                // The caller keeps this job's cookie FD alive while checking
+                // cancellation. Observe MuPDF's documented progress field to
+                // ensure cancellation happens during real page execution.
+                for (const auto& name :
+                     QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
+                    if (!QFileInfo(QStringLiteral("/proc/self/fd/") + name)
+                             .symLinkTarget()
+                             .contains(QStringLiteral("memfd:mupdf-render-cancel")))
+                        continue;
+                    cookie = Mu::Worker::Sys::Mapping(
+                        ::mmap(
+                            nullptr, Mu::IPC::RenderCookieBytes, PROT_READ | PROT_WRITE, MAP_SHARED, name.toInt(), 0),
+                        Mu::IPC::RenderCookieBytes);
+                    break;
+                }
+            }
+            if (cookie) {
+                // Once queued, wait for the renderer here rather than relying
+                // on the 10 ms client poll to catch a short replay window.
+                while (std::chrono::steady_clock::now() - started < std::chrono::seconds(3)) {
+                    if (static_cast<volatile fz_cookie*>(cookie.data())->progress > 0) {
+                        sawProgress = true;
+                        return true;
+                    }
+                    std::this_thread::yield();
+                }
+            }
+            return std::chrono::steady_clock::now() - started > std::chrono::seconds(3);
+        };
+        const QRect tile = tiled ? QRect(0, 0, 1024, 1024) : QRect { };
+        QVERIFY(m_client.render(0, 2048, 2048, tile, shouldAbort).isNull());
+        QVERIFY(sawProgress);
+        auto drained = std::async(std::launch::async, [&] { return m_client.isConnected(); });
+        QVERIFY(drained.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+        QVERIFY(drained.get());
+
+        // A late write to the old cookie must never abort the next render.
+        const QImage next = m_client.render(0, 32, 32, { }, [&] {
+            *static_cast<volatile std::int32_t*>(cookie.data()) = 1;
+            return false;
+        });
+        QVERIFY(!next.isNull());
+        QCOMPARE(next, expected);
+        // The interrupted render published no frame and required no lease release.
+        QCOMPARE(frameRequestId(next), frameRequestId(expected) + 2);
+        QVERIFY(m_client.close());
+    }
+
+    void cancelledRendersDrainSafely()
+    {
+        QFETCH(bool, epub);
+        QFETCH(int, finish);
+        using namespace Mu::Model;
+        QVERIFY(m_client.start(QStringLiteral(RENDER_WORKER_BUILD_PATH)));
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(epub ? m_epub : m_pdf, { }, pages, epub ? DocumentType::Epub : DocumentType::Pdf),
+                 OpenStatus::Success);
+        const QImage expected = m_client.render(0, 160, 160);
+        QVERIFY(!expected.isNull());
+        // Exercise cancellation alongside an existing retained frame lease.
+        pid_t workerPid = -1;
+        const int socket = workerControlSocket(workerPid);
+        QVERIFY(socket >= 0);
+        QCOMPARE(::kill(workerPid, SIGSTOP), 0);
+        auto resume = qScopeGuard([&] { ::kill(workerPid, SIGCONT); });
+        int status = 0;
+        QCOMPARE(::waitpid(workerPid, &status, WUNTRACED), workerPid);
+        QVERIFY(WIFSTOPPED(status));
+
+        std::atomic<bool> cancel { false };
+        auto active = std::async(std::launch::async,
+                                 [&] { return m_client.render(0, 160, 160, { }, [&] { return cancel.load(); }); });
+        // Ensure failed assertions also release the requesting thread before
+        // the future's destructor joins it.
+        const auto cancelOnExit = qScopeGuard([&] { cancel.store(true); });
+        int pending = 0;
+        const auto requestSent = [&] {
+            return ::ioctl(socket, TIOCOUTQ, &pending) == 0 && pending > 0;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(requestSent(), 2000);
+        QVERIFY(active.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout);
+
+        // The worker cannot answer yet, so this job must stay behind the active
+        // RPC. Cancellation must return without waiting for either response.
+        int checks = 0;
+        QVERIFY(m_client.render(0, 160, 160, { }, [&] { return ++checks >= 3; }).isNull());
+        cancel.store(true);
+        QVERIFY(active.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+        QVERIFY(active.get().isNull());
+
+        if (finish == 2) {
+            QCOMPARE(::kill(workerPid, SIGKILL), 0);
+            resume.dismiss();
+            QVERIFY(m_client.render(0, 160, 160, { }, [] { return false; }).isNull());
+            return;
+        }
+        QCOMPARE(::kill(workerPid, SIGCONT), 0);
+        resume.dismiss();
+        if (finish == 1) {
+            m_client.stop();
+            QCOMPARE(m_client.state(), ::Mu::Plugin::WorkerClient::State::Stopped);
+            return;
+        }
+        // These barriers drain the cancelled RPC. It must publish no frame or
+        // lease, and the queued cancelled job must consume no RPC request id.
+        QVERIFY(m_client.isConnected());
+        QVERIFY(m_client.isConnected());
+        {
+            const QImage next = m_client.render(0, 160, 160, { }, [] { return false; });
+            QVERIFY(!next.isNull());
+            // One cancelled render and the next render; no frame lease release.
+            QCOMPARE(frameRequestId(next), frameRequestId(expected) + 2);
+            QCOMPARE(next, expected);
+        }
+        // This also waits for the old response and its FD to be drained. Repeat
+        // cancellation/completion races beyond the pool size to catch lease loss.
+        for (int attempt = 0; attempt < 12; ++attempt) {
+            checks = 0;
+            QVERIFY(m_client.render(0, 160, 160, { }, [&] { return ++checks >= 2; }).isNull());
+            const QImage image = m_client.render(0, 160, 160, { }, [] { return false; });
+            QVERIFY(!image.isNull());
+            QCOMPARE(image, expected);
         }
         QVERIFY(m_client.close());
     }

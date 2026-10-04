@@ -499,13 +499,21 @@ bool WorkerTransport::close()
     return response && !response->error;
 }
 
-QImage WorkerTransport::render(int page, int width, int height, const QRect& rect)
+QImage WorkerTransport::render(int page, int width, int height, const QRect& rect, int cancellationFd)
 {
     // Phase 1: build the render request, folding the tile geometry into the
     // projection when the caller asks for a partial viewport.
     RenderRequest request { page, width, height, std::nullopt };
     if (!rect.isEmpty())
         request.tile = RenderTile { rect.x(), rect.y(), rect.width(), rect.height() };
+    if (cancellationFd >= 0) {
+        request.cancelTransferId = m_nextTransfer++;
+        std::string error;
+        if (!m_fd.send(request.cancelTransferId, cancellationFd, &error)) {
+            MU_LOG(warning, "Mu::Plugin", "could not send render cancellation cookie: " + error);
+            return { };
+        }
+    }
 
     // Phase 2: synchronous RPC round trip. A lost or rejected request returns
     // an empty image, and the payload must come back as a RenderResponse.

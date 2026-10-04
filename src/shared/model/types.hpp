@@ -815,6 +815,7 @@ struct RenderTile {
 struct RenderRequest {
     std::int32_t page = -1, width = 0, height = 0;
     std::optional<RenderTile> tile;
+    std::uint64_t cancelTransferId = 0;
 };
 
 /// Releases a pooled render slot after the final QImage copy is destroyed.

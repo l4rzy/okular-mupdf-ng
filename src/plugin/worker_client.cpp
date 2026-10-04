@@ -4,6 +4,12 @@
 #include "plugin/worker_client.hpp"
 
 #include <chrono>
+#include <condition_variable>
+#include <fcntl.h>
+#include <memory>
+#include <mutex>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include "plugin/worker_transport.hpp"
 #include "shared/logging.hpp"
@@ -124,9 +130,86 @@ bool WorkerClient::close()
     return sync([&](WorkerTransport* transport) { return transport->close(); });
 }
 
-QImage WorkerClient::render(int p, int w, int h, const QRect& t)
+QImage WorkerClient::render(int p, int w, int h, const QRect& t, const std::function<bool()>& shouldAbort)
 {
-    return sync([&](WorkerTransport* transport) { return transport->render(p, w, h, t); });
+    if (!shouldAbort)
+        return sync([&](WorkerTransport* transport) { return transport->render(p, w, h, t); });
+    if (shouldAbort() || !m_transport)
+        return { };
+
+    struct RenderState {
+        std::mutex mutex;
+        std::condition_variable completed;
+        bool cancelled = false;
+        bool done = false;
+        QImage image;
+        int cancellationFd = -1;
+        void* cookie = MAP_FAILED;
+
+        ~RenderState()
+        {
+            if (cookie != MAP_FAILED)
+                ::munmap(cookie, IPC::RenderCookieBytes);
+            if (cancellationFd >= 0)
+                ::close(cancellationFd);
+        }
+    };
+
+    const auto state = std::make_shared<RenderState>();
+    state->cancellationFd = ::memfd_create("mupdf-render-cancel", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    if (state->cancellationFd >= 0 && ::ftruncate(state->cancellationFd, IPC::RenderCookieBytes) == 0
+        && ::fcntl(state->cancellationFd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL) == 0) {
+        state->cookie =
+            ::mmap(nullptr, IPC::RenderCookieBytes, PROT_READ | PROT_WRITE, MAP_SHARED, state->cancellationFd, 0);
+    }
+    if (state->cookie == MAP_FAILED) {
+        if (state->cancellationFd >= 0)
+            ::close(state->cancellationFd);
+        state->cancellationFd = -1;
+        MU_LOG(warning, "Mu::Plugin", "render cancellation cookie unavailable; active render will finish normally");
+    }
+    // Only owned inputs cross the thread boundary. The abort predicate may
+    // reference a PixmapRequest that is destroyed as soon as this call returns.
+    if (!QMetaObject::invokeMethod(
+            m_transport,
+            [transport = m_transport, state, p, w, h, t] {
+                {
+                    const std::lock_guard lock(state->mutex);
+                    if (state->cancelled)
+                        return;
+                }
+                // Once dispatched, finish the exchange, including receiving
+                // frame descriptors. Discarded images use normal lease cleanup.
+                QImage image = transport->render(p, w, h, t, state->cancellationFd);
+                {
+                    const std::lock_guard lock(state->mutex);
+                    if (!state->cancelled)
+                        state->image = std::move(image);
+                    state->done = true;
+                }
+                state->completed.notify_one();
+            },
+            Qt::QueuedConnection))
+        return { };
+
+    std::unique_lock lock(state->mutex);
+    for (;;) {
+        lock.unlock();
+        const bool cancelled = shouldAbort();
+        lock.lock();
+        if (cancelled) {
+            state->cancelled = true;
+            // MuPDF explicitly permits an unsynchronized, one-way abort update.
+            // This mapping belongs only to this job and outlives the active RPC.
+            if (state->cookie != MAP_FAILED)
+                *static_cast<volatile std::int32_t*>(state->cookie) = 1;
+            return { };
+        }
+        if (state->done)
+            return std::move(state->image);
+        // Completion wakes immediately; poll only the caller-owned abort flag.
+        state->completed.wait_for(lock, std::chrono::milliseconds(10));
+    }
 }
 
 std::vector<TextBox> WorkerClient::getTextBoxesForPage(int p, qreal x, qreal y, bool skipAnnots, bool* success) const

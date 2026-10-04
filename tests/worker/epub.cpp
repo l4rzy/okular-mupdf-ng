@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <string>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <vector>
 
@@ -618,6 +619,61 @@ private slots:
         QVERIFY(response.error);
         QCOMPARE(response.error->code, ::Mu::Model::ErrorCode::Unavailable);
         QVERIFY(response.error->message.find("PDF") != std::string::npos);
+    }
+
+    void testRenderCancellationCookieValidation_data()
+    {
+        QTest::addColumn<int>("size");
+        QTest::addColumn<int>("seals");
+        QTest::addColumn<bool>("abort");
+        QTest::addColumn<bool>("cancelled");
+        constexpr int required = F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL;
+        QTest::newRow("cancelled") << 64 << required << true << true;
+        QTest::newRow("wrong-size") << 63 << required << true << false;
+        QTest::newRow("unsealed") << 64 << 0 << true << false;
+        QTest::newRow("mutable-seals") << 64 << (F_SEAL_SHRINK | F_SEAL_GROW) << true << false;
+        QTest::newRow("write-sealed") << 64 << (required | F_SEAL_WRITE) << false << false;
+    }
+
+    void testRenderCancellationCookieValidation()
+    {
+        QFETCH(int, size);
+        QFETCH(int, seals);
+        QFETCH(bool, abort);
+        QFETCH(bool, cancelled);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        std::string error;
+        ::Mu::IPC::FdChannel receiver;
+        QVERIFY(receiver.listen(directory.filePath(QStringLiteral("cancel.sock")).toStdString(), &error));
+        ::Mu::IPC::FdChannel sender;
+        QVERIFY(sender.connect(directory.filePath(QStringLiteral("cancel.sock")).toStdString(), &error));
+        QVERIFY(receiver.accept(&error));
+        ::Mu::Worker::Runtime::CommandService service({ .sandbox = { }, .fdChannel = &receiver });
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(service.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error));
+        ::Mu::Worker::Sys::FileDescriptor cookie(::memfd_create("test-cookie", MFD_CLOEXEC | MFD_ALLOW_SEALING));
+        QVERIFY(cookie);
+        QCOMPARE(::ftruncate(cookie.get(), size), 0);
+        const std::int32_t flag = abort ? 1 : 0;
+        QCOMPARE(::pwrite(cookie.get(), &flag, sizeof(flag), 0), ssize_t(sizeof(flag)));
+        QCOMPARE(::fcntl(cookie.get(), F_ADD_SEALS, seals), 0);
+        QVERIFY(sender.send(7, cookie.get(), &error));
+        const auto response = service.dispatch({ 100, ::Mu::Model::RenderRequest { 0, 100, 100, std::nullopt, 7 } });
+        QCOMPARE(response.id, std::uint64_t(100));
+        QVERIFY(response.error);
+        QCOMPARE(response.error->code,
+                 cancelled ? ::Mu::Model::ErrorCode::Cancelled : ::Mu::Model::ErrorCode::InvalidRequest);
+        QVERIFY(std::holds_alternative<std::monostate>(response.payload));
+        pollfd pending { sender.fd(), POLLIN, 0 };
+        QCOMPARE(::poll(&pending, 1, 0), 0); // No partial frame descriptor.
+        const auto next = service.dispatch({ 101, ::Mu::Model::RenderRequest { 0, 100, 100, std::nullopt } });
+        QVERIFY(!next.error);
+        const auto* rendered = std::get_if<::Mu::Model::RenderResponse>(&next.payload);
+        QVERIFY(rendered);
+        ::Mu::Worker::Sys::FileDescriptor frame(sender.receive(rendered->frame.transferId, &error));
+        QVERIFY(frame);
     }
 
     void testMetadataFilteringAndHash()

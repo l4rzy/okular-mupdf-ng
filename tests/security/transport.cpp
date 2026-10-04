@@ -33,6 +33,31 @@ class TestTransport : public QObject {
 
 private slots:
 
+    void renderCancellationRoundTrip_data()
+    {
+        QTest::addColumn<quint64>("transfer");
+        QTest::newRow("ordinary-render") << quint64(0);
+        QTest::newRow("cancellable-render") << quint64(42);
+    }
+
+    void renderCancellationRoundTrip()
+    {
+        QFETCH(quint64, transfer);
+        using namespace Mu;
+        std::string error;
+        const auto bytes = IPC::ZppCodec::encode(
+            Model::RequestMessage { 17, Model::RenderRequest { 0, 100, 100, std::nullopt, transfer } }, &error);
+        QVERIFY2(bytes.has_value(), error.c_str());
+        Model::RequestMessage decoded;
+        QVERIFY2(IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
+        const auto* render = std::get_if<Model::RenderRequest>(&decoded.payload);
+        QVERIFY(render);
+        QCOMPARE(render->cancelTransferId, transfer);
+        auto oldVersion = *bytes;
+        oldVersion[4] = std::byte { 5 };
+        QVERIFY(!IPC::ZppCodec::decode(oldVersion, &decoded, &error));
+    }
+
     void overprintSettingsRoundTrip_data()
     {
         QTest::addColumn<bool>("enabled");

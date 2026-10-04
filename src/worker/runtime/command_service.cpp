@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <fcntl.h>
 #include <limits>
 #include <mupdf/fitz/version.h>
 #include <string_view>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "engine/epub/document.hpp"
@@ -511,8 +513,46 @@ bool CommandService::hasOpenDocument() const noexcept
 // Page Rendering & Shared Memory Frame Buffer Management
 // =============================================================================
 
+std::optional<ResponseMessage>
+CommandService::receiveRenderCookie(std::uint64_t requestId, std::uint64_t transferId, Mapping& mapping)
+{
+    if (!transferId)
+        return std::nullopt;
+
+    ResponseMessage fdError;
+    Sys::FileDescriptor fd(receiveFd(requestId, "render", transferId, &fdError));
+    if (!fd)
+        return fdError;
+    struct stat info { };
+    const int seals = ::fcntl(fd.get(), F_GET_SEALS);
+    constexpr int requiredSeals = F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL;
+    if (::fstat(fd.get(), &info) != 0 || info.st_size != IPC::RenderCookieBytes || seals < 0
+        || (seals & requiredSeals) != requiredSeals)
+        return failure(requestId, ErrorCode::InvalidRequest, "render", "invalid cancellation cookie");
+    mapping = Mapping(::mmap(nullptr, IPC::RenderCookieBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd.get(), 0),
+                      IPC::RenderCookieBytes);
+    if (!mapping)
+        return failure(requestId, ErrorCode::InvalidRequest, "render", "could not map cancellation cookie");
+    static_assert(offsetof(fz_cookie, abort) == 0 && sizeof(fz_cookie::abort) == sizeof(std::int32_t)
+                  && sizeof(fz_cookie) <= IPC::RenderCookieBytes);
+    auto* cookie = static_cast<fz_cookie*>(mapping.data());
+    // The host owns only abort. Preserve an abort written before dispatch;
+    // initialize the remaining fields without racing that first word.
+    cookie->progress = 0;
+    cookie->progress_max = 0;
+    cookie->errors = 0;
+    cookie->incomplete = 0;
+    if (cookie->abort)
+        return failure(requestId, ErrorCode::Cancelled, "render", "render cancelled");
+    return std::nullopt;
+}
+
 ResponseMessage CommandService::renderResponse(const RequestMessage& request, const RenderRequest& render)
 {
+    Mapping cookieMapping;
+    if (auto error = receiveRenderCookie(request.id, render.cancelTransferId, cookieMapping))
+        return std::move(*error);
+    auto* cookie = static_cast<fz_cookie*>(cookieMapping.data());
     if (!hasOpenDocument())
         return failure(request.id, ErrorCode::NotOpen, "render", "no document is open");
 
@@ -549,19 +589,6 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     }
 
     bool newSlot = false;
-    if (!slot && m_frameSlots.size() < MaxFramePoolSlots && total <= FramePoolBytes - m_framePoolBytes) {
-        auto fd = createMemfd("mupdf-frame", total, &error);
-        if (!fd)
-            return failure(request.id, ErrorCode::ResourceLimit, "render", error);
-        Mapping mapping(::mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, fd->get(), 0), total);
-        if (!mapping)
-            return failure(request.id, ErrorCode::Internal, "render", "could not map frame");
-        m_frameSlots.push_back({ m_nextFrameSlotId++, 0, total, std::move(*fd), std::move(mapping), false });
-        m_framePoolBytes += total;
-        slot = &m_frameSlots.back();
-        newSlot = true;
-    }
-
     // Pooled slots retain their descriptor and writable mapping between
     // renders. The transient fallback preserves the existing safe lifecycle
     // when every compatible slot is leased or either pool budget is full.
@@ -571,14 +598,22 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     if (slot) {
         address = slot->mapping.data();
     } else {
-        transientFrame = createMemfd("mupdf-frame", total, &error);
-        if (!transientFrame)
+        auto fd = createMemfd("mupdf-frame", total, &error);
+        if (!fd)
             return failure(request.id, ErrorCode::ResourceLimit, "render", error);
-        transientMapping =
-            Mapping(::mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, transientFrame->get(), 0), total);
-        if (!transientMapping)
+        Mapping mapping(::mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, fd->get(), 0), total);
+        if (!mapping)
             return failure(request.id, ErrorCode::Internal, "render", "could not map frame");
-        address = transientMapping.data();
+        address = mapping.data();
+        if (m_frameSlots.size() < MaxFramePoolSlots && total <= FramePoolBytes - m_framePoolBytes) {
+            m_frameSlots.push_back({ m_nextFrameSlotId++, 0, total, std::move(*fd), std::move(mapping), false });
+            m_framePoolBytes += total;
+            slot = &m_frameSlots.back();
+            newSlot = true;
+        } else {
+            transientFrame = std::move(fd);
+            transientMapping = std::move(mapping);
+        }
     }
 
     auto* header = static_cast<IPC::FrameBufferHeader*>(address);
@@ -593,12 +628,16 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
         slot = nullptr;
     };
 
-    // Step 3: Render raster pixmap into mapped SHM buffer
-    if (!m_document->renderToBuffer({ fitted.request.page, fitted.request.width, fitted.request.height, tile },
-                                    IPC::framePixelData(address),
-                                    outputStride,
-                                    &error)) {
+    // Render into the mapped frame before publishing its descriptor or lease.
+    const bool rendered =
+        m_document->renderToBuffer({ fitted.request.page, fitted.request.width, fitted.request.height, tile, cookie },
+                                   IPC::framePixelData(address),
+                                   outputStride,
+                                   &error);
+    if (!rendered || (cookie && cookie->abort)) {
         discardNewSlot();
+        if (cookie && cookie->abort)
+            return failure(request.id, ErrorCode::Cancelled, "render", "render cancelled");
         return failure(request.id, ErrorCode::Internal, "render", error.empty() ? "MuPDF returned no image" : error);
     }
 

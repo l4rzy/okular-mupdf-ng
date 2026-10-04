@@ -17,7 +17,7 @@ namespace Mu::Model {
 
 // zpp's C++23 aggregate fallback cannot count optionals containing aggregates.
 auto serialize(const AnnotationStyle&) -> zpp::bits::members<7>;
-auto serialize(const RenderRequest&) -> zpp::bits::members<4>;
+auto serialize(const RenderRequest&) -> zpp::bits::members<5>;
 auto serialize(const ResponseMessage&) -> zpp::bits::members<3>;
 
 constexpr auto serialize(auto& archive, Value& value)

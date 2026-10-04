@@ -54,6 +54,24 @@ private Q_SLOTS:
         QCOMPARE(client.state(), State::Ready);
         QVERIFY(client.operational());
     }
+
+    void renderWithoutWorkerCompletes_data()
+    {
+        QTest::addColumn<int>("abortAfter");
+        QTest::newRow("completion") << 0;
+        QTest::newRow("already-cancelled") << 1;
+        QTest::newRow("cancel-after-enqueue") << 2;
+    }
+
+    void renderWithoutWorkerCompletes()
+    {
+        QFETCH(int, abortAfter);
+        WorkerClient client;
+        int checks = 0;
+        QVERIFY(client.render(0, 100, 100, { }, [&] { return abortAfter && ++checks >= abortAfter; }).isNull());
+        QCOMPARE(client.state(), State::Stopped);
+        client.stop();
+    }
 };
 
 QTEST_GUILESS_MAIN(TestWorkerClientState)
