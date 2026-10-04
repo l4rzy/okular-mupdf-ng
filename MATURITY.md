@@ -41,6 +41,7 @@ promise that every input or workflow has been tested.
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
 | PDF JS support | 🟣 Experimental | Basic integration tests |
+| MOBI support | 🟣 Experimental | Basic integration tests |
 
 ## Known limitations
 
