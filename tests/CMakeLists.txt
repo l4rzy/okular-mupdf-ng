@@ -283,3 +283,7 @@ add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     USES_TERMINAL)
+
+add_layer_test(test_plugin_pdf_toc plugin/test_pdf_toc.cpp plugin ../src/worker/engine/pdf/generated_outline.cpp)
+target_include_directories(test_plugin_pdf_toc PRIVATE ../src ../src/worker)
+target_link_libraries(test_plugin_pdf_toc PRIVATE mupdf_plugin_cache)

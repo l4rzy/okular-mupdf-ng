@@ -90,18 +90,23 @@ private slots:
         const QString staleOnlyDoc = writeFile(root.filePath(QStringLiteral("ocr_cache/gone/p0_eng.bin")), "old", old);
         const QString staleEpub = writeFile(root.filePath(QStringLiteral("epub_accelerators/abc.bin")), "old", old);
         const QString freshEpub = writeFile(root.filePath(QStringLiteral("epub_accelerators/fresh.bin")), "new", now);
+        const QString stalePdfToc = writeFile(root.filePath(QStringLiteral("pdf_toc/old.bin")), "old", old);
+        const QString freshPdfToc = writeFile(root.filePath(QStringLiteral("pdf_toc/fresh.bin")), "new", now);
         const QString foreign = writeFile(root.filePath(QStringLiteral("other/keep.bin")), "old", old);
-        for (const QString& path : { staleOcr, freshOcr, staleOnlyDoc, staleEpub, freshEpub, foreign })
+        for (const QString& path :
+             { staleOcr, freshOcr, staleOnlyDoc, staleEpub, freshEpub, stalePdfToc, freshPdfToc, foreign })
             QVERIFY2(!path.isEmpty(), qPrintable(QStringLiteral("fixture setup failed")));
         QCOMPARE(QFileInfo(staleOcr).lastModified().toSecsSinceEpoch(), old.toSecsSinceEpoch());
 
         const auto result = Vacuum::vacuumStaleCaches(root.path(), now);
-        QCOMPARE(result.filesRemoved, 3);
+        QCOMPARE(result.filesRemoved, 4);
         QVERIFY(!QFile::exists(staleOcr));
         QVERIFY(!QFile::exists(staleOnlyDoc));
         QVERIFY(!QFile::exists(staleEpub));
         QVERIFY(QFile::exists(freshOcr));
         QVERIFY(QFile::exists(freshEpub));
+        QVERIFY(!QFile::exists(stalePdfToc));
+        QVERIFY(QFile::exists(freshPdfToc));
         // Unknown trees are out of scope even when their files are old.
         QVERIFY(QFile::exists(foreign));
         // The emptied document directory is pruned; the live one survives.

@@ -26,6 +26,7 @@
 #include <utility>
 
 #include "plugin/caching/epub_cache.hpp"
+#include "plugin/caching/pdf_toc_cache.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/process_memory.hpp"
 #include "plugin/util/temp_dir.hpp"
@@ -135,6 +136,8 @@ int timeoutFor(const RequestPayload& payload)
                 // Only the job submission round-trip is bounded here; the
                 // export itself completes out-of-band via a notification.
                 return Timeout::GenericOpMs;
+            if constexpr (std::is_same_v<T, SynopsisRequest>)
+                return value.generateFallback ? 30'000 : Timeout::GenericOpMs;
             if constexpr (std::is_same_v<T, SignRequest>)
                 return Timeout::SignMs;
             return Timeout::GenericOpMs;
@@ -315,6 +318,9 @@ void WorkerTransport::cleanupSession()
     }
     m_sourcePath.clear();
     m_useEpubCache = false;
+    m_pdfSource.reset();
+    m_pdfPageCount = 0;
+    m_pdfSynopsis.reset();
     m_epubCachePath.reset();
     m_epubCacheLayoutKey.reset();
     m_epubCacheSource.clear();
@@ -390,7 +396,8 @@ OpenStatus WorkerTransport::openFile(const QString& path,
 #ifdef MU_DEBUG_ENABLED
     const auto pageLinksStartedAt = std::chrono::steady_clock::now();
 #endif
-    QFile file(path);
+    auto source = std::make_unique<QFile>(path);
+    QFile& file = *source;
     if (!file.open(QIODevice::ReadOnly))
         return OpenStatus::Failed;
     const auto transfer = m_nextTransfer++;
@@ -408,6 +415,9 @@ OpenStatus WorkerTransport::openFile(const QString& path,
         { transfer }, QFileInfo(path).fileName().toStdString(), password.toStdString(), type, accelerator
     };
     m_linkGeneration = 0;
+    m_pdfSynopsis.reset();
+    m_pdfSource.reset();
+    m_pdfPageCount = 0;
     auto response = call(req);
     if (!response || response->error) {
         if (response && response->error)
@@ -436,6 +446,10 @@ OpenStatus WorkerTransport::openFile(const QString& path,
         pages->reserve(static_cast<qsizetype>(opened->pages.size()));
         for (auto& page : opened->pages)
             pages->append(std::move(page));
+    }
+    if (type == DocumentType::Pdf) {
+        m_pdfSource = std::move(source);
+        m_pdfPageCount = static_cast<int>(opened->pages.size());
     }
     m_sourcePath = path;
     m_useEpubCache = useEpubAcceleratorCache && type == DocumentType::Epub;
@@ -489,6 +503,9 @@ bool WorkerTransport::close()
     }
     m_sourcePath.clear();
     m_useEpubCache = false;
+    m_pdfSource.reset();
+    m_pdfPageCount = 0;
+    m_pdfSynopsis.reset();
     m_epubCachePath.reset();
     m_epubCacheLayoutKey.reset();
     m_epubCacheSource.clear();
@@ -696,6 +713,8 @@ std::vector<EmbeddedFile> WorkerTransport::embeddedFiles()
 
 std::vector<OutlineNode> WorkerTransport::synopsis()
 {
+    if (m_pdfSynopsis)
+        return *m_pdfSynopsis;
     if (m_useEpubCache && !m_sourcePath.isEmpty()) {
         if (const auto cached = Caching::EPUB::Cache::loadAt(epubCachePath(m_sourcePath)); cached && cached->outline) {
             return *cached->outline;
@@ -705,6 +724,29 @@ std::vector<OutlineNode> WorkerTransport::synopsis()
     if (!response || response->error)
         return { };
     if (auto* value = std::get_if<OutlineResponse>(&response->payload)) {
+        if (m_pdfSource) {
+            // Embedded outlines take precedence and avoid hashing/scanning.
+            if (!value->nodes.empty()) {
+                m_pdfSynopsis = std::move(value->nodes);
+                return *m_pdfSynopsis;
+            }
+            const QString cachePath = Caching::PDF::tocCachePath(m_pdfSource->handle());
+            if (auto cached = Caching::PDF::loadToc(cachePath, m_pdfPageCount)) {
+                m_pdfSynopsis = std::move(*cached);
+                return *m_pdfSynopsis;
+            }
+            auto generated = call(SynopsisRequest { true });
+            if (!generated || generated->error)
+                return { };
+            auto* outline = std::get_if<OutlineResponse>(&generated->payload);
+            if (!outline)
+                return { };
+            m_pdfSynopsis = std::move(outline->nodes);
+            // Recheck source identity before persisting a completed scan.
+            if (!cachePath.isEmpty() && Caching::PDF::tocCachePath(m_pdfSource->handle()) == cachePath)
+                (void)Caching::PDF::saveToc(cachePath, m_pdfPageCount, *m_pdfSynopsis);
+            return *m_pdfSynopsis;
+        }
         if (m_useEpubCache && !m_sourcePath.isEmpty())
             (void)Caching::EPUB::Cache::saveOutlineAt(epubCachePath(m_sourcePath), value->nodes);
         return std::move(value->nodes);

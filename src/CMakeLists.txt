@@ -70,6 +70,7 @@ install(TARGETS mupdfng-cli
 add_library(mupdf_plugin_cache STATIC
   plugin/caching/cache_file.cpp
   plugin/caching/epub_cache.cpp
+  plugin/caching/pdf_toc_cache.cpp
   plugin/caching/ocr_cache.cpp
   plugin/caching/vacuum.cpp
 )

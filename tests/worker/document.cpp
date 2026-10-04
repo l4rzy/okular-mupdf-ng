@@ -167,6 +167,155 @@ class TestDocument : public QObject {
     Q_OBJECT
 private slots:
 
+    void generatedOutlineWithoutHeadings_data()
+    {
+        QTest::addColumn<QByteArray>("content");
+        QTest::newRow("blank") << QByteArray("q Q");
+        QTest::newRow("plain") << QByteArray("BT /F1 12 Tf 72 700 Td (Ordinary prose) Tj ET");
+        QTest::newRow("numbered-list") << QByteArray(
+            "BT /F1 12 Tf 72 700 Td (1. First list item) Tj 0 -20 Td (2. Second list item) Tj ET");
+    }
+
+    void generatedOutlineWithoutHeadings()
+    {
+        QFETCH(QByteArray, content);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("no-headings.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createTextPDF(document.context(), path, content.constData());
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY(document.openFd(::dup(source.handle()), "no-headings.pdf", &error));
+        QVERIFY(document.generateOutline(&error).empty());
+        QVERIFY2(error.empty(), error.c_str());
+    }
+
+    void generatedOutlineSplitTitlesAndContents_data()
+    {
+        QTest::addColumn<int>("rotation");
+        QTest::newRow("normal") << 0;
+        QTest::newRow("rotated") << 90;
+    }
+
+    void generatedOutlineSplitTitlesAndContents()
+    {
+        QFETCH(int, rotation);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("book.pdf");
+        const QList<QByteArray> streams {
+            "BT /F2 24 Tf 1 0 0 1 50 740 Tm (Contents) Tj "
+            "/F2 13 Tf 1 0 0 1 50 700 Tm (Alpha Architecture) Tj "
+            "1 0 0 1 330 700 Tm (Beta Architecture) Tj "
+            "/F2 11 Tf 1 0 0 1 50 650 Tm (First Topic) Tj "
+            "1 0 0 1 250 650 Tm (1) Tj 1 0 0 1 50 610 Tm (Summary) Tj "
+            "1 0 0 1 250 610 Tm (1) Tj 1 0 0 1 330 650 Tm (Second Topic) Tj "
+            "1 0 0 1 550 650 Tm (2) Tj 1 0 0 1 330 610 Tm (Summary) Tj "
+            "1 0 0 1 550 610 Tm (2) Tj ET",
+            "BT /F2 36 Tf 1 0 0 1 300 720 Tm (1) Tj "
+            "/F2 30 Tf 1 0 0 1 300 680 Tm (Alpha) Tj 1 0 0 1 300 645 Tm (Architecture) Tj "
+            "/F1 11 Tf 1 0 0 1 50 570 Tm (Ordinary body prose with enough characters for a stable document baseline.) "
+            "Tj "
+            "/F2 17 Tf 1 0 0 1 50 520 Tm (First Topic) Tj "
+            "1 0 0 1 50 420 Tm (Summary) Tj ET",
+            "BT /F2 30 Tf 1 0 0 1 50 700 Tm (2 Beta Architecture) Tj "
+            "/F1 11 Tf 1 0 0 1 50 570 Tm (More ordinary body prose with enough characters to outweigh display titles.) "
+            "Tj "
+            "/F2 17 Tf 1 0 0 1 50 520 Tm (Second Topic) Tj "
+            "1 0 0 1 50 420 Tm (Summary) Tj ET"
+        };
+        QList<QByteArray> objects { "<< /Type /Catalog /Pages 2 0 R >>",
+                                    "<< /Type /Pages /Count 3 /Kids [5 0 R 7 0 R 9 0 R] >>",
+                                    "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>",
+                                    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>" };
+        for (int index = 0; index < streams.size(); ++index) {
+            objects.push_back("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Rotate "
+                              + QByteArray::number(rotation)
+                              + " /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents "
+                              + QByteArray::number(6 + index * 2) + " 0 R >>");
+            objects.push_back("<< /Length " + QByteArray::number(streams[index].size()) + " >>\nstream\n"
+                              + streams[index] + "\nendstream");
+        }
+        QVERIFY(writePdfObjects(path, objects));
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY(document.openFd(::dup(source.handle()), "book.pdf", &error));
+        const auto nodes = document.generateOutline(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(nodes.size(), std::size_t(2));
+        QCOMPARE(nodes[0].title, std::string("1 Alpha Architecture"));
+        QCOMPARE(nodes[0].link.viewport.page, 1);
+        QCOMPARE(nodes[0].children.size(), std::size_t(2));
+        QCOMPARE(nodes[0].children[0].title, std::string("First Topic"));
+        QCOMPARE(nodes[0].children[1].title, std::string("Summary"));
+        QCOMPARE(nodes[1].title, std::string("2 Beta Architecture"));
+        QCOMPARE(nodes[1].link.viewport.page, 2);
+        QCOMPARE(nodes[1].children.size(), std::size_t(2));
+        QCOMPARE(nodes[1].children[0].title, std::string("Second Topic"));
+        QCOMPARE(nodes[1].children[1].title, std::string("Summary"));
+        const double coordinate = rotation ? nodes[0].link.viewport.normalizedY : nodes[0].link.viewport.normalizedX;
+        QVERIFY(std::abs(coordinate - 0.5) < 0.01);
+    }
+
+    void generatedOutlineRejectsPageLimit()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("large.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createMultiPagePDF(document.context(), path, 5001);
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY(document.openFd(::dup(source.handle()), "large.pdf", &error));
+        QVERIFY(document.generateOutline(&error).empty());
+        QVERIFY(error.starts_with("resource limit:"));
+    }
+
+    void generatedOutline_data()
+    {
+        QTest::addColumn<int>("rotation");
+        QTest::newRow("normal") << 0;
+        QTest::newRow("rotated") << 90;
+    }
+
+    void generatedOutline()
+    {
+        QFETCH(int, rotation);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("headings.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createTextPDF(document.context(),
+                      path,
+                      "BT /F1 18 Tf 72 700 Td (1 Introduction) Tj 0 -40 Td "
+                      "/F1 12 Tf (A long body paragraph with ordinary text to establish the body font size.) Tj "
+                      "0 -30 Td (1. A numbered list item should be excluded.) Tj "
+                      "0 -40 Td /F1 16 Tf (1.2 Background) Tj "
+                      "0 -40 Td /F1 12 Tf (More ordinary body text with enough characters to dominate headings.) Tj "
+                      "0 -40 Td /F1 18 Tf (2 Results) Tj ET");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY(document.openFd(::dup(file.handle()), "headings.pdf", &error));
+        QVERIFY(document.outline(&error).empty());
+        if (rotation) {
+            auto* pdf = pdf_specifics(document.context(), document.document());
+            pdf_dict_put_int(
+                document.context(), pdf_lookup_page_obj(document.context(), pdf, 0), PDF_NAME(Rotate), rotation);
+        }
+        const auto nodes = document.generateOutline(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(nodes.size(), std::size_t(2));
+        QCOMPARE(nodes[0].title, std::string("1 Introduction"));
+        QCOMPARE(nodes[0].children.size(), std::size_t(1));
+        QCOMPARE(nodes[0].children[0].title, std::string("1.2 Background"));
+        QCOMPARE(nodes[1].title, std::string("2 Results"));
+        QVERIFY(nodes[0].link.valid);
+        QCOMPARE(nodes[0].link.viewport.page, 0);
+        QVERIFY(nodes[0].link.viewport.normalizedY >= 0 && nodes[0].link.viewport.normalizedY <= 1);
+    }
+
     void attachmentMetadataReadFailures_data()
     {
         QTest::addColumn<QByteArray>("metadata");

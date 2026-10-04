@@ -3,6 +3,7 @@
 #include "genpdf.hpp"
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/epub_cache.hpp"
+#include "plugin/caching/pdf_toc_cache.hpp"
 #include "plugin/worker_client.hpp"
 
 #include <QCryptographicHash>
@@ -20,6 +21,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <fcntl.h>
 #include <future>
 #include <optional>
 #include <sys/ioctl.h>
@@ -470,6 +472,86 @@ private slots:
 
         // No export notification was queued by the failed submission.
         QVERIFY2(spy.isEmpty(), "failed submit must not emit a completion signal");
+        QVERIFY(m_client.close());
+    }
+
+    void pdfGeneratedOutlineCacheRoundTrip()
+    {
+        using namespace Mu::Model;
+        const QString path = m_fixtureRoot.filePath("generated-outline.pdf");
+        fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        createTextPDF(context,
+                      path,
+                      "BT /F1 18 Tf 72 700 Td (1 Introduction) Tj 0 -40 Td "
+                      "/F1 12 Tf (Ordinary body text with enough characters to establish the normal font size.) Tj ET");
+        fz_drop_context(context);
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
+        const auto first = m_client.synopsis();
+        QCOMPARE(first.size(), std::size_t(1));
+        QCOMPARE(first.front().title, std::string("1 Introduction"));
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const QString cachePath = ::Mu::Plugin::Caching::PDF::tocCachePath(source.handle());
+        const auto cached = ::Mu::Plugin::Caching::PDF::loadToc(cachePath, 1);
+        QVERIFY(cached);
+        QCOMPARE(cached->front().title, first.front().title);
+        QVERIFY(m_client.close());
+        // A distinguishable cached result proves reopen uses the cache rather
+        // than generating the same tree again.
+        auto replacement = first;
+        replacement.front().title = "Cached heading";
+        QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, replacement));
+        QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
+        QCOMPARE(m_client.synopsis().front().title, std::string("Cached heading"));
+        QVERIFY(m_client.close());
+        // Empty completed scans are cache hits too.
+        QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, { }));
+        QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
+        QVERIFY(m_client.synopsis().empty());
+        QVERIFY(m_client.close());
+        // Memory-backed opens use the staged source's content identity.
+        QVERIFY(source.seek(0));
+        QCOMPARE(m_client.openData(source.readAll(), { }, pages), OpenStatus::Success);
+        QVERIFY(m_client.synopsis().empty());
+        QVERIFY(m_client.close());
+    }
+
+    void pdfEmbeddedOutlinePrecedesCache()
+    {
+        using namespace Mu::Model;
+        const QString path = m_fixtureRoot.filePath("embedded-outline.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createTextPDF(document.context(), path);
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY(document.openFd(::dup(source.handle()), "embedded-outline.pdf", &error));
+        auto* iterator = fz_new_outline_iterator(document.context(), document.document());
+        fz_outline_item item { };
+        item.title = const_cast<char*>("Embedded heading");
+        item.uri = const_cast<char*>("#page=1");
+        fz_outline_iterator_insert(document.context(), iterator, &item);
+        fz_drop_outline_iterator(document.context(), iterator);
+        const QString saved = m_fixtureRoot.filePath("embedded-outline-saved.pdf");
+        const int output = ::open(QFile::encodeName(saved).constData(), O_CREAT | O_TRUNC | O_RDWR, 0600);
+        QVERIFY(output >= 0);
+        QVERIFY2(document.saveFd(output, &error), error.c_str());
+        QFile input(saved);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        const QString cachePath = ::Mu::Plugin::Caching::PDF::tocCachePath(input.handle());
+        OutlineNode node;
+        node.title = "Cached fallback";
+        node.link.valid = true;
+        node.link.viewport.page = 0;
+        node.link.viewport.coordinateMask = Viewport::CoordinateX | Viewport::CoordinateY;
+        QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, { node }));
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(saved, { }, pages), OpenStatus::Success);
+        const auto outline = m_client.synopsis();
+        QCOMPARE(outline.size(), std::size_t(1));
+        QCOMPARE(outline.front().title, std::string("Embedded heading"));
         QVERIFY(m_client.close());
     }
 

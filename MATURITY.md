@@ -42,6 +42,7 @@ promise that every input or workflow has been tested.
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
 | PDF JS support | 🟣 Experimental | Basic integration tests |
 | MOBI support | 🟣 Experimental | Basic integration tests |
+| Generated PDF TOC (printed contents and typography; persistent cache) | 🟣 Experimental | Heading/hierarchy, wrapped titles, contents columns/page mapping, and cache tests; rotated worker fixtures and IPC reopen/precedence tests |
 
 ## Known limitations
 

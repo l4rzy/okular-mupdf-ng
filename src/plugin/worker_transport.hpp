@@ -225,6 +225,10 @@ private:
     bool m_intentionalStop = false;
     bool m_inFlight = false;
     bool m_useEpubCache = false;
+    // Retain the exact opened source for PDF TOC identity (also covers openData).
+    std::unique_ptr<QFile> m_pdfSource;
+    int m_pdfPageCount = 0;
+    std::optional<std::vector<Model::OutlineNode>> m_pdfSynopsis;
 };
 
 } // namespace Mu::Plugin

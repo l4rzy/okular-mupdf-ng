@@ -19,6 +19,7 @@ set(mupdf_worker_core_SRCS
     engine/pdf/signature.cpp
     engine/pdf/save.cpp
     engine/pdf/outline.cpp
+    engine/pdf/generated_outline.cpp
     engine/pdf/layers.cpp
     engine/pdf/metadata.cpp
     engine/pdf/fonts.cpp

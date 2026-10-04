@@ -862,7 +862,10 @@ struct MetadataRequest {
 };
 
 /// Requests the document outline.
-struct SynopsisRequest { };
+struct SynopsisRequest {
+    /// PDF-only fallback; embedded outlines always take precedence.
+    bool generateFallback = false;
+};
 
 /// One entry in the default PDF optional-content configuration UI.
 enum class LayerType : std::uint8_t { Label, CheckBox, RadioButton };

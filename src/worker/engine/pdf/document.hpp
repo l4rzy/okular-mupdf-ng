@@ -95,6 +95,7 @@ public:
     [[nodiscard]] std::vector<Link>
     extractLinks(int page, std::string* error = nullptr, ExtractionBudgets* budgets = nullptr) const override;
     [[nodiscard]] std::vector<OutlineNode> outline(std::string* error = nullptr) const override;
+    [[nodiscard]] std::vector<OutlineNode> generateOutline(std::string* error = nullptr) const;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
 

@@ -103,6 +103,7 @@ and the source-tree layout.
 | **Annotations export** | Export PDF annotations to XFDF | ✓ | ✗ |
 | **Flattened PDF export** | Bake annotations and form fields into PDF page content | ✓ | ✗ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
+| **PDF Heuristic Outline** | Outline generation for PDFs that don't have embedded outline | ✓ | ✗ |
 | **Printing & Exporting** | Print & Export | ✓ | ✓ |
 | **PDF layers** | Toggle optional content in the Layers sidebar | ✓ | ✓ (PDF) |
 | **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |

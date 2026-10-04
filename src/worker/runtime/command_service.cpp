@@ -1108,6 +1108,10 @@ ResponseMessage CommandService::synopsis(const RequestMessage& r)
 
     std::string e;
     auto nodes = m_document->outline(&e);
+    if (e.empty() && nodes.empty() && std::get<SynopsisRequest>(r.payload).generateFallback) {
+        if (auto* pdf = dynamic_cast<Engine::PdfDocument*>(m_document.get()))
+            nodes = pdf->generateOutline(&e);
+    }
     if (!e.empty())
         return failure(r.id, isResourceLimitError(e) ? ErrorCode::ResourceLimit : ErrorCode::Internal, "synopsis", e);
 
