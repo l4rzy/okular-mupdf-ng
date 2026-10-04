@@ -149,7 +149,9 @@ int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int
         return -1;
     }
     MonotonicDeadline deadline = MonotonicDeadline::fromMilliseconds(timeoutMs);
-    for (;;) {
+    // Always attempt one packet, including with a zero timeout. Check the
+    // deadline before retrying so queued stale packets cannot extend the wait.
+    do {
         if (waitForFd(m_fd, POLLIN, deadline, error) != IoResult::Complete)
             return -1;
 
@@ -191,7 +193,9 @@ int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int
                "skipping stale FD transfer " + std::to_string(transferId) + " while waiting for "
                    + std::to_string(expectedTransferId));
         closeDescriptors(msg);
-    }
+    } while (!deadline.expired());
+    setError(error, "operation timed out");
+    return -1;
 }
 
 void FdChannel::close()

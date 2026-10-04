@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
+#include <memory>
 #include <sys/eventfd.h>
 #include <thread>
 #include <unistd.h>
@@ -67,6 +68,49 @@ private slots:
         MonotonicDeadline loopDeadline(std::chrono::milliseconds(100));
         QVERIFY(loop.runOnce(loopDeadline, &error) == 1 && dispatched);
         loop.unwatch(event->get());
+    }
+
+    void pollCallbackSurvivesWatchMutation_data()
+    {
+        QTest::addColumn<bool>("replaceWatch");
+        QTest::newRow("remove") << false;
+        QTest::newRow("replace") << true;
+    }
+
+    void pollCallbackSurvivesWatchMutation()
+    {
+        QFETCH(bool, replaceWatch);
+        auto event = createEventFd();
+        QVERIFY(event);
+        QVERIFY(::eventfd_write(event->get(), 1) == 0);
+
+        PollLoop loop;
+        auto state = std::make_shared<int>(42);
+        std::weak_ptr<int> lifetime = state;
+        bool aliveDuringCallback = false;
+        bool replacementCalled = false;
+        QVERIFY(loop.watch(event->get(), POLLIN, [&, state](short) {
+            // Copy everything needed after mutation to the stack so the
+            // regression check itself does not access a destroyed closure.
+            auto* lifetimePtr = &lifetime;
+            auto* alivePtr = &aliveDuringCallback;
+            if (replaceWatch) {
+                loop.watch(event->get(), POLLIN, [&](short) { replacementCalled = true; });
+            } else {
+                loop.unwatch(event->get());
+            }
+            *alivePtr = !lifetimePtr->expired();
+        }));
+        state.reset();
+        auto deadline = MonotonicDeadline::fromMilliseconds(100);
+        QCOMPARE(loop.runOnce(deadline), 1);
+        QVERIFY(aliveDuringCallback);
+        QVERIFY(lifetime.expired());
+        QVERIFY(!replacementCalled);
+
+        deadline = MonotonicDeadline::fromMilliseconds(0);
+        QCOMPARE(loop.runOnce(deadline), replaceWatch ? 1 : 0);
+        QCOMPARE(replacementCalled, replaceWatch);
     }
 
     void memfdSealsPreventResizing()

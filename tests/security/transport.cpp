@@ -494,6 +494,51 @@ private slots:
         QCOMPARE(::munmap(mapping, payloadSize), 0);
     }
 
+    void fdReceiveHonorsDeadlineWithQueuedPackets_data()
+    {
+        QTest::addColumn<int>("timeoutMs");
+        QTest::addColumn<bool>("queueStale");
+        QTest::addColumn<bool>("expectSuccess");
+        QTest::newRow("zero-matching") << 0 << false << true;
+        QTest::newRow("zero-stale") << 0 << true << false;
+        QTest::newRow("finite-stale") << 1000 << true << true;
+        QTest::newRow("infinite-stale") << -1 << true << true;
+    }
+
+    void fdReceiveHonorsDeadlineWithQueuedPackets()
+    {
+        QFETCH(int, timeoutMs);
+        QFETCH(bool, queueStale);
+        QFETCH(bool, expectSuccess);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = QFile::encodeName(dir.filePath(QStringLiteral("fd.sock"))).toStdString();
+        ::Mu::IPC::FdChannel receiver;
+        ::Mu::IPC::FdChannel sender;
+        std::string error;
+        QVERIFY2(receiver.listen(path, &error), error.c_str());
+        QVERIFY2(sender.connect(path, &error, ::getpid()), error.c_str());
+        QVERIFY2(receiver.accept(&error, ::getpid()), error.c_str());
+        QFile source(QStringLiteral("/dev/null"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        if (queueStale)
+            QVERIFY2(sender.send(1, source.handle(), &error), error.c_str());
+        QVERIFY2(sender.send(2, source.handle(), &error), error.c_str());
+
+        const int received = receiver.receive(2, &error, timeoutMs);
+        const bool success = received >= 0;
+        if (success)
+            ::close(received);
+        QCOMPARE(success, expectSuccess);
+        if (!expectSuccess) {
+            QVERIFY(error.find("timed out") != std::string::npos);
+            // Expiration must leave the next packet and its descriptor queued.
+            const int pending = receiver.receive(2, &error, 0);
+            QVERIFY2(pending >= 0, error.c_str());
+            ::close(pending);
+        }
+    }
+
     void formFieldRoundTripSerialization()
     {
         ::Mu::Model::FormField field;
