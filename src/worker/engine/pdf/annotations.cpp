@@ -23,6 +23,13 @@ using namespace ::Mu::Model;
 
 namespace {
 
+std::string copyAnnotationText(fz_context* context, const char* text, ByteBudget& budget)
+{
+    if (!budget.chargeText(text))
+        fz_throw(context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
+    return text ? std::string(text) : std::string { };
+}
+
 void normalizeAnnotationForWrite(Annotation& annotation)
 {
     const auto coordinate = [](double value) {
@@ -554,8 +561,10 @@ bool PdfDocument::removeAnnotation(int page, std::int32_t objectNumber, std::str
     });
 }
 
-std::vector<Annotation>
-PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, std::string* error) const
+std::vector<Annotation> PdfDocument::extractPageAnnotations(fz_page* nativePage,
+                                                            const fz_rect& bounds,
+                                                            std::string* error,
+                                                            ByteBudget& budget) const
 {
     // All annotation geometry is reported to the model as normalized page coordinates.
     const PageCoordinates coordinates { bounds, bounds.x1 - bounds.x0, bounds.y1 - bounds.y0 };
@@ -586,17 +595,19 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 if (type == PDF_ANNOT_WIDGET)
                     continue;
 
+                if (!budget.charge(sizeof(Annotation)))
+                    fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                 value.subtype = modelAnnotationType(type);
                 value.nativeIndex = index;
                 value.pdfObjectNumber = pdf_to_num(m_context, pdf_annot_obj(m_context, annotation));
                 value.flags = modelAnnotationFlags(pdf_annot_flags(m_context, annotation));
 
                 if (const char* text = pdf_annot_name(m_context, annotation))
-                    value.uuid = text;
+                    value.uuid = copyAnnotationText(m_context, text, budget);
                 if (const char* text = pdf_annot_contents(m_context, annotation))
-                    value.contents = text;
+                    value.contents = copyAnnotationText(m_context, text, budget);
                 if (const char* text = pdf_annot_author(m_context, annotation))
-                    value.author = text;
+                    value.author = copyAnnotationText(m_context, text, budget);
 
                 const auto creation = pdf_annot_creation_date(m_context, annotation);
                 const auto modification = pdf_annot_modification_date(m_context, annotation);
@@ -635,7 +646,7 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 if (pdf_annot_has_icon_name(m_context, annotation)) {
                     if (const char* icon = pdf_annot_icon_name(m_context, annotation)) {
                         value.extras.style.appearance.emplace();
-                        value.extras.style.appearance->icon = icon;
+                        value.extras.style.appearance->icon = copyAnnotationText(m_context, icon, budget);
                     }
                 }
                 if (pdf_annot_has_intent(m_context, annotation))
@@ -654,6 +665,8 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 case PDF_ANNOT_STRIKE_OUT: {
                     // Markup annotations store one quadrilateral per highlighted region.
                     const int count = boundedGeometryCount(pdf_annot_quad_point_count(m_context, annotation));
+                    if (!budget.charge(static_cast<std::size_t>(count) * sizeof(Quad)))
+                        fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                     value.extras.quads.reserve(static_cast<std::size_t>(count));
                     for (int quad = 0; quad < count; ++quad) {
                         const fz_quad raw = pdf_annot_quad_point(m_context, annotation, quad);
@@ -667,12 +680,16 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                 case PDF_ANNOT_INK: {
                     // Ink annotations contain multiple strokes, each with its own vertex list.
                     const int strokes = boundedGeometryCount(pdf_annot_ink_list_count(m_context, annotation));
+                    if (!budget.charge(static_cast<std::size_t>(strokes) * sizeof(std::vector<Point>)))
+                        fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                     value.extras.inkPaths.reserve(static_cast<std::size_t>(strokes));
                     for (int stroke = 0; stroke < strokes; ++stroke) {
                         const int count =
                             boundedGeometryCount(pdf_annot_ink_list_stroke_count(m_context, annotation, stroke));
                         value.extras.inkPaths.emplace_back();
                         auto& path = value.extras.inkPaths.back();
+                        if (!budget.charge(static_cast<std::size_t>(count) * sizeof(Point)))
+                            fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                         path.reserve(static_cast<std::size_t>(count));
                         for (int vertex = 0; vertex < count; ++vertex)
                             path.push_back(coordinates.fromPdfPoint(
@@ -694,9 +711,13 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                     if (type == PDF_ANNOT_LINE) {
                         fz_point first { }, second { };
                         pdf_annot_line(m_context, annotation, &first, &second);
+                        if (!budget.charge(2 * sizeof(Point)))
+                            fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                         value.extras.points = { coordinates.fromPdfPoint(first), coordinates.fromPdfPoint(second) };
                     } else {
                         const int count = boundedGeometryCount(pdf_annot_vertex_count(m_context, annotation));
+                        if (!budget.charge(static_cast<std::size_t>(count) * sizeof(Point)))
+                            fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                         value.extras.points.reserve(static_cast<std::size_t>(count));
                         for (int vertex = 0; vertex < count; ++vertex)
                             value.extras.points.push_back(
@@ -714,7 +735,7 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                     value.extras.style.appearance.emplace();
                     auto& appearance = *value.extras.style.appearance;
                     if (font)
-                        appearance.fontName = font;
+                        appearance.fontName = copyAnnotationText(m_context, font, budget);
                     appearance.fontSize = fontSize;
                     if (textComponents > 0)
                         appearance.textColor = pdfColorToArgb(textComponents, textColor, 1.0f);
@@ -725,6 +746,9 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
                         fz_point points[3] { };
                         int count = 0;
                         pdf_annot_callout_line(m_context, annotation, points, &count);
+                        if (!budget.charge(static_cast<std::size_t>(count) * sizeof(Point)))
+                            fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
+                        value.extras.callout.reserve(static_cast<std::size_t>(count));
                         for (int point = 0; point < count; ++point)
                             value.extras.callout.push_back(coordinates.fromPdfPoint(points[point]));
                     }
@@ -740,6 +764,8 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
             }
             fz_catch(m_context)
             {
+                if (fz_caught(m_context) == FZ_ERROR_LIMIT)
+                    fz_rethrow(m_context);
                 // Annotation extraction is intentionally best effort per object;
                 // malformed geometry must not hide valid annotations on the page.
             }
@@ -747,7 +773,7 @@ PdfDocument::extractPageAnnotations(fz_page* nativePage, const fz_rect& bounds, 
     }
     fz_catch(m_context)
     {
-        fail(error, fz_caught_message(m_context));
+        fail(error, fz_convert_error(m_context, nullptr));
         return { };
     }
     return result;

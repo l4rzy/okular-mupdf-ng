@@ -175,7 +175,9 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
                                                     pdf_document* pdfDocument,
                                                     const fz_rect& bounds,
                                                     std::int64_t fileSize,
-                                                    std::size_t& totalCmsBytes)
+                                                    std::size_t& totalCmsBytes,
+                                                    ByteBudget& budget,
+                                                    std::string* error)
 {
     const float width = bounds.x1 - bounds.x0;
     const float height = bounds.y1 - bounds.y0;
@@ -204,6 +206,10 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
             raw->signedField = pdf_signature_is_signed(context, pdfDocument, field) != 0;
             raw->rectangle = pdf_bound_annot(context, annotation);
 
+            if (!budget.charge(sizeof(SignatureField)) || !budget.chargeText(raw->partialName)
+                || !budget.chargeText(raw->fullyQualifiedName))
+                fz_throw(context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
+
             if (raw->signedField) {
                 // Parse signature dictionary (/V entry)
                 pdf_obj* signature = pdf_dict_get_inheritable(context, field, PDF_NAME(V));
@@ -228,6 +234,11 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
                         raw->byteRange[index] = pdf_to_int64(context, pdf_array_get(context, byteRange, index));
                 }
 
+                if (!budget.charge(static_cast<std::size_t>(raw->byteRangeCount) * sizeof(std::int64_t))
+                    || !budget.chargeText(raw->signerName) || !budget.chargeText(raw->reason)
+                    || !budget.chargeText(raw->location) || !budget.chargeText(raw->subFilter))
+                    fz_throw(context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
+
                 // Avoid asking MuPDF to allocate an oversized /Contents string.
                 pdf_obj* contents = pdf_dict_get(context, signature, PDF_NAME(Contents));
                 const std::size_t remainingCmsBytes = totalCmsBytes < Constant::MaxPageSignatureCmsBytes
@@ -236,7 +247,12 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
                 const std::size_t maxContentsBytes = std::min(Constant::MaxSignatureCmsBytes, remainingCmsBytes);
                 if (contents && pdf_is_string(context, contents)
                     && pdf_to_str_len(context, contents) <= maxContentsBytes) {
+                    if (!budget.charge(pdf_to_str_len(context, contents)))
+                        fz_throw(context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
+                    const auto expectedBytes = pdf_to_str_len(context, contents);
                     raw->contentsSize = pdf_signature_contents(context, pdfDocument, field, &raw->contents);
+                    if (raw->contentsSize > expectedBytes && !budget.charge(raw->contentsSize - expectedBytes))
+                        fz_throw(context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
                 }
             }
             accepted = true;
@@ -244,6 +260,8 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
     }
     fz_catch(context)
     {
+        if (fz_caught(context) == FZ_ERROR_LIMIT && error)
+            *error = fz_convert_error(context, nullptr);
         // A malformed signature widget is non-critical to page extraction;
         // skip it while retaining other valid fields.
     }
@@ -695,7 +713,10 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 // Signature Field Discovery & Inspection
 // =============================================================================
 
-std::vector<SignatureField> PdfDocument::extractPageSignatures(fz_page* nativePage, const fz_rect& bounds) const
+std::vector<SignatureField> PdfDocument::extractPageSignatures(fz_page* nativePage,
+                                                               const fz_rect& bounds,
+                                                               std::string* error,
+                                                               ByteBudget* metadataBudget) const
 {
     if (!m_hasAcroForm || !nativePage || bounds.x1 <= bounds.x0 || bounds.y1 <= bounds.y0)
         return { };
@@ -713,6 +734,10 @@ std::vector<SignatureField> PdfDocument::extractPageSignatures(fz_page* nativePa
         return { };
 
     std::vector<SignatureField> result;
+    std::optional<SignatureField> field;
+    ByteBudget pageBudget;
+    ByteBudget& budget = metadataBudget ? *metadataBudget : pageBudget;
+    std::string extractionError;
     std::size_t totalCmsBytes = 0;
     fz_try(m_context)
     {
@@ -720,13 +745,17 @@ std::vector<SignatureField> PdfDocument::extractPageSignatures(fz_page* nativePa
             if (result.size() >= Constant::MaxPageSignatures)
                 fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: page signature limit exceeded");
 
-            if (auto field =
-                    extractSignatureField(m_context, annotation, pdfDocument, bounds, m_sourceSize, totalCmsBytes))
+            field = extractSignatureField(
+                m_context, annotation, pdfDocument, bounds, m_sourceSize, totalCmsBytes, budget, &extractionError);
+            if (!extractionError.empty())
+                fz_throw(m_context, FZ_ERROR_LIMIT, "%s", extractionError.c_str());
+            if (field)
                 result.push_back(std::move(*field));
         }
     }
     fz_catch(m_context)
     {
+        fail(error, fz_convert_error(m_context, nullptr));
         return { };
     }
     return result;

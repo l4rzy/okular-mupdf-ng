@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/extraction_budget.hpp"
 #include "engine/signer.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
@@ -123,11 +124,10 @@ public:
     [[nodiscard]] virtual std::vector<Annotation> extractAnnotations(int page, std::string* error = nullptr) const = 0;
 
     /// Queries page details, bounding copied form text by the caller's remaining document budget.
-    [[nodiscard]] virtual PageDetails
-    pageDetails(int page,
-                std::string* error = nullptr,
-                bool includeLinks = true,
-                std::size_t formTextByteLimit = ::Mu::Limit::MaxAggregateFormTextBytes) const = 0;
+    [[nodiscard]] virtual PageDetails pageDetails(int page,
+                                                  std::string* error = nullptr,
+                                                  bool includeLinks = true,
+                                                  ExtractionBudgets* budgets = nullptr) const = 0;
 
     /// Renders a page or page tile directly into a pre-allocated target pixel buffer (RGBA8888).
     [[nodiscard]] virtual bool renderToBuffer(const RenderRequest& request,
@@ -153,7 +153,8 @@ public:
     [[nodiscard]] virtual ResolvedLink resolveLink(const std::string& uri, std::string* error = nullptr) const = 0;
 
     /// Extracts all hyper-links present on a given page index.
-    [[nodiscard]] virtual std::vector<Link> extractLinks(int page, std::string* error = nullptr) const = 0;
+    [[nodiscard]] virtual std::vector<Link>
+    extractLinks(int page, std::string* error = nullptr, ExtractionBudgets* budgets = nullptr) const = 0;
 
     /// Extracts the table-of-contents outline tree.
     [[nodiscard]] virtual std::vector<OutlineNode> outline(std::string* error = nullptr) const = 0;

@@ -222,11 +222,12 @@ bool WorkerServer::writePageLinks(std::string* error)
     const Sys::OperationBudget budget;
     // CommandService advances one page at a time. It returns a notification only
     // after the current generation completes or encounters a terminal error.
-    const auto notification = m_commandService->processPageLinks();
+    auto notification = m_commandService->processPageLinks();
     if (!notification)
         return true;
 
-    const NotificationMessage message { *notification };
+    const auto generation = notification->generation;
+    const NotificationMessage message { std::move(*notification) };
     MU_LOG(debug, "Worker -> Plugin", IPC::Debug::notification(message, true));
     ZppCodec::EncodeError encodeError = ZppCodec::EncodeError::None;
     std::string serializationError;
@@ -234,7 +235,7 @@ bool WorkerServer::writePageLinks(std::string* error)
     if (!data && encodeError == ZppCodec::EncodeError::ControlMessageLimit) {
         m_commandService->cancelPageLinks();
         const NotificationMessage limitMessage { ::Mu::Model::PageLinksNotification {
-            notification->generation,
+            generation,
             { },
             true,
             "page-link notification exceeds control-message limit",

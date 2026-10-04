@@ -52,6 +52,10 @@ inline constexpr std::int32_t MaxEpubFontSize = 20;
 inline constexpr std::size_t MaxEpubCustomCssCharacters = 1000;
 inline constexpr std::size_t MaxEpubCustomCssBase64Bytes = 8192;
 
+// --- Extracted Document Metadata Limits ---
+inline constexpr std::size_t MaxAggregateMetadataBytes = 32U * 1024U * 1024U;
+inline constexpr std::size_t MaxLinkStringBytes = 64U * 1024U;
+
 // --- Annotation Geometry & Extras Limits ---
 // Leave room for heavily marked-up pages and detailed freehand strokes.
 inline constexpr std::size_t MaxAnnotationsPerPage = 2048;

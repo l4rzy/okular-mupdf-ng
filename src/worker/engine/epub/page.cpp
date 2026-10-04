@@ -31,7 +31,8 @@ std::vector<Annotation> EpubDocument::extractAnnotations(int, std::string*) cons
     return { };
 }
 
-DocumentBase::PageDetails EpubDocument::pageDetails(int page, std::string* error, bool includeLinks, std::size_t) const
+DocumentBase::PageDetails
+EpubDocument::pageDetails(int page, std::string* error, bool includeLinks, ExtractionBudgets* budgets) const
 {
     if (!includeLinks) {
         PageDetails details;
@@ -70,8 +71,9 @@ DocumentBase::PageDetails EpubDocument::pageDetails(int page, std::string* error
         layout.paperWidth, layout.paperHeight, -1.0, labelBuf[0] ? std::string(labelBuf) : std::to_string(page + 1)
     };
     // extractPageLinks never throws across C++: it reports via error only.
+    ExtractionBudgets pageBudgets;
     if (includeLinks)
-        details.links = extractPageLinks(pagePtr, bounds, error);
+        details.links = extractPageLinks(pagePtr, bounds, error, (budgets ? *budgets : pageBudgets).links);
 
     fz_try(m_context)
     {
@@ -147,7 +149,7 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
     return result;
 }
 
-std::vector<Link> EpubDocument::extractLinks(int page, std::string* error) const
+std::vector<Link> EpubDocument::extractLinks(int page, std::string* error, ExtractionBudgets* budgets) const
 {
     fz_rect bounds { };
     fz_page* pagePtr = loadPageWithBounds(page, &bounds, error);
@@ -155,7 +157,8 @@ std::vector<Link> EpubDocument::extractLinks(int page, std::string* error) const
         return { };
 
     // extractPageLinks reports via error and never throws across C++.
-    std::vector<Link> result = extractPageLinks(pagePtr, bounds, error);
+    ExtractionBudgets pageBudgets;
+    std::vector<Link> result = extractPageLinks(pagePtr, bounds, error, (budgets ? *budgets : pageBudgets).links);
     fz_try(m_context)
     {
         fz_drop_page(m_context, pagePtr);
@@ -168,7 +171,8 @@ std::vector<Link> EpubDocument::extractLinks(int page, std::string* error) const
     return result;
 }
 
-std::vector<Link> EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect& bounds, std::string* error) const
+std::vector<Link>
+EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect& bounds, std::string* error, ByteBudget& budget) const
 {
     std::vector<Link> result;
     const float width = bounds.x1 - bounds.x0;
@@ -204,6 +208,12 @@ std::vector<Link> EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect
         const double bottom = (link->rect.y1 - bounds.y0) / height;
         if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom))
             continue;
+
+        if (!budget.charge(sizeof(Link)) || !budget.chargeText(link->uri, Limit::MaxLinkStringBytes)) {
+            fail(error, ExtractionBudgetError);
+            result.clear();
+            break;
+        }
 
         // resolveLink never throws across C++; the raw uri pointer stays
         // valid until the list is dropped below.

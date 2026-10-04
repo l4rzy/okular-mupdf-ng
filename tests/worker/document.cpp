@@ -84,6 +84,36 @@ bool writeFormBudgetPdf(const QString& path, const QByteArray& field, int string
     return writePdfObjects(path, objects);
 }
 
+bool writeMetadataBudgetPdf(const QString& path, int kind, int stringLength, int entries, int pages = 1)
+{
+    QByteArray references;
+    for (int index = 0; index < entries; ++index)
+        references += QByteArray::number(9 + index) + " 0 R ";
+    QByteArray pageRefs("3 0 R ");
+    for (int index = 1; index < pages; ++index)
+        pageRefs += QByteArray::number(8 + entries + index) + " 0 R ";
+    const QByteArray page("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [" + references
+                          + "] >>");
+    QList<QByteArray> objects { "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>",
+                                "<< /Type /Pages /Count " + QByteArray::number(pages) + " /Kids [" + pageRefs + "] >>",
+                                page,
+                                "null",
+                                "<< /Fields [" + references + "] >>",
+                                "<< /Type /Sig /Contents 8 0 R >>",
+                                "null",
+                                "(" + (kind == 2 ? QByteArray("https://example.test/") : QByteArray { })
+                                    + QByteArray(stringLength, 'x') + ")" };
+    for (int index = 0; index < entries; ++index) {
+        const QByteArray body = kind == 0 ? QByteArray("/Subtype /Text /Contents 8 0 R")
+            : kind == 1                   ? QByteArray("/Subtype /Widget /FT /Sig /T (f) /V 6 0 R /P 3 0 R")
+                                          : QByteArray("/Subtype /Link /A << /S /URI /URI 8 0 R >>");
+        objects.push_back("<< /Type /Annot /Rect [50 50 150 90] " + body + " >>");
+    }
+    for (int index = 1; index < pages; ++index)
+        objects.push_back(page);
+    return writePdfObjects(path, objects);
+}
+
 std::vector<std::uint8_t>
 renderPdfPage(const ::Mu::Worker::Engine::PdfDocument& doc, int page, int width, int height, std::string* error)
 {
@@ -511,6 +541,134 @@ private slots:
         }
     }
 
+    void metadataByteBudget_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<int>("entries");
+        for (int entries : { 1, 2 }) {
+            QTest::newRow(entries == 1 ? "annotation" : "repeated-annotation") << 0 << entries;
+            QTest::newRow(entries == 1 ? "signature" : "repeated-signature") << 1 << entries;
+            QTest::newRow(entries == 1 ? "link" : "repeated-link") << 2 << entries;
+        }
+    }
+
+    void metadataByteBudget()
+    {
+        QFETCH(int, kind);
+        QFETCH(int, entries);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("metadata-budget.pdf");
+        QVERIFY(writeMetadataBudgetPdf(path, kind, 64, entries, 2));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "metadata-budget.pdf", &error), error.c_str());
+        using ::Mu::Worker::Engine::ExtractionBudgets;
+        const auto extract = [&](int page, ExtractionBudgets& budgets) {
+            if (kind == 2)
+                return document.extractLinks(page, &error, &budgets).size();
+            const auto details = document.pageDetails(page, &error, false, &budgets);
+            return kind == 0 ? details.annotations.size() : details.signatures.size();
+        };
+        ExtractionBudgets budgets;
+        auto& budget = kind == 2 ? budgets.links : budgets.metadata;
+        const auto initial = budget.remainingBytes;
+        QCOMPARE(extract(0, budgets), static_cast<std::size_t>(entries));
+        QVERIFY2(error.empty(), error.c_str());
+        const auto bytes = initial - budget.remainingBytes;
+        QCOMPARE(budgets.forms.remainingBytes, ::Mu::Limit::MaxAggregateFormTextBytes);
+        QCOMPARE((kind == 2 ? budgets.metadata : budgets.links).remainingBytes, ::Mu::Limit::MaxAggregateMetadataBytes);
+        QVERIFY(bytes >= static_cast<std::size_t>(entries * 64));
+        if (kind == 1) {
+            const auto details = document.pageDetails(0, &error, false);
+            QCOMPARE(details.signatures.size(), static_cast<std::size_t>(entries));
+            QCOMPARE(details.signatures.front().cmsSignature.size(), 64u);
+        }
+        const auto* exceptionTop = document.context()->error.top;
+        for (int extra : { 0, 1 }) {
+            error.clear();
+            budget.remainingBytes = bytes - static_cast<std::size_t>(extra);
+            QCOMPARE(extract(0, budgets), extra == 0 ? static_cast<std::size_t>(entries) : 0u);
+            QCOMPARE(error.empty(), extra == 0);
+            if (extra)
+                QVERIFY2(error.starts_with("resource limit:"), error.c_str());
+            QCOMPARE(document.context()->error.top, exceptionTop);
+        }
+        error.clear();
+        budget.remainingBytes = bytes;
+        QCOMPARE(extract(0, budgets), static_cast<std::size_t>(entries));
+        QCOMPARE(extract(1, budgets), 0u);
+        QVERIFY2(error.starts_with("resource limit:"), error.c_str());
+    }
+
+    void linkStringByteLimit_data()
+    {
+        QTest::addColumn<int>("extra");
+        QTest::newRow("at-limit") << 0;
+        QTest::newRow("over-limit") << 1;
+    }
+
+    void linkStringByteLimit()
+    {
+        QFETCH(int, extra);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("link-string-budget.pdf");
+        const int length =
+            static_cast<int>(::Mu::Limit::MaxLinkStringBytes - sizeof("https://example.test/") + 1) + extra;
+        QVERIFY(writeMetadataBudgetPdf(path, 2, length, 1));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "link-string-budget.pdf", &error), error.c_str());
+        const auto links = document.extractLinks(0, &error);
+        QCOMPARE(links.size(), extra == 0 ? 1u : 0u);
+        if (extra)
+            QVERIFY2(error.starts_with("resource limit:"), error.c_str());
+        else
+            QVERIFY2(error.empty(), error.c_str());
+    }
+
+    void aggregateMetadataByteLimit_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::newRow("annotation") << 0;
+        QTest::newRow("signature") << 1;
+        QTest::newRow("link") << 2;
+    }
+
+    void aggregateMetadataByteLimit()
+    {
+        QFETCH(int, kind);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("aggregate-metadata.pdf");
+        const int stringLength = kind == 1 ? 8 * 1024 * 1024 : 64 * 1024 - 32;
+        const int entries = kind == 1 ? 1 : 128;
+        QVERIFY(writeMetadataBudgetPdf(path, kind, stringLength, entries, 5));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Runtime::CommandService service({ });
+        const auto response = service.openFdResponse(1, ::dup(file.handle()), "aggregate-metadata.pdf");
+        if (kind != 2) {
+            QVERIFY(response.error);
+            QCOMPARE(response.error->code, ::Mu::Model::ErrorCode::ResourceLimit);
+        } else {
+            QVERIFY(!response.error);
+            std::optional<::Mu::Model::PageLinksNotification> notification;
+            for (int page = 0; page < 5 && !notification; ++page)
+                notification = service.processPageLinks();
+            QVERIFY(notification);
+            QVERIFY(notification->resourceLimited);
+            QVERIFY(notification->error.starts_with("resource limit:"));
+            QVERIFY(notification->pages.empty());
+            QVERIFY(!service.hasPendingPageLinks());
+        }
+    }
+
     void formCountLimits_data()
     {
         QTest::addColumn<int>("widgets");
@@ -634,7 +792,9 @@ private slots:
         const auto* exceptionTop = document.context()->error.top;
         for (int repeat = 0; repeat < 2; ++repeat) {
             error.clear();
-            const auto details = document.pageDetails(0, &error, false, byteLimit);
+            ::Mu::Worker::Engine::ExtractionBudgets budgets;
+            budgets.forms.remainingBytes = byteLimit;
+            const auto details = document.pageDetails(0, &error, false, &budgets);
             QCOMPARE(details.formFields.size(), accepted ? static_cast<size_t>(widgets) : 0u);
             QCOMPARE(error.empty(), accepted);
             if (!accepted)
@@ -642,7 +802,9 @@ private slots:
             QCOMPARE(document.context()->error.top, exceptionTop);
         }
         if (!accepted) {
-            const auto details = document.pageDetails(0, nullptr, false, byteLimit);
+            ::Mu::Worker::Engine::ExtractionBudgets budgets;
+            budgets.forms.remainingBytes = byteLimit;
+            const auto details = document.pageDetails(0, nullptr, false, &budgets);
             QCOMPARE(details.geometry.widthPoints, 0.0);
         }
     }
@@ -676,7 +838,9 @@ private slots:
         // must stop before reading it, rather than materializing the whole array.
         const auto seek = pdf->file->seek;
         pdf->file->seek = failPdfSeek;
-        const auto details = document.pageDetails(0, &error, false, 10 + 3 * sizeof(std::string));
+        ::Mu::Worker::Engine::ExtractionBudgets budgets;
+        budgets.forms.remainingBytes = 10 + 3 * sizeof(std::string);
+        const auto details = document.pageDetails(0, &error, false, &budgets);
         pdf->file->seek = seek;
         QVERIFY(details.formFields.empty());
         QVERIFY2(error.starts_with("resource limit:"), error.c_str());

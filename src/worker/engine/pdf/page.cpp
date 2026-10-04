@@ -125,7 +125,8 @@ std::vector<Annotation> PdfDocument::extractAnnotations(int page, std::string* e
     fz_try(m_context)
     {
         const fz_rect bounds = fz_bound_page(m_context, nativePage);
-        result = extractPageAnnotations(nativePage, bounds, error);
+        ByteBudget budget;
+        result = extractPageAnnotations(nativePage, bounds, error, budget);
     }
     fz_always(m_context)
     {
@@ -215,16 +216,18 @@ ResolvedLink PdfDocument::resolveLink(const std::string& uri, std::string* error
     return result;
 }
 
-std::vector<Link> PdfDocument::extractLinks(int page, std::string* error) const
+std::vector<Link> PdfDocument::extractLinks(int page, std::string* error, ExtractionBudgets* budgets) const
 {
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
         return { };
 
     std::vector<Link> result;
+    ExtractionBudgets pageBudgets;
     fz_try(m_context)
     {
-        result = extractPageLinks(nativePage, fz_bound_page(m_context, nativePage), error);
+        result = extractPageLinks(
+            nativePage, fz_bound_page(m_context, nativePage), error, (budgets ? *budgets : pageBudgets).links);
     }
     fz_always(m_context)
     {
@@ -238,7 +241,8 @@ std::vector<Link> PdfDocument::extractLinks(int page, std::string* error) const
     return result;
 }
 
-std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_rect& bounds, std::string* error) const
+std::vector<Link>
+PdfDocument::extractPageLinks(fz_page* nativePage, const fz_rect& bounds, std::string* error, ByteBudget& budget) const
 {
     const float width = bounds.x1 - bounds.x0;
     const float height = bounds.y1 - bounds.y0;
@@ -248,6 +252,7 @@ std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_re
     {
         fz_link* volatile list = nullptr;
         std::vector<Link> result;
+        Link value;
         bool failed = false;
         fz_try(m_context)
         {
@@ -260,7 +265,9 @@ std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_re
                 if (!link->uri)
                     continue;
 
-                Link value;
+                if (!budget.charge(sizeof(Link)) || !budget.chargeText(link->uri, Limit::MaxLinkStringBytes))
+                    fz_throw(m_context, FZ_ERROR_LIMIT, "%s", ExtractionBudgetError);
+                value = { };
                 value.left = (link->rect.x0 - bounds.x0) / width;
                 value.top = (link->rect.y0 - bounds.y0) / height;
                 value.right = (link->rect.x1 - bounds.x0) / width;
@@ -290,27 +297,31 @@ std::vector<Link> PdfDocument::extractPageLinks(fz_page* nativePage, const fz_re
 // =============================================================================
 
 DocumentBase::PageDetails
-PdfDocument::pageDetails(int page, std::string* error, bool includeLinks, std::size_t formTextByteLimit) const
+PdfDocument::pageDetails(int page, std::string* error, bool includeLinks, ExtractionBudgets* budgets) const
 {
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
         return { };
 
     PageDetails result;
+    ExtractionBudgets pageBudgets;
+    ExtractionBudgets& budget = budgets ? *budgets : pageBudgets;
     std::string extractionError;
     fz_try(m_context)
     {
         const fz_rect bounds = fz_bound_page(m_context, nativePage);
         result.geometry = geometryFromPage(nativePage, bounds);
-        result.annotations = extractPageAnnotations(nativePage, bounds, &extractionError);
+        result.annotations = extractPageAnnotations(nativePage, bounds, &extractionError, budget.metadata);
         if (!extractionError.empty())
             fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
-        result.signatures = extractPageSignatures(nativePage, bounds);
+        result.signatures = extractPageSignatures(nativePage, bounds, &extractionError, &budget.metadata);
+        if (!extractionError.empty())
+            fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
         if (includeLinks)
-            result.links = extractPageLinks(nativePage, bounds, &extractionError);
+            result.links = extractPageLinks(nativePage, bounds, &extractionError, budget.links);
         if (!extractionError.empty())
             fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
-        result.formFields = extractPageFormFields(nativePage, bounds, page, formTextByteLimit, &extractionError);
+        result.formFields = extractPageFormFields(nativePage, bounds, page, budget.forms, &extractionError);
         if (!extractionError.empty())
             fz_throw(m_context, FZ_ERROR_GENERIC, "%s", extractionError.c_str());
     }

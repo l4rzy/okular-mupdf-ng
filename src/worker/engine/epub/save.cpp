@@ -266,7 +266,8 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
 
                 // Link extraction is intentionally best-effort: malformed source
                 // link data must not make the visible page fail to export.
-                links = extractPageLinks(page, bounds, &pageError);
+                ByteBudget pageBudget;
+                links = extractPageLinks(page, bounds, &pageError, pageBudget);
                 fz_drop_page(m_context, page);
                 page = nullptr;
                 if (!pageError.empty())

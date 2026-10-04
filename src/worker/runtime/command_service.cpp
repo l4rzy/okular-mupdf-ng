@@ -38,18 +38,6 @@ std::uint64_t objectKey(int page, std::int32_t objectNumber)
         | static_cast<std::uint32_t>(objectNumber);
 }
 
-std::size_t formStringBytes(const ::Mu::Model::FormField& field)
-{
-    std::size_t bytes = field.partialName.size() + field.uiName.size() + field.fullyQualifiedName.size()
-        + field.groupName.size() + field.text.size() + field.onState.size() + field.buttonCaption.size()
-        + (field.choices.size() + field.exportValues.size()) * sizeof(std::string);
-    for (const auto& choice : field.choices)
-        bytes += choice.size();
-    for (const auto& exportValue : field.exportValues)
-        bytes += exportValue.size();
-    return bytes;
-}
-
 } // namespace
 
 using namespace ::Mu::Model;
@@ -317,7 +305,8 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
     const auto linkGeneration = ++m_linkGeneration;
     output.linkGeneration = linkGeneration;
     output.pages.reserve(static_cast<std::size_t>(m_document->pageCount()));
-    std::size_t annotations = 0, signatures = 0, formFields = 0, formTextBytes = 0;
+    std::size_t annotations = 0, signatures = 0, formFields = 0;
+    Engine::ExtractionBudgets budgets;
 
     // Step 4: Populate initial page descriptors, geometries, annotations, and signatures.
     // Links are resolved incrementally after the response is sent.
@@ -327,7 +316,7 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
     // or the document closes (closeDocument).
     m_document->setPageCacheSuspended(true);
     for (int page = 0; page < m_document->pageCount(); ++page) {
-        auto details = m_document->pageDetails(page, &error, false, Limit::MaxAggregateFormTextBytes - formTextBytes);
+        auto details = m_document->pageDetails(page, &error, false, &budgets);
         if (!error.empty()) {
             closeDocument();
             return failure(
@@ -337,15 +326,6 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
         annotations += details.annotations.size();
         signatures += details.signatures.size();
         formFields += details.formFields.size();
-        for (const auto& field : details.formFields) {
-            const std::size_t fieldBytes = formStringBytes(field);
-            if (formTextBytes > Limit::MaxAggregateFormTextBytes
-                || fieldBytes > Limit::MaxAggregateFormTextBytes - formTextBytes) {
-                closeDocument();
-                return failure(id, ErrorCode::ResourceLimit, "open", "document form text size exceeded");
-            }
-            formTextBytes += fieldBytes;
-        }
         if (annotations > MaxOpenAnnotations || signatures > MaxOpenSignatures
             || formFields > Limit::MaxOpenFormFields) {
             closeDocument();
@@ -370,7 +350,7 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
                                  std::move(details.formFields) });
     }
 
-    m_pendingPageLinks = PendingPageLinks { linkGeneration, 0, 0, { } };
+    m_pendingPageLinks = PendingPageLinks { linkGeneration, 0, 0, { }, std::move(budgets) };
     if (type == DocumentType::Epub) {
         auto* epub = static_cast<Engine::EpubDocument*>(m_document.get());
         std::string acceleratorError;
@@ -962,7 +942,7 @@ std::optional<PageLinksNotification> CommandService::processPageLinks()
     // Resolve one page per turn so large documents do not monopolize the control
     // loop. A notification is sent only once this generation is complete or fails.
     std::string error;
-    auto links = m_document->extractLinks(pending.nextPage, &error);
+    auto links = m_document->extractLinks(pending.nextPage, &error, &pending.budgets);
     if (!error.empty()) {
         notification.resourceLimited = isResourceLimitError(error);
         notification.error = std::move(error);

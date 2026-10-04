@@ -74,11 +74,10 @@ public:
 
     [[nodiscard]] PageGeometry pageGeometry(int page, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Annotation> extractAnnotations(int page, std::string* error = nullptr) const override;
-    [[nodiscard]] PageDetails
-    pageDetails(int page,
-                std::string* error = nullptr,
-                bool includeLinks = true,
-                std::size_t formTextByteLimit = ::Mu::Limit::MaxAggregateFormTextBytes) const override;
+    [[nodiscard]] PageDetails pageDetails(int page,
+                                          std::string* error = nullptr,
+                                          bool includeLinks = true,
+                                          ExtractionBudgets* budgets = nullptr) const override;
     [[nodiscard]] bool renderToBuffer(const RenderRequest& request,
                                       void* dstPixels,
                                       std::size_t dstStride,
@@ -92,7 +91,8 @@ public:
     [[nodiscard]] DocumentSettings settings() const noexcept override;
     void setSettings(const DocumentSettings& settings) noexcept override;
     [[nodiscard]] ResolvedLink resolveLink(const std::string& uri, std::string* error = nullptr) const override;
-    [[nodiscard]] std::vector<Link> extractLinks(int page, std::string* error = nullptr) const override;
+    [[nodiscard]] std::vector<Link>
+    extractLinks(int page, std::string* error = nullptr, ExtractionBudgets* budgets = nullptr) const override;
     void discardResolvedLinkCache() noexcept override;
     [[nodiscard]] std::vector<OutlineNode> outline(std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Font> fonts(const std::vector<int>& pages, std::string* error = nullptr) const override;
@@ -131,7 +131,8 @@ private:
     [[nodiscard]] fz_page* loadPageWithBounds(int page, fz_rect* bounds, std::string* error) const;
 
     /// Extracts links from an already-loaded EPUB page.
-    [[nodiscard]] std::vector<Link> extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error) const;
+    [[nodiscard]] std::vector<Link>
+    extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error, ByteBudget& budget) const;
 
     /// Recursively copies MuPDF outline nodes into OutlineNode model vector.
     [[nodiscard]] std::vector<OutlineNode>

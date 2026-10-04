@@ -246,6 +246,7 @@ private:
         int nextPage = 0;
         std::size_t totalLinks = 0;
         std::vector<::Mu::Model::PageLinks> pages;
+        Engine::ExtractionBudgets budgets;
     };
 
     [[nodiscard]] ResponseMessage layers(const RequestMessage& request);

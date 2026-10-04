@@ -71,11 +71,10 @@ public:
 
     [[nodiscard]] PageGeometry pageGeometry(int page, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Annotation> extractAnnotations(int page, std::string* error = nullptr) const override;
-    [[nodiscard]] PageDetails
-    pageDetails(int page,
-                std::string* error = nullptr,
-                bool includeLinks = true,
-                std::size_t formTextByteLimit = ::Mu::Limit::MaxAggregateFormTextBytes) const override;
+    [[nodiscard]] PageDetails pageDetails(int page,
+                                          std::string* error = nullptr,
+                                          bool includeLinks = true,
+                                          ExtractionBudgets* budgets = nullptr) const override;
     [[nodiscard]] bool renderToBuffer(const RenderRequest& request,
                                       void* dstPixels,
                                       std::size_t dstStride,
@@ -93,7 +92,8 @@ public:
     [[nodiscard]] bool setLayer(std::int32_t id, bool selected, std::string* error = nullptr) override;
     /// Discards the temporary link resolution cache used during incremental page-link aggregation.
     void discardResolvedLinkCache() noexcept override;
-    [[nodiscard]] std::vector<Link> extractLinks(int page, std::string* error = nullptr) const override;
+    [[nodiscard]] std::vector<Link>
+    extractLinks(int page, std::string* error = nullptr, ExtractionBudgets* budgets = nullptr) const override;
     [[nodiscard]] std::vector<OutlineNode> outline(std::string* error = nullptr) const override;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
@@ -171,20 +171,24 @@ private:
 
     /// Parses annotations from a MuPDF page handle.
     [[nodiscard]] std::vector<Annotation>
-    extractPageAnnotations(fz_page* page, const fz_rect& bounds, std::string* error) const;
+    extractPageAnnotations(fz_page* page, const fz_rect& bounds, std::string* error, ByteBudget& budget) const;
 
     /// Parses signature fields from a MuPDF page handle.
-    [[nodiscard]] std::vector<SignatureField> extractPageSignatures(fz_page* page, const fz_rect& bounds) const;
+    [[nodiscard]] std::vector<SignatureField> extractPageSignatures(fz_page* page,
+                                                                    const fz_rect& bounds,
+                                                                    std::string* error = nullptr,
+                                                                    ByteBudget* budget = nullptr) const;
 
     /// Parses interactive form fields (text, checkbox, radio, choice) from a MuPDF page handle.
     [[nodiscard]] std::vector<FormField> extractPageFormFields(
-        fz_page* page, const fz_rect& bounds, int pageIndex, std::size_t& remainingBytes, std::string* error) const;
+        fz_page* page, const fz_rect& bounds, int pageIndex, ByteBudget& budget, std::string* error) const;
 
     /// Collects canonical values across all pages after a form mutation.
     bool collectFormMutations(std::vector<FieldMutation>* mutations, std::string* error);
 
     /// Parses links from a MuPDF page handle.
-    [[nodiscard]] std::vector<Link> extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error) const;
+    [[nodiscard]] std::vector<Link>
+    extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error, ByteBudget& budget) const;
 
     /// Applies properties to a MuPDF target annotation.
     static void applyAnnotation(fz_context* context,
