@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "engine/epub/document.hpp"
+#include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
 #include "engine/signer.hpp"
 #include "shared/compat.hpp"
@@ -256,6 +257,8 @@ bool CommandService::openFd(int fd,
     const auto storeSize = static_cast<std::size_t>(m_settings.memoryCacheBytes);
     if (type == DocumentType::Epub)
         m_document = std::make_unique<Engine::EpubDocument>(storeSize);
+    else if (type == DocumentType::Mobi)
+        m_document = std::make_unique<Engine::MobiDocument>(storeSize);
     else
         m_document = std::make_unique<Engine::PdfDocument>(storeSize);
 
@@ -421,14 +424,15 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
     // The background job re-opens the source file with the session's fixed
     // EPUB settings, which reproduce the live document's layout exactly.
     if (!dynamic_cast<Engine::EpubDocument*>(m_document.get()))
-        return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an EPUB document");
+        return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an ebook document");
 
     // A dead completion eventfd would strand the job silently, so reject the
     // request with an accurate diagnostic instead of the busy-slot message.
     if (m_exportJobs.eventFd() < 0)
         return failure(r.id, ErrorCode::Internal, "export_pdf_async", "export completion channel is unavailable");
 
-    auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages);
+    const auto type = dynamic_cast<Engine::MobiDocument*>(m_document.get()) ? DocumentType::Mobi : DocumentType::Epub;
+    auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages, type);
     if (!job)
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
     return success(r.id, JobResponse { *job });

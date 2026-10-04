@@ -74,6 +74,50 @@ private slots:
         Okular::SettingsCore::instance(QStringLiteral("mupdfng-layer-test"));
     }
 
+    void opensAndSearchesMobi()
+    {
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_MOBI_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        QCOMPARE(document.documentInfo().get(Okular::DocumentInfo::MimeType),
+                 QStringLiteral("application/x-mobipocket-ebook"));
+        const auto* synopsis = document.documentSynopsis();
+        QVERIFY(synopsis);
+        QCOMPARE(synopsis->documentElement().tagName(), QStringLiteral("Legacy MOBI"));
+        QVERIFY(!document.layersModel());
+        QVERIFY(!document.embeddedFiles());
+        QSignalSpy finished(&document, &Okular::Document::searchFinished);
+        document.searchText(PART_SEARCH_ID,
+                            QStringLiteral("Searchable"),
+                            true,
+                            Qt::CaseSensitive,
+                            Okular::Document::AllDocument,
+                            false,
+                            Qt::yellow);
+        QTRY_VERIFY(!finished.isEmpty());
+        QCOMPARE(finished.last().at(1).value<Okular::Document::SearchStatus>(), Okular::Document::MatchFound);
+        document.closeDocument();
+    }
+
+    void opensMobiWithExplicitToc()
+    {
+        if (!TEST_BUNDLED_MOBI_TOC)
+            QSKIP("Explicit MOBI TOC requires the bundled MuPDF patch");
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_MOBI_TOC_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        const auto* synopsis = document.documentSynopsis();
+        QVERIFY(synopsis);
+        const auto first = synopsis->documentElement();
+        QCOMPARE(first.tagName(), QStringLiteral("First café"));
+        QCOMPARE(first.firstChildElement().tagName(), QStringLiteral("Detail"));
+        QCOMPARE(first.nextSiblingElement().tagName(), QStringLiteral("Second"));
+        QVERIFY(!first.attribute(QStringLiteral("Viewport")).isEmpty());
+        QVERIFY(!first.firstChildElement().attribute(QStringLiteral("Viewport")).isEmpty());
+    }
+
     void clearsLayerSearchHighlights_data()
     {
         QTest::addColumn<int>("searchId");

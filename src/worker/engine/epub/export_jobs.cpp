@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "engine/epub/document.hpp"
+#include "engine/mobi/document.hpp"
 #include "shared/logging.hpp"
 #include "sys/operation_budget.hpp"
 
@@ -40,7 +41,8 @@ int ExportJobs::eventFd() const noexcept
 std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                                                 int outputFd,
                                                 const ::Mu::Model::DocumentSettings& settings,
-                                                std::vector<std::int32_t> pages)
+                                                std::vector<std::int32_t> pages,
+                                                ::Mu::Model::DocumentType type)
 {
     // Both descriptors are consumed on every path below, including rejection.
     Sys::FileDescriptor ownedInput(inputFd);
@@ -67,6 +69,7 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
     try {
         worker = std::thread([state,
                               id,
+                              type,
                               settings = std::move(settingsCopy),
                               pages = std::move(pages),
                               inputFd = ownedInput.get(),
@@ -77,13 +80,18 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
             {
                 // Private document instance: the session engine is
                 // single-threaded and must never be touched from this thread.
-                EpubDocument document(static_cast<std::size_t>(settings.memoryCacheBytes));
-                document.setSettings(settings);
-                if (document.openFdWithAccelerator(inputFd, "export.epub", { }, &error)) {
+                const auto storeSize = static_cast<std::size_t>(settings.memoryCacheBytes);
+                std::unique_ptr<EpubDocument> document;
+                if (type == Model::DocumentType::Mobi)
+                    document = std::make_unique<MobiDocument>(storeSize);
+                else
+                    document = std::make_unique<EpubDocument>(storeSize);
+                document->setSettings(settings);
+                if (document->openFd(inputFd, "export.epub", &error)) {
                     // savePdfFdWithReferences adopts and closes the output
                     // descriptor on every exit path, so ownership simply moves
                     // to the engine.
-                    success = document.savePdfFdWithReferences(outputFd, pages, &error);
+                    success = document->savePdfFdWithReferences(outputFd, pages, &error);
                 } else {
                     // Opening consumed the input fd; the output fd is still
                     // ours.

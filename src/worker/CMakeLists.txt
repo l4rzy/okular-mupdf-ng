@@ -31,6 +31,7 @@ set(mupdf_worker_core_SRCS
     engine/epub/fonts.cpp
     engine/epub/save.cpp
     engine/epub/export_jobs.cpp
+    engine/mobi/document.cpp
     engine/ocr/ocr.cpp
     engine/ocr/jobs.cpp
     engine/signer.cpp

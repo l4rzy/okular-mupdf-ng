@@ -250,11 +250,12 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
 int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
-    const auto type = options.flatten ? Mu::Model::DocumentType::Pdf : Mu::Model::DocumentType::Epub;
-    if (Mu::Plugin::Util::documentTypeForFile(file) != type) {
+    const auto type = Mu::Plugin::Util::documentTypeForFile(file);
+    if (options.flatten ? type != Mu::Model::DocumentType::Pdf : !Mu::Model::isReflowableDocument(type)) {
         reportError(options.flatten
                         ? QStringLiteral("flattened PDF export only supports PDF documents")
-                        : QStringLiteral("PDF export only supports EPUB documents; use --flatten for PDF input"));
+                        : QStringLiteral(
+                              "PDF export only supports EPUB and legacy MOBI documents; use --flatten for PDF input"));
         return ExitJobFailed;
     }
     if (options.useLayout) {

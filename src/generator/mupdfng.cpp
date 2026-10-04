@@ -465,7 +465,8 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     } else if (!m_document.sourcePath.isEmpty()) {
         m_document.name = QFileInfo(m_document.sourcePath).fileName();
     } else {
-        m_document.name = m_document.type == Model::DocumentType::Epub ? QStringLiteral("document.epub")
+        m_document.name = m_document.type == Model::DocumentType::Mobi ? QStringLiteral("document.mobi")
+            : m_document.type == Model::DocumentType::Epub             ? QStringLiteral("document.epub")
                                                                        : QStringLiteral("document.pdf");
     }
 
@@ -927,7 +928,7 @@ void Main::observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nat
 {
     if (m_placeholder.isActive())
         return;
-    if (m_document.type == Model::DocumentType::Epub || !m_defaultLayerVisibility.load())
+    if (Model::isReflowableDocument(m_document.type) || !m_defaultLayerVisibility.load())
         return;
     const Okular::Document* doc = document();
     if (!doc)
@@ -1123,9 +1124,7 @@ Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo:
         const auto info = m_worker.getDocumentInfo();
         if (!info.values.empty()) {
             Okular::DocumentInfo di;
-            const QString mimeString = (m_document.type == Model::DocumentType::Epub)
-                ? QStringLiteral("application/epub+zip")
-                : QStringLiteral("application/pdf");
+            const QString mimeString = QString::fromStdString(Model::documentTypeToMime(m_document.type));
             di.set(Okular::DocumentInfo::MimeType, mimeString);
             di.set(Okular::DocumentInfo::Pages, QString::number(info.pageCount));
 
@@ -1385,7 +1384,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         return nullptr;
     const int pageNum = request->page()->number();
 
-    if (m_document.type == Model::DocumentType::Epub) {
+    if (Model::isReflowableDocument(m_document.type)) {
         if (!workerReady())
             return nullptr;
         const std::vector<Model::TextBox> workerBoxes =
@@ -1452,7 +1451,7 @@ Okular::Generator::PageSizeMetric Main::pagesSizeMetric() const
 // Okular Generator Func: returns embedded files as Okular objects.
 const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 {
-    if (m_document.type == Model::DocumentType::Epub)
+    if (Model::isReflowableDocument(m_document.type))
         return nullptr;
     if (m_placeholder.isActive())
         return nullptr;
@@ -1474,7 +1473,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 // Okular Generator Func: reports the supported save options.
 bool Main::supportsOption(SaveOption option) const
 {
-    if (m_document.type == Model::DocumentType::Epub)
+    if (Model::isReflowableDocument(m_document.type))
         return false;
     if (m_placeholder.isActive())
         return false;
@@ -1508,7 +1507,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
 Okular::ExportFormat::List Main::exportFormats() const
 {
     Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
-    if (m_document.type == Model::DocumentType::Epub)
+    if (Model::isReflowableDocument(m_document.type))
         formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
     if (m_document.type == Model::DocumentType::Pdf) {
         const QMimeType pdf = QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"));
@@ -1536,7 +1535,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
                 Q_EMIT notice(i18n("Export to flattened PDF finished."), NoticeMs);
             return success;
         }
-        if (m_document.type != Model::DocumentType::Epub)
+        if (!Model::isReflowableDocument(m_document.type))
             return false;
         // The background export runs in an isolated worker job, so the
         // document stays fully usable while it completes. Without a source
@@ -1594,7 +1593,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 // Okular Generator Func: returns the annotation adapter used by Okular.
 Okular::AnnotationProxy* Main::annotationProxy() const
 {
-    if (m_document.type == Model::DocumentType::Epub)
+    if (Model::isReflowableDocument(m_document.type))
         return nullptr;
     return &m_annotationProxy;
 }
@@ -1751,7 +1750,7 @@ bool Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
 // Okular Generator Func: reports that worker-backed signing is supported.
 bool Main::canSign() const
 {
-    if (m_document.type == Model::DocumentType::Epub)
+    if (Model::isReflowableDocument(m_document.type))
         return false;
     if (m_placeholder.isActive())
         return false;

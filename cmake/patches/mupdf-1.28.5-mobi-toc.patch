@@ -1,0 +1,292 @@
+--- a/source/html/mobi.c
++++ b/source/html/mobi.c
+@@ -36,6 +36,236 @@
+ #define TEXT_ENCODING_1252 1252
+ #define TEXT_ENCODING_UTF8 65001
+ 
++/* filepos counts bytes in the original, decompressed text, before transcoding. */
++int
++fz_parse_mobi_filepos(const char *text, uint32_t *position)
++{
++	uint32_t value = 0;
++	if (!text || !*text)
++		return 0;
++	for (; *text; ++text)
++	{
++		unsigned digit = (unsigned char)*text - '0';
++		if (digit > 9 || value > (UINT32_MAX - digit) / 10)
++			return 0;
++		value = value * 10 + digit;
++	}
++	*position = value;
++	return 1;
++}
++
++/* Iterative traversal also keeps deeply nested input off the C stack. */
++static fz_xml *
++mobi_next_xml(fz_xml *node, fz_xml *top)
++{
++	if (fz_xml_down(node))
++		return fz_xml_down(node);
++	while (node && node != top)
++	{
++		if (fz_xml_next(node))
++			return fz_xml_next(node);
++		node = fz_xml_up(node);
++	}
++	return NULL;
++}
++
++static int
++compare_mobi_positions(const void *a, const void *b)
++{
++	uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
++	return (x > y) - (x < y);
++}
++
++static void
++mobi_add_targets(fz_context *ctx, fz_buffer *buffer)
++{
++	fz_xml *xml = NULL, *node;
++	fz_buffer *out = NULL;
++	uint32_t *positions = NULL, position;
++	size_t count = 0, index = 0, i;
++	int in_tag = 0, quote = 0, in_entity = 0;
++	fz_var(xml);
++	fz_var(out);
++	fz_var(positions);
++	fz_try(ctx)
++	{
++		xml = fz_parse_xml_from_html5(ctx, buffer);
++		positions = fz_malloc_array(ctx, 50000, uint32_t);
++		for (node = fz_xml_root(xml); node; node = mobi_next_xml(node, NULL))
++		{
++			if (fz_parse_mobi_filepos(fz_xml_att(node, "filepos"), &position) && position < buffer->len)
++			{
++				if (count == 50000)
++					fz_throw(ctx, FZ_ERROR_LIMIT, "too many MOBI destinations");
++				positions[count++] = position;
++			}
++		}
++		qsort(positions, count, sizeof(*positions), compare_mobi_positions);
++		if (count)
++		{
++			out = fz_new_buffer(ctx, buffer->len);
++			for (i = 0; i < buffer->len; ++i)
++			{
++				int c = buffer->data[i];
++				/* If a bad offset lands in markup, an entity, or a UTF-8
++				 * sequence, wait for a safe insertion point. */
++				if (!in_tag && !in_entity && c != '<' && (c & 0xc0) != 0x80)
++					while (index < count && positions[index] <= i)
++					{
++						position = positions[index++];
++						fz_append_printf(ctx, out, "<span id=\"mupdf-mobi-%u\"></span>", position);
++						while (index < count && positions[index] == position)
++							++index;
++					}
++				fz_append_byte(ctx, out, c);
++				if (in_tag)
++				{
++					if (quote && c == quote) quote = 0;
++					else if (!quote && (c == '\'' || c == '"')) quote = c;
++					else if (!quote && c == '>') in_tag = 0;
++				}
++				else if (c == '<') in_tag = 1;
++				else if (c == '&') in_entity = 1;
++				else if (c == ';' || c == ' ' || c == '\n') in_entity = 0;
++			}
++			fz_clear_buffer(ctx, buffer);
++			fz_append_buffer(ctx, buffer, out);
++		}
++	}
++	fz_always(ctx)
++	{
++		fz_drop_xml(ctx, xml);
++		fz_drop_buffer(ctx, out);
++		fz_free(ctx, positions);
++	}
++	fz_catch(ctx)
++		fz_rethrow(ctx);
++}
++
++fz_outline *
++fz_load_mobi_outline(fz_context *ctx, fz_buffer *buffer)
++{
++	fz_xml *xml = NULL, *node, *start = NULL;
++	fz_tree *targets = NULL;
++	fz_outline *head = NULL, *last = NULL;
++	fz_outline **tails[65];
++	int levels[65], level = 0, depth;
++	size_t count = 0;
++	fz_buffer *label = NULL;
++	char target[64];
++	uint32_t position;
++	fz_var(xml);
++	fz_var(targets);
++	fz_var(head);
++	fz_var(label);
++	fz_try(ctx)
++	{
++		xml = fz_parse_xml_from_html5(ctx, buffer);
++		for (node = fz_xml_root(xml); node; node = mobi_next_xml(node, NULL))
++		{
++			const char *id = fz_xml_att(node, "id");
++			if (id && !strncmp(id, "mupdf-mobi-", 11))
++				targets = fz_tree_insert(ctx, targets, id, node);
++		}
++		for (node = fz_xml_root(xml); node; node = mobi_next_xml(node, NULL))
++			if (fz_xml_is_tag(node, "reference") && fz_xml_att_eq(node, "type", "toc")
++				&& fz_parse_mobi_filepos(fz_xml_att(node, "filepos"), &position))
++			{
++				fz_snprintf(target, sizeof target, "mupdf-mobi-%u", position);
++				start = fz_tree_lookup(ctx, targets, target);
++				/* A guide may point at the first link itself. Its inserted
++				 * marker is inside that link, so include the enclosing entry. */
++				for (node = fz_xml_up(start); node; node = fz_xml_up(node))
++					if (fz_xml_is_tag(node, "a"))
++					{
++						start = node;
++						break;
++					}
++				break;
++			}
++		tails[0] = &head;
++		levels[0] = 0;
++		label = fz_new_buffer(ctx, 128);
++		for (node = start; node; node = mobi_next_xml(node, NULL))
++		{
++			fz_xml *child, *parent;
++			const char *uri;
++			int space = 0;
++			if (fz_xml_is_tag(node, "pagebreak"))
++				break;
++			if (!fz_xml_is_tag(node, "a"))
++				continue;
++			uri = fz_xml_att(node, "href");
++			if (fz_parse_mobi_filepos(fz_xml_att(node, "filepos"), &position))
++			{
++				fz_snprintf(target, sizeof target, "mupdf-mobi-%u", position);
++				if (!fz_tree_lookup(ctx, targets, target))
++					continue;
++				fz_snprintf(target, sizeof target, "#mupdf-mobi-%u", position);
++				uri = target;
++			}
++			if (!uri || uri[0] != '#')
++				continue;
++			fz_clear_buffer(ctx, label);
++			for (child = fz_xml_down(node); child; child = mobi_next_xml(child, node))
++			{
++				const unsigned char *text = (const unsigned char *)fz_xml_text(child);
++				if (text)
++				{
++					for (; *text; ++text)
++						if (*text == ' ' || *text == '\n' || *text == '\r' || *text == '\t')
++							space = label->len != 0;
++						else
++						{
++							if (space) fz_append_byte(ctx, label, ' ');
++							space = 0;
++							fz_append_byte(ctx, label, *text);
++							if (label->len > 65536)
++								fz_throw(ctx, FZ_ERROR_LIMIT, "MOBI outline title limit exceeded");
++						}
++				}
++			}
++			if (!label->len)
++				continue;
++			depth = 0;
++			for (parent = fz_xml_up(node); parent; parent = fz_xml_up(parent))
++				if (fz_xml_is_tag(parent, "ul") || fz_xml_is_tag(parent, "ol") || fz_xml_is_tag(parent, "blockquote"))
++					++depth;
++			if (depth > 64 || ++count > 50000)
++				fz_throw(ctx, FZ_ERROR_LIMIT, "MOBI outline limit exceeded");
++			if (last && depth > levels[level])
++			{
++				levels[++level] = depth;
++				tails[level] = &last->down;
++			}
++			else
++				while (level && depth < levels[level]) --level;
++			levels[level] = depth;
++			last = fz_new_outline(ctx);
++			*tails[level] = last;
++			tails[level] = &last->next;
++			last->title = fz_strdup(ctx, fz_string_from_buffer(ctx, label));
++			last->uri = fz_strdup(ctx, uri);
++			last->is_open = 1;
++		}
++	}
++	fz_always(ctx)
++	{
++		fz_drop_xml(ctx, xml);
++		fz_drop_tree(ctx, targets, NULL);
++		fz_drop_buffer(ctx, label);
++	}
++	fz_catch(ctx)
++	{
++		fz_drop_outline(ctx, head);
++		fz_rethrow_if(ctx, FZ_ERROR_SYSTEM);
++		fz_rethrow_if(ctx, FZ_ERROR_TRYLATER);
++		fz_report_error(ctx);
++		return NULL;
++	}
++	return head;
++}
++
+ static void
+ skip_bytes(fz_context *ctx, fz_stream *stm, size_t len)
+ {
+@@ -183,6 +413,9 @@
+ 		if (!memcmp(out->data, "<html>", 6) || !memcmp(out->data, "<HTML>", 6))
+ 			format = FORMAT_HTML;
+ 	}
++
++	if (format == FORMAT_HTML)
++		mobi_add_targets(ctx, out);
+ 
+ 	if (text_encoding != TEXT_ENCODING_UTF8 || format == FORMAT_TEXT)
+ 	{
+--- a/source/html/html-doc.c
++++ b/source/html/html-doc.c
+@@ -197,7 +197,10 @@
+ 	doc->outline = NULL;
+ 
+ 	doc->html = fz_parse_html(ctx, doc->set, doc->zip, ".", doc->buf, doc->super.user_css, doc->format->try_xml, doc->format->try_html5, doc->format->flavor, doc->super.publisher_css);
+-	doc->outline = fz_load_html_outline(ctx, doc->html);
++	if (doc->format->flavor == FZ_HTML_FLAVOR_MOBI)
++		doc->outline = fz_load_mobi_outline(ctx, doc->buf);
++	if (!doc->outline)
++		doc->outline = fz_load_html_outline(ctx, doc->html);
+ }
+ 
+ static void
+--- a/source/html/html-imp.h
++++ b/source/html/html-imp.h
+@@ -636,6 +636,8 @@
+ fz_html_flow *fz_html_split_flow(fz_context *ctx, fz_pool *pool, fz_html_flow *flow, size_t offset);
+ 
+ fz_archive *fz_extract_html_from_mobi(fz_context *ctx, fz_buffer *mobi);
++int fz_parse_mobi_filepos(const char *text, uint32_t *position);
++fz_outline *fz_load_mobi_outline(fz_context *ctx, fz_buffer *buffer);
+ 
+ fz_structure fz_html_tag_to_structure(const char *tag);
+ 
+--- a/source/html/html-parse.c
++++ b/source/html/html-parse.c
+@@ -2342,6 +2342,15 @@
+ 		if (tag)
+ 		{
+ 			// Read MOBI attributes, convert to inline CSS style
++			if (!strcmp(tag, "a"))
++			{
++				uint32_t position;
++				if (fz_parse_mobi_filepos(fz_xml_att(node, "filepos"), &position))
++				{
++					fz_snprintf(buf, sizeof buf, "#mupdf-mobi-%u", position);
++					fz_xml_add_att(ctx, pool, node, "href", buf);
++				}
++			}
+ 			if (!strcmp(tag, "font"))
+ 			{
+ 				const char *size = fz_xml_att(node, "size");

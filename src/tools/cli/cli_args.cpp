@@ -65,7 +65,7 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
 {
     parser.setApplicationDescription(
         "Export a document through the MuPDF worker.\n"
-        "The format is inferred from the output suffix: .pdf exports an EPUB document "
+        "The format is inferred from the output suffix: .pdf exports an EPUB or legacy MOBI document "
         "to PDF (or flattens a PDF with --flatten), .xfdf/.xml exports a PDF document's annotations as XFDF.");
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output file; alternative to the OUTPUT positional.", "file" });

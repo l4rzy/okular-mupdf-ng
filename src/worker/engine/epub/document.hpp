@@ -34,7 +34,7 @@ namespace Mu::Worker::Engine {
  * 3. User CSS and font-family injection via `fz_style_document`.
  * 4. Paginated document layout via `fz_layout_document` at target page dimensions (A5, B5, Letter, 6x9).
  */
-class EpubDocument final : public DocumentBase {
+class EpubDocument : public DocumentBase {
 public:
     explicit EpubDocument(std::size_t storeSize = Constant::DefaultStoreSize);
     ~EpubDocument() override;

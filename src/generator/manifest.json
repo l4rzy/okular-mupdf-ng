@@ -16,7 +16,8 @@
         "MimeTypes": [
             "application/x-pdf",
             "application/pdf",
-            "application/epub+zip"
+            "application/epub+zip",
+            "application/x-mobipocket-ebook"
         ],
         "Name": "MuPDF-NG Backend for Okular",
         "ServiceTypes": [

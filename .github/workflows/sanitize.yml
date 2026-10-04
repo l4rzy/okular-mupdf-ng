@@ -57,6 +57,7 @@ jobs:
             libkf6kio-dev \
             ninja-build \
             okular-dev \
+            patch \
             pkg-config \
             python3 \
             qt6-base-dev \

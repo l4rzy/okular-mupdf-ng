@@ -45,6 +45,7 @@ jobs:
             ninja-build \
             okular-dev \
             openssl \
+            patch \
             pkg-config \
             python3 \
             qt6-base-dev \

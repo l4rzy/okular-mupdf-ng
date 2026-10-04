@@ -54,6 +54,30 @@ else()
             "MuPDF ${MUPDF_REQUIRED_VERSION} is required, found ${MUPDF_VERSION} in ${MUPDF_SOURCE_DIR}")
     endif()
 
+    # Keep bundled fixes reproducible on a fresh source download and rerunnable
+    # when multiple build directories share the same MuPDF tree.
+    find_program(MUPDF_PATCH_EXECUTABLE NAMES patch REQUIRED)
+    set(_mupdf_mobi_patch "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-mobi-toc.patch")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_mupdf_mobi_patch}")
+    execute_process(
+        COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --forward --dry-run -i "${_mupdf_mobi_patch}"
+        WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
+        RESULT_VARIABLE _mupdf_patch_result OUTPUT_QUIET ERROR_QUIET)
+    if(_mupdf_patch_result EQUAL 0)
+        execute_process(
+            COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --forward -i "${_mupdf_mobi_patch}"
+            WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
+            COMMAND_ERROR_IS_FATAL ANY)
+    else()
+        execute_process(
+            COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --reverse --dry-run -i "${_mupdf_mobi_patch}"
+            WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
+            RESULT_VARIABLE _mupdf_patch_result OUTPUT_QUIET ERROR_QUIET)
+        if(NOT _mupdf_patch_result EQUAL 0)
+            message(FATAL_ERROR "Could not apply or verify bundled MuPDF MOBI TOC patch")
+        endif()
+    endif()
+
     find_program(MUPDF_MAKE_EXECUTABLE NAMES make gmake REQUIRED)
     find_program(MUPDF_NPROC_EXECUTABLE NAMES nproc REQUIRED)
     execute_process(
@@ -145,7 +169,7 @@ else()
         "-DFZ_ENABLE_CBZ=0"
         "-DFZ_ENABLE_IMG=0"
         "-DFZ_ENABLE_FB2=0"
-        "-DFZ_ENABLE_MOBI=0"
+        "-DFZ_ENABLE_MOBI=1"
         "-DFZ_ENABLE_TXT=0"
         "-DFZ_ENABLE_OFFICE=0"
         "-DFZ_ENABLE_MD=0"
@@ -177,6 +201,8 @@ else()
             "CXXFLAGS="
             "${MUPDF_MAKE_EXECUTABLE}"
             -C "${MUPDF_SOURCE_DIR}"
+            # Make does not track XCFLAGS changes; refresh handler registration.
+            -W source/fitz/document-all.c
             -j${MUPDF_BUILD_JOBS}
             "CC=${CMAKE_C_COMPILER}"
             "CXX=${CMAKE_CXX_COMPILER}"
@@ -205,6 +231,11 @@ else()
             "${MUPDF_SOURCE_DIR}/Makerules"
             "${MUPDF_SOURCE_DIR}/Makethird"
             "${MUPDF_SOURCE_DIR}/include/mupdf/fitz/version.h"
+            "${_mupdf_mobi_patch}"
+            "${MUPDF_SOURCE_DIR}/source/html/mobi.c"
+            "${MUPDF_SOURCE_DIR}/source/html/html-doc.c"
+            "${MUPDF_SOURCE_DIR}/source/html/html-parse.c"
+            "${MUPDF_SOURCE_DIR}/source/html/html-imp.h"
         WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
         VERBATIM
         COMMENT "Building bundled MuPDF ${MUPDF_VERSION} (${MUPDF_BUILD_PROFILE})"

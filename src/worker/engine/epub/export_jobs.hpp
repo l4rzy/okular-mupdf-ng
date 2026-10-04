@@ -54,8 +54,11 @@ public:
     /// path: rejection closes them here; a started job transfers ownership to
     /// the engine (DocumentBase::openFd/savePdfFdWithReferences close them on
     /// all paths). Returns nullopt while another export is running.
-    [[nodiscard]] std::optional<std::uint64_t>
-    submit(int inputFd, int outputFd, const ::Mu::Model::DocumentSettings& settings, std::vector<std::int32_t> pages);
+    [[nodiscard]] std::optional<std::uint64_t> submit(int inputFd,
+                                                      int outputFd,
+                                                      const ::Mu::Model::DocumentSettings& settings,
+                                                      std::vector<std::int32_t> pages,
+                                                      ::Mu::Model::DocumentType type = ::Mu::Model::DocumentType::Epub);
 
     /// Drains all completed export job notifications.
     [[nodiscard]] std::vector<Notification> drainNotifications();

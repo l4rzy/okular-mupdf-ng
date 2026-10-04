@@ -29,6 +29,7 @@ add_executable(test_mupdf
     worker/signature.cpp
     worker/ocr.cpp
     worker/epub.cpp
+    worker/mobi.cpp
     worker/native_types.cpp
     worker/native_runtime.cpp
     integration/ipc.cpp
@@ -61,6 +62,8 @@ target_link_libraries(test_mupdf PRIVATE
 target_compile_definitions(test_mupdf PRIVATE
     HAVE_NEW_SIGNATURE_API=1
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
+    TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi"
+    TEST_BUNDLED_MOBI_TOC=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
     FORM_JS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_calculation.pdf"
     FORM_JS_BUTTON_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_button.pdf"
@@ -181,6 +184,9 @@ find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core 
 target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
 target_compile_definitions(test_generator_layers PRIVATE
     TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf"
+    TEST_MOBI_PATH="${CMAKE_CURRENT_SOURCE_DIR}/mobi/legacy-palmdoc.mobi"
+    TEST_MOBI_TOC_PATH="${CMAKE_CURRENT_SOURCE_DIR}/mobi/toc-palmdoc.mobi"
+    TEST_BUNDLED_MOBI_TOC=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
 add_dependencies(test_generator_layers okularGenerator_mupdfng mupdfng-worker)

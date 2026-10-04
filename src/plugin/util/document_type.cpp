@@ -47,6 +47,9 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
         return Model::DocumentType::Epub;
     }
 
+    if (contentMime == QStringLiteral("application/octet-stream") && suffixLower == QStringLiteral("mobi"))
+        return Model::DocumentType::Mobi;
+
     if (suffixLower == QStringLiteral("pdf")) {
         MU_LOG(warning, "Mu::Plugin", "Falling back to pdf suffix");
         return Model::DocumentType::Pdf;

@@ -15,7 +15,7 @@ license=('GPL-3.0-or-later')
 makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
              'gcc' 'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq'
              'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'openjpeg2' 'pkgconf'
-             'python' 'qt6-tools')
+             'patch' 'python' 'qt6-tools')
 # The bundled-MuPDF build links MuPDF's third-party libraries from the system
 # (USE_SYSTEM_LIBS=yes), so they remain direct runtime dependencies of the
 # static package; Leptonica is the exception, bundled alongside Tesseract to

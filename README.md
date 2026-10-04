@@ -117,6 +117,7 @@ and the source-tree layout.
 - Build dependencies required by MuPDF, including FreeType, HarfBuzz, JPEG,
   JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
+- `patch` for applying the bundled MuPDF fixes during CMake configuration.
 
 ## Building and testing
 
