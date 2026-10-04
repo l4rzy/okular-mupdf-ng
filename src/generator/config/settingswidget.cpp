@@ -202,6 +202,9 @@ void MuPDFNGSettingsWidget::setupToolTips()
                i18n("Limit the worker’s rendering cache memory. This is not a limit on total process memory usage."));
     setToolTip({ m_mupdfsw->kcfg_IdleTrimLevel, m_mupdfsw->labelIdleTrim },
                i18n("Choose how eagerly the worker releases cached memory while idle."));
+    setToolTip({ m_mupdfsw->kcfg_CancelObsoleteRenders },
+               i18n("Stop rendering pages that are no longer needed. When disabled, rendering finishes before "
+                    "obsolete results are discarded."));
     setToolTip({ m_mupdfsw->kcfg_SandboxEnforcement, m_mupdfsw->labelSandboxEnforcement },
                i18n("Strict refuses to process documents unless the worker sandbox is fully hardened on this host."));
     setToolTip({ m_mupdfsw->kcfg_NotifyDegradedSandbox },

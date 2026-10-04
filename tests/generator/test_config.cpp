@@ -37,6 +37,28 @@ private slots:
         KLocalizedString::setApplicationDomain("okular_mupdfng");
     }
 
+    void defaultsRenderCancellationToDisabled() { QVERIFY(!::Mu::Generator::Config::readRenderCancellationEnabled()); }
+
+    void readsRenderCancellation_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::newRow("enabled") << true;
+        QTest::newRow("disabled") << false;
+    }
+
+    void readsRenderCancellation()
+    {
+        QFETCH(bool, enabled);
+        const bool original = MuPDFNGSettings::cancelObsoleteRenders();
+        MuPDFNGSettings::setCancelObsoleteRenders(enabled);
+        MuPDFNGSettings::self()->save();
+        ::Mu::Generator::Config::reloadSettings();
+        const bool actual = ::Mu::Generator::Config::readRenderCancellationEnabled();
+        MuPDFNGSettings::setCancelObsoleteRenders(original);
+        MuPDFNGSettings::self()->save();
+        QCOMPARE(actual, enabled);
+    }
+
     void selectsSigningKey_data()
     {
         using Mu::Plugin::Crypto::CertificateDatabase::SigningKey;

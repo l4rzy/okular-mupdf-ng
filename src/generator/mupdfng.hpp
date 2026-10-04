@@ -215,6 +215,8 @@ private:
     // Render/extraction threads must discard results from previous visibility.
     std::atomic<std::uint64_t> m_layerRevision { 0 };
     std::atomic<bool> m_defaultLayerVisibility { true };
+    // Settings reloads can run while image() is rendering on another thread.
+    std::atomic<bool> m_cancelObsoleteRenders { false };
 
     std::unique_ptr<Okular::DocumentSynopsis> m_synopsis;
     mutable std::unique_ptr<QList<Okular::EmbeddedFile*>> m_embeddedFilesCache;

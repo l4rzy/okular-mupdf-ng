@@ -249,6 +249,13 @@
             </item>
            </layout>
           </item>
+          <item>
+           <widget class="QCheckBox" name="kcfg_CancelObsoleteRenders">
+            <property name="text">
+             <string>Cancel obsolete renders</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

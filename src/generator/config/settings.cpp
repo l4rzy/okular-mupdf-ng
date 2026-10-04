@@ -121,6 +121,11 @@ void reloadSettings()
     MuPDFNGSettings::self()->read();
 }
 
+bool readRenderCancellationEnabled()
+{
+    return MuPDFNGSettings::cancelObsoleteRenders();
+}
+
 SandboxEnforcement readSandboxEnforcement()
 {
     // Generated enums are ints; map through the generated constants so a

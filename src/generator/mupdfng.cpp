@@ -33,6 +33,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <atomic>
+#include <functional>
 #include <unordered_map>
 
 #include "generator/config/settings.hpp"
@@ -104,7 +105,8 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
-    setFeature(SupportsCancelling);
+    m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
+    setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
@@ -335,6 +337,8 @@ void Main::refreshPaperColor()
 bool Main::reparseConfig()
 {
     Config::reloadSettings();
+    m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
+    setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
@@ -1271,7 +1275,10 @@ QImage Main::image(Okular::PixmapRequest* request)
                          static_cast<int>(right - left),
                          static_cast<int>(bottom - top));
         }
-        QImage img = m_worker.render(pageNum, request->width(), request->height(), tile, shouldAbort);
+        // Cancellation is optional; discarding obsolete images remains mandatory.
+        const std::function<bool()> cancellation =
+            m_cancelObsoleteRenders.load() ? shouldAbort : std::function<bool()> { };
+        QImage img = m_worker.render(pageNum, request->width(), request->height(), tile, cancellation);
         if (shouldAbort())
             return { };
         if (img.isNull()) {
