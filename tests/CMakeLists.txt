@@ -66,14 +66,14 @@ target_compile_definitions(test_mupdf PRIVATE
     FORM_JS_BUTTON_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_button.pdf"
     FORM_JS_CONTROLS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_controls.pdf"
     FORM_JS_PARTIAL_ERROR_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_partial_error.pdf"
-    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     RENDER_WORKER_BUILD_PATH="$<TARGET_FILE:test_render_worker>"
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
     TESSDATA_DIR="${TESSDATA_DIR}")
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_mupdf PRIVATE MU_DEBUG_ENABLED)
 endif()
-add_dependencies(test_mupdf okular-mupdf-worker mupdfng-cli test_render_worker)
+add_dependencies(test_mupdf mupdfng-worker mupdfng-cli test_render_worker)
 
 add_test(NAME test_mupdf COMMAND test_mupdf)
 set_tests_properties(test_mupdf PROPERTIES
@@ -90,10 +90,10 @@ add_executable(test_tools_cli_xfdf tools/test_cli_xfdf.cpp)
 target_link_libraries(test_tools_cli_xfdf PRIVATE Qt6::Core Qt6::Test Qt6::Xml)
 target_compile_definitions(test_tools_cli_xfdf PRIVATE
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
-    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf"
     TEST_CALLOUT_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/freetext_callout_no_intent.pdf")
-add_dependencies(test_tools_cli_xfdf mupdfng-cli okular-mupdf-worker)
+add_dependencies(test_tools_cli_xfdf mupdfng-cli mupdfng-worker)
 add_test(NAME test_tools_cli_xfdf COMMAND test_tools_cli_xfdf)
 set_tests_properties(test_tools_cli_xfdf PROPERTIES
     LABELS "tools;integration"
@@ -104,10 +104,10 @@ add_executable(test_tools_cli_ocr tools/test_cli_ocr.cpp)
 target_link_libraries(test_tools_cli_ocr PRIVATE Qt6::Core Qt6::Test)
 target_compile_definitions(test_tools_cli_ocr PRIVATE
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
-    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf"
     TESSDATA_DIR="${TESSDATA_DIR}")
-add_dependencies(test_tools_cli_ocr mupdfng-cli okular-mupdf-worker)
+add_dependencies(test_tools_cli_ocr mupdfng-cli mupdfng-worker)
 add_test(NAME test_tools_cli_ocr COMMAND test_tools_cli_ocr)
 set_tests_properties(test_tools_cli_ocr PROPERTIES
     LABELS "tools;integration"
@@ -182,17 +182,17 @@ target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_D
 target_compile_definitions(test_generator_layers PRIVATE
     TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf"
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
-    TEST_WORKER_DIR="$<TARGET_FILE_DIR:okular-mupdf-worker>")
-add_dependencies(test_generator_layers okularGenerator_mupdfng okular-mupdf-worker)
+    TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
+add_dependencies(test_generator_layers okularGenerator_mupdfng mupdfng-worker)
 
 add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
 target_include_directories(test_generator_ocr PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
 target_link_libraries(test_generator_ocr PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
 target_compile_definitions(test_generator_ocr PRIVATE
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
-    TEST_WORKER_DIR="$<TARGET_FILE_DIR:okular-mupdf-worker>"
+    TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>"
     TESSDATA_DIR="${TESSDATA_DIR}")
-add_dependencies(test_generator_ocr okularGenerator_mupdfng okular-mupdf-worker)
+add_dependencies(test_generator_ocr okularGenerator_mupdfng mupdfng-worker)
 
 add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generator)
 target_include_directories(test_generator_placeholder PRIVATE ../src)
@@ -203,9 +203,9 @@ target_include_directories(test_plugin_ocrcontroller PRIVATE
     ../src ${MU_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
 target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_plugin_ocr Qt6::Gui Qt6::Network)
 target_compile_definitions(test_plugin_ocrcontroller PRIVATE
-    WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
-add_dependencies(test_plugin_ocrcontroller okular-mupdf-worker)
+add_dependencies(test_plugin_ocrcontroller mupdfng-worker)
 
 add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp plugin)
 target_include_directories(test_plugin_workerclientstate PRIVATE ../src)
@@ -261,7 +261,7 @@ endif()
 # Keep the isolated process free of GUI and host-application dependencies.
 add_test(NAME test_worker_link_boundary
     COMMAND ${CMAKE_COMMAND}
-        -DWORKER_PATH=$<TARGET_FILE:okular-mupdf-worker>
+        -DWORKER_PATH=$<TARGET_FILE:mupdfng-worker>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_worker_link_boundary.cmake)
 set_tests_properties(test_worker_link_boundary PROPERTIES LABELS "security" TIMEOUT 15)
 

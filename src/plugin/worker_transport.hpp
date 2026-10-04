@@ -142,7 +142,7 @@ private:
     template <class Payload> bool writeFile(Payload payload, const QString& target)
     {
         QFileInfo info(target);
-        QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdf-worker-XXXXXX"));
+        QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
         if (!file.open()) {
             MU_LOG(warning,
                    "Mu::Plugin",

@@ -1,5 +1,5 @@
 if(NOT DEFINED WORKER_PATH OR NOT EXISTS "${WORKER_PATH}")
-    message(FATAL_ERROR "okular-mupdf-worker executable was not built: ${WORKER_PATH}")
+    message(FATAL_ERROR "mupdfng-worker executable was not built: ${WORKER_PATH}")
 endif()
 
 find_program(LDD_EXECUTABLE ldd REQUIRED)
@@ -16,5 +16,5 @@ endif()
 # worker dependency graph; GUI, Okular, and KDE libraries are also forbidden.
 string(REGEX MATCH "(libQt[56](Gui|Network)|libOkular|libKF[0-9])" forbidden "${dependencies}")
 if(forbidden)
-    message(FATAL_ERROR "okular-mupdf-worker links a forbidden dependency: ${forbidden}\n${dependencies}")
+    message(FATAL_ERROR "mupdfng-worker links a forbidden dependency: ${forbidden}\n${dependencies}")
 endif()

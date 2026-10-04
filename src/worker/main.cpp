@@ -44,7 +44,7 @@ void appendUniquePath(std::vector<std::string>& paths, std::string path)
 
 cxxopts::Options makeWorkerOptions()
 {
-    cxxopts::Options options("okular-mupdf-worker", "Sandboxed MuPDF worker for the okular-mupdf-ng Okular generator.");
+    cxxopts::Options options("mupdfng-worker", "Sandboxed MuPDF worker for the okular-mupdf-ng Okular generator.");
     options.add_options()(
         "socket", "control Unix-domain socket for private plugin IPC", cxxopts::value<std::string>(), "PATH")(
         "fd-socket", "Unix-domain socket for private descriptor transfer", cxxopts::value<std::string>(), "PATH")(
@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
             return 0;
         }
         if (result.count("version")) {
-            std::cout << "okular-mupdf-worker " << ::Mu::IPC::COMPAT << "\nMuPDF " << FZ_VERSION << "\n";
+            std::cout << "mupdfng-worker " << ::Mu::IPC::COMPAT << "\nMuPDF " << FZ_VERSION << "\n";
             return 0;
         }
         if (result.count("tessdata-dir")) {

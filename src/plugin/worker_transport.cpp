@@ -803,7 +803,7 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     }
 
     const QFileInfo info(target);
-    auto file = std::make_unique<QTemporaryFile>(info.absolutePath() + QStringLiteral("/.mupdf-worker-XXXXXX"));
+    auto file = std::make_unique<QTemporaryFile>(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
     if (!file->open()) {
         MU_LOG(warning,
                "Mu::Plugin",
@@ -912,7 +912,7 @@ void WorkerTransport::completePdfExport(bool success, QString error)
 SignResponse WorkerTransport::signToFile(SignRequest request, const QString& password, const QString& target)
 {
     QFileInfo info(target);
-    QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdf-worker-XXXXXX"));
+    QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
     if (!file.open())
         return { SigningResult::WriteFailed, "could not create signing output" };
     const auto transfer = m_nextTransfer++;
@@ -1201,7 +1201,7 @@ QString WorkerTransport::findBinary(const QString& hint)
     if (QFileInfo::exists(install))
         return install;
 #endif
-    return QStandardPaths::findExecutable(QStringLiteral("okular-mupdf-worker"));
+    return QStandardPaths::findExecutable(QStringLiteral("mupdfng-worker"));
 }
 
 void WorkerTransport::finished(int code, QProcess::ExitStatus /*status*/)

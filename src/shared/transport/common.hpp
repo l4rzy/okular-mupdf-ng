@@ -6,7 +6,7 @@
 
 /**
  * @file common.hpp
- * @brief Shared transport limits and deadline budgets for okular-mupdf-worker.
+ * @brief Shared transport limits and deadline budgets for mupdfng-worker.
  *
  * This header is shared between the worker executable and the plugin. It has
  * no dependencies beyond the C++ standard library, so it can be included by

@@ -144,12 +144,11 @@ Main::Main(QObject* parent, const QVariantList& args)
     // Step 3: Start the isolated worker. The worker binary path is embedded at compile time by CMake.
     // WorkerClient::start() will also try PATH and install-dir fallbacks.
     if (!m_worker.start(QString(), Config::readTessDataDirectories())) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to start okular-mupdf-worker");
+        MU_LOG(warning, "Mu::Generator::Main", "failed to start mupdfng-worker");
     }
     // Step 4: Invalidate asynchronous UI state before handling worker failure.
     connect(&m_worker, &Plugin::WorkerClient::workerDied, this, [this](int code) {
-        MU_LOG(
-            warning, "Mu::Generator::Main", std::string("okular-mupdf-worker died with code ") + std::to_string(code));
+        MU_LOG(warning, "Mu::Generator::Main", std::string("mupdfng-worker died with code ") + std::to_string(code));
         m_ocrController->reset();
         m_annotationProxy.setAvailable(false);
         m_formCoordinator->setAvailable(false);

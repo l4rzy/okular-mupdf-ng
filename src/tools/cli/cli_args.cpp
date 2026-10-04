@@ -30,7 +30,7 @@ bool parseInt(const std::string& text, int& value)
 
 void addSharedOptions(QCommandLineParser& parser)
 {
-    parser.addOption({ "worker", "Path to the okular-mupdf-worker binary (auto-detected otherwise).", "path" });
+    parser.addOption({ "worker", "Path to the mupdfng-worker binary (auto-detected otherwise).", "path" });
     parser.addOption({ "password", "Password for encrypted documents.", "password" });
     parser.addOption({ "timeout", "Timeout in seconds for worker jobs.", "seconds", QString::number(120) });
 }

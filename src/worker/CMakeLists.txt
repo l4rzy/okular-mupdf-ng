@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # ---------------------------------------------------------------------------
-# okular-mupdf-worker: sandboxed worker executable
+# mupdfng-worker: sandboxed worker executable
 #
 # IMPORTANT: This target MUST NOT link against Okular::Core, Qt GUI, or any
 # KF6 library. It is the isolated MuPDF capability process.
@@ -63,45 +63,45 @@ if(ENABLE_FORM_JAVASCRIPT)
     target_compile_definitions(mupdf_worker_core PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
 endif()
 
-add_executable(okular-mupdf-worker
+add_executable(mupdfng-worker
     main.cpp
     runtime/worker_server.cpp
     sys/sandbox.cpp
 )
-target_link_libraries(okular-mupdf-worker PRIVATE
+target_link_libraries(mupdfng-worker PRIVATE
     mupdf_worker_core
     MuPDF::Engine
 )
 if(MU_DEBUG_BUILD)
-    target_link_libraries(okular-mupdf-worker PRIVATE mupdf_ipc_debug)
+    target_link_libraries(mupdfng-worker PRIVATE mupdf_ipc_debug)
 endif()
-set_target_properties(okular-mupdf-worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+set_target_properties(mupdfng-worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 
 if(MU_DEBUG_BUILD)
     target_compile_definitions(mupdf_worker_core PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(okular-mupdf-worker PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdfng-worker PRIVATE MU_DEBUG_ENABLED)
 endif()
 
-target_include_directories(okular-mupdf-worker PRIVATE
+target_include_directories(mupdfng-worker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}          # worker/ headers
     ${CMAKE_CURRENT_SOURCE_DIR}/..       # src/ root for shared/ contract headers
     ${MU_GENERATED_INCLUDE_DIR}
     ${SECCOMP_INCLUDE_DIRS}
 )
 
-target_link_libraries(okular-mupdf-worker PRIVATE
+target_link_libraries(mupdfng-worker PRIVATE
     ${SECCOMP_LIBRARIES}
 )
 
 if(SECCOMP_FOUND)
-    target_compile_definitions(okular-mupdf-worker PRIVATE MUPDF_HAVE_LIBSECCOMP)
+    target_compile_definitions(mupdfng-worker PRIVATE MUPDF_HAVE_LIBSECCOMP)
 endif()
 
-target_compile_definitions(okular-mupdf-worker PRIVATE
+target_compile_definitions(mupdfng-worker PRIVATE
     TESSDATA_DIR="${TESSDATA_DIR}"
     SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
 )
 
-install(TARGETS okular-mupdf-worker
+install(TARGETS mupdfng-worker
     DESTINATION "${MUPDF_WORKER_INSTALL_DIR}"
 )

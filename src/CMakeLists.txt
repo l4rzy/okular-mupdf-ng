@@ -116,7 +116,7 @@ target_compile_definitions(mupdf_plugin_worker PRIVATE
 )
 if(ENABLE_BUILD_TREE_WORKER)
     target_compile_definitions(mupdf_plugin_worker PRIVATE
-        WORKER_BUILD_PATH="$<TARGET_FILE:okular-mupdf-worker>"
+        WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     )
 endif()
 

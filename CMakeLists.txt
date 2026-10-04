@@ -101,8 +101,8 @@ configure_file(
     @ONLY)
 
 set(MUPDF_WORKER_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/okular-mupdf-ng")
-set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/okular-mupdf-worker"
-    CACHE PATH "Installed path of the okular-mupdf-worker binary")
+set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/mupdfng-worker"
+    CACHE PATH "Installed path of the mupdfng-worker binary")
 add_subdirectory(src)
 
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.png"

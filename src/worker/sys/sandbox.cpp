@@ -657,7 +657,7 @@ bool activateSeccomp(Status& status)
 
 #endif // __linux__
 
-/// Main entry point for sandboxing the okular-mupdf-worker executable.
+/// Main entry point for sandboxing the mupdfng-worker executable.
 ///
 /// Runs the sandbox phases in activation order. Primary controls are required for a fully
 /// hardened status; startup remains best-effort when a phase is unavailable.
