@@ -10,7 +10,9 @@
 #include <QString>
 
 void createMultiPagePDF(fz_context* ctx, const QString& path, int numPages);
-void createTextPDF(fz_context* ctx, const QString& path);
+void createTextPDF(fz_context* ctx,
+                   const QString& path,
+                   const char* streamData = "BT\n/F1 12 Tf\n72 700 Td(Hello World)Tj\nET\n");
 void createShiftedCropTextPDF(fz_context* ctx, const QString& path);
 void createEncryptedPDF(fz_context* ctx, const QString& path, const QString& password);
 void createSignaturePDF(fz_context* ctx, const QString& path);

@@ -34,13 +34,12 @@ void createMultiPagePDF(fz_context* ctx, const QString& path, int numPages)
     }
 }
 
-void createTextPDF(fz_context* ctx, const QString& path)
+void createTextPDF(fz_context* ctx, const QString& path, const char* streamData)
 {
     fz_try(ctx)
     {
         pdf_document* doc = pdf_create_document(ctx);
 
-        const char* streamData = "BT\n/F1 12 Tf\n72 700 Td(Hello World)Tj\nET\n";
         fz_buffer* contents =
             fz_new_buffer_from_copied_data(ctx, (const unsigned char*)streamData, std::strlen(streamData));
 

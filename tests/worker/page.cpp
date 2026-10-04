@@ -43,6 +43,86 @@ private:
 
 private slots:
 
+    void testDehyphenatedCharacterFiltering_data()
+    {
+        QTest::addColumn<int>("lineFlags");
+        QTest::addColumn<int>("codepoint");
+        QTest::addColumn<bool>("hasNext");
+        QTest::addColumn<bool>("hasNextLine");
+        QTest::addColumn<bool>("expectedSkip");
+
+        QTest::newRow("ordinary-hyphen") << 0 << static_cast<int>('-') << false << false << false;
+        QTest::newRow("joined-line-hyphen")
+            << static_cast<int>(FZ_STEXT_LINE_FLAGS_JOINED) << static_cast<int>('-') << false << true << true;
+        QTest::newRow("joined-line-nonterminal-hyphen")
+            << static_cast<int>(FZ_STEXT_LINE_FLAGS_JOINED) << static_cast<int>('-') << true << true << false;
+        QTest::newRow("terminal-line-hyphen")
+            << static_cast<int>(FZ_STEXT_LINE_FLAGS_JOINED) << static_cast<int>('-') << false << false << false;
+        QTest::newRow("soft-hyphen") << 0 << 0x00AD << false << false << true;
+    }
+
+    void testDehyphenatedCharacterFiltering()
+    {
+        QFETCH(int, lineFlags);
+        QFETCH(int, codepoint);
+        QFETCH(bool, hasNext);
+        QFETCH(bool, hasNextLine);
+        QFETCH(bool, expectedSkip);
+
+        fz_stext_line line { };
+        line.flags = static_cast<decltype(line.flags)>(lineFlags);
+        fz_stext_char next { };
+        fz_stext_line nextLine { };
+        nextLine.first_char = &next;
+        line.next = hasNextLine ? &nextLine : nullptr;
+        fz_stext_char character { };
+        character.c = codepoint;
+        character.next = hasNext ? &next : nullptr;
+
+        QCOMPARE(Mu::Worker::Engine::shouldSkipDehyphenatedChar(&line, &character), expectedSkip);
+        const bool expectedJoin = hasNextLine && (lineFlags & FZ_STEXT_LINE_FLAGS_JOINED) != 0;
+        QCOMPARE(Mu::Worker::Engine::isDehyphenatedLine(&line), expectedJoin);
+        nextLine.first_char = nullptr;
+        QVERIFY(!Mu::Worker::Engine::isDehyphenatedLine(&line));
+    }
+
+    void testDehyphenatedDocumentText_data()
+    {
+        QTest::addColumn<QByteArray>("contents");
+        QTest::addColumn<QString>("expectedText");
+        QTest::newRow("terminal-hyphen") << QByteArray("BT /F1 12 Tf 72 700 Td (command -) Tj ET")
+                                         << QStringLiteral("command -\n");
+        QTest::newRow("wrapped-word") << QByteArray("BT /F1 12 Tf 72 700 Td (inter-) Tj 0 -18 Td (national) Tj ET")
+                                      << QStringLiteral("international\n");
+        QTest::newRow("wrapped-word-terminal-hyphen")
+            << QByteArray("BT /F1 12 Tf 72 700 Td (inter-) Tj 0 -18 Td (national-) Tj ET")
+            << QStringLiteral("international-\n");
+    }
+
+    void testDehyphenatedDocumentText()
+    {
+        QFETCH(QByteArray, contents);
+        QFETCH(QString, expectedText);
+        const QString path = m_tempDir.filePath(QStringLiteral("dehyphenation.pdf"));
+        fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        createTextPDF(context, path, contents.constData());
+        fz_drop_context(context);
+
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, path));
+        std::string error;
+        const auto boxes = document.textBoxes(0, 72, 72, 1000, true, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QString text;
+        for (const auto& box : boxes) {
+            text += QString::fromStdString(box.text);
+            if (box.endOfLine)
+                text += QLatin1Char('\n');
+        }
+        QCOMPARE(text, expectedText);
+    }
+
     void initTestCase()
     {
         QVERIFY(m_tempDir.isValid());

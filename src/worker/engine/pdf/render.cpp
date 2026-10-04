@@ -14,6 +14,7 @@ extern "C" {
 }
 
 #include "engine/constants.hpp"
+#include "engine/mupdf_helpers.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 
@@ -181,7 +182,7 @@ std::vector<TextBox> PdfDocument::textBoxes(
                                                  static_cast<float>(dpiY / Constant::PointsPerInch));
 
         fz_stext_options options { };
-        options.flags = FZ_STEXT_CLIP;
+        options.flags = FZ_STEXT_CLIP | FZ_STEXT_ACCURATE_BBOXES | FZ_STEXT_DEHYPHENATE;
 
         // Build structured text page tree
         text = fz_new_stext_page(m_context, bounds);
@@ -207,8 +208,11 @@ std::vector<TextBox> PdfDocument::textBoxes(
                 continue;
 
             for (fz_stext_line* line = block->u.t.first_line; line; line = line->next) {
-                bool hasText = false;
+                const std::size_t lineStart = result.size();
                 for (fz_stext_char* character = line->first_char; character; character = character->next) {
+                    if (shouldSkipDehyphenatedChar(line, character))
+                        continue;
+
                     // Filter invalid Unicode code points and surrogates
                     if (character->c < 0 || character->c > Constant::UnicodeMaxCodePoint
                         || (character->c >= Constant::UnicodeSurrogateMin
@@ -234,9 +238,10 @@ std::vector<TextBox> PdfDocument::textBoxes(
                     const fz_rect rect = fz_transform_rect(charBounds, transform);
                     result.emplace_back(
                         std::string(utf8, static_cast<std::size_t>(bytes)), rect.x0, rect.y0, rect.x1, rect.y1, false);
-                    hasText = true;
                 }
-                if (hasText)
+                if (result.size() > lineStart && isDehyphenatedLine(line))
+                    result.back().endOfLine = false;
+                else if (result.size() > lineStart)
                     result.back().endOfLine = true;
             }
         }
