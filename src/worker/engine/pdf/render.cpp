@@ -190,7 +190,7 @@ std::vector<TextBox> PdfDocument::textBoxes(
                                                  static_cast<float>(dpiY / Constant::PointsPerInch));
 
         fz_stext_options options { };
-        options.flags = FZ_STEXT_CLIP | FZ_STEXT_ACCURATE_BBOXES | FZ_STEXT_DEHYPHENATE;
+        options.flags = FZ_STEXT_CLIP | FZ_STEXT_DEHYPHENATE;
 
         // Build structured text page tree
         text = fz_new_stext_page(m_context, bounds);

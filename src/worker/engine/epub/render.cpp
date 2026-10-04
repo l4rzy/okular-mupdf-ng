@@ -189,7 +189,7 @@ EpubDocument::textBoxes(int page, double dpiX, double dpiY, std::size_t maxBoxes
         const double scaleX = dpiX / Constant::PointsPerInch;
         const double scaleY = dpiY / Constant::PointsPerInch;
         fz_stext_options options { };
-        options.flags = FZ_STEXT_CLIP | FZ_STEXT_ACCURATE_BBOXES | FZ_STEXT_DEHYPHENATE;
+        options.flags = FZ_STEXT_CLIP | FZ_STEXT_DEHYPHENATE;
         stext = fz_new_stext_page_from_page(m_context, pagePtr, &options);
 
         const std::size_t charCount = countStextChars(stext);
