@@ -157,6 +157,7 @@ ocrConfigFor(const OcrTarget& target, int pageCount, double dpiX, double dpiY, c
 
 void reloadSettings();
 bool readRenderCancellationEnabled();
+bool readHeuristicSynopsisEnabled();
 EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();

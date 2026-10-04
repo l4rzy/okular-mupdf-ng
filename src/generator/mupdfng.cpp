@@ -455,6 +455,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // the source and the password.
     const auto info = m_worker.getDocumentInfo(
         { QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired"), QStringLiteral("hasXfaForm") });
+    m_document.heuristicSynopsisEnabled = Config::readHeuristicSynopsisEnabled();
     m_document.hasXfaForm = info.values.contains("hasXfaForm") && info.values.at("hasXfaForm") == "true";
     m_document.type = Model::documentTypeFromMime(info.mimeType);
     m_document.hash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
@@ -1202,7 +1203,7 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
 
     std::vector<Model::OutlineNode> nodes;
     if (workerReady()) {
-        nodes = m_worker.synopsis();
+        nodes = m_worker.synopsis(m_document.heuristicSynopsisEnabled);
     }
     m_synopsis = Conversion::documentSynopsis(nodes);
     return m_synopsis.get();

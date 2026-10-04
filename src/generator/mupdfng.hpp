@@ -235,6 +235,8 @@ private:
         QString hash;
         Model::DocumentType type = Model::DocumentType::Pdf;
         bool hasXfaForm = false;
+        // Snapshot on open; changing this option does not refresh the sidebar.
+        bool heuristicSynopsisEnabled = true;
     };
 
     Document m_document;

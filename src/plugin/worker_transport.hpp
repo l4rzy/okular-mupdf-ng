@@ -87,7 +87,8 @@ public:
     bool cancelOcrJobs();
     std::vector<Model::Font> fonts(int page);
     std::vector<Model::EmbeddedFile> embeddedFiles();
-    std::vector<Model::OutlineNode> synopsis();
+    /// Disabling the PDF fallback also bypasses cached generated outlines.
+    std::vector<Model::OutlineNode> synopsis(bool allowHeuristic = true);
     std::optional<Model::LayersResponse> layers();
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request);
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys);

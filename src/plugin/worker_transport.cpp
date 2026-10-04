@@ -711,9 +711,9 @@ std::vector<EmbeddedFile> WorkerTransport::embeddedFiles()
     return { };
 }
 
-std::vector<OutlineNode> WorkerTransport::synopsis()
+std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic)
 {
-    if (m_pdfSynopsis)
+    if (allowHeuristic && m_pdfSynopsis)
         return *m_pdfSynopsis;
     if (m_useEpubCache && !m_sourcePath.isEmpty()) {
         if (const auto cached = Caching::EPUB::Cache::loadAt(epubCachePath(m_sourcePath)); cached && cached->outline) {
@@ -730,6 +730,9 @@ std::vector<OutlineNode> WorkerTransport::synopsis()
                 m_pdfSynopsis = std::move(value->nodes);
                 return *m_pdfSynopsis;
             }
+            // Disabled policy bypasses generated results in memory and on disk.
+            if (!allowHeuristic)
+                return { };
             const QString cachePath = Caching::PDF::tocCachePath(m_pdfSource->handle());
             if (auto cached = Caching::PDF::loadToc(cachePath, m_pdfPageCount)) {
                 m_pdfSynopsis = std::move(*cached);

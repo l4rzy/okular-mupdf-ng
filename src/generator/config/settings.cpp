@@ -121,6 +121,11 @@ void reloadSettings()
     MuPDFNGSettings::self()->read();
 }
 
+bool readHeuristicSynopsisEnabled()
+{
+    return MuPDFNGSettings::heuristicSynopsisEnabled();
+}
+
 bool readRenderCancellationEnabled()
 {
     return MuPDFNGSettings::cancelObsoleteRenders();

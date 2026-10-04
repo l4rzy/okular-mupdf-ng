@@ -59,6 +59,28 @@ private slots:
         QCOMPARE(actual, enabled);
     }
 
+    void defaultsHeuristicSynopsisToEnabled() { QVERIFY(::Mu::Generator::Config::readHeuristicSynopsisEnabled()); }
+
+    void readsHeuristicSynopsis_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::newRow("enabled") << true;
+        QTest::newRow("disabled") << false;
+    }
+
+    void readsHeuristicSynopsis()
+    {
+        QFETCH(bool, enabled);
+        const bool original = MuPDFNGSettings::heuristicSynopsisEnabled();
+        MuPDFNGSettings::setHeuristicSynopsisEnabled(enabled);
+        MuPDFNGSettings::self()->save();
+        ::Mu::Generator::Config::reloadSettings();
+        const bool actual = ::Mu::Generator::Config::readHeuristicSynopsisEnabled();
+        MuPDFNGSettings::setHeuristicSynopsisEnabled(original);
+        MuPDFNGSettings::self()->save();
+        QCOMPARE(actual, enabled);
+    }
+
     void selectsSigningKey_data()
     {
         using Mu::Plugin::Crypto::CertificateDatabase::SigningKey;

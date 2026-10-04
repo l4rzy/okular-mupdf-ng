@@ -40,6 +40,22 @@
       </attribute>
       <layout class="QVBoxLayout" name="generalTabLayout">
        <item>
+        <widget class="QGroupBox" name="behaviorGroupBox">
+         <property name="title">
+          <string>Behavior</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_behavior">
+          <item>
+           <widget class="QCheckBox" name="kcfg_HeuristicSynopsisEnabled">
+            <property name="text">
+             <string>Generate a table of contents for documents without one</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="renderingQualityBox">
          <property name="title">
           <string>Rendering Quality</string>

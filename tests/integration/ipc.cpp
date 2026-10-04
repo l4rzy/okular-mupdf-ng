@@ -518,8 +518,80 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void pdfHeuristicSynopsisPolicy_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::addColumn<bool>("cached");
+        QTest::addColumn<bool>("memorySource");
+        QTest::newRow("enabled-fresh-file") << true << false << false;
+        QTest::newRow("disabled-fresh-file") << false << false << false;
+        QTest::newRow("enabled-cached-file") << true << true << false;
+        QTest::newRow("disabled-cached-file") << false << true << false;
+        QTest::newRow("enabled-fresh-data") << true << false << true;
+        QTest::newRow("disabled-fresh-data") << false << false << true;
+        QTest::newRow("enabled-cached-data") << true << true << true;
+        QTest::newRow("disabled-cached-data") << false << true << true;
+    }
+
+    void pdfHeuristicSynopsisPolicy()
+    {
+        QFETCH(bool, enabled);
+        QFETCH(bool, cached);
+        QFETCH(bool, memorySource);
+        using namespace Mu::Model;
+        const QString path = m_fixtureRoot.filePath("heuristic-policy.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createTextPDF(document.context(),
+                      path,
+                      "BT /F1 18 Tf 72 700 Td (1 Introduction) Tj 0 -40 Td "
+                      "/F1 12 Tf (Ordinary body text with enough characters to establish the normal font size.) Tj ET");
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const QString cachePath = ::Mu::Plugin::Caching::PDF::tocCachePath(source.handle());
+        QVERIFY(!cachePath.isEmpty());
+        QFile::remove(cachePath);
+        if (cached) {
+            OutlineNode node;
+            node.title = "Cached heading";
+            node.link.valid = true;
+            node.link.viewport.page = 0;
+            node.link.viewport.coordinateMask = Viewport::CoordinateX | Viewport::CoordinateY;
+            QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, { node }));
+        }
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        const auto status =
+            memorySource ? m_client.openData(source.readAll(), { }, pages) : m_client.open(path, { }, pages);
+        QCOMPARE(status, OpenStatus::Success);
+        const auto outline = m_client.synopsis(enabled);
+        if (enabled) {
+            QCOMPARE(outline.size(), std::size_t(1));
+            QCOMPARE(outline.front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
+        } else {
+            QVERIFY(outline.empty());
+            QCOMPARE(QFile::exists(cachePath), cached);
+        }
+        // Changing request policy must bypass a memoized generated tree too,
+        // and leave existing disk entries available for re-enabling.
+        const auto restored = m_client.synopsis(true);
+        QCOMPARE(restored.size(), std::size_t(1));
+        QCOMPARE(restored.front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
+        QVERIFY(m_client.synopsis(false).empty());
+        const auto reused = m_client.synopsis(true);
+        QCOMPARE(reused.size(), std::size_t(1));
+        QCOMPARE(reused.front().title, restored.front().title);
+        QVERIFY(m_client.close());
+    }
+
+    void pdfEmbeddedOutlinePrecedesCache_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::newRow("heuristic-enabled") << true;
+        QTest::newRow("heuristic-disabled") << false;
+    }
+
     void pdfEmbeddedOutlinePrecedesCache()
     {
+        QFETCH(bool, enabled);
         using namespace Mu::Model;
         const QString path = m_fixtureRoot.filePath("embedded-outline.pdf");
         ::Mu::Worker::Engine::PdfDocument document;
@@ -549,7 +621,7 @@ private slots:
         QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, { node }));
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(saved, { }, pages), OpenStatus::Success);
-        const auto outline = m_client.synopsis();
+        const auto outline = m_client.synopsis(enabled);
         QCOMPARE(outline.size(), std::size_t(1));
         QCOMPARE(outline.front().title, std::string("Embedded heading"));
         QVERIFY(m_client.close());

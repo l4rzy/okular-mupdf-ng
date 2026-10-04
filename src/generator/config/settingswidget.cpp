@@ -209,6 +209,10 @@ void MuPDFNGSettingsWidget::setupToolTips()
                i18n("Strict refuses to process documents unless the worker sandbox is fully hardened on this host."));
     setToolTip({ m_mupdfsw->kcfg_NotifyDegradedSandbox },
                i18n("Show a notification when the worker sandbox cannot provide its full protection."));
+    setToolTip({ m_mupdfsw->kcfg_HeuristicSynopsisEnabled },
+               i18n("Infer a table of contents from PDF headings when an embedded table of contents is absent. "
+                    "Generation may delay "
+                    "opening. Changes apply when the document is next opened."));
     setToolTip({ m_mupdfsw->kcfg_PdfFormJavaScriptEnabled },
                i18n("Run JavaScript embedded in PDF forms. Disabled by default; enable only for documents you trust."));
     setToolTip({ m_mupdfsw->kcfg_OcrLanguage, m_mupdfsw->labelOcrLang },
