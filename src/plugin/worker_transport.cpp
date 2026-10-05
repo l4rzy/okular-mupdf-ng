@@ -710,10 +710,15 @@ std::vector<EmbeddedFile> WorkerTransport::embeddedFiles()
     return { };
 }
 
-std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic)
+std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* generatedSynopsis)
 {
-    if (allowHeuristic && m_pdfSynopsis)
+    if (generatedSynopsis)
+        *generatedSynopsis = false;
+    if (allowHeuristic && m_pdfSynopsis) {
+        if (generatedSynopsis)
+            *generatedSynopsis = m_pdfSynopsisGenerated;
         return *m_pdfSynopsis;
+    }
     if (m_useEpubCache && !m_sourcePath.isEmpty()) {
         if (const auto cached = Caching::EPUB::Cache::loadAt(epubCachePath(m_sourcePath)); cached && cached->outline) {
             return *cached->outline;
@@ -727,6 +732,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic)
             // Embedded outlines take precedence and avoid hashing/scanning.
             if (!value->nodes.empty()) {
                 m_pdfSynopsis = std::move(value->nodes);
+                m_pdfSynopsisGenerated = false;
                 return *m_pdfSynopsis;
             }
             // Disabled policy bypasses generated results in memory and on disk.
@@ -735,6 +741,9 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic)
             const QString cachePath = Caching::PDF::tocCachePath(m_pdfSource->handle());
             if (auto cached = Caching::PDF::loadToc(cachePath, m_pdfPageCount)) {
                 m_pdfSynopsis = std::move(*cached);
+                m_pdfSynopsisGenerated = true;
+                if (generatedSynopsis)
+                    *generatedSynopsis = true;
                 return *m_pdfSynopsis;
             }
             auto generated = call(SynopsisRequest { true });
@@ -744,6 +753,9 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic)
             if (!outline)
                 return { };
             m_pdfSynopsis = std::move(outline->nodes);
+            m_pdfSynopsisGenerated = true;
+            if (generatedSynopsis)
+                *generatedSynopsis = true;
             // Recheck source identity before persisting a completed scan.
             if (!cachePath.isEmpty() && Caching::PDF::tocCachePath(m_pdfSource->handle()) == cachePath)
                 (void)Caching::PDF::saveToc(cachePath, m_pdfPageCount, *m_pdfSynopsis);

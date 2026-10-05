@@ -238,6 +238,7 @@ private:
         bool hasXfaForm = false;
         // Snapshot on open; changing this option does not refresh the sidebar.
         bool heuristicSynopsisEnabled = true;
+        bool generatedSynopsisNoticeShown = false;
     };
 
     Document m_document;

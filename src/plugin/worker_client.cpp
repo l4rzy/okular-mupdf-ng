@@ -245,9 +245,9 @@ std::vector<EmbeddedFile> WorkerClient::embeddedFiles() const
     return sync([&](WorkerTransport* transport) { return transport->embeddedFiles(); });
 }
 
-std::vector<OutlineNode> WorkerClient::synopsis(bool allowHeuristic) const
+std::vector<OutlineNode> WorkerClient::synopsis(bool allowHeuristic, bool* generatedSynopsis) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->synopsis(allowHeuristic); });
+    return sync([&](WorkerTransport* transport) { return transport->synopsis(allowHeuristic, generatedSynopsis); });
 }
 
 DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& k) const

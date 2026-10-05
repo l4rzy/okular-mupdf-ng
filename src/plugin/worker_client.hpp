@@ -85,7 +85,7 @@ public:
     std::vector<Model::Font> fonts(int page) const;
     std::vector<Model::EmbeddedFile> embeddedFiles() const;
     /// Disabling the PDF fallback also bypasses cached generated outlines.
-    std::vector<Model::OutlineNode> synopsis(bool allowHeuristic = true) const;
+    std::vector<Model::OutlineNode> synopsis(bool allowHeuristic = true, bool* generatedSynopsis = nullptr) const;
     std::optional<Model::LayersResponse> layers() const;
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request) const;
     bool setSettings(const Model::DocumentSettings& settings);

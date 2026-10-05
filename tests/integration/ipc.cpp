@@ -591,7 +591,9 @@ private slots:
         const auto status =
             memorySource ? m_client.openData(source.readAll(), { }, pages) : m_client.open(path, { }, pages);
         QCOMPARE(status, OpenStatus::Success);
-        const auto outline = m_client.synopsis(enabled);
+        bool generated = false;
+        const auto outline = m_client.synopsis(enabled, &generated);
+        QCOMPARE(generated, enabled);
         if (enabled) {
             QCOMPARE(outline.size(), std::size_t(1));
             QCOMPARE(outline.front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
@@ -601,11 +603,13 @@ private slots:
         }
         // Changing request policy must bypass a memoized generated tree too,
         // and leave existing disk entries available for re-enabling.
-        const auto restored = m_client.synopsis(true);
+        const auto restored = m_client.synopsis(true, &generated);
+        QVERIFY(generated);
         QCOMPARE(restored.size(), std::size_t(1));
         QCOMPARE(restored.front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
         QVERIFY(m_client.synopsis(false).empty());
-        const auto reused = m_client.synopsis(true);
+        const auto reused = m_client.synopsis(true, &generated);
+        QVERIFY(generated);
         QCOMPARE(reused.size(), std::size_t(1));
         QCOMPARE(reused.front().title, restored.front().title);
         QVERIFY(m_client.close());
@@ -650,7 +654,9 @@ private slots:
         QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, { node }));
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(saved, { }, pages), OpenStatus::Success);
-        const auto outline = m_client.synopsis(enabled);
+        bool generated = true;
+        const auto outline = m_client.synopsis(enabled, &generated);
+        QVERIFY(!generated);
         QCOMPARE(outline.size(), std::size_t(1));
         QCOMPARE(outline.front().title, std::string("Embedded heading"));
         QVERIFY(m_client.close());

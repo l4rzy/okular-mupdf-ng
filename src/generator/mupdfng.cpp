@@ -456,6 +456,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     const auto info = m_worker.getDocumentInfo(
         { QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired"), QStringLiteral("hasXfaForm") });
     m_document.heuristicSynopsisEnabled = Config::readHeuristicSynopsisEnabled();
+    m_document.generatedSynopsisNoticeShown = false;
     m_document.hasXfaForm = info.values.contains("hasXfaForm") && info.values.at("hasXfaForm") == "true";
     m_document.type = Model::documentTypeFromMime(info.mimeType);
     m_document.hash = QString::fromStdString(info.values.contains("hash") ? info.values.at("hash") : std::string());
@@ -1213,11 +1214,21 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
     if (m_placeholder.isActive())
         return nullptr;
 
+    bool generated = false;
     std::vector<Model::OutlineNode> nodes;
     if (workerReady()) {
-        nodes = m_worker.synopsis(m_document.heuristicSynopsisEnabled);
+        nodes = m_worker.synopsis(m_document.heuristicSynopsisEnabled, &generated);
     }
     m_synopsis = Conversion::documentSynopsis(nodes);
+    if (m_synopsis && generated && !m_document.generatedSynopsisNoticeShown) {
+        m_document.generatedSynopsisNoticeShown = true;
+        // Deliver on the generator thread after releasing the synopsis mutex.
+        QTimer::singleShot(0, this, [this] {
+            Q_EMIT notice(i18n("This document has no embedded table of contents. A generated table of contents "
+                               "is being used."),
+                          WarningMs);
+        });
+    }
     return m_synopsis.get();
 }
 

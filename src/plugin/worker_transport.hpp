@@ -88,7 +88,7 @@ public:
     std::vector<Model::Font> fonts(int page);
     std::vector<Model::EmbeddedFile> embeddedFiles();
     /// Disabling the PDF fallback also bypasses cached generated outlines.
-    std::vector<Model::OutlineNode> synopsis(bool allowHeuristic = true);
+    std::vector<Model::OutlineNode> synopsis(bool allowHeuristic = true, bool* generatedSynopsis = nullptr);
     std::optional<Model::LayersResponse> layers();
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request);
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys);
@@ -230,6 +230,7 @@ private:
     std::unique_ptr<QFile> m_pdfSource;
     int m_pdfPageCount = 0;
     std::optional<std::vector<Model::OutlineNode>> m_pdfSynopsis;
+    bool m_pdfSynopsisGenerated = false;
 };
 
 } // namespace Mu::Plugin
