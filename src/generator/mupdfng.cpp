@@ -1031,7 +1031,9 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
         if (m_formsDirty)
             const_cast<Okular::Document*>(currentDocument)->setHistoryClean(false);
         for (int i = 0; i < m_okularPages.size(); ++i) {
-            clearPageDisplayState(i);
+            // refreshPixmaps needs the existing cache to request replacement
+            // images. Keep it visible until the updated render completes.
+            clearPageTextState(i);
             const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(i);
         }
     }
@@ -1066,6 +1068,15 @@ void Main::failClosed(const QString& message)
 
 void Main::clearPageDisplayState(int page)
 {
+    clearPageTextState(page);
+    if (document() && page >= 0 && page < m_okularPages.size()) {
+        if (Okular::Page* okularPage = m_okularPages.at(page))
+            okularPage->deletePixmaps();
+    }
+}
+
+void Main::clearPageTextState(int page)
+{
     if (page < 0 || page >= m_okularPages.size())
         return;
     const Okular::Document* currentDocument = document();
@@ -1078,7 +1089,6 @@ void Main::clearPageDisplayState(int page)
     if (!okularPage)
         return;
     okularPage->setTextPage(nullptr);
-    okularPage->deletePixmaps();
 }
 
 // Okular Generator Func: clears the current document and worker state.

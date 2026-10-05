@@ -142,6 +142,7 @@ private:
     void failClosed(const QString& message);
     // Clears transient Okular display state without removing document data.
     void clearPageDisplayState(int page);
+    void clearPageTextState(int page);
     // Tracks settings that are fixed when the generator process starts.
     // Refreshes restart-required state: fresh EPUB settings are compared
     // against the frozen startup set; the NSS database is the runtime-checked
