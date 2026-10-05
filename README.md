@@ -22,8 +22,8 @@ A **secure** and fast PDF and ePUB generator for Okular.
 ## How to install
 
 Prebuilt packages for supported distros are attached to each
-[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). The links
-below always resolve to the latest release.
+[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). The commands
+below install v0.3.3.
 
 Installing this plugin will override the default backend for PDF and ePUB. You
 can select the backend of your choice every time you open a document by enabling
@@ -32,37 +32,37 @@ the "Show backend selection dialog" option in Okular.
 ### Arch Linux
 
 ```bash
-yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.3.2-1-x86_64.pkg.tar.zst
+yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1-x86_64.pkg.tar.zst
 ```
 
 ### Fedora
 
 ```bash
 # Fedora 44 x86_64
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.3.2-1.fc44.x86_64.rpm
+sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1.fc44.x86_64.rpm
 
 # Fedora 43 aarch64/Asahi Linux
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.3.2-1.fc43.aarch64.rpm
+sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1.fc43.aarch64.rpm
 ```
 
 ### openSUSE Tumbleweed
 
 ```bash
-sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng-0.3.2-1.tumbleweed.x86_64.rpm
+sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1.tumbleweed.x86_64.rpm
 ```
 
 ### Debian 13
 
 ```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.3.2-1_amd64_debian-13.deb
-sudo apt install ./okular-mupdf-ng_0.3.2-1_amd64_debian-13.deb
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng_0.3.3-1_amd64_debian-13.deb
+sudo apt install ./okular-mupdf-ng_0.3.3-1_amd64_debian-13.deb
 ```
 
 ### Ubuntu 26.04
 
 ```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/latest/download/okular-mupdf-ng_0.3.2-1_amd64_ubuntu-26.04.deb
-sudo apt install ./okular-mupdf-ng_0.3.2-1_amd64_ubuntu-26.04.deb
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng_0.3.3-1_amd64_ubuntu-26.04.deb
+sudo apt install ./okular-mupdf-ng_0.3.3-1_amd64_ubuntu-26.04.deb
 ```
 
 ### Any other distro

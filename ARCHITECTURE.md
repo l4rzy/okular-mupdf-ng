@@ -97,7 +97,7 @@ Persistent cache code lives in `src/plugin/caching/` and is owned by the host,
 not the sandboxed worker.
 
 - Generated PDF outlines use a separate content-addressed cache keyed by the
-  complete source SHA-256, heading algorithm revision, and MuPDF version. Embedded
+  complete source SHA-256 and heading algorithm revision. Embedded
   outlines always win; valid empty generated outlines are also cached. The worker
   extracts bounded native line/style records, then pure reconstruction matches
   printed contents to body headings or infers hierarchy from typography. The host
