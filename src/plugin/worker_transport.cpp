@@ -418,6 +418,9 @@ OpenStatus WorkerTransport::openFile(const QString& path,
     m_pdfSynopsis.reset();
     m_pdfSource.reset();
     m_pdfPageCount = 0;
+#ifdef MU_DEBUG_ENABLED
+    m_pageLinksStartedAt = pageLinksStartedAt;
+#endif
     auto response = call(req);
     if (!response || response->error) {
         if (response && response->error)
@@ -437,10 +440,6 @@ OpenStatus WorkerTransport::openFile(const QString& path,
                                   static_cast<qsizetype>(opened->epubAccelerator.size()));
         (void)Caching::EPUB::Cache::saveAcceleratorAt(epubCachePath(path), produced);
     }
-    m_linkGeneration = opened->linkGeneration;
-#ifdef MU_DEBUG_ENABLED
-    m_pageLinksStartedAt = pageLinksStartedAt;
-#endif
     if (pages) {
         pages->clear();
         pages->reserve(static_cast<qsizetype>(opened->pages.size()));
@@ -1101,6 +1100,11 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
         ResponseMessage response;
         if (IPC::ZppCodec::decode(frame, &response, &e)) {
             if (response.id == id) {
+                if (!response.error && std::holds_alternative<OpenRequest>(request.payload)) {
+                    // Publish the generation before the guard drains queued link notifications.
+                    if (const auto* opened = std::get_if<OpenResponse>(&response.payload))
+                        m_linkGeneration = opened->linkGeneration;
+                }
 #ifdef MU_DEBUG_ENABLED
                 const auto elapsed =
                     std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started)
