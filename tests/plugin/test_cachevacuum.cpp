@@ -83,13 +83,11 @@ private slots:
         const QDateTime now = utcNow();
         const QDateTime old = now.addDays(-100);
 
-        const QString staleOcr =
-            writeFile(root.filePath(QStringLiteral("ocr_cache/hash/p0_eng_300dpi.bin")), "old", old);
-        const QString freshOcr =
-            writeFile(root.filePath(QStringLiteral("ocr_cache/hash/p1_eng_300dpi.bin")), "new", now);
-        const QString staleOnlyDoc = writeFile(root.filePath(QStringLiteral("ocr_cache/gone/p0_eng.bin")), "old", old);
-        const QString staleEpub = writeFile(root.filePath(QStringLiteral("epub_accelerators/abc.bin")), "old", old);
-        const QString freshEpub = writeFile(root.filePath(QStringLiteral("epub_accelerators/fresh.bin")), "new", now);
+        const QString staleOcr = writeFile(root.filePath(QStringLiteral("ocr/hash/p0_eng_300dpi.bin")), "old", old);
+        const QString freshOcr = writeFile(root.filePath(QStringLiteral("ocr/hash/p1_eng_300dpi.bin")), "new", now);
+        const QString staleOnlyDoc = writeFile(root.filePath(QStringLiteral("ocr/gone/p0_eng.bin")), "old", old);
+        const QString staleEpub = writeFile(root.filePath(QStringLiteral("epub_accel/abc.bin")), "old", old);
+        const QString freshEpub = writeFile(root.filePath(QStringLiteral("epub_accel/fresh.bin")), "new", now);
         const QString stalePdfToc = writeFile(root.filePath(QStringLiteral("pdf_toc/old.bin")), "old", old);
         const QString freshPdfToc = writeFile(root.filePath(QStringLiteral("pdf_toc/fresh.bin")), "new", now);
         const QString foreign = writeFile(root.filePath(QStringLiteral("other/keep.bin")), "old", old);
@@ -110,8 +108,8 @@ private slots:
         // Unknown trees are out of scope even when their files are old.
         QVERIFY(QFile::exists(foreign));
         // The emptied document directory is pruned; the live one survives.
-        QVERIFY(!QDir(root.filePath(QStringLiteral("ocr_cache/gone"))).exists());
-        QVERIFY(QDir(root.filePath(QStringLiteral("ocr_cache/hash"))).exists());
+        QVERIFY(!QDir(root.filePath(QStringLiteral("ocr/gone"))).exists());
+        QVERIFY(QDir(root.filePath(QStringLiteral("ocr/hash"))).exists());
         QVERIFY(result.dirsRemoved >= 1);
     }
 

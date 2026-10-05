@@ -373,7 +373,7 @@ QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings&
     // SHA-256 gives a compact, collision-resistant filename without exposing
     // source paths or CSS contents in the cache directory.
     const QByteArray digest = QCryptographicHash::hash(payload, QCryptographicHash::Sha256);
-    return directory(QStringLiteral("epub_accelerators")) + QLatin1Char('/') + QString::fromLatin1(digest.toHex())
+    return directory(QStringLiteral("epub_accel")) + QLatin1Char('/') + QString::fromLatin1(digest.toHex())
         + QStringLiteral(".bin");
 }
 

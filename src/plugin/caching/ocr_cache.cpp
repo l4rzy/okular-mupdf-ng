@@ -132,7 +132,7 @@ QString Cache::getCacheFilePath(const CacheKey& key, int pageNum)
     const QString cleanLang =
         (key.dpi > 0) ? QStringLiteral("%1_%2dpi").arg(key.language, QString::number(key.dpi)) : key.language;
 
-    const QString docCacheDir = directory(QStringLiteral("ocr_cache")) + QLatin1Char('/') + key.documentHash;
+    const QString docCacheDir = directory(QStringLiteral("ocr")) + QLatin1Char('/') + key.documentHash;
     return docCacheDir + QStringLiteral("/p") + QString::number(pageNum) + QStringLiteral("_") + cleanLang
         + QStringLiteral(".bin");
 }

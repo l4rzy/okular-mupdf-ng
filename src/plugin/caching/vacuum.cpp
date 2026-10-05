@@ -18,8 +18,8 @@ namespace Mu::Plugin::Caching::Vacuum {
 
 namespace {
 
-const std::array<QString, 3> KnownSubdirectories { QStringLiteral("ocr_cache"),
-                                                   QStringLiteral("epub_accelerators"),
+const std::array<QString, 3> KnownSubdirectories { QStringLiteral("ocr"),
+                                                   QStringLiteral("epub_accel"),
                                                    QStringLiteral("pdf_toc") };
 
 } // namespace

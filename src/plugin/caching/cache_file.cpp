@@ -19,7 +19,8 @@ std::optional<QString> s_root;
 
 QString root()
 {
-    return s_root ? *s_root : QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    return s_root ? *s_root
+                  : QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/mupdfng");
 }
 
 } // namespace

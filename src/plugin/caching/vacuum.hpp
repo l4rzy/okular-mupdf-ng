@@ -29,7 +29,7 @@ struct VacuumResult {
     int dirsRemoved = 0;
 };
 
-/// Removes stale files from ocr_cache and epub_accelerators under the
+/// Removes stale files from ocr, epub_accel, and pdf_toc under the
 /// production cache root. Missing trees are a no-op; symlinks are skipped.
 [[nodiscard]] VacuumResult vacuumStaleCaches(const QDateTime& now);
 /// Test seam: same vacuum scoped to an explicit root directory.
