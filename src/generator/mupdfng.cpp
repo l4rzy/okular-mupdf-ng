@@ -724,7 +724,7 @@ void Main::notifyDegradedSandbox()
         Q_EMIT warning(warningMessage(), LongWarningMs);
 }
 
-// Okular Generator Func: Builds the "Using MuPDF ..." description shown by Okular's About dialog,
+// Okular Generator Func: Builds the runtime diagnostics shown by Okular's About dialog,
 // mirroring the poppler generator's GeneratorExtraDescription. The runtime
 // engine version cached from the worker ping is authoritative. If the worker
 // version is unavailable, report it as Unknown.
@@ -737,23 +737,25 @@ QString Main::generatorExtraDescription() const
             engineVersion = QString::fromStdString(workerVersion);
     }
 
-    QString result = i18n("Using MuPDF %1", engineVersion);
+    QString result = i18n("MuPDF: %1", engineVersion);
 
     const Model::SandboxStatus status = m_worker.sandboxStatus();
     if (status.isFullyHardened()) {
-        result += QStringLiteral("\n") + i18n("Worker is fully hardened [OK]");
+        result += QStringLiteral("\n") + i18n("Sandbox: Fully hardened [OK]");
     } else if (status.isPartiallyActive()) {
-        result += QStringLiteral("\n") + i18n("Worker is partially hardened [WARN]");
+        result += QStringLiteral("\n") + i18n("Sandbox: Partially hardened [WARN]");
     } else {
-        result += QStringLiteral("\n") + i18n("Worker is unconfined [CRIT]");
+        result += QStringLiteral("\n") + i18n("Sandbox: Unconfined [CRIT]");
     }
 
     if (m_worker.isConnected()) {
         const std::optional<quint64> workerMemory = m_worker.workerMemoryBytes();
         const QString memoryText =
             workerMemory ? QLocale().formattedDataSize(static_cast<qint64>(*workerMemory)) : i18n("unknown");
-        result += QStringLiteral("\n") + i18n("Worker is using %1", memoryText);
+        result += QStringLiteral("\n") + i18n("Worker memory: %1", memoryText);
     }
+
+    result += QStringLiteral("\n") + i18n("Worker restarts: %1", m_worker.restartCount());
 
     return result;
 }

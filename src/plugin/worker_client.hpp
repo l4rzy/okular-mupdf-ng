@@ -51,6 +51,9 @@ public:
     /// Resident memory of the worker process in bytes; nullopt when unavailable.
     std::optional<quint64> workerMemoryBytes() const;
 
+    /// Successful automatic restarts over this client's lifetime, excluding initial starts.
+    [[nodiscard]] quint64 restartCount() const noexcept { return m_lifecycle.sequence; }
+
     [[nodiscard]] State state() const noexcept { return m_lifecycle.current(); }
 
     [[nodiscard]] bool operational() const noexcept { return state() == State::Ready; }
@@ -135,6 +138,7 @@ private:
         bool restartsDisabled = false;
         int attempts = 0;
         std::deque<std::chrono::steady_clock::time_point> restartTimes;
+        // Lifetime total, retained when the recovery budget is reset.
         quint64 sequence = 0;
 
         // Generator render threads read this; the client thread writes it.

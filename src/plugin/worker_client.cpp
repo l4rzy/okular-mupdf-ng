@@ -64,7 +64,7 @@ WorkerClient::~WorkerClient()
 
 bool WorkerClient::start(const QString& binaryPath, const QStringList& tessDataDirectories)
 {
-    // A manual start resets automatic-recovery history and becomes the new
+    // A manual start resets the automatic-recovery budget and becomes the new
     // baseline for subsequent crash recovery.
     m_lifecycle.reset(binaryPath, tessDataDirectories);
     const bool started = startWorker();
@@ -354,7 +354,6 @@ void WorkerClient::LifeCycle::reset(const QString& binaryPath, const QStringList
     restartsDisabled = false;
     attempts = 0;
     restartTimes.clear();
-    sequence = 0;
 }
 
 bool WorkerClient::LifeCycle::budgetExhausted()

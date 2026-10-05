@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-04 15:30-0500\n"
+"POT-Creation-Date: 2026-10-04 19:38-0500\n"
 "PO-Revision-Date: 2026-10-04 15:30-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
@@ -676,30 +676,34 @@ msgstr ""
 "khỏi tài liệu độc hại."
 
 #: src/generator/mupdfng.cpp:740
-msgid "Using MuPDF %1"
-msgstr "Đang dùng MuPDF %1"
+msgid "MuPDF: %1"
+msgstr "MuPDF: %1"
 
 #: src/generator/mupdfng.cpp:744
-msgid "Worker is fully hardened [OK]"
-msgstr "Worker được gia cố đầy đủ [OK]"
+msgid "Sandbox: Fully hardened [OK]"
+msgstr "Hộp cát: Được gia cố đầy đủ [OK]"
 
 #: src/generator/mupdfng.cpp:746
-msgid "Worker is partially hardened [WARN]"
-msgstr "Worker chỉ được gia cố một phần [CẢNH BÁO]"
+msgid "Sandbox: Partially hardened [WARN]"
+msgstr "Hộp cát: Được gia cố một phần [CẢNH BÁO]"
 
 #: src/generator/mupdfng.cpp:748
-msgid "Worker is unconfined [CRIT]"
-msgstr "Worker không bị giới hạn [NGHIÊM TRỌNG]"
+msgid "Sandbox: Unconfined [CRIT]"
+msgstr "Hộp cát: Không bị giới hạn [NGHIÊM TRỌNG]"
 
 #: src/generator/mupdfng.cpp:754
 msgid "unknown"
 msgstr "không xác định"
 
 #: src/generator/mupdfng.cpp:755
-msgid "Worker is using %1"
-msgstr "Worker đang dùng %1"
+msgid "Worker memory: %1"
+msgstr "Bộ nhớ worker: %1"
 
-#: src/generator/mupdfng.cpp:781
+#: src/generator/mupdfng.cpp:758
+msgid "Worker restarts: %1"
+msgstr "Số lần khởi động lại worker: %1"
+
+#: src/generator/mupdfng.cpp:783
 msgid ""
 "[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
@@ -713,88 +717,88 @@ msgstr ""
 "tác này sẽ giảm mức bảo vệ.\n"
 "Lỗi: %1"
 
-#: src/generator/mupdfng.cpp:870
+#: src/generator/mupdfng.cpp:872
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 "Đã chuyển sang chế độ thực thi Nới lỏng. Vui lòng mở lại tài liệu theo cách "
 "thủ công."
 
-#: src/generator/mupdfng.cpp:900
+#: src/generator/mupdfng.cpp:902
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 "Không thể tải lại tài liệu sau khi lưu. Hãy khởi động lại Okular để tiếp tục."
 
-#: src/generator/mupdfng.cpp:1173
+#: src/generator/mupdfng.cpp:1175
 msgid "Format"
 msgstr "Định dạng"
 
-#: src/generator/mupdfng.cpp:1176 rc.cpp:14
+#: src/generator/mupdfng.cpp:1178 rc.cpp:14
 msgid "Security"
 msgstr "Bảo mật"
 
-#: src/generator/mupdfng.cpp:1178
+#: src/generator/mupdfng.cpp:1180
 msgid "Yes"
 msgstr "Có"
 
-#: src/generator/mupdfng.cpp:1178
+#: src/generator/mupdfng.cpp:1180
 msgid "No"
 msgstr "Không"
 
-#: src/generator/mupdfng.cpp:1179
+#: src/generator/mupdfng.cpp:1181
 msgid "Optimized"
 msgstr "Đã tối ưu hóa"
 
-#: src/generator/mupdfng.cpp:1182
+#: src/generator/mupdfng.cpp:1184
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] "Đã ký (%1 chữ ký)"
 
-#: src/generator/mupdfng.cpp:1182
+#: src/generator/mupdfng.cpp:1184
 msgid "Not Signed"
 msgstr "Chưa ký"
 
-#: src/generator/mupdfng.cpp:1183
+#: src/generator/mupdfng.cpp:1185
 msgid "Digital Signatures"
 msgstr "Chữ ký số"
 
-#: src/generator/mupdfng.cpp:1317 src/generator/mupdfng.cpp:1340
+#: src/generator/mupdfng.cpp:1319 src/generator/mupdfng.cpp:1342
 msgid "The PDF layers could not be loaded."
 msgstr "Không thể tải các lớp PDF."
 
-#: src/generator/mupdfng.cpp:1328
+#: src/generator/mupdfng.cpp:1330
 msgid "The PDF layer visibility could not be changed."
 msgstr "Không thể thay đổi trạng thái hiển thị của lớp PDF."
 
-#: src/generator/mupdfng.cpp:1491
+#: src/generator/mupdfng.cpp:1493
 msgid "Strict sandbox enforcement blocks this document."
 msgstr "Chế độ thực thi hộp cát nghiêm ngặt đã chặn tài liệu này."
 
-#: src/generator/mupdfng.cpp:1492 src/generator/mupdfng.cpp:1503
+#: src/generator/mupdfng.cpp:1494 src/generator/mupdfng.cpp:1505
 msgid "MuPDF worker is unavailable."
 msgstr "Worker MuPDF không khả dụng."
 
-#: src/generator/mupdfng.cpp:1499
+#: src/generator/mupdfng.cpp:1501
 msgid "Failed to save PDF document."
 msgstr "Không thể lưu tài liệu PDF."
 
-#: src/generator/mupdfng.cpp:1516
+#: src/generator/mupdfng.cpp:1518
 msgid "Flattened PDF"
 msgstr "PDF đã làm phẳng"
 
-#: src/generator/mupdfng.cpp:1522
+#: src/generator/mupdfng.cpp:1524
 msgid "Annotation File (XFDF)"
 msgstr "Tệp chú thích (XFDF)"
 
-#: src/generator/mupdfng.cpp:1536
+#: src/generator/mupdfng.cpp:1538
 msgid "Export to flattened PDF finished."
 msgstr "Đã xuất PDF làm phẳng xong."
 
-#: src/generator/mupdfng.cpp:1547
+#: src/generator/mupdfng.cpp:1549
 msgid "Starting to export to PDF."
 msgstr "Đang bắt đầu xuất PDF."
 
-#: src/generator/mupdfng.cpp:1563
+#: src/generator/mupdfng.cpp:1565
 msgid "Export to XFDF finished."
 msgstr "Đã xuất XFDF xong."
 

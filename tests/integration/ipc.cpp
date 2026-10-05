@@ -121,6 +121,35 @@ private slots:
 
     void cleanupTestCase() { ::Mu::Plugin::Caching::clearRootForTesting(); }
 
+    void workerRestartCountSurvivesManualStart_data()
+    {
+        QTest::addColumn<bool>("validBinary");
+        QTest::newRow("successful-manual-start") << true;
+        QTest::newRow("failed-manual-start") << false;
+    }
+
+    void workerRestartCountSurvivesManualStart()
+    {
+        QFETCH(bool, validBinary);
+        ::Mu::Plugin::WorkerClient client;
+        QCOMPARE(client.restartCount(), quint64(0));
+        QVERIFY(client.start(QStringLiteral(RENDER_WORKER_BUILD_PATH)));
+        QCOMPARE(client.restartCount(), quint64(0));
+        QSignalSpy restarted(&client, &::Mu::Plugin::WorkerClient::workerRestarted);
+        for (quint64 count = 1; count <= 2; ++count) {
+            pid_t workerPid = -1;
+            QVERIFY(workerControlSocket(workerPid) >= 0);
+            QCOMPARE(::kill(workerPid, SIGKILL), 0);
+            QTRY_COMPARE_WITH_TIMEOUT(restarted.size(), static_cast<qsizetype>(count), 5000);
+            QCOMPARE(client.restartCount(), count);
+            client.commitSessionReady();
+        }
+        client.stop();
+        QCOMPARE(client.restartCount(), quint64(2));
+        QCOMPARE(client.start(validBinary ? QStringLiteral(RENDER_WORKER_BUILD_PATH) : m_pdf), validBinary);
+        QCOMPARE(client.restartCount(), quint64(2));
+    }
+
     // End-to-end: a document MuPDF had to repair is reported across IPC.
     // End-to-end: the Okular paper color reaches the worker renderer.
     void layersFlowThroughIpc()
