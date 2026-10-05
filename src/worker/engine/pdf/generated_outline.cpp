@@ -511,8 +511,12 @@ std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> l
     }
     auto candidates = findCandidates(lines, contentsPages);
     auto contents = readContents(lines, contentsPages);
-    if (!applyContents(candidates, contents))
+    if (!applyContents(candidates, contents)) {
+        // An uncorroborated contents label must not suppress its page's headings.
+        if (!contentsPages.empty())
+            candidates = findCandidates(lines, { });
         assignLevels(candidates);
+    }
     std::vector<Model::OutlineNode> result;
 
     struct Parent {

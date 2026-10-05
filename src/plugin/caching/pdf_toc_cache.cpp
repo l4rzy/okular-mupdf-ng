@@ -13,8 +13,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "shared/compat.hpp"
-
 namespace Mu::Plugin::Caching::PDF {
 namespace {
 
@@ -44,8 +42,7 @@ QString tocCachePath(int sourceFd)
     if (::fstat(sourceFd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size < 0)
         return { };
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    hash.addData(QByteArrayView("pdf-generated-toc-v3"));
-    hash.addData(QByteArrayView(Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(Mu::MUPDF_VERSION.size())));
+    hash.addData(QByteArrayView("pdf-generated-toc-v5"));
     hash.addData(QByteArrayView("\0", 1));
     std::array<char, 65536> buffer;
     off_t offset = 0;

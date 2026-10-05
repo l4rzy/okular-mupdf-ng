@@ -747,7 +747,8 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
                 return *m_pdfSynopsis;
             }
             auto generated = call(SynopsisRequest { true });
-            if (!generated || generated->error)
+            // call() can drain a worker disconnect and clear the PDF source.
+            if (!generated || generated->error || !m_pdfSource)
                 return { };
             auto* outline = std::get_if<OutlineResponse>(&generated->payload);
             if (!outline)

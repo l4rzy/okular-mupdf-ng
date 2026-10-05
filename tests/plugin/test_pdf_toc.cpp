@@ -215,6 +215,32 @@ private slots:
         QCOMPARE(nodes[0].title, std::string("Generating a table of contents"));
     }
 
+    void incidentalContentsLabel_data()
+    {
+        QTest::addColumn<QString>("label");
+        QTest::addColumn<double>("top");
+        QTest::newRow("contents") << "Contents" << 250.0;
+        QTest::newRow("table-of-contents") << "Table of Contents" << 250.0;
+        QTest::newRow("continued") << "Table of Contents (continued)" << 250.0;
+        QTest::newRow("running-header") << "Contents" << 20.0;
+    }
+
+    void incidentalContentsLabel()
+    {
+        QFETCH(QString, label);
+        QFETCH(double, top);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes a stable body style.", 1, 50, 300, 11, 400, false);
+        layout.add(label.toStdString(), 1, 50, top, 11, 200, false);
+        layout.add("1 Overview", 1, 50, 150, 17, 200);
+        layout.add("2 Results", 1, 50, 450, 17, 200);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(2));
+        QCOMPARE(nodes[0].title, std::string("1 Overview"));
+        QCOMPARE(nodes[1].title, std::string("2 Results"));
+        QCOMPARE(nodes[0].link.viewport.page, 1);
+    }
+
     void malformedGeometry_data()
     {
         QTest::addColumn<int>("field");
