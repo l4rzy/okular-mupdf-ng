@@ -15,8 +15,16 @@ class TestNativeWorkerTypes : public QObject {
     Q_OBJECT
 private slots:
 
+    void pingCompatibilityRoundTrip_data()
+    {
+        QTest::addColumn<bool>("systemMuPdf");
+        QTest::newRow("bundled") << false;
+        QTest::newRow("system") << true;
+    }
+
     void pingCompatibilityRoundTrip()
     {
+        QFETCH(bool, systemMuPdf);
         using namespace Mu;
         const Model::RequestMessage input { 5, Model::PingRequest { "0.2.3" } };
         std::string error;
@@ -27,7 +35,7 @@ private slots:
         QCOMPARE(std::get<Model::PingRequest>(decodedRequest.payload).compat, std::string("0.2.3"));
 
         const Model::ResponseMessage response {
-            5, Model::PingResponse { std::string(::Mu::IPC::COMPAT), 123, { }, "1.26.0" }, std::nullopt
+            5, Model::PingResponse { std::string(::Mu::IPC::COMPAT), 123, { }, "1.26.0", systemMuPdf }, std::nullopt
         };
         const auto responseBytes = ::Mu::IPC::ZppCodec::encode(response, &error);
         QVERIFY(responseBytes);
@@ -35,6 +43,7 @@ private slots:
         QVERIFY(::Mu::IPC::ZppCodec::decode(*responseBytes, &decodedResponse, &error));
         QCOMPARE(std::get<Model::PingResponse>(decodedResponse.payload).compat, std::string(::Mu::IPC::COMPAT));
         QCOMPARE(std::get<Model::PingResponse>(decodedResponse.payload).engineVersion, std::string("1.26.0"));
+        QCOMPARE(std::get<Model::PingResponse>(decodedResponse.payload).systemMuPdf, systemMuPdf);
     }
 
     void typedRequestRoundTrip()

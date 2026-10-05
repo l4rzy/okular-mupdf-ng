@@ -348,6 +348,7 @@ private slots:
         QCOMPARE(metadata.values.at("hash").size(), std::size_t(64));
         // The worker binary reports its MuPDF version via the ping handshake.
         QCOMPARE(m_client.engineVersion(), std::string(FZ_VERSION));
+        QCOMPARE(m_client.usesSystemMuPdf(), bool(TEST_SYSTEM_MUPDF));
 
         const auto sandbox = m_client.sandboxStatus();
         QVERIFY(sandbox.landlock || sandbox.seccomp || sandbox.linuxNamespace || sandbox.memoryProtection);

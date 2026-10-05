@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-04 20:12-0500\n"
+"POT-Creation-Date: 2026-10-04 21:02-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -630,34 +630,38 @@ msgid ""
 msgstr ""
 
 #: src/generator/mupdfng.cpp:741
-msgid "MuPDF: %1"
+msgid "MuPDF: %1 (system library)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:745
+#: src/generator/mupdfng.cpp:742
+msgid "MuPDF: %1 (bundled)"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:746
 msgid "Sandbox: Fully hardened [OK]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:747
+#: src/generator/mupdfng.cpp:748
 msgid "Sandbox: Partially hardened [WARN]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:749
+#: src/generator/mupdfng.cpp:750
 msgid "Sandbox: Unconfined [CRIT]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:755
+#: src/generator/mupdfng.cpp:756
 msgid "unknown"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:756
+#: src/generator/mupdfng.cpp:757
 msgid "Worker memory: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:759
+#: src/generator/mupdfng.cpp:760
 msgid "Worker restarts: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:784
+#: src/generator/mupdfng.cpp:785
 msgid ""
 "[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
@@ -666,92 +670,92 @@ msgid ""
 "Error: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:873
+#: src/generator/mupdfng.cpp:874
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:903
+#: src/generator/mupdfng.cpp:904
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1186
+#: src/generator/mupdfng.cpp:1187
 msgid "Format"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1189 rc.cpp:14
+#: src/generator/mupdfng.cpp:1190 rc.cpp:14
 msgid "Security"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1191
+#: src/generator/mupdfng.cpp:1192
 msgid "Yes"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1191
+#: src/generator/mupdfng.cpp:1192
 msgid "No"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1192
+#: src/generator/mupdfng.cpp:1193
 msgid "Optimized"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1195
+#: src/generator/mupdfng.cpp:1196
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/generator/mupdfng.cpp:1195
+#: src/generator/mupdfng.cpp:1196
 msgid "Not Signed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1196
+#: src/generator/mupdfng.cpp:1197
 msgid "Digital Signatures"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1227
+#: src/generator/mupdfng.cpp:1228
 msgid ""
 "This document has no embedded table of contents. A generated table of "
 "contents is being used."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1340 src/generator/mupdfng.cpp:1363
+#: src/generator/mupdfng.cpp:1341 src/generator/mupdfng.cpp:1364
 msgid "The PDF layers could not be loaded."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1351
+#: src/generator/mupdfng.cpp:1352
 msgid "The PDF layer visibility could not be changed."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1514
+#: src/generator/mupdfng.cpp:1515
 msgid "Strict sandbox enforcement blocks this document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1515 src/generator/mupdfng.cpp:1526
+#: src/generator/mupdfng.cpp:1516 src/generator/mupdfng.cpp:1527
 msgid "MuPDF worker is unavailable."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1522
+#: src/generator/mupdfng.cpp:1523
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1539
+#: src/generator/mupdfng.cpp:1540
 msgid "Flattened PDF"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1545
+#: src/generator/mupdfng.cpp:1546
 msgid "Annotation File (XFDF)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1559
+#: src/generator/mupdfng.cpp:1560
 msgid "Export to flattened PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1570
+#: src/generator/mupdfng.cpp:1571
 msgid "Starting to export to PDF."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1586
+#: src/generator/mupdfng.cpp:1587
 msgid "Export to XFDF finished."
 msgstr ""
 

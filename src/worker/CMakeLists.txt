@@ -58,6 +58,7 @@ target_link_libraries(mupdf_worker_core PUBLIC
 
 # The bundled MuPDF is built with tesseract enabled, so OCR is always available.
 target_compile_definitions(mupdf_worker_core PRIVATE
+    MU_WORKER_USE_SYSTEM_MUPDF=$<BOOL:${USE_SYSTEM_MUPDF}>
     TESSDATA_DIR="${TESSDATA_DIR}"
     SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
 )

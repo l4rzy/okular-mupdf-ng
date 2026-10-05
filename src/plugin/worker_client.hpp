@@ -106,6 +106,9 @@ public:
     clickFormButton(const Model::FormButtonClickRequest& request) const override;
     [[nodiscard]] Model::SandboxStatus sandboxStatus() const;
     [[nodiscard]] std::string engineVersion() const;
+
+    [[nodiscard]] bool usesSystemMuPdf() const noexcept { return m_lifecycle.info.systemMuPdf; }
+
 signals:
     void workerDied(int exitCode);
     /// A fresh worker is available. It deliberately has no document open.

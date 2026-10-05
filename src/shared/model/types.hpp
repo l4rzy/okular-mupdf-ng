@@ -1103,6 +1103,7 @@ struct PingResponse {
     std::int64_t pid = 0;
     SandboxStatus sandbox;
     std::string engineVersion;
+    bool systemMuPdf = false;
 };
 
 /// Signing status returned after the worker processes a sign request.

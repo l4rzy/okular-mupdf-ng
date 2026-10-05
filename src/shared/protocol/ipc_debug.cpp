@@ -550,7 +550,7 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                     out << " handle=" << std::quoted(value.handle.value);
                 else if constexpr (std::is_same_v<T, Model::PingResponse>) {
                     out << " compat=" << std::quoted(value.compat) << " pid=" << value.pid
-                        << " engine=" << std::quoted(value.engineVersion)
+                        << " engine=" << std::quoted(value.engineVersion) << " systemMuPdf=" << value.systemMuPdf
                         << " sandbox={landlock=" << value.sandbox.landlock;
                     if (value.sandbox.landlockAbi > 0)
                         out << " abi=" << value.sandbox.landlockAbi;

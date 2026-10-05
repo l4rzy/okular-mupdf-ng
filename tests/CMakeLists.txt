@@ -60,6 +60,7 @@ target_link_libraries(test_mupdf PRIVATE
     ${NSS_LIBRARIES}
     ZLIB::ZLIB)
 target_compile_definitions(test_mupdf PRIVATE
+    TEST_SYSTEM_MUPDF=$<BOOL:${USE_SYSTEM_MUPDF}>
     HAVE_NEW_SIGNATURE_API=1
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
     TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi"
