@@ -150,6 +150,11 @@ For an already configured build tree, run all tests with:
 ctest --test-dir build --output-on-failure
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and testing guidelines.
+See [SECURITY.md](SECURITY.md) for the security contact.
+
 ## Credits
 - [Okular Poppler Backend](https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler)
 - [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf)
