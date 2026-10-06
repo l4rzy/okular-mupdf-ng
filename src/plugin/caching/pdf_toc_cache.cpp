@@ -42,7 +42,7 @@ QString tocCachePath(int sourceFd)
     if (::fstat(sourceFd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size < 0)
         return { };
     QCryptographicHash hash(QCryptographicHash::Sha256);
-    hash.addData(QByteArrayView("pdf-generated-toc-v7"));
+    hash.addData(QByteArrayView("pdf-generated-toc-v8"));
     hash.addData(QByteArrayView("\0", 1));
     std::array<char, 65536> buffer;
     off_t offset = 0;

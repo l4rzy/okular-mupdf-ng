@@ -383,8 +383,10 @@ std::vector<Candidate> findCandidates(const std::vector<OutlineLine>& lines, con
         while (i + 1 < lines.size() && isHeading(lines[i + 1]) && canJoinLines(heading, lines[i + 1])) {
             appendLine(heading, lines[++i]);
         }
-        // Check the joined title so a standalone chapter number can still acquire its title.
-        if (heading.text.size() > MaxGeneratedHeadingBytes || normalizeTitle(heading.text).empty())
+        // Require letters after joining so table values are rejected while a
+        // standalone chapter number can still acquire its title.
+        if (heading.text.size() > MaxGeneratedHeadingBytes || normalizeTitle(heading.text).empty()
+            || !hasTitleLetters(heading.text))
             continue;
         result.push_back({ std::move(heading), chapter, 0 });
         if (result.size() > MaxGeneratedOutlineNodes)

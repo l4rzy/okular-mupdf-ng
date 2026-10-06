@@ -258,6 +258,37 @@ private slots:
         QCOMPARE(nodes.size(), static_cast<std::size_t>(expectedHeading));
     }
 
+    void rejectsNumericTableCells_data()
+    {
+        QTest::addColumn<QString>("cell");
+        QTest::newRow("year") << "2023";
+        QTest::newRow("zero") << "0.00";
+        QTest::newRow("decimal") << "214.00";
+        QTest::newRow("grouped-amount") << "17,350.00";
+        QTest::newRow("negative-amount") << "-214.00";
+        QTest::newRow("currency") << "$214.00";
+        QTest::newRow("percentage") << "12.5%";
+    }
+
+    void rejectsNumericTableCells()
+    {
+        QFETCH(QString, cell);
+        BookLayout layout;
+        // Short table cells exceed the heading threshold when smaller metadata
+        // is the only long, nonbold line available to estimate body typography.
+        layout.add("Version: 2026-02-20 2:19:15 p.m.", 0, 50, 600, 10, 300, false);
+        layout.add("Carryover amounts", 0, 50, 100, 22, 250);
+        layout.add("Capital Gains Deduction", 0, 150, 150, 14, 250);
+        layout.add(cell.toStdString(), 0, 50, 220, 13, 60, false);
+
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes[0].title, std::string("Carryover amounts"));
+        QCOMPARE(nodes[0].children.size(), std::size_t(1));
+        QCOMPARE(nodes[0].children[0].title, std::string("Capital Gains Deduction"));
+        QVERIFY(nodes[0].children[0].children.empty());
+    }
+
     void incidentalContentsLabel_data()
     {
         QTest::addColumn<QString>("label");
