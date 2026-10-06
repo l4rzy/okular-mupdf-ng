@@ -581,7 +581,7 @@ private slots:
         QTest::newRow("fitBV") << QStringLiteral("#page=7&view=FitBV,0.25") << true << true << 6 << coordinateX << 0.25
                                << 0.0 << false;
         QTest::newRow("explicitTopLeft") << QStringLiteral("#page=1&zoom=nan,69.04297,78.73584") << false << true << 0
-                                         << 3 << 69.04297 / 612.0 << (78.73584 - 16.0) / 792.0 << false;
+                                         << 3 << 69.04297 / 612.0 << (78.73584 - 12.0) / 792.0 << false;
         QTest::newRow("external") << QStringLiteral("https://example.com/document.pdf") << true << true << -1 << 0
                                   << skip << skip << true;
         QTest::newRow("pageOutOfRange") << QStringLiteral("#page=999&view=Fit") << true << false << -1 << 0 << skip
@@ -655,7 +655,7 @@ private slots:
         QCOMPARE(transformed.viewport.page, 1);
         QCOMPARE(transformed.viewport.coordinateMask, uint8_t(3));
         QVERIFY(std::abs(transformed.viewport.normalizedX - 0.65) < 0.0001);
-        QVERIFY(std::abs(transformed.viewport.normalizedY - (1.0 - 16.0 / 300.0)) < 0.0001);
+        QVERIFY(std::abs(transformed.viewport.normalizedY - (1.0 - 12.0 / 300.0)) < 0.0001);
 
         pdf_obj* malformedPage = pdf_lookup_page_obj(context, pdfDocument, 2);
         QVERIFY(malformedPage);

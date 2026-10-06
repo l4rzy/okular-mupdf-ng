@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine/pdf/generated_outline.hpp"
+#include "engine/pdf/destination.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -13,6 +14,18 @@
 #include <utility>
 
 namespace Mu::Worker::Engine {
+
+namespace {
+
+bool hasTitleLetters(std::string_view text)
+{
+    // Preserve the existing UTF-8 policy so non-English titles remain usable.
+    return std::any_of(text.begin(), text.end(), [](unsigned char ch) {
+        return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch >= 128;
+    });
+}
+
+} // namespace
 
 std::optional<HeadingNumber> parseHeading(std::string_view text)
 {
@@ -43,12 +56,7 @@ std::optional<HeadingNumber> parseHeading(std::string_view text)
     }
     if (text.empty() || (text.front() != ' ' && text.front() != '\t'))
         return std::nullopt;
-    // A title needs letters, not just another number or punctuation. UTF-8
-    // bytes above ASCII are accepted so non-English titles remain usable.
-    const bool hasLetters = std::any_of(text.begin(), text.end(), [](unsigned char ch) {
-        return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch >= 128;
-    });
-    return hasLetters ? std::optional<HeadingNumber>(std::move(result)) : std::nullopt;
+    return hasTitleLetters(text) ? std::optional<HeadingNumber>(std::move(result)) : std::nullopt;
 }
 
 namespace {
@@ -375,8 +383,8 @@ std::vector<Candidate> findCandidates(const std::vector<OutlineLine>& lines, con
         while (i + 1 < lines.size() && isHeading(lines[i + 1]) && canJoinLines(heading, lines[i + 1])) {
             appendLine(heading, lines[++i]);
         }
-        if (heading.text.size() > MaxGeneratedHeadingBytes || normalizeTitle(heading.text).empty()
-            || parsePageNumber(heading.text))
+        // Check the joined title so a standalone chapter number can still acquire its title.
+        if (heading.text.size() > MaxGeneratedHeadingBytes || normalizeTitle(heading.text).empty())
             continue;
         result.push_back({ std::move(heading), chapter, 0 });
         if (result.size() > MaxGeneratedOutlineNodes)
@@ -552,7 +560,8 @@ std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> l
             node.link.viewport.page = line.page;
             node.link.viewport.coordinateMask = Model::Viewport::CoordinateX | Model::Viewport::CoordinateY;
             node.link.viewport.normalizedX = std::clamp(line.left / line.pageWidth, 0.0, 1.0);
-            node.link.viewport.normalizedY = std::clamp(line.top / line.pageHeight, 0.0, 1.0);
+            node.link.viewport.normalizedY =
+                normalizeDestinationY(std::clamp(line.top / line.pageHeight, 0.0, 1.0), line.pageHeight);
         }
         auto& siblings = parents.empty() ? result : parents.back().node->children;
         siblings.push_back(std::move(node));

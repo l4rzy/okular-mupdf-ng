@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/pdf/destination.hpp"
 #include "engine/pdf/document.hpp"
 
 #include <algorithm>
@@ -66,9 +67,7 @@ normalizeDestination(const fz_link_dest& destination, fz_rect cropBox, fz_matrix
         coordinateMask |= Viewport::CoordinateX;
     }
     if (hasY) {
-        viewport.normalizedY = (pagePoint.y - pageBounds.y0) / height;
-        if (height > Constant::DestinationTopMarginPoints)
-            viewport.normalizedY = std::max(0.0, viewport.normalizedY - Constant::DestinationTopMarginPoints / height);
+        viewport.normalizedY = normalizeDestinationY((pagePoint.y - pageBounds.y0) / height, height);
         coordinateMask |= Viewport::CoordinateY;
     }
     return coordinateMask;

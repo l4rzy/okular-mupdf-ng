@@ -256,7 +256,7 @@ private slots:
         QCOMPARE(nodes[1].children[0].title, std::string("Second Topic"));
         QCOMPARE(nodes[1].children[1].title, std::string("Summary"));
         const double coordinate = rotation ? nodes[0].link.viewport.normalizedY : nodes[0].link.viewport.normalizedX;
-        QVERIFY(std::abs(coordinate - 0.5) < 0.01);
+        QVERIFY(std::abs(coordinate - (rotation ? 0.5 - 12.0 / 600.0 : 0.5)) < 0.01);
     }
 
     void generatedOutlineRejectsPageLimit()

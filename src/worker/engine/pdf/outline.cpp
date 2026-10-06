@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/pdf/destination.hpp"
 #include "engine/pdf/document.hpp"
 
 #include <algorithm>
@@ -182,7 +183,8 @@ std::vector<OutlineNode> PdfDocument::generateOutline(std::string* error) const
                 record.viewport.page = pageIndex;
                 record.viewport.coordinateMask = Model::Viewport::CoordinateX | Model::Viewport::CoordinateY;
                 record.viewport.normalizedX = std::clamp((line->bbox.x0 - bounds.x0) / width, 0.0, 1.0);
-                record.viewport.normalizedY = std::clamp((line->bbox.y0 - bounds.y0) / height, 0.0, 1.0);
+                record.viewport.normalizedY =
+                    normalizeDestinationY(std::clamp((line->bbox.y0 - bounds.y0) / height, 0.0, 1.0), height);
                 // Classify in reading orientation, while retaining the display
                 // coordinates for destinations on rotated pages.
                 if (!std::isfinite(line->dir.x) || !std::isfinite(line->dir.y)

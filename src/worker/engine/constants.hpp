@@ -47,7 +47,7 @@ inline constexpr std::size_t MaxPageLinks = 100'000;
 // --- Link Resolution Cache ---
 inline constexpr std::size_t MaxResolvedLinkCacheEntries = 8'192;
 inline constexpr std::size_t MaxResolvedLinkCacheKeyBytes = 4U * 1024U * 1024U;
-inline constexpr float DestinationTopMarginPoints = 16.0f;
+inline constexpr float DestinationTopMarginPoints = 12.0f;
 
 // --- PDF Embedded Files ---
 inline constexpr std::size_t MaxEmbeddedBytes = 16U * 1024U * 1024U;

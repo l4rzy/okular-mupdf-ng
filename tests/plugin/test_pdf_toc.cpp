@@ -12,6 +12,7 @@
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/epub_cache.hpp"
 #include "plugin/caching/pdf_toc_cache.hpp"
+#include "worker/engine/pdf/destination.hpp"
 #include "worker/engine/pdf/generated_outline.hpp"
 
 using namespace Mu;
@@ -77,6 +78,24 @@ private slots:
             QCOMPARE(heading->components.size(), static_cast<std::size_t>(depth));
     }
 
+    void destinationTopMargin()
+    {
+        const struct {
+            double y, height, expected;
+        } cases[] = {
+            { 0.5, 800, 0.485 },
+            { 1, 300, 1.0 - 12.0 / 300.0 },
+            { 0.01, 800, 0 },
+            { 0, 800, 0 },
+            { 0.5, 12, 0.5 },
+            { 0.5, 0, 0.5 },
+            { 0.5, std::numeric_limits<double>::infinity(), 0.5 },
+        };
+
+        for (const auto& c : cases)
+            QCOMPARE(Worker::Engine::normalizeDestinationY(c.y, c.height), c.expected);
+    }
+
     void numberedHierarchy()
     {
         std::vector<Worker::Engine::OutlineLine> lines;
@@ -102,6 +121,7 @@ private slots:
         add("11.2 Missing parent", 16, 400);
         const auto nodes = Worker::Engine::buildGeneratedOutline(lines);
         QCOMPARE(nodes.size(), std::size_t(3));
+        QCOMPARE(nodes[0].link.viewport.normalizedY, (150.0 - 12.0) / 800.0);
         QCOMPARE(nodes[0].children[0].children[0].title, std::string("1.2.3 Details"));
         QCOMPARE(nodes[1].children[0].title, std::string("10.2 Section"));
         QCOMPARE(nodes[2].title, std::string("11.2 Missing parent"));
@@ -213,6 +233,29 @@ private slots:
         const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
         QCOMPARE(nodes.size(), std::size_t(2));
         QCOMPARE(nodes[0].title, std::string("Generating a table of contents"));
+    }
+
+    void rejectsPunctuationOnlyUnicodeHeadings_data()
+    {
+        QTest::addColumn<QString>("title");
+        QTest::addColumn<bool>("expectedHeading");
+        QTest::newRow("trademark") << QStringLiteral("™") << false;
+        QTest::newRow("em-dash") << QStringLiteral("—") << false;
+        QTest::newRow("registered-mark") << QStringLiteral("®") << false;
+        QTest::newRow("curly-quote") << QStringLiteral("’") << false;
+        QTest::newRow("unicode-letters") << QStringLiteral("Résumé") << true;
+    }
+
+    void rejectsPunctuationOnlyUnicodeHeadings()
+    {
+        QFETCH(QString, title);
+        QFETCH(bool, expectedHeading);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes a stable body style.", 1, 50, 300, 11, 400, false);
+        layout.add(title.toStdString(), 1, 50, 150, 17, 200);
+
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), static_cast<std::size_t>(expectedHeading));
     }
 
     void incidentalContentsLabel_data()
