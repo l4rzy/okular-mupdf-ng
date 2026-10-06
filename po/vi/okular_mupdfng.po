@@ -231,11 +231,11 @@ msgstr "Hiện thông báo khi hộp cát của worker không thể bảo vệ �
 
 #: src/generator/config/settingswidget.cpp:213
 msgid ""
-"Infer a table of contents from PDF headings when an embedded table of "
+"Infer a table of contents from document headings when an embedded table of "
 "contents is absent. Generation may delay opening. Changes apply when the "
 "document is next opened."
 msgstr ""
-"Tạo mục lục từ các tiêu đề trong PDF khi tài liệu không có mục lục nhúng. "
+"Tạo mục lục từ các tiêu đề trong tài liệu khi tài liệu không có mục lục nhúng. "
 "Việc tạo mục lục có thể làm chậm quá trình mở tài liệu. Thay đổi có hiệu lực "
 "khi mở lại tài liệu."
 
@@ -855,8 +855,8 @@ msgid "Behavior"
 msgstr "Hành vi"
 
 #: rc.cpp:3
-msgid "Generate a table of contents for documents without one"
-msgstr "Tạo mục lục cho tài liệu chưa có mục lục"
+msgid "Generate a table of contents when none is embedded"
+msgstr "Tạo mục lục khi chưa có mục lục nhúng"
 
 #: rc.cpp:4
 msgid "Rendering Quality"

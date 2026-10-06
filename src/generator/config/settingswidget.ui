@@ -48,7 +48,7 @@
           <item>
            <widget class="QCheckBox" name="kcfg_HeuristicSynopsisEnabled">
             <property name="text">
-             <string>Generate a table of contents for documents without one</string>
+             <string>Generate a table of contents when none is embedded</string>
             </property>
            </widget>
           </item>

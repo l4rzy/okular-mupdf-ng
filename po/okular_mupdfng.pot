@@ -221,7 +221,7 @@ msgstr ""
 
 #: src/generator/config/settingswidget.cpp:213
 msgid ""
-"Infer a table of contents from PDF headings when an embedded table of "
+"Infer a table of contents from document headings when an embedded table of "
 "contents is absent. Generation may delay opening. Changes apply when the "
 "document is next opened."
 msgstr ""
@@ -798,7 +798,7 @@ msgid "Behavior"
 msgstr ""
 
 #: rc.cpp:3
-msgid "Generate a table of contents for documents without one"
+msgid "Generate a table of contents when none is embedded"
 msgstr ""
 
 #: rc.cpp:4
