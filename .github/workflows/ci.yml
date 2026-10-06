@@ -1,8 +1,9 @@
-name: Tagged Release CI
+name: Build and Release CI
 
 on:
   push:
-    tags: [ 'v*' ]
+    branches: [ '**' ]
+    tags: [ '**' ]
   workflow_dispatch:
 
 concurrency:
@@ -10,38 +11,37 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  sanitizer:
+    uses: ./.github/workflows/sanitize.yml
+
   package-arch:
-    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-arch.yml
 
   package-deb-ubuntu:
-    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-deb-ubuntu.yml
 
   package-deb-debian:
-    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-deb-debian.yml
 
   package-rpm-tumbleweed:
-    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-rpm-tumbleweed.yml
 
   package-rpm-fedora-arm:
-    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-rpm-fedora-arm.yml
 
   package-rpm-fedora:
-    if: startsWith(github.ref, 'refs/tags/')
     uses: ./.github/workflows/build-rpm-fedora-44.yml
 
   release:
     name: Publish Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [package-arch, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
+    needs: [sanitizer, package-arch, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
     runs-on: ubuntu-26.04
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository with tags

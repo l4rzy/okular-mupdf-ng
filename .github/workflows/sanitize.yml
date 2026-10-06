@@ -1,10 +1,8 @@
 name: Sanitizer
 
-# ASan/LSan/UBSan signal for the sandboxed worker and IPC layers. Tags-only
-# like the other workflows, so every release is memory-safety checked.
+# ASan/LSan/UBSan validation for every CI run, required before publishing releases.
 on:
-  push:
-    tags: ['v*']
+  workflow_call:
   workflow_dispatch:
 
 permissions:
