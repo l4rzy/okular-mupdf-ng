@@ -147,9 +147,14 @@ Model::DocumentSettings readLayoutConfig()
     config.readFile(QStringLiteral("/etc/kderc"));
     readSystem(QStringLiteral("system.kdeglobals"));
     readSystem(QStringLiteral("kdeglobals"));
+#ifndef MU_KCONFIG_LEGACY_PRECEDENCE
     readSystem(QStringLiteral("okular-mupdf-ngrc"));
+#endif
     config.readFile(user + QStringLiteral("/system.kdeglobals"));
     config.readFile(user + QStringLiteral("/kdeglobals"));
+#ifdef MU_KCONFIG_LEGACY_PRECEDENCE
+    readSystem(QStringLiteral("okular-mupdf-ngrc"));
+#endif
     config.readFile(user + QStringLiteral("/okular-mupdf-ngrc"));
     return settingsFor(config);
 }

@@ -13,7 +13,7 @@
 #ifdef HAVE_KDE_CONFIG
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
-#include <KConfig>
+#include <KSharedConfig>
 #endif
 
 namespace Cli = Mu::Tools::Cli;
@@ -113,7 +113,7 @@ private slots:
         QCOMPARE(int(actual.epub.pageSize), pageSize);
 #ifdef HAVE_KDE_CONFIG
         // Read through the actual generated singleton, not a duplicate mapping.
-        MuPDFNGSettings::self()->setConfig(std::make_unique<KConfig>(path, KConfig::SimpleConfig));
+        MuPDFNGSettings::self()->setSharedConfig(KSharedConfig::openConfig(path, KConfig::SimpleConfig));
         Mu::Generator::Config::reloadSettings();
         compareSettings(actual, Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF));
 #endif
@@ -198,9 +198,9 @@ private slots:
         const auto actual = Cli::readLayoutConfig({ first, second });
         QCOMPARE(actual.epub.fontSize, expectedSize);
 #ifdef HAVE_KDE_CONFIG
-        auto config = std::make_unique<KConfig>(second, KConfig::NoGlobals);
+        auto config = KSharedConfig::openConfig(second, KConfig::NoGlobals);
         config->addConfigSources({ first });
-        MuPDFNGSettings::self()->setConfig(std::move(config));
+        MuPDFNGSettings::self()->setSharedConfig(config);
         Mu::Generator::Config::reloadSettings();
         compareSettings(actual, Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF));
 #endif
@@ -235,7 +235,11 @@ private slots:
         if (!qEnvironmentVariableIsSet("MUPDFNG_TEST_CONFIG_PROBE"))
             QSKIP("Invoked in a child with isolated XDG paths");
         const auto actual = Cli::readLayoutConfig();
+#ifdef MU_KCONFIG_LEGACY_PRECEDENCE
+        QCOMPARE(actual.epub.fontSize, 14);
+#else
         QCOMPARE(actual.epub.fontSize, 15);
+#endif
         QCOMPARE(actual.epub.pageSize, Model::EpubPageSize::A5);
         QCOMPARE(actual.epub.fontFamily, Model::EpubFontFamily::Monospace);
         QCOMPARE(actual.epub.customCssBase64, std::string("Ym9keSB7IGNvbG9yOiByZWQ7IH0="));
