@@ -15,13 +15,13 @@
 #include <QTextStream>
 #include <QTimer>
 
-#include "generator/config/settings.hpp"
 #include "plugin/util/document_type.hpp"
 #include "plugin/worker_client.hpp"
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
 #include "shared/compat.hpp"
 #include "tools/cli/cli_args.hpp"
+#include "tools/cli/layout_config.hpp"
 
 #include <cstdio>
 #include <unistd.h>
@@ -259,12 +259,7 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
         return ExitJobFailed;
     }
     if (options.useLayout) {
-        // Refresh the KConfigXT singleton and build worker-facing settings from
-        // the same persisted EPUB layout Okular uses. No session paper color is
-        // available here, so default to white.
-        Mu::Generator::Config::reloadSettings();
-        const Mu::Model::DocumentSettings settings =
-            Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF);
+        const Mu::Model::DocumentSettings settings = readLayoutConfig();
         if (!client.setSettings(settings)) {
             reportError(QStringLiteral("failed to apply EPUB layout settings"));
             return ExitJobFailed;

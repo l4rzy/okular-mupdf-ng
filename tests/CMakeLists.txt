@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-find_package(Qt6 REQUIRED COMPONENTS Core Concurrent Gui Network Test Xml)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Test Xml)
+if(BUILD_OKULAR_GENERATOR)
+    find_package(Qt6 REQUIRED COMPONENTS Concurrent Network)
+endif()
 
 function(add_layer_test target source label)
     add_executable(${target} ${source} ${ARGN})
@@ -13,6 +16,7 @@ function(add_layer_test target source label)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
+if(BUILD_OKULAR_GENERATOR)
 add_executable(test_render_worker support/render_worker.cpp ../src/worker/runtime/worker_server.cpp)
 set_target_properties(test_render_worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(test_render_worker PRIVATE ../src ../src/worker ${MU_GENERATED_INCLUDE_DIR})
@@ -85,6 +89,8 @@ set_tests_properties(test_mupdf PROPERTIES
     TIMEOUT 300
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+endif()
+
 # mupdfng-cli argument parsing: pure decision logic, no worker needed.
 add_layer_test(test_tools_cliargs tools/test_cli_args.cpp tools ../src/tools/cli/cli_args.cpp)
 target_include_directories(test_tools_cliargs PRIVATE ../src ${MU_GENERATED_INCLUDE_DIR})
@@ -117,6 +123,42 @@ set_tests_properties(test_tools_cli_ocr PROPERTIES
     LABELS "tools;integration"
     TIMEOUT 180
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_layer_test(test_tools_cli_export tools/test_cli_export.cpp "tools;integration")
+target_link_libraries(test_tools_cli_export PRIVATE MuPDF::Engine)
+target_compile_definitions(test_tools_cli_export PRIVATE
+    MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
+    TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub")
+add_dependencies(test_tools_cli_export mupdfng-cli mupdfng-worker)
+set_tests_properties(test_tools_cli_export PROPERTIES TIMEOUT 150)
+
+add_layer_test(test_tools_layoutconfig tools/test_layout_config.cpp tools)
+target_link_libraries(test_tools_layoutconfig PRIVATE mupdf_cli_layout)
+if(ENABLE_FORM_JAVASCRIPT)
+    target_compile_definitions(test_tools_layoutconfig PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
+endif()
+if(BUILD_OKULAR_GENERATOR)
+    target_link_libraries(test_tools_layoutconfig PRIVATE mupdf_generator_settings)
+    target_include_directories(test_tools_layoutconfig PRIVATE ${CMAKE_BINARY_DIR}/src)
+    target_compile_definitions(test_tools_layoutconfig PRIVATE HAVE_KDE_CONFIG)
+endif()
+
+add_test(NAME test_cli_link_boundary
+    COMMAND ${CMAKE_COMMAND}
+        -DCLI_PATH=$<TARGET_FILE:mupdfng-cli>
+        -DCLI_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../src/tools/cli
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_cli_link_boundary.cmake)
+set_tests_properties(test_cli_link_boundary PROPERTIES LABELS "tools" TIMEOUT 15)
+
+add_custom_target(check
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    USES_TERMINAL)
+
+if(NOT BUILD_OKULAR_GENERATOR)
+    return()
+endif()
 
 # Plugin behaviour owns persistent cache state and uses a per-test root.
 add_layer_test(test_plugin_ocrcache plugin/test_ocrcache.cpp plugin)
@@ -277,13 +319,6 @@ add_test(NAME test_plugin_boundary
         -DPLUGIN_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../src/plugin
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_plugin_boundary.cmake)
 set_tests_properties(test_plugin_boundary PROPERTIES LABELS "plugin" TIMEOUT 15)
-
-# The normal developer test command runs the MuPDF suites together and keeps
-# the remaining lightweight tests as separate executables.
-add_custom_target(check
-    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    USES_TERMINAL)
 
 add_layer_test(test_plugin_pdf_toc plugin/test_pdf_toc.cpp plugin ../src/worker/engine/pdf/generated_outline.cpp)
 target_include_directories(test_plugin_pdf_toc PRIVATE ../src ../src/worker)

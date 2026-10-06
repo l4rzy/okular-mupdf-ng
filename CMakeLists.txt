@@ -14,22 +14,29 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(PkgConfig REQUIRED)
-find_package(ECM 6.3.0 CONFIG REQUIRED)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${ECM_MODULE_PATH})
-include(FeatureSummary)
-include(KDEInstallDirs)
-
-# ECM_ENABLE_SANITIZERS must be populated before ECMEnableSanitizers runs: the
-# module appends the -fsanitize flags to CMAKE_CXX_FLAGS at include time.
+option(BUILD_OKULAR_GENERATOR "Build the Okular generator and KDE integration" ON)
 option(ENABLE_SANITIZERS "Enable Address/Undefined/LeakSanitizer instrumentation" OFF)
-if(ENABLE_SANITIZERS)
-    set(ECM_ENABLE_SANITIZERS "address;leak;undefined" CACHE STRING
-        "ECM sanitizer set for the release test build" FORCE)
+find_package(PkgConfig REQUIRED)
+include(FeatureSummary)
+if(BUILD_OKULAR_GENERATOR)
+    find_package(ECM 6.3.0 CONFIG REQUIRED)
+    list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+    include(KDEInstallDirs)
+    if(ENABLE_SANITIZERS)
+        set(ECM_ENABLE_SANITIZERS "address;leak;undefined" CACHE STRING
+            "ECM sanitizer set for the release test build" FORCE)
+    endif()
+    include(ECMEnableSanitizers)
+    include(KDECMakeSettings)
+else()
+    include(GNUInstallDirs)
+    set(CMAKE_AUTOMOC ON)
+    if(ENABLE_SANITIZERS)
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
 endif()
-
-include(ECMEnableSanitizers)
-include(KDECMakeSettings)
+include(CTest)
 
 # Only the exact Debug configuration enables verbose diagnostics. None is used
 # by Arch packaging so that makepkg owns the compiler flags; it must still
@@ -61,19 +68,16 @@ set(TESSDATA_DIR "/usr/share/tessdata" CACHE PATH "Path to tesseract tessdata di
 set(SIGNATURE_FONT_DIR "${CMAKE_INSTALL_FULL_DATADIR}/okular-mupdf-ng" CACHE PATH
     "Directory containing the bundled signature font")
 
-find_package(Okular6 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 pkg_check_modules(NSS REQUIRED nss)
 pkg_check_modules(SECCOMP QUIET libseccomp)
-find_package(KF6 REQUIRED COMPONENTS
-    CoreAddons
-    I18n
-    Config
-    ConfigWidgets
-    KIO
-    )
-find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network Xml)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui)
+if(BUILD_OKULAR_GENERATOR)
+    find_package(Okular6 REQUIRED)
+    find_package(KF6 REQUIRED COMPONENTS CoreAddons I18n Config ConfigWidgets KIO)
+    find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network Xml)
+endif()
 
 option(ENABLE_BUILD_TREE_WORKER
     "Embed the build-tree worker for uninstalled developer runs"
@@ -105,8 +109,10 @@ set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/mupdfng-wo
     CACHE PATH "Installed path of the mupdfng-worker binary")
 add_subdirectory(src)
 
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.png"
-    DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps")
+if(BUILD_OKULAR_GENERATOR)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.png"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps")
+endif()
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME copyright)
@@ -135,12 +141,12 @@ message(STATUS "Build-tree worker: ${ENABLE_BUILD_TREE_WORKER}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
 message(STATUS "Signature font directory: ${SIGNATURE_FONT_DIR}")
 message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
-# BUILD_TESTING is defined by ECM's KDECMakeSettings (default ON).
+# Both build profiles expose the standard BUILD_TESTING option.
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/po")
+if(BUILD_OKULAR_GENERATOR AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/po")
     ki18n_install(po)
 endif()
 
@@ -149,7 +155,13 @@ feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
 set(CPACK_PACKAGE_NAME "okular-mupdf-ng")
 set(CPACK_PACKAGE_VERSION "${MU_COMPAT_VERSION}")
 set(CPACK_PACKAGE_CONTACT "l4rzy <me@23ro.org>")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A secure and fast PDF and ePUB backend for Okular")
+if(BUILD_OKULAR_GENERATOR)
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A secure and fast PDF and ePUB backend for Okular")
+    set(MU_APPLICATION_PACKAGE_DEPENDS "okular")
+else()
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Command-line PDF and ePUB tools using a sandboxed MuPDF worker")
+    set(MU_APPLICATION_PACKAGE_DEPENDS "")
+endif()
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/l4rzy/okular-mupdf-ng")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/COPYING")
 set(CPACK_DEBIAN_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
@@ -159,7 +171,7 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${CPACK_PACKAGE_CONTACT}")
 set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION_SUMMARY}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "okular")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "${MU_APPLICATION_PACKAGE_DEPENDS}")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_RPM_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
@@ -171,7 +183,7 @@ set(CPACK_RPM_PACKAGE_VENDOR "l4rzy")
 set(CPACK_RPM_PACKAGE_URL "${CPACK_PACKAGE_HOMEPAGE_URL}")
 set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION_SUMMARY}")
 set(CPACK_RPM_PACKAGE_REQUIRES
-    "okular"
+    "${MU_APPLICATION_PACKAGE_DEPENDS}"
     CACHE STRING "Explicit runtime dependencies for RPM packages")
 set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
 include(CPack)

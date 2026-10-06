@@ -1,8 +1,6 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-add_subdirectory(generator/config)
-
 # Qt-free code shared by the plugin and the sandboxed worker: transport
 # channels, logging, model validation, and the zpp serialization codec.
 add_library(mupdf_shared STATIC
@@ -39,6 +37,13 @@ endif()
 
 add_subdirectory(worker)
 
+add_library(mupdf_cli_layout STATIC tools/cli/layout_config.cpp)
+set_target_properties(mupdf_cli_layout PROPERTIES AUTOMOC OFF POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(mupdf_cli_layout PUBLIC Qt6::Core mupdf_shared)
+if(ENABLE_FORM_JAVASCRIPT)
+    target_compile_definitions(mupdf_cli_layout PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
+endif()
+
 # mupdfng-cli: thin command-line adapter over the plugin worker bridge
 # (WorkerClient). Only WorkerClient crosses the process boundary here.
 add_executable(mupdfng-cli
@@ -51,7 +56,7 @@ target_include_directories(mupdfng-cli PRIVATE
 target_link_libraries(mupdfng-cli PRIVATE
     mupdf_plugin_worker
     mupdf_plugin_util
-    mupdf_generator_settings
+    mupdf_cli_layout
     Qt6::Core
 )
 target_compile_definitions(mupdfng-cli PRIVATE
@@ -121,10 +126,6 @@ if(ENABLE_BUILD_TREE_WORKER)
     )
 endif()
 
-add_library(mupdf_plugin_ocr STATIC plugin/ocr/controller.cpp)
-target_include_directories(mupdf_plugin_ocr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache mupdf_plugin_worker)
-
 add_library(mupdf_plugin_util STATIC
   plugin/util/document_type.cpp
   plugin/util/ocr_options.cpp
@@ -136,6 +137,24 @@ add_library(mupdf_plugin_util STATIC
   plugin/xfdf/import.cpp)
 target_include_directories(mupdf_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mupdf_plugin_util PUBLIC Qt6::Core Qt6::Gui mupdf_shared)
+
+set_target_properties(mupdf_plugin_cache mupdf_plugin_crypto mupdf_plugin_worker mupdf_plugin_util
+    PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MU_DEBUG_BUILD)
+    foreach(target IN ITEMS mupdf_plugin_cache mupdf_plugin_crypto mupdf_plugin_worker mupdf_plugin_util)
+        target_compile_definitions(${target} PRIVATE MU_DEBUG_ENABLED)
+    endforeach()
+endif()
+
+if(NOT BUILD_OKULAR_GENERATOR)
+    return()
+endif()
+
+add_library(mupdf_plugin_ocr STATIC plugin/ocr/controller.cpp)
+target_include_directories(mupdf_plugin_ocr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache mupdf_plugin_worker)
+
+add_subdirectory(generator/config)
 
 add_library(mupdf_generator_placeholder STATIC generator/placeholder.cpp)
 target_include_directories(mupdf_generator_placeholder PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -199,11 +218,7 @@ target_compile_definitions(mupdf_generator_signature PRIVATE
     MUPDF_FORMFIELD_REMOTE_SIGNING
 )
 set_target_properties(
-    mupdf_plugin_cache
-    mupdf_plugin_crypto
-    mupdf_plugin_worker
     mupdf_plugin_ocr
-    mupdf_plugin_util
     mupdf_generator_placeholder
     mupdf_generator_adapters
     mupdf_generator_signature
@@ -211,11 +226,7 @@ set_target_properties(
 )
 
 if(MU_DEBUG_BUILD)
-    target_compile_definitions(mupdf_plugin_cache PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(mupdf_plugin_crypto PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(mupdf_plugin_worker PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdf_plugin_ocr PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(mupdf_plugin_util PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdf_generator_placeholder PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdf_generator_adapters PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdf_generator_signature PRIVATE MU_DEBUG_ENABLED)

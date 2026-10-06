@@ -113,7 +113,8 @@ and the source-tree layout.
 
 - A C++23 compiler (Clang preferred), CMake 3.20 or newer, Ninja, mold, `pkg-config`, and the usual
   build tools.
-- Qt 6, KDE Frameworks 6, and Okular 6 development packages.
+- Qt 6 development packages. The default Okular plugin build also requires
+  KDE Frameworks 6 and Okular 6 development packages.
 - NSS/NSPR for certificate and signature operations.
 - Build dependencies required by MuPDF, including FreeType, HarfBuzz, JPEG,
   JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
