@@ -74,7 +74,6 @@ namespace {
 // the message length.
 constexpr int AutoDurationMs = -1;
 constexpr int ShortNoticeMs = 1500;
-constexpr int BriefNoticeMs = 2000;
 constexpr int NoticeMs = 3000;
 constexpr int WarningMs = 5000;
 constexpr int LongWarningMs = 10000;
@@ -257,10 +256,6 @@ Main::Main(QObject* parent, const QVariantList& args)
                                m_layerRevision.load(),
                                source == Plugin::OCR::Controller::CompletionSource::OcrCompleted);
             });
-    connect(m_ocrController.get(), &Plugin::OCR::Controller::started, this, [this](int page) {
-        if (Config::readOcrSettings().notify)
-            Q_EMIT notice(i18n("Running OCR on page %1...", page + 1), BriefNoticeMs);
-    });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::failed, this, [this](int page) {
         MU_LOG(warning, "Mu::Generator::Main", std::string("OCR failed for page ") + std::to_string(page + 1));
         Q_EMIT warning(i18n("OCR failed for page %1", page + 1), WarningMs);
@@ -1383,10 +1378,8 @@ void Main::applyOcrResult(int page,
     auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
     target->setTextPage(textPage);
     Q_EMIT signalTextGenerationDone(target, textPage);
-    if (notifyCompletion && Config::readOcrSettings().notify)
-        Q_EMIT notice(boxes.isEmpty() ? i18n("OCR completed for page %1. No images with text detected.", page + 1)
-                                      : i18n("OCR completed for page %1", page + 1),
-                      ShortNoticeMs);
+    if (!boxes.isEmpty() && notifyCompletion && Config::readOcrSettings().notify)
+        Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
 }
 
 void Main::refreshLayerText(std::uint64_t revision)
