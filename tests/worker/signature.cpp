@@ -160,7 +160,11 @@ private slots:
                 .certificateNickname = "okular-mupdf-test",
                 .certificateSubjectCommonName = "Okular MuPDF Test Signer",
                 .existingFieldObjectNumber = details.signatures.front().objectNumber,
-                .appearance = { },
+                .appearance = { .elements = ::Mu::Model::SignatureElementSimple,
+                                .reason = "Rejected approval",
+                                .location = "Winnipeg",
+                                .signingDisplayDate = { },
+                                .backgroundImage = { } },
             },
             failingCms,
             ::dup(output.handle()),
@@ -169,6 +173,13 @@ private slots:
         QVERIFY2(!signedPdf, "signing must fail when the CMS callback is rejected");
         QCOMPARE(signingResult, ::Mu::Model::SigningResult::GenericError);
         QVERIFY(!error.empty());
+        error.clear();
+        const auto restored = document.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(restored.signatures.size(), size_t(1));
+        QVERIFY(!restored.signatures.front().signedField);
+        QVERIFY(restored.signatures.front().reason.empty());
+        QVERIFY(restored.signatures.front().location.empty());
     }
 };
 

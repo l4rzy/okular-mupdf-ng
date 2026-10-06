@@ -49,12 +49,11 @@ private slots:
 
         const auto appearance = toModelSignatureAppearance(data, { true, false });
 
-        // Simple renders name, reason, and time only: no labels, DN, graphic
-        // name, or logo, and location is cleared (the worker renders it
-        // unconditionally when present).
+        // Simple renders name, reason, and time while retaining location
+        // for the signature dictionary.
         QCOMPARE(appearance.elements, Mu::Model::SignatureElementSimple);
         QCOMPARE(appearance.reason, std::string("unit test reason"));
-        QVERIFY(appearance.location.empty());
+        QCOMPARE(appearance.location, std::string("unit test location"));
         QVERIFY(appearance.signingEpochSeconds > 0);
         const QDateTime epoch = QDateTime::fromSecsSinceEpoch(appearance.signingEpochSeconds);
         QCOMPARE(QString::fromStdString(appearance.signingDisplayDate),

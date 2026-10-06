@@ -537,7 +537,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                     hasElement(request.appearance.elements, SignatureElement::TextName) ? signerNickname : nullptr,
                     hasElement(request.appearance.elements, SignatureElement::DistinguishedName) ? dn : nullptr,
                     reason,
-                    location,
+                    hasElement(request.appearance.elements, SignatureElement::Location) ? location : nullptr,
                     -1,
                     hasElement(request.appearance.elements, SignatureElement::Labels) ? 1 : 0);
                 signatureText = info ? info : "";
@@ -616,6 +616,20 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
                 // The same epoch drives /M, keeping the dictionary and the appearance consistent.
                 pdf_sign_signature_with_appearance(m_context, widget, signer, signingTime, dlist);
+
+                if (reason || location) {
+                    pdf_obj* field = pdf_annot_obj(m_context, widget);
+                    pdf_obj* signature = pdf_dict_get(m_context, field, PDF_NAME(V));
+                    // Edits after registering a pending signature start a new
+                    // incremental section. Unregister it while adding metadata
+                    // so /ByteRange and the signature remain in the same revision.
+                    pdf_xref_remove_unsaved_signature(m_context, pdf, field);
+                    if (reason)
+                        pdf_dict_put_text_string(m_context, signature, PDF_NAME(Reason), reason);
+                    if (location)
+                        pdf_dict_put_text_string(m_context, signature, PDF_NAME(Location), location);
+                    pdf_xref_store_unsaved_signature(m_context, pdf, field, signer);
+                }
             }
             fz_always(m_context)
             {

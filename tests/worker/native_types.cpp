@@ -284,7 +284,7 @@ private slots:
         const auto requestText = ::Mu::IPC::Debug::request(request);
         QVERIFY(requestText.rfind("[sign] id=12", 0) == 0);
         QVERIFY(requestText.find("sign") != std::string::npos);
-        QVERIFY(requestText.find("elements=\"0x3f\"") != std::string::npos);
+        QVERIFY(requestText.find("elements=\"0x7f\"") != std::string::npos);
         QVERIFY(requestText.find("displayDate=\"Sep 7, 2026 13:14 CDT\"") != std::string::npos);
         QVERIFY(requestText.find("password") == std::string::npos);
         const Model::NotificationMessage notification { Model::SignInput { 4, "nonce", "cert", { 0, 1, 255 } } };

@@ -463,7 +463,11 @@ private slots:
                                                           .certificateNickname = "okular-mupdf-test",
                                                           .certificateSubjectCommonName = "Okular MuPDF Test Signer",
                                                           .existingFieldObjectNumber = -1,
-                                                          .appearance = { } },
+                                                          .appearance = { .elements = Model::SignatureElementSimple,
+                                                                          .reason = "IPC signing test",
+                                                                          .location = "Winnipeg",
+                                                                          .signingDisplayDate = { },
+                                                                          .backgroundImage = { } } },
                                      { },
                                      target);
             QCOMPARE(result.result, Model::SigningResult::Success);
@@ -476,6 +480,8 @@ private slots:
                                             [](const auto& field) { return field.signedField; });
             QVERIFY(found != details.signatures.cend());
             auto field = *found;
+            QCOMPARE(field.reason, std::string("IPC signing test"));
+            QCOMPARE(field.location, std::string("Winnipeg"));
             Plugin::Crypto::validateDetachedPdfSignature(field, signedSource, false);
             QCOMPARE(field.signatureStatus, Model::SignatureStatus::Valid);
             transport.close();
@@ -1419,8 +1425,34 @@ private slots:
         QVERIFY2(foundSignature, "PDF contains no signed signature field");
     }
 
+    void writesPdfWithTrustedEmailSigningChain_data()
+    {
+        QTest::addColumn<QString>("reason");
+        QTest::addColumn<QString>("location");
+        QTest::addColumn<quint8>("elements");
+        QTest::newRow("ascii") << QStringLiteral("Okular signing test") << QStringLiteral("Test location")
+                               << ::Mu::Model::SignatureElementDefault;
+        QTest::newRow("unicode") << QStringLiteral("承認 — café") << QStringLiteral("Montréal 東京")
+                                 << ::Mu::Model::SignatureElementDefault;
+        QTest::newRow("reason-only") << QStringLiteral("Approval") << QString { }
+                                     << ::Mu::Model::SignatureElementDefault;
+        QTest::newRow("location-only") << QString { } << QStringLiteral("Winnipeg")
+                                       << ::Mu::Model::SignatureElementDefault;
+        QTest::newRow("no-metadata") << QString { } << QString { } << ::Mu::Model::SignatureElementDefault;
+        QTest::newRow("simple") << QStringLiteral("Okular signing test") << QStringLiteral("Test location")
+                                << ::Mu::Model::SignatureElementSimple;
+        QTest::newRow("simple-unicode") << QStringLiteral("承認 — café") << QStringLiteral("Montréal 東京")
+                                        << ::Mu::Model::SignatureElementSimple;
+        QTest::newRow("pdf-delimiters") << QStringLiteral("Approval (final) \\ /Filter\n/Contents")
+                                        << QStringLiteral("Office (1) \\ /ByteRange")
+                                        << ::Mu::Model::SignatureElementSimple;
+    }
+
     void writesPdfWithTrustedEmailSigningChain()
     {
+        QFETCH(QString, reason);
+        QFETCH(QString, location);
+        QFETCH(quint8, elements);
         const QString sourcePath = QStringLiteral(TEST_SIGNATURE_PDF_DIR) + QStringLiteral("/pdfreference1.0.pdf");
         QFile source(sourcePath);
         Mu::Worker::Engine::PdfDocument document;
@@ -1440,8 +1472,9 @@ private slots:
                 .certificateNickname = "okular-mupdf-test",
                 .certificateSubjectCommonName = "Okular MuPDF Test Signer",
                 .existingFieldObjectNumber = -1,
-                .appearance = { .reason = "Okular signing test",
-                                .location = "Test location",
+                .appearance = { .elements = elements,
+                                .reason = reason.toStdString(),
+                                .location = location.toStdString(),
                                 .signingDisplayDate = { },
                                 .backgroundImage = { } },
             },
@@ -1465,6 +1498,8 @@ private slots:
                 continue;
             foundSignature = true;
             QVERIFY(field.partialName.starts_with("OkularMuPDFSignature"));
+            QCOMPARE(field.reason, reason.toStdString());
+            QCOMPARE(field.location, location.toStdString());
             QVERIFY(!field.cmsSignature.empty());
             QVERIFY(field.byteRange[0] == 0);
             QVERIFY(field.byteRange[1] >= 0);
@@ -1480,6 +1515,18 @@ private slots:
             QCOMPARE(field.certificateStatus, ::Mu::Model::CertificateStatus::Trusted);
             QCOMPARE(field.hashAlgorithm, ::Mu::Model::HashAlgorithm::Sha256);
             QVERIFY(field.signsTotalDocument);
+            if (!location.isEmpty()) {
+                QVERIFY(signedSource.seek(0));
+                QByteArray tampered = signedSource.readAll();
+                const auto locationOffset = tampered.lastIndexOf("/Location");
+                QVERIFY(locationOffset >= 0);
+                tampered[locationOffset + 1] = 'X';
+                QBuffer tamperedSource(&tampered);
+                QVERIFY(tamperedSource.open(QIODevice::ReadOnly));
+                auto tamperedField = field;
+                ::Mu::Plugin::Crypto::validateDetachedPdfSignature(tamperedField, tamperedSource);
+                QCOMPARE(tamperedField.signatureStatus, ::Mu::Model::SignatureStatus::Invalid);
+            }
         }
         QVERIFY(foundSignature);
     }
@@ -1532,12 +1579,19 @@ private slots:
         QVERIFY(text.find("Date:") != std::string::npos);
         QVERIFY(text.find("Digitally signed by") == std::string::npos);
         QVERIFY(text.find("DN:") == std::string::npos);
+        QVERIFY(text.find("Test location") == std::string::npos);
+
+        const std::string simpleText = sign(::Mu::Model::SignatureElementSimple);
+        QVERIFY2(!simpleText.empty(), "appearance extraction failed");
+        QVERIFY(simpleText.find("Okular signing test") != std::string::npos);
+        QVERIFY(simpleText.find("Test location") == std::string::npos);
 
         const std::string defaultText = sign(::Mu::Model::SignatureElementDefault);
         QVERIFY2(!defaultText.empty(), "appearance extraction failed");
         QVERIFY(defaultText.find("Digitally signed by") != std::string::npos);
         QVERIFY(defaultText.find("DN:") != std::string::npos);
         QVERIFY(defaultText.find("Date:") != std::string::npos);
+        QVERIFY(defaultText.find("Test location") != std::string::npos);
     }
 
     void newSignatureDoesNotLockExistingFormFields()
@@ -1623,7 +1677,11 @@ private slots:
                          .certificateNickname = "okular-mupdf-test",
                          .certificateSubjectCommonName = "Okular MuPDF Test Signer",
                          .existingFieldObjectNumber = unsignedFields.front().objectNumber,
-                         .appearance = { },
+                         .appearance = { .elements = ::Mu::Model::SignatureElementSimple,
+                                         .reason = "Existing field approval",
+                                         .location = "Winnipeg",
+                                         .signingDisplayDate = { },
+                                         .backgroundImage = { } },
                      },
                      createCms,
                      ::dup(output.handle()),
@@ -1639,6 +1697,12 @@ private slots:
         QCOMPARE(signedFields.size(), size_t(1));
         QVERIFY(signedFields.front().signedField);
         QCOMPARE(signedFields.front().partialName, std::string("Approval"));
+        auto signedField = signedFields.front();
+        QCOMPARE(signedField.reason, std::string("Existing field approval"));
+        QCOMPARE(signedField.location, std::string("Winnipeg"));
+        ::Mu::Plugin::Crypto::validateDetachedPdfSignature(signedField, signedSource);
+        QCOMPARE(signedField.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
+        QVERIFY(signedField.signsTotalDocument);
         const auto signedMetadata = signedDocument.metadata({ "signatureCount" }, &error);
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(signedMetadata.values.at("signatureCount"), std::string("1"));

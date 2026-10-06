@@ -958,15 +958,16 @@ enum class SignatureElement : std::uint8_t {
     TextName = 1 << 3, // signer nickname as a text line
     GraphicName = 1 << 4, // signer common name as the left graphic text
     Logo = 1 << 5,
+    Location = 1 << 6,
 };
 
 inline constexpr std::uint8_t SignatureElementDefault = static_cast<std::uint8_t>(SignatureElement::Labels)
     | static_cast<std::uint8_t>(SignatureElement::DistinguishedName) | static_cast<std::uint8_t>(SignatureElement::Date)
     | static_cast<std::uint8_t>(SignatureElement::TextName) | static_cast<std::uint8_t>(SignatureElement::GraphicName)
-    | static_cast<std::uint8_t>(SignatureElement::Logo);
+    | static_cast<std::uint8_t>(SignatureElement::Logo) | static_cast<std::uint8_t>(SignatureElement::Location);
 
-/// Simple profile: signer name, reason, and time only. Reason renders
-/// unconditionally in the worker; location must be cleared by the caller.
+/// Simple profile: signer name, reason, and time only. Location remains
+/// available as signature metadata but is omitted from the appearance.
 inline constexpr std::uint8_t SignatureElementSimple =
     static_cast<std::uint8_t>(SignatureElement::TextName) | static_cast<std::uint8_t>(SignatureElement::Date);
 
@@ -975,6 +976,7 @@ struct SignatureAppearance {
     /// Bitmask of SignatureElement values included in the appearance stream.
     std::uint8_t elements = SignatureElementDefault;
     std::string reason;
+    /// Embedded in /Location regardless of whether the Location element is rendered.
     std::string location;
     /// Signing timestamp (epoch seconds) shared by /M and the appearance; 0 = worker uses time(NULL).
     std::int64_t signingEpochSeconds = 0;

@@ -14,7 +14,7 @@ namespace Mu::Generator::Conversion {
 /// Builds the shared appearance payload for a signing request. Captures the
 /// signing instant once so the worker's /M and the appearance text always
 /// describe the same timestamp. The simple profile renders only name, reason,
-/// and time; location is cleared because the worker renders it unconditionally.
+/// and time; location is retained as signature metadata.
 [[nodiscard]] Model::SignatureAppearance toModelSignatureAppearance(const Okular::NewSignatureData& data,
                                                                     const Config::SignatureAppearanceOptions& options);
 
