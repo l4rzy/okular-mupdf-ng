@@ -99,7 +99,7 @@ jobs:
           mv "$package" "build/packages/${package_name}-${package_version}-${package_release}.tumbleweed.${package_architecture}.rpm"
 
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel "${CTEST_PARALLEL_LEVEL:-4}"
 
       - name: Validate RPM package
         run: |

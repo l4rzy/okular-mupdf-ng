@@ -85,7 +85,7 @@ cmake --build "$BUILD_DIR" -j$(nproc)
 
 if [ "$RUN_TESTS" -eq 1 ]; then
   echo "==> Running tests..."
-  ctest --test-dir "$BUILD_DIR" --output-on-failure
+  ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel "${CTEST_PARALLEL_LEVEL:-4}"
 fi
 
 echo "==> Build finished successfully."

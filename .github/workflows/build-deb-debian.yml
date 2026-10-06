@@ -85,7 +85,7 @@ jobs:
           mv "$package" "build/packages/${package_name}_${package_version}_${package_architecture}_debian-13.deb"
 
       - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel "${CTEST_PARALLEL_LEVEL:-4}"
 
       - name: Validate Debian package
         run: |

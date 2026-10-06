@@ -83,11 +83,29 @@ if(MU_DEBUG_BUILD)
 endif()
 add_dependencies(test_mupdf mupdfng-worker mupdfng-cli test_render_worker)
 
-add_test(NAME test_mupdf COMMAND test_mupdf)
-set_tests_properties(test_mupdf PROPERTIES
-    LABELS "mupdf;worker;plugin;signature;integration"
-    TIMEOUT 300
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set(MUPDF_TEST_SUITES
+    "test_worker_document|worker"
+    "test_worker_page|worker"
+    "test_worker_signature|worker,signature"
+    "test_plugin_signature|plugin,signature"
+    "test_worker_ocr|worker"
+    "test_worker_epub|worker"
+    "test_worker_mobi|worker"
+    "test_worker_native_types|worker"
+    "test_worker_native_runtime|worker,security"
+    "test_integration_ipc|integration,plugin,worker")
+foreach(suite_definition IN LISTS MUPDF_TEST_SUITES)
+    string(REPLACE "|" ";" suite_fields "${suite_definition}")
+    list(GET suite_fields 0 suite_name)
+    list(GET suite_fields 1 suite_labels)
+    string(REPLACE "," ";" suite_labels "${suite_labels}")
+    add_test(NAME "test_mupdf_${suite_name}"
+        COMMAND test_mupdf --suite "${suite_name}")
+    set_tests_properties("test_mupdf_${suite_name}" PROPERTIES
+        LABELS "mupdf;${suite_labels}"
+        TIMEOUT 300
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endforeach()
 
 endif()
 
