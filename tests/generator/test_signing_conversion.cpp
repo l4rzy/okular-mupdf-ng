@@ -11,6 +11,8 @@
 
 using Mu::Generator::Conversion::toModelSignatureAppearance;
 
+using Mu::Generator::Config::SignatureEmblem;
+
 class TestGeneratorSigningConversion : public QObject {
     Q_OBJECT
 
@@ -24,11 +26,14 @@ private slots:
         data.setReason("unit test reason");
         data.setLocation("unit test location");
 
-        const auto appearance = toModelSignatureAppearance(data, { });
+        const auto appearanceResult = toModelSignatureAppearance(data, { });
+        QVERIFY(appearanceResult);
+        const auto& appearance = *appearanceResult;
 
-        // Every element is rendered by default (parity with the previous
-        // hardcoded MuPDF default appearance).
-        QCOMPARE(appearance.elements, Mu::Model::SignatureElementDefault);
+        // Every element is rendered by default, using the Okular emblem.
+        QCOMPARE(appearance.elements,
+                 Mu::Model::SignatureElementDefault & ~static_cast<std::uint8_t>(Mu::Model::SignatureElement::Logo));
+        QVERIFY(!appearance.emblemImage.empty());
         QCOMPARE(appearance.reason, std::string("unit test reason"));
         QCOMPARE(appearance.location, std::string("unit test location"));
         QVERIFY(appearance.signingEpochSeconds > 0);
@@ -47,7 +52,9 @@ private slots:
         data.setReason("unit test reason");
         data.setLocation("unit test location");
 
-        const auto appearance = toModelSignatureAppearance(data, { true, false });
+        const auto appearanceResult = toModelSignatureAppearance(data, { true, false });
+        QVERIFY(appearanceResult);
+        const auto& appearance = *appearanceResult;
 
         // Simple renders name, reason, and time while retaining location
         // for the signature dictionary.
@@ -66,7 +73,9 @@ private slots:
         data.setCertNickname("test-cert");
         data.setCertSubjectCommonName("Test Signer");
 
-        const auto appearance = toModelSignatureAppearance(data, { false, true });
+        const auto appearanceResult = toModelSignatureAppearance(data, { false, true });
+        QVERIFY(appearanceResult);
+        const auto& appearance = *appearanceResult;
 
         QVERIFY(appearance.signingEpochSeconds > 0);
         const QDateTime utc = QDateTime::fromSecsSinceEpoch(appearance.signingEpochSeconds, QTimeZone::UTC);
@@ -75,16 +84,49 @@ private slots:
         QVERIFY(QString::fromStdString(appearance.signingDisplayDate).endsWith(QStringLiteral("UTC")));
     }
 
+    void selectsSignatureEmblem_data()
+    {
+        QTest::addColumn<bool>("simple");
+        QTest::addColumn<SignatureEmblem>("emblem");
+        QTest::newRow("complete-none") << false << SignatureEmblem::None;
+        QTest::newRow("complete-mupdf") << false << SignatureEmblem::MuPDF;
+        QTest::newRow("simple-none") << true << SignatureEmblem::None;
+        QTest::newRow("simple-mupdf") << true << SignatureEmblem::MuPDF;
+        QTest::newRow("complete-okular") << false << SignatureEmblem::Okular;
+        QTest::newRow("simple-okular") << true << SignatureEmblem::Okular;
+    }
+
+    void selectsSignatureEmblem()
+    {
+        QFETCH(bool, simple);
+        QFETCH(SignatureEmblem, emblem);
+        Mu::Generator::Config::SignatureAppearanceOptions options;
+        options.simple = simple;
+        options.emblem = emblem;
+        const auto appearanceResult = toModelSignatureAppearance(Okular::NewSignatureData { }, options);
+        QVERIFY(appearanceResult);
+        const auto& appearance = *appearanceResult;
+        QCOMPARE(!appearance.emblemImage.empty(), emblem == SignatureEmblem::Okular);
+        const auto logo = static_cast<std::uint8_t>(Mu::Model::SignatureElement::Logo);
+        QCOMPARE((appearance.elements & logo) != 0, emblem == SignatureEmblem::MuPDF);
+        const auto profile = simple ? Mu::Model::SignatureElementSimple : Mu::Model::SignatureElementDefault;
+        QCOMPARE(appearance.elements & ~logo, profile & ~logo);
+    }
+
     void passesDrawBorderOptionToAppearance()
     {
         Okular::NewSignatureData data;
         data.setCertNickname("test-cert");
         data.setCertSubjectCommonName("Test Signer");
 
-        const auto bordered = toModelSignatureAppearance(data, { false, false, true });
+        const auto borderedResult = toModelSignatureAppearance(data, { false, false, true });
+        QVERIFY(borderedResult);
+        const auto& bordered = *borderedResult;
         QVERIFY(bordered.drawBorder);
 
-        const auto plain = toModelSignatureAppearance(data, { });
+        const auto plainResult = toModelSignatureAppearance(data, { });
+        QVERIFY(plainResult);
+        const auto& plain = *plainResult;
         QVERIFY(!plain.drawBorder);
     }
 

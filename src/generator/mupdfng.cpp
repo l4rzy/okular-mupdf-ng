@@ -1728,7 +1728,9 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
         if (commonName.isEmpty())
             return { Okular::KeyMissing, QStringLiteral("Signing certificate was not found") };
         auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
-        appearance.backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
+        if (!appearance)
+            return { Okular::GenericSigningError, QStringLiteral("Could not render signature emblem") };
+        appearance->backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
             data.backgroundImagePath(), rect.width(), rect.height());
         const auto result = m_worker.sign({ { },
                                             data.page() >= 0 ? data.page() : 0,
@@ -1736,7 +1738,7 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
                                             data.certNickname().toStdString(),
                                             commonName.toStdString(),
                                             -1,
-                                            std::move(appearance) },
+                                            std::move(*appearance) },
                                           data.password(),
                                           rFilename);
         switch (result.result) {

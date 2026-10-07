@@ -125,7 +125,9 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
             const QString imagePath =
                 !data.backgroundImagePath().isEmpty() ? data.backgroundImagePath() : signature->imagePath();
             auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
-            appearance.backgroundImage =
+            if (!appearance)
+                return { Okular::GenericSigningError, QStringLiteral("Could not render signature emblem") };
+            appearance->backgroundImage =
                 Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
             return signingResult(backend->sign({ { },
                                                  page,
@@ -133,7 +135,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                                                  data.certNickname().toStdString(),
                                                  commonName.toStdString(),
                                                  -1,
-                                                 std::move(appearance) },
+                                                 std::move(*appearance) },
                                                data.password(),
                                                fileName));
         };

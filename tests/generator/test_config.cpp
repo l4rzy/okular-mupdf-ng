@@ -20,6 +20,8 @@
 #include "mupdfngsettings.h"
 #include "shared/model/validation.hpp"
 
+using Mu::Generator::Config::SignatureEmblem;
+
 class TestGeneratorConfig : public QObject {
     Q_OBJECT
 
@@ -307,23 +309,45 @@ private slots:
         }
     }
 
+    void defaultsSignatureEmblemToOkular()
+    {
+        QCOMPARE(MuPDFNGSettings::signatureEmblem(), MuPDFNGSettings::EnumSignatureEmblem::Okular);
+        QCOMPARE(::Mu::Generator::Config::readSignatureAppearance().emblem, SignatureEmblem::Okular);
+    }
+
+    void readsSignatureAppearanceOptions_data()
+    {
+        QTest::addColumn<int>("emblem");
+        QTest::newRow("none") << int(MuPDFNGSettings::EnumSignatureEmblem::None);
+        QTest::newRow("mupdf") << int(MuPDFNGSettings::EnumSignatureEmblem::MuPDF);
+        QTest::newRow("okular") << int(MuPDFNGSettings::EnumSignatureEmblem::Okular);
+    }
+
     void readsSignatureAppearanceOptions()
     {
+        QFETCH(int, emblem);
         const int originalProfile = MuPDFNGSettings::signatureProfile();
+        const int originalEmblem = MuPDFNGSettings::signatureEmblem();
         const bool originalUseUtc = MuPDFNGSettings::signatureUseUtc();
         const bool originalDrawBorder = MuPDFNGSettings::signatureDrawBorder();
         MuPDFNGSettings::setSignatureProfile(MuPDFNGSettings::EnumSignatureProfile::Simple);
         MuPDFNGSettings::setSignatureUseUtc(true);
         MuPDFNGSettings::setSignatureDrawBorder(true);
+        MuPDFNGSettings::setSignatureEmblem(emblem);
+        MuPDFNGSettings::self()->save();
+        ::Mu::Generator::Config::reloadSettings();
 
         const auto options = ::Mu::Generator::Config::readSignatureAppearance();
         MuPDFNGSettings::setSignatureProfile(originalProfile);
         MuPDFNGSettings::setSignatureUseUtc(originalUseUtc);
         MuPDFNGSettings::setSignatureDrawBorder(originalDrawBorder);
+        MuPDFNGSettings::setSignatureEmblem(originalEmblem);
+        MuPDFNGSettings::self()->save();
 
         QVERIFY(options.simple);
         QVERIFY(options.useUtc);
         QVERIFY(options.drawBorder);
+        QCOMPARE(options.emblem, static_cast<SignatureEmblem>(emblem));
     }
 
     void selectsInstalledOcrModel()

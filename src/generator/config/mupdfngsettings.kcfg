@@ -124,6 +124,14 @@
         <choice name="Simple" />
       </choices>
     </entry>
+    <entry key="SignatureEmblem" type="Enum">
+      <default>Okular</default>
+      <choices>
+        <choice name="None" />
+        <choice name="MuPDF" />
+        <choice name="Okular" />
+      </choices>
+    </entry>
     <entry key="SignatureUseUtc" type="Bool">
       <default>false</default>
     </entry>

@@ -14,11 +14,12 @@
 
 using Mu::Generator::Config::buildSignaturePreview;
 using Mu::Generator::Config::renderSignaturePreview;
+using Mu::Generator::Config::SignatureEmblem;
 using Mu::Generator::Config::SignaturePreview;
 
 QImage renderLines(const QStringList& lines)
 {
-    return renderSignaturePreview({ { }, lines }, QFont(), 1.0);
+    return renderSignaturePreview({ { }, lines, SignatureEmblem::None }, QFont(), 1.0);
 }
 
 class TestGeneratorSignaturePreview : public QObject {
@@ -31,6 +32,7 @@ private slots:
         const QDateTime now = QDateTime::fromSecsSinceEpoch(1757248440);
 
         const auto complete = buildSignaturePreview(false, false, now);
+        QCOMPARE(complete.emblem, SignatureEmblem::Okular);
         QCOMPARE(complete.leftText, QStringLiteral("Jane Doe"));
         QCOMPARE(complete.rightLines.size(), 5);
         QCOMPARE(complete.rightLines.at(0), QStringLiteral("Digitally signed by Jane Doe"));
@@ -41,6 +43,7 @@ private slots:
                  QStringLiteral("Date: ") + Mu::Plugin::Util::SigningTimestamp::displayDate(now.toLocalTime()));
 
         const auto simple = buildSignaturePreview(true, true, now);
+        QCOMPARE(simple.emblem, SignatureEmblem::Okular);
         QVERIFY(simple.leftText.isEmpty());
         QCOMPARE(simple.rightLines.size(), 3);
         QCOMPARE(simple.rightLines.at(0), QStringLiteral("Jane Doe"));
@@ -68,6 +71,46 @@ private slots:
         QCOMPARE(image.pixelColor(0, 0), QColor(0x9a, 0x9a, 0x9a));
         QCOMPARE(image.pixelColor(5, 5), QColor(Qt::white));
         QCOMPARE(image.pixelColor(image.width() - 1, image.height() - 1), QColor(0x9a, 0x9a, 0x9a));
+    }
+
+    void rendersSelectedEmblem_data()
+    {
+        QTest::addColumn<bool>("simple");
+        QTest::addColumn<SignatureEmblem>("emblem");
+        QTest::addColumn<qreal>("ratio");
+        QTest::newRow("complete-none") << false << SignatureEmblem::None << qreal(1);
+        QTest::newRow("complete-mupdf") << false << SignatureEmblem::MuPDF << qreal(1);
+        QTest::newRow("simple-none") << true << SignatureEmblem::None << qreal(1);
+        QTest::newRow("simple-mupdf") << true << SignatureEmblem::MuPDF << qreal(1);
+        QTest::newRow("complete-okular") << false << SignatureEmblem::Okular << qreal(1);
+        QTest::newRow("simple-okular") << true << SignatureEmblem::Okular << qreal(1);
+        QTest::newRow("simple-mupdf-high-dpi") << true << SignatureEmblem::MuPDF << qreal(2);
+        QTest::newRow("complete-okular-fractional-dpi") << false << SignatureEmblem::Okular << qreal(1.5);
+        QTest::newRow("simple-okular-high-dpi") << true << SignatureEmblem::Okular << qreal(2);
+    }
+
+    void rendersSelectedEmblem()
+    {
+        QFETCH(bool, simple);
+        QFETCH(SignatureEmblem, emblem);
+        QFETCH(qreal, ratio);
+        const auto preview = buildSignaturePreview(simple, false, QDateTime::fromSecsSinceEpoch(1757248440), emblem);
+        QCOMPARE(preview.emblem, emblem);
+        const auto image = renderSignaturePreview(preview, QFont(), ratio);
+        QVERIFY(!image.isNull());
+        bool hasEmblemColor = false;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x)
+                hasEmblemColor = hasEmblemColor
+                    || (image.pixelColor(x, y).red() != image.pixelColor(x, y).green()
+                        || image.pixelColor(x, y).green() != image.pixelColor(x, y).blue());
+        }
+        QCOMPARE(hasEmblemColor, emblem != SignatureEmblem::None);
+        if (emblem == SignatureEmblem::Okular) {
+            const auto mupdf =
+                buildSignaturePreview(simple, false, QDateTime::fromSecsSinceEpoch(1757248440), SignatureEmblem::MuPDF);
+            QVERIFY(image != renderSignaturePreview(mupdf, QFont(), ratio));
+        }
     }
 
     void twoPaneLayoutIsWiderThanSinglePane()

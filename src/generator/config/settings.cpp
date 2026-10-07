@@ -227,12 +227,17 @@ OcrSettings readOcrSettings()
     return settings;
 }
 
+static_assert(static_cast<int>(SignatureEmblem::None) == MuPDFNGSettings::EnumSignatureEmblem::None);
+static_assert(static_cast<int>(SignatureEmblem::MuPDF) == MuPDFNGSettings::EnumSignatureEmblem::MuPDF);
+static_assert(static_cast<int>(SignatureEmblem::Okular) == MuPDFNGSettings::EnumSignatureEmblem::Okular);
+
 SignatureAppearanceOptions readSignatureAppearance()
 {
     SignatureAppearanceOptions options;
     options.simple = MuPDFNGSettings::signatureProfile() == MuPDFNGSettings::EnumSignatureProfile::Simple;
     options.useUtc = MuPDFNGSettings::signatureUseUtc();
     options.drawBorder = MuPDFNGSettings::signatureDrawBorder();
+    options.emblem = static_cast<SignatureEmblem>(MuPDFNGSettings::signatureEmblem());
     return options;
 }
 

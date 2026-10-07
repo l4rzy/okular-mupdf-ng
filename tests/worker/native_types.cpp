@@ -7,6 +7,8 @@
 #include "shared/protocol/ipc_debug.hpp"
 #include "shared/protocol/limits.hpp"
 #include "shared/protocol/zpp_codec.hpp"
+#include <QBuffer>
+#include <QImage>
 #include <QTest>
 #include <cmath>
 #include <mupdf/fitz/version.h>
@@ -598,6 +600,70 @@ private slots:
         QVERIFY(isValidSignRequest(sign, &reason));
         sign.appearance.elements = 0x80;
         QVERIFY(!isValidSignRequest(sign, &reason));
+    }
+
+    void validatesSignatureEmblem_data()
+    {
+        using namespace Mu;
+        QTest::addColumn<QByteArray>("png");
+        QTest::addColumn<bool>("nativeLogo");
+        QTest::addColumn<bool>("valid");
+        QImage image(2, 2, QImage::Format_ARGB32);
+        image.fill(Qt::blue);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QTest::newRow("none") << QByteArray { } << false << true;
+        QTest::newRow("native") << QByteArray { } << true << true;
+        QTest::newRow("custom") << png << false << true;
+        QTest::newRow("both") << png << true << false;
+        QTest::newRow("not-png") << QByteArray("not a PNG") << false << false;
+        QTest::newRow("truncated-header") << png.left(32) << false << false;
+        auto invalid = png;
+        invalid[12] = 'X';
+        QTest::newRow("wrong-header") << invalid << false << false;
+        invalid = png;
+        for (int i = 16; i < 20; ++i)
+            invalid[i] = 0;
+        QTest::newRow("zero-width") << invalid << false << false;
+        invalid = png;
+        invalid[18] = 4;
+        invalid[19] = 1;
+        QTest::newRow("oversized-width") << invalid << false << false;
+        invalid = png;
+        invalid[22] = 4;
+        invalid[23] = 1;
+        QTest::newRow("oversized-height") << invalid << false << false;
+        invalid = png;
+        invalid.resize(Limit::MaxSignatureEmblemBytes + 1);
+        QTest::newRow("oversized-bytes") << invalid << false << false;
+    }
+
+    void validatesSignatureEmblem()
+    {
+        using namespace Mu;
+        QFETCH(QByteArray, png);
+        QFETCH(bool, nativeLogo);
+        QFETCH(bool, valid);
+        Model::SignRequest request;
+        request.file.transferId = 1;
+        request.page = 0;
+        request.rectangle = { 0.1, 0.1, 0.9, 0.9 };
+        request.appearance.elements = nativeLogo ? Model::SignatureElementDefault : Model::SignatureElementSimple;
+        request.appearance.emblemImage.assign(png.begin(), png.end());
+        QCOMPARE(Model::isValidSignRequest(request), valid);
+        if (valid) {
+            const Model::RequestMessage message { 1, request };
+            std::string error;
+            const auto bytes = IPC::ZppCodec::encode(message, &error);
+            QVERIFY2(bytes, error.c_str());
+            Model::RequestMessage decoded;
+            QVERIFY2(IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
+            const auto& appearance = std::get<Model::SignRequest>(decoded.payload).appearance;
+            QCOMPARE(appearance.elements, request.appearance.elements);
+            QCOMPARE(appearance.emblemImage, request.appearance.emblemImage);
+        }
     }
 
     void renderRequestsFitSharedFrameBudget()

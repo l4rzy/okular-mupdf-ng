@@ -160,6 +160,7 @@ See [SECURITY.md](SECURITY.md) for the security contact.
 - [Okular Poppler Backend](https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler)
 - [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf)
 - [Zathura MuPDF Backend](https://github.com/pwmt/zathura-pdf-mupdf)
+- [Sioyek](https://github.com/ahrm/sioyek)
 
 ## License
 

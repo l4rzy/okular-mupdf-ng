@@ -3,16 +3,26 @@
 
 #include "generator/conversion/signing.hpp"
 
-#include "plugin/util/signature_image.hpp"
+#include "generator/config/okular_emblem.hpp"
 #include "plugin/util/signing_timestamp.hpp"
 
 namespace Mu::Generator::Conversion {
 
-Model::SignatureAppearance toModelSignatureAppearance(const Okular::NewSignatureData& data,
-                                                      const Config::SignatureAppearanceOptions& options)
+std::optional<Model::SignatureAppearance> toModelSignatureAppearance(const Okular::NewSignatureData& data,
+                                                                     const Config::SignatureAppearanceOptions& options)
 {
     Model::SignatureAppearance appearance;
     appearance.elements = options.simple ? Model::SignatureElementSimple : Model::SignatureElementDefault;
+    const auto logo = static_cast<std::uint8_t>(Model::SignatureElement::Logo);
+    if (options.emblem == Config::SignatureEmblem::Okular) {
+        appearance.emblemImage = Config::encodeOkularEmblem();
+        if (appearance.emblemImage.empty())
+            return std::nullopt;
+    }
+    if (options.emblem == Config::SignatureEmblem::MuPDF)
+        appearance.elements |= logo;
+    else
+        appearance.elements &= static_cast<std::uint8_t>(~logo);
     appearance.reason = data.reason().toStdString();
     appearance.location = data.location().toStdString();
     appearance.drawBorder = options.drawBorder;

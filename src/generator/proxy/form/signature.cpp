@@ -205,7 +205,9 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
         return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
     }
     auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
-    appearance.backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
+    if (!appearance)
+        return { Okular::GenericSigningError, QStringLiteral("Could not render signature emblem") };
+    appearance->backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
         data.backgroundImagePath(), rect().width(), rect().height());
     const auto result = m_backend->sign({ { },
                                           m_data.page,
@@ -213,7 +215,7 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
                                           data.certNickname().toStdString(),
                                           data.certSubjectCommonName().toStdString(),
                                           m_data.objectNumber,
-                                          std::move(appearance) },
+                                          std::move(*appearance) },
                                         data.password(),
                                         newPath);
     switch (result.result) {

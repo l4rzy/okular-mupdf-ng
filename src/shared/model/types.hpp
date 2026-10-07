@@ -986,6 +986,8 @@ struct SignatureAppearance {
     std::vector<std::uint8_t> backgroundImage;
     /// Draw a 1px border around the signature box.
     bool drawBorder = false;
+    /// Optional PNG watermark behind signature text; mutually exclusive with Logo.
+    std::vector<std::uint8_t> emblemImage { };
 };
 
 /// Creates or updates a PDF signature widget and requests CMS signing.

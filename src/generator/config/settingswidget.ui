@@ -632,6 +632,42 @@
            </layout>
           </item>
           <item>
+           <layout class="QHBoxLayout" name="signatureEmblemLayout">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelSignatureEmblem">
+              <property name="text">
+               <string>Signature emblem:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="line_signatureEmblem">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <horstretch>1</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Shape::HLine</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Shadow::Plain</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="kcfg_SignatureEmblem"/>
+            </item>
+           </layout>
+          </item>
+          <item>
            <widget class="QCheckBox" name="kcfg_SignatureUseUtc">
             <property name="text">
              <string>Use UTC time for signatures</string>

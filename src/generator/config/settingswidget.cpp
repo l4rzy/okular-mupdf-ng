@@ -157,6 +157,15 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     signatureProfile->clear();
     signatureProfile->addItem(i18n("Complete"), MuPDFNGSettings::EnumSignatureProfile::Complete);
     signatureProfile->addItem(i18n("Simple"), MuPDFNGSettings::EnumSignatureProfile::Simple);
+    auto* signatureEmblem = m_mupdfsw->kcfg_SignatureEmblem;
+    signatureEmblem->clear();
+    signatureEmblem->addItem(i18n("None"), MuPDFNGSettings::EnumSignatureEmblem::None);
+    signatureEmblem->addItem(i18n("MuPDF"), MuPDFNGSettings::EnumSignatureEmblem::MuPDF);
+    signatureEmblem->addItem(i18n("Okular"), MuPDFNGSettings::EnumSignatureEmblem::Okular);
+    connect(signatureEmblem,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,
+            &MuPDFNGSettingsWidget::updateSignaturePreview);
     connect(signatureProfile,
             QOverload<int>::of(&QComboBox::currentIndexChanged),
             this,
@@ -238,9 +247,11 @@ void MuPDFNGSettingsWidget::setupToolTips()
                i18n("Choose the appearance of signatures added to the document."));
     setToolTip({ m_mupdfsw->kcfg_SignatureUseUtc },
                i18n("Render the signature appearance timestamp in UTC instead of local time."));
+    setToolTip({ m_mupdfsw->kcfg_SignatureEmblem, m_mupdfsw->labelSignatureEmblem },
+               i18n("Choose an emblem to include in the signature appearance."));
     setToolTip({ m_mupdfsw->kcfg_SignatureDrawBorder }, i18n("Draw a border around the signed signature appearance."));
     setToolTip({ m_mupdfsw->signaturePreviewLabel },
-               i18n("Preview the selected signature profile and time format using sample identity data."));
+               i18n("Preview the selected signature profile, emblem, and time format using sample identity data."));
     setToolTip({ m_mupdfsw->kcfg_EpubFontSize, m_mupdfsw->labelEpubFontSize },
                i18n("Set the base font size for EPUB text."));
     setToolTip({ m_mupdfsw->kcfg_EpubFontFamily, m_mupdfsw->labelEpubFontFamily },
@@ -277,14 +288,15 @@ void MuPDFNGSettingsWidget::updateSignaturePreview()
     const bool simple =
         m_mupdfsw->kcfg_SignatureProfile->currentData().toInt() == MuPDFNGSettings::EnumSignatureProfile::Simple;
     const bool useUtc = m_mupdfsw->kcfg_SignatureUseUtc->isChecked();
+    const auto emblem = static_cast<Config::SignatureEmblem>(m_mupdfsw->kcfg_SignatureEmblem->currentData().toInt());
     QLabel* preview = m_mupdfsw->signaturePreviewLabel;
     // Point-size based application font: the preview text scales with the UI
     // font size and stays crisp on high-DPI screens via the ratio below.
     const QFont font = QApplication::font();
-    const QImage image =
-        Config::renderSignaturePreview(Config::buildSignaturePreview(simple, useUtc, QDateTime::currentDateTime()),
-                                       font,
-                                       preview->devicePixelRatioF());
+    const QImage image = Config::renderSignaturePreview(
+        Config::buildSignaturePreview(simple, useUtc, QDateTime::currentDateTime(), emblem),
+        font,
+        preview->devicePixelRatioF());
     preview->setPixmap(QPixmap::fromImage(image));
 }
 

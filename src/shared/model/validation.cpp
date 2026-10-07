@@ -4,6 +4,7 @@
 #include "shared/model/validation.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -518,6 +519,27 @@ bool isValidLayersResponse(const LayersResponse& response) noexcept
     return true;
 }
 
+bool isValidSignatureEmblemImage(std::span<const std::uint8_t> png, std::string_view* reason)
+{
+    if (png.empty())
+        return true;
+    if (png.size() > Limit::MaxSignatureEmblemBytes)
+        return failWith("signature emblem exceeds byte limit", reason);
+    constexpr std::array<std::uint8_t, 16> header { 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 'I', 'H', 'D', 'R' };
+    if (png.size() < 33 || !std::equal(header.begin(), header.end(), png.begin()))
+        return failWith("signature emblem is not a PNG with an IHDR header", reason);
+    const auto readUint32 = [&](std::size_t offset) {
+        return (std::uint32_t(png[offset]) << 24) | (std::uint32_t(png[offset + 1]) << 16)
+            | (std::uint32_t(png[offset + 2]) << 8) | std::uint32_t(png[offset + 3]);
+    };
+    const auto width = readUint32(16);
+    const auto height = readUint32(20);
+    if (width == 0 || height == 0 || width > Limit::MaxSignatureEmblemDimension
+        || height > Limit::MaxSignatureEmblemDimension)
+        return failWith("signature emblem dimensions exceed limit", reason);
+    return true;
+}
+
 bool isValidSignRequest(const SignRequest& request, std::string_view* reason)
 {
     if (!isValidFileTransfer(request.file, reason))
@@ -526,6 +548,11 @@ bool isValidSignRequest(const SignRequest& request, std::string_view* reason)
         return failWith("signing page index is negative", reason);
     if (request.existingFieldObjectNumber < 0 && !isValidNormalizedRect(request.rectangle))
         return failWith("signing rectangle is invalid", reason);
+    if (!isValidSignatureEmblemImage(request.appearance.emblemImage, reason))
+        return false;
+    if (!request.appearance.emblemImage.empty()
+        && (request.appearance.elements & static_cast<std::uint8_t>(SignatureElement::Logo)) != 0)
+        return failWith("signature appearance contains both native and custom emblems", reason);
     if ((request.appearance.elements & ~SignatureElementDefault) != 0)
         return failWith("signing appearance contains unknown elements", reason);
     if (!isValidText(request.certificateNickname,

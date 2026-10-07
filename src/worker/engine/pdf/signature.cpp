@@ -24,12 +24,60 @@ extern "C" {
 #include "engine/signer.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
+#include "shared/model/validation.hpp"
+#include "shared/protocol/limits.hpp"
 
 namespace Mu::Worker::Engine {
 
 using namespace ::Mu::Model;
 
 namespace {
+
+fz_display_list*
+addSignatureEmblem(fz_context* context, fz_display_list* text, fz_rect rect, const std::vector<std::uint8_t>& png)
+{
+    fz_display_list* volatile appearance = nullptr;
+    fz_device* volatile device = nullptr;
+    fz_buffer* volatile buffer = nullptr;
+    fz_image* volatile emblem = nullptr;
+    fz_try(context)
+    {
+        appearance = fz_new_display_list(context, rect);
+        device = fz_new_list_device(context, appearance);
+        std::string_view reason;
+        if (!isValidSignatureEmblemImage(png, &reason))
+            fz_throw(context, FZ_ERROR_FORMAT, "%.*s", static_cast<int>(reason.size()), reason.data());
+        buffer = fz_new_buffer_from_copied_data(context, png.data(), png.size());
+        emblem = fz_new_image_from_buffer(context, buffer);
+        if (emblem->w <= 0 || emblem->h <= 0 || emblem->w > static_cast<int>(Limit::MaxSignatureEmblemDimension)
+            || emblem->h > static_cast<int>(Limit::MaxSignatureEmblemDimension))
+            fz_throw(context, FZ_ERROR_FORMAT, "signature emblem dimensions exceed limit");
+        const float width = static_cast<float>(emblem->w);
+        const float height = static_cast<float>(emblem->h);
+        const float scale = std::min((rect.x1 - rect.x0) / width, (rect.y1 - rect.y0) / height);
+        const fz_matrix transform { scale * width,
+                                    0,
+                                    0,
+                                    scale * height,
+                                    (rect.x0 + rect.x1 - scale * width) / 2,
+                                    (rect.y0 + rect.y1 - scale * height) / 2 };
+        fz_fill_image(context, device, emblem, transform, 1, fz_default_color_params);
+        fz_run_display_list(context, text, device, fz_identity, rect, nullptr);
+        fz_close_device(context, device);
+    }
+    fz_always(context)
+    {
+        fz_drop_device(context, device);
+        fz_drop_image(context, emblem);
+        fz_drop_buffer(context, buffer);
+    }
+    fz_catch(context)
+    {
+        fz_drop_display_list(context, appearance);
+        fz_rethrow(context);
+    }
+    return appearance;
+}
 
 struct RawSignatureField {
     int page = -1;
@@ -565,6 +613,13 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                 else
                     dlist =
                         pdf_signature_appearance_signed(m_context, rect, lang, nullptr, nullptr, appearanceText, logo);
+
+                if (!request.appearance.emblemImage.empty()) {
+                    fz_display_list* decorated =
+                        addSignatureEmblem(m_context, dlist, rect, request.appearance.emblemImage);
+                    fz_drop_display_list(m_context, dlist);
+                    dlist = decorated;
+                }
 
                 if (request.appearance.drawBorder) {
                     // Decorative 1pt grey border stroked inside the signature

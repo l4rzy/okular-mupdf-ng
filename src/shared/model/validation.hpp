@@ -5,6 +5,7 @@
 #define MU_SHARED_MODEL_VALIDATION_HPP
 
 #include <cstddef>
+#include <span>
 #include <string_view>
 
 #include "shared/model/types.hpp"
@@ -105,6 +106,10 @@ bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std:
 
 /// Validates a bounded default-layer UI with contiguous document-scoped entry IDs.
 bool isValidLayersResponse(const LayersResponse& response) noexcept;
+
+/// Checks byte limits, PNG/IHDR identity, and dimensions before decoding.
+/// Empty data means no custom emblem. Image decoding stays in the worker.
+bool isValidSignatureEmblemImage(std::span<const std::uint8_t> png, std::string_view* reason = nullptr);
 
 /// Validates signing fields independent of the open document and backend.
 bool isValidSignRequest(const SignRequest& request, std::string_view* reason = nullptr);

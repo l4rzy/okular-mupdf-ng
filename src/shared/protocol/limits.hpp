@@ -46,6 +46,10 @@ inline constexpr std::int32_t MaxDocumentImageQuality = 2;
 inline constexpr std::int64_t MinDocumentMemoryCacheBytes = 32LL * 1024 * 1024;
 inline constexpr std::int64_t MaxDocumentMemoryCacheBytes = 256LL * 1024 * 1024;
 
+// --- Signature Emblem Limits ---
+inline constexpr std::size_t MaxSignatureEmblemBytes = 1024U * 1024U;
+inline constexpr std::uint32_t MaxSignatureEmblemDimension = 1024;
+
 // --- EPUB / Content Limits ---
 inline constexpr std::int32_t MinEpubFontSize = 10;
 inline constexpr std::int32_t MaxEpubFontSize = 20;

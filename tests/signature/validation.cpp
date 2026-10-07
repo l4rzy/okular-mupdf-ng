@@ -1,5 +1,6 @@
 #include "engine/pdf/document.hpp"
 #include "generator/config/certmanager/dialog_utils.hpp"
+#include "generator/conversion/signing.hpp"
 #include "generator/proxy/certificate_store.hpp"
 #include "generator/proxy/form/signature.hpp"
 #include "genpdf.hpp"
@@ -42,6 +43,8 @@
 #ifndef TEST_SIGNATURE_PDF_DIR
 #define TEST_SIGNATURE_PDF_DIR "."
 #endif
+
+using Mu::Generator::Config::SignatureEmblem;
 
 namespace {
 
@@ -1529,6 +1532,93 @@ private slots:
             }
         }
         QVERIFY(foundSignature);
+    }
+
+    void rendersSelectedSignatureEmblem_data()
+    {
+        QTest::addColumn<bool>("simple");
+        QTest::addColumn<SignatureEmblem>("emblem");
+        QTest::addColumn<QByteArray>("invalidPng");
+        QTest::addColumn<bool>("expectedSuccess");
+        QTest::newRow("complete-none") << false << SignatureEmblem::None << QByteArray { } << true;
+        QTest::newRow("complete-mupdf") << false << SignatureEmblem::MuPDF << QByteArray { } << true;
+        QTest::newRow("simple-none") << true << SignatureEmblem::None << QByteArray { } << true;
+        QTest::newRow("simple-mupdf") << true << SignatureEmblem::MuPDF << QByteArray { } << true;
+        QTest::newRow("complete-okular") << false << SignatureEmblem::Okular << QByteArray { } << true;
+        QTest::newRow("simple-okular") << true << SignatureEmblem::Okular << QByteArray { } << true;
+        QTest::newRow("malformed-png") << false << SignatureEmblem::Okular << QByteArray("not a PNG") << false;
+    }
+
+    void rendersSelectedSignatureEmblem()
+    {
+        QFETCH(bool, simple);
+        QFETCH(QByteArray, invalidPng);
+        QFETCH(bool, expectedSuccess);
+        QFETCH(SignatureEmblem, emblem);
+        QTemporaryFile sourceFile;
+        QVERIFY(sourceFile.open());
+        const QString sourcePath = sourceFile.fileName();
+        sourceFile.close();
+        fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        createSignaturePDF(context, sourcePath);
+        fz_drop_context(context);
+
+        QFile source(sourcePath);
+        Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(openDocument(document, source, sourcePath));
+        Mu::Generator::Config::SignatureAppearanceOptions options;
+        options.simple = simple;
+        options.emblem = emblem;
+        const auto appearanceResult =
+            Mu::Generator::Conversion::toModelSignatureAppearance(Okular::NewSignatureData { }, options);
+        QVERIFY(appearanceResult);
+        auto appearance = *appearanceResult;
+        if (!expectedSuccess)
+            appearance.emblemImage.assign(invalidPng.begin(), invalidPng.end());
+        const Mu::Model::NormalizedRect rectangle { .1, .1, .5, .3 };
+        QTemporaryFile output;
+        QVERIFY(output.open());
+        std::string error;
+        const bool success = document.signFd({ .file = { },
+                                               .page = 0,
+                                               .rectangle = rectangle,
+                                               .certificateNickname = "okular-mupdf-test",
+                                               .certificateSubjectCommonName = "Okular MuPDF Test Signer",
+                                               .existingFieldObjectNumber = -1,
+                                               .appearance = appearance },
+                                             createCms,
+                                             ::dup(output.handle()),
+                                             nullptr,
+                                             &error);
+        QCOMPARE(success, expectedSuccess);
+        if (!success) {
+            QVERIFY(!error.empty());
+            return;
+        }
+        QVERIFY(output.flush());
+        QFile signedSource(output.fileName());
+        Mu::Worker::Engine::PdfDocument signedDocument;
+        QVERIFY(openDocument(signedDocument, signedSource, output.fileName()));
+        QImage image(600, 800, QImage::Format_RGBA8888);
+        QVERIFY2(signedDocument.renderToBuffer({ 0, image.width(), image.height(), std::nullopt },
+                                               image.bits(),
+                                               static_cast<std::size_t>(image.bytesPerLine()),
+                                               &error),
+                 error.c_str());
+        bool hasEmblemColor = false;
+        bool hasNativeEmblemColor = false;
+        // Inspect the new signature rectangle, excluding the fixture's
+        // separate unsigned widget and its built-in colored placeholder.
+        for (int y = int(rectangle.top * image.height()); y < int(rectangle.bottom * image.height()); ++y) {
+            for (int x = int(rectangle.left * image.width()); x < int(rectangle.right * image.width()); ++x) {
+                const auto color = image.pixelColor(x, y);
+                hasNativeEmblemColor = hasNativeEmblemColor || color == QColor(0xa4, 0xca, 0xf5);
+                hasEmblemColor = hasEmblemColor || (color.blue() > color.red() + 8 && color.blue() > color.green() + 3);
+            }
+        }
+        QCOMPARE(hasEmblemColor, emblem != SignatureEmblem::None);
+        QCOMPARE(hasNativeEmblemColor, emblem == SignatureEmblem::MuPDF);
     }
 
     void appearanceElementsControlRenderedText()

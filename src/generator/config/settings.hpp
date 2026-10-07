@@ -4,7 +4,9 @@
 #ifndef MU_GENERATOR_CONFIG_SETTINGS_HPP
 #define MU_GENERATOR_CONFIG_SETTINGS_HPP
 
+#include "generator/config/signature_emblem_type.hpp"
 #include <QByteArray>
+
 #include <QDateTime>
 #include <QString>
 #include <QStringList>
@@ -64,12 +66,14 @@ struct OcrTarget {
 
 /// Signature appearance policy read from the generator settings page.
 struct SignatureAppearanceOptions {
-    /// Simple profile renders only name, reason, and time.
+    /// Simple profile text contains only name, reason, and time.
     bool simple = false;
     /// Render the appearance timestamp in UTC instead of local time.
     bool useUtc = false;
     /// Draw a 1px border around the signed signature appearance.
     bool drawBorder = false;
+    /// Select the emblem independently of the text profile.
+    SignatureEmblem emblem = SignatureEmblem::Okular;
 };
 
 /// Policy for running the worker when its sandbox is not fully hardened.

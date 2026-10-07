@@ -249,7 +249,8 @@ ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
    generator/config/settingswidget.ui
 )
 
-set(mupdf_generator_settings_SRCS generator/config/settings.cpp generator/config/signature_preview.cpp)
+set(mupdf_generator_settings_SRCS generator/config/settings.cpp generator/config/signature_preview.cpp
+    generator/config/okular_emblem.cpp)
 kconfig_add_kcfg_files(mupdf_generator_settings_SRCS
    GENERATE_MOC generator/config/mupdfngsettings.kcfgc
 )

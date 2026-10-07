@@ -3,6 +3,7 @@
 
 #include "generator/config/signature_preview.hpp"
 
+#include "generator/config/okular_emblem.hpp"
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QLatin1String>
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 
+#include "generator/config/signature_emblem.hpp"
 #include "plugin/util/signing_timestamp.hpp"
 #include "shared/logging.hpp"
 
@@ -39,7 +41,7 @@ QString loadSignatureFont()
 
 } // namespace
 
-SignaturePreview buildSignaturePreview(bool simple, bool useUtc, const QDateTime& now)
+SignaturePreview buildSignaturePreview(bool simple, bool useUtc, const QDateTime& now, SignatureEmblem emblem)
 {
     // Sample identity: no certificate exists at settings time. Prefixes stay
     // English to match MuPDF's real appearance output.
@@ -50,13 +52,14 @@ SignaturePreview buildSignaturePreview(bool simple, bool useUtc, const QDateTime
     const QDateTime stamped = useUtc ? now.toUTC() : now.toLocalTime();
     const QString date = Plugin::Util::SigningTimestamp::displayDate(stamped);
     if (simple)
-        return { { }, { name, reason, date } };
+        return { { }, { name, reason, date }, emblem };
     return { name,
              { QStringLiteral("Digitally signed by %1").arg(name),
                QStringLiteral("DN: %1").arg(distinguishedName),
                QStringLiteral("Reason: %1").arg(reason),
                QStringLiteral("Location: %1").arg(location),
-               QStringLiteral("Date: %1").arg(date) } };
+               QStringLiteral("Date: %1").arg(date) },
+             emblem };
 }
 
 QImage renderSignaturePreview(const SignaturePreview& preview, const QFont& font, qreal devicePixelRatio)
@@ -101,6 +104,33 @@ QImage renderSignaturePreview(const SignaturePreview& preview, const QFont& font
     QPainter painter(&image);
     painter.setPen(QColor(0x9a, 0x9a, 0x9a));
     painter.drawRect(0, 0, logicalSize.width() - 1, logicalSize.height() - 1);
+    if (preview.emblem == SignatureEmblem::Okular) {
+        const auto emblem = renderOkularEmblem();
+        const QSizeF size = emblem.size().scaled(QSize(panesWidth, contentHeight), Qt::KeepAspectRatio);
+        const QRectF rect((logicalSize.width() - size.width()) / 2,
+                          (logicalSize.height() - size.height()) / 2,
+                          size.width(),
+                          size.height());
+        // Pre-filter the large source at the preview's physical pixel size.
+        // QPainter's bilinear transform alone skips fine rims during reduction.
+        const auto scaled = emblem.scaled((size * ratio).toSize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        painter.save();
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawImage(rect, scaled);
+        painter.restore();
+    } else if (preview.emblem == SignatureEmblem::MuPDF) {
+        const auto path = buildSignatureEmblemPath();
+        const auto bounds = path.boundingRect();
+        const qreal scale = std::min(panesWidth / bounds.width(), contentHeight / bounds.height());
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.translate(logicalSize.width() / 2.0, logicalSize.height() / 2.0);
+        // MuPDF's signature artwork uses an upward Y axis.
+        painter.scale(scale, -scale);
+        painter.translate(-bounds.center());
+        painter.fillPath(path, QColor(0xa4, 0xca, 0xf5));
+        painter.restore();
+    }
     painter.setPen(Qt::black);
     if (leftWidth > 0) {
         painter.setFont(leftFont);
