@@ -133,7 +133,7 @@ target_link_libraries(test_tools_cli_ocr PRIVATE Qt6::Core Qt6::Test)
 target_compile_definitions(test_tools_cli_ocr PRIVATE
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
     WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
-    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/digital_signature.pdf"
+    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
     TESSDATA_DIR="${TESSDATA_DIR}")
 add_dependencies(test_tools_cli_ocr mupdfng-cli mupdfng-worker)
 add_test(NAME test_tools_cli_ocr COMMAND test_tools_cli_ocr)

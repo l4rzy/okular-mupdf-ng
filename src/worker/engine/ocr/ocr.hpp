@@ -23,14 +23,10 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
                                                  const std::vector<std::string>& directories);
 
 /**
- * Runs Tesseract OCR text recognition on a document page.
+ * Recognizes image text not already covered by a document page's text layer.
  *
- * Execution Steps:
- * 1. Opens source document in an isolated Fitz context (`fz_context`).
- * 2. Probes page for bitmap image presence (`pageHasImages`).
- * 3. Renders page using `fz_new_ocr_device` backed by Tesseract traineddata.
- * 4. Traverses recognized structured text blocks and emits normalized [0, 1] character boxes.
- * 5. Respects cooperative cancellation via `CancellationCookie`.
+ * Uses an isolated Fitz context and Tesseract, preserving image occlusion and
+ * masking existing native/hidden text. Supports cooperative cancellation.
  *
  * @param inputFd Duplicated file descriptor of the document file.
  * @param password Optional document unlock password.
@@ -39,7 +35,7 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
  * @param dpi Target rendering rasterization resolution.
  * @param cookie Optional cancellation cookie checked periodically during layout and OCR.
  * @param tessDataDirectory Selected model directory; empty uses the compiled default.
- * @return OcrResult with status and extracted character bounding boxes.
+ * @return OcrResult with status and normalized character boxes to add to native text.
  */
 ::Mu::Model::OcrResult runOcr(int inputFd,
                               const std::string& password,

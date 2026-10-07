@@ -38,10 +38,13 @@ Okular::TextPage* textPage(const std::vector<Model::TextBox>& boxes, qreal width
     return result;
 }
 
-Okular::TextPage* ocrTextPage(const QVector<Plugin::Caching::OCR::CacheItem>& boxes)
+Okular::TextPage* mergedTextPage(const std::vector<Model::TextBox>& nativeBoxes,
+                                 qreal width,
+                                 qreal height,
+                                 const QVector<Plugin::Caching::OCR::CacheItem>& additions)
 {
-    auto* result = new Okular::TextPage();
-    for (const auto& box : boxes) {
+    auto* result = textPage(nativeBoxes, width, height);
+    for (const auto& box : additions) {
         if (box.ch.isEmpty() || box.r <= 0.0 || box.l >= 1.0 || box.b <= 0.0 || box.t >= 1.0)
             continue;
 
@@ -60,6 +63,7 @@ Okular::TextPage* ocrTextPage(const QVector<Plugin::Caching::OCR::CacheItem>& bo
 
         result->append(box.ch, Okular::NormalizedRect(left, top, right, bottom));
     }
+    // Page::setTextPage applies Okular's geometric reading-order analysis.
     return result;
 }
 

@@ -15,7 +15,11 @@
 namespace Mu::Generator::Conversion {
 
 Okular::TextPage* textPage(const std::vector<Model::TextBox>& boxes, qreal width, qreal height);
-Okular::TextPage* ocrTextPage(const QVector<Plugin::Caching::OCR::CacheItem>& boxes);
+/// Keeps native text and adds image OCR; Okular determines the combined reading order.
+Okular::TextPage* mergedTextPage(const std::vector<Model::TextBox>& nativeBoxes,
+                                 qreal width,
+                                 qreal height,
+                                 const QVector<Plugin::Caching::OCR::CacheItem>& additions);
 /// Assembles worker text boxes into plain text, preserving source lines
 /// (newlines follow endOfLine boxes; empty boxes contribute no text).
 QString plainText(const std::vector<Model::TextBox>& boxes);

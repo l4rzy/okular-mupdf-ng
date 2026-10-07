@@ -252,16 +252,10 @@ Main::Main(QObject* parent, const QVariantList& args)
             [this](int page,
                    QVector<Plugin::Caching::OCR::CacheItem> boxes,
                    Plugin::OCR::Controller::CompletionSource source) {
-                QMutexLocker locker(userMutex());
-                if (page < 0 || page >= m_okularPages.size())
-                    return;
-                auto* textPage = Conversion::ocrTextPage(boxes);
-                m_okularPages.at(page)->setTextPage(textPage);
-                Q_EMIT signalTextGenerationDone(m_okularPages.at(page), textPage);
-                if (Config::readOcrSettings().notify
-                    && source == Plugin::OCR::Controller::CompletionSource::OcrCompleted) {
-                    Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
-                }
+                applyOcrResult(page,
+                               std::move(boxes),
+                               m_layerRevision.load(),
+                               source == Plugin::OCR::Controller::CompletionSource::OcrCompleted);
             });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::started, this, [this](int page) {
         if (Config::readOcrSettings().notify)
@@ -1365,6 +1359,36 @@ void Main::loadLayers()
     }
 }
 
+void Main::applyOcrResult(int page,
+                          QVector<Plugin::Caching::OCR::CacheItem> boxes,
+                          std::uint64_t revision,
+                          bool notifyCompletion)
+{
+    if (revision != m_layerRevision.load() || page < 0 || page >= m_okularPages.size())
+        return;
+    // Okular must install any pending native extraction before we replace it.
+    // canGenerateTextPage stays false until its queued completion is delivered.
+    if (!canGenerateTextPage()) {
+        QTimer::singleShot(10, this, [this, page, boxes = std::move(boxes), revision, notifyCompletion]() mutable {
+            applyOcrResult(page, std::move(boxes), revision, notifyCompletion);
+        });
+        return;
+    }
+    QMutexLocker locker(userMutex());
+    auto* target = m_okularPages.at(page);
+    bool success = false;
+    const auto native = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
+    if (!success)
+        return;
+    auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
+    target->setTextPage(textPage);
+    Q_EMIT signalTextGenerationDone(target, textPage);
+    if (notifyCompletion && Config::readOcrSettings().notify)
+        Q_EMIT notice(boxes.isEmpty() ? i18n("OCR completed for page %1. No images with text detected.", page + 1)
+                                      : i18n("OCR completed for page %1", page + 1),
+                      ShortNoticeMs);
+}
+
 void Main::refreshLayerText(std::uint64_t revision)
 {
     if (revision != m_layerRevision.load())
@@ -1417,23 +1441,20 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         return finish(Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height()));
     }
 
-    // Text extraction never blocks on recognition: when OCR is wanted the page
-    // is queued and its TextPage arrives later through signalTextGenerationDone,
-    // while the retained result serves hosts that request the page again.
-    if (m_defaultLayerVisibility.load()) {
-        if (const auto ready = m_ocrController->takeReady(pageNum))
-            return finish(Conversion::ocrTextPage(*ready));
-    }
+    // Image OCR is additive: native text stays available while recognition runs.
+    // Both cached and fresh results use the same merge with the current native layer.
     if (workerReady()) {
+        bool success = false;
         const std::vector<Model::TextBox> workerBoxes =
-            m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
-        const Config::OcrSettings ocrSettings = Config::readOcrSettings();
-        const Config::OcrTarget ocrTarget = Config::ocrTargetFor(m_document.hash, ocrSettings);
-        const auto ocrConfig = Config::ocrConfigFor(
-            ocrTarget, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings);
-        const bool useOcr = m_defaultLayerVisibility.load()
-            && Plugin::OCR::Controller::shouldTrigger(
-                                ocrConfig.force, ocrConfig.autoTrigger, ocrConfig.triggerThreshold, workerBoxes.size());
+            m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true, &success);
+        if (!success)
+            return nullptr;
+        if (m_defaultLayerVisibility.load()) {
+            if (const auto ready = m_ocrController->takeReady(pageNum)) {
+                return finish(Conversion::mergedTextPage(
+                    workerBoxes, request->page()->width(), request->page()->height(), *ready));
+            }
+        }
         QMetaObject::invokeMethod(
             this,
             [this, pageNum, revision, nativeTextBoxCount = workerBoxes.size()] {
@@ -1441,8 +1462,6 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
                     observeOcrFocus(Plugin::OCR::NativeTextObservation { pageNum, nativeTextBoxCount });
             },
             Qt::QueuedConnection);
-        if (useOcr)
-            return nullptr;
         return finish(Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height()));
     }
     return nullptr;

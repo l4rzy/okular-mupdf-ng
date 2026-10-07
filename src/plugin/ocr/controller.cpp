@@ -100,10 +100,6 @@ void Controller::reset()
     m_focus.reset();
     m_lastFocusPage = -1;
     invalidate();
-    {
-        QMutexLocker locker(&m_readyMutex);
-        m_readyResults.clear();
-    }
 }
 
 void Controller::invalidate()
@@ -119,6 +115,8 @@ void Controller::invalidate()
         m_activeJob.reset();
     }
     m_nativeTextBoxCounts.clear();
+    QMutexLocker locker(&m_readyMutex);
+    m_readyResults.clear();
 }
 
 void Controller::deliver(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source)

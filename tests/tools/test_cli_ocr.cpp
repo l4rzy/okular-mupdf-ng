@@ -37,8 +37,20 @@ class TestToolsCliOcr : public QObject {
 
 private slots:
 
+    void writesRecognizedTextToFile_data()
+    {
+        QTest::addColumn<int>("page");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("image-text") << 0 << QStringLiteral("RASTERALPHAONERASTERBETATWO");
+        QTest::newRow("partial-text-layer") << 1 << QStringLiteral("UNCOVEREDSECONDLINE");
+        QTest::newRow("complete-text-layer") << 2 << QString();
+        QTest::newRow("native-text-only") << 3 << QString();
+    }
+
     void writesRecognizedTextToFile()
     {
+        QFETCH(int, page);
+        QFETCH(QString, expected);
         if (!QFile::exists(QStringLiteral(TESSDATA_DIR "/eng.traineddata")))
             QSKIP("English traineddata is not installed");
         QTemporaryDir tempDir;
@@ -47,16 +59,21 @@ private slots:
 
         QString standardOutput;
         QString standardError;
-        const int code = runCli(
-            { QStringLiteral("ocr"), QStringLiteral(TEST_PDF_PATH), QStringLiteral("0"), QStringLiteral("-o"), output },
-            &standardOutput,
-            &standardError);
+        const int code = runCli({ QStringLiteral("ocr"),
+                                  QStringLiteral(TEST_PDF_PATH),
+                                  QString::number(page),
+                                  QStringLiteral("-o"),
+                                  output },
+                                &standardOutput,
+                                &standardError);
         QVERIFY2(code == 0, qPrintable(standardError));
 
         QFile file(output);
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QString content = QString::fromUtf8(file.readAll());
-        QVERIFY(!content.trimmed().isEmpty());
+        QString recognized = content;
+        recognized.remove(QRegularExpression(QStringLiteral("\\s+")));
+        QCOMPARE(recognized, expected);
         // Text-only lines: no quad-coordinate prefix from the old box format.
         for (const QString& line : content.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
             QVERIFY(!line.contains(QRegularExpression(QStringLiteral("^[0-9.]+ [0-9.]+ [0-9.]+ [0-9.]+ "))));

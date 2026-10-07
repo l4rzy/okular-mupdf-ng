@@ -84,6 +84,35 @@ private slots:
         QCOMPARE(loaded.items.at(0).ch, QStringLiteral("K"));
     }
 
+    void ignoresLegacyFullPageResults_data()
+    {
+        QTest::addColumn<int>("storedDpi");
+        QTest::newRow("same-dpi") << 150;
+        QTest::newRow("higher-dpi-fallback") << 300;
+    }
+
+    void ignoresLegacyFullPageResults()
+    {
+        QFETCH(int, storedDpi);
+        using namespace Mu::Plugin::Caching::OCR;
+        const QString hash = m_hash + QString::number(storedDpi);
+        const auto images = Cache::normalizeKey(hash, QStringLiteral("eng"), storedDpi);
+        const auto requested = Cache::normalizeKey(hash, QStringLiteral("eng"), 150);
+        QVERIFY(images && requested);
+        QVERIFY(Cache::save(*images, 0, { { QStringLiteral("old full page"), 0, 0, 1, 1 } }));
+        const QString path = Cache::getCacheFilePath(*images, 0);
+        QString legacyPath = path;
+        legacyPath.replace(QStringLiteral("v1.bin"), QStringLiteral(".bin"));
+        QVERIFY(path != legacyPath);
+        QVERIFY(QFile::rename(path, legacyPath));
+        QVERIFY(!Cache::load(*requested, 0).present);
+        QVERIFY(Cache::save(*images, 0, { { QStringLiteral("addition"), .1, .1, .2, .2 } }));
+        const auto loaded = Cache::load(*requested, 0);
+        QVERIFY(loaded.present);
+        QCOMPARE(loaded.items.size(), 1);
+        QCOMPARE(loaded.items.front().ch, QStringLiteral("addition"));
+    }
+
     void corruptionAndInvalidInputAreRemoved()
     {
         const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 1, QStringLiteral("eng"));

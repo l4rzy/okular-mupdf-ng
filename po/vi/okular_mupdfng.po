@@ -618,7 +618,11 @@ msgstr "Xuất PDF không thành công: %1"
 msgid "Export to PDF finished."
 msgstr "Đã xuất PDF xong."
 
-#: src/generator/mupdfng.cpp:263
+#: src/generator/mupdfng.cpp:268
+msgid "OCR completed for page %1. No images with text detected."
+msgstr "Đã hoàn tất OCR cho trang %1. Không phát hiện hình ảnh có văn bản."
+
+#: src/generator/mupdfng.cpp:269
 msgid "OCR completed for page %1"
 msgstr "Đã hoàn tất OCR cho trang %1"
 

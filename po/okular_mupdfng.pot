@@ -582,7 +582,11 @@ msgstr ""
 msgid "Export to PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:263
+#: src/generator/mupdfng.cpp:268
+msgid "OCR completed for page %1. No images with text detected."
+msgstr ""
+
+#: src/generator/mupdfng.cpp:269
 msgid "OCR completed for page %1"
 msgstr ""
 
