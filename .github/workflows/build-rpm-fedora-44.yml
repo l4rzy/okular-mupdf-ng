@@ -64,7 +64,7 @@ jobs:
           test -f /usr/share/tesseract/tessdata/eng.traineddata
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -126,7 +126,7 @@ jobs:
           rpm --info -qp "$package"
 
       - name: Upload Fedora 44 x86_64 RPM package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fedora-44-x86_64-rpm-package
           path: build/packages/*.rpm

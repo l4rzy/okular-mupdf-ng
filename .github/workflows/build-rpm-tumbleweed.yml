@@ -64,7 +64,7 @@ jobs:
         run: test -f /usr/share/tessdata/eng.traineddata
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -123,7 +123,7 @@ jobs:
           rpm --info -qp "$package"
 
       - name: Upload openSUSE RPM package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tumbleweed-rpm-package
           path: build/packages/*.rpm

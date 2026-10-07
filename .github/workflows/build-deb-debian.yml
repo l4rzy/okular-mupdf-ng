@@ -53,7 +53,7 @@ jobs:
             zlib1g-dev
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -108,7 +108,7 @@ jobs:
           dpkg-deb --info "$package"
 
       - name: Upload Debian package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: debian-13-package
           path: build/packages/*.deb
