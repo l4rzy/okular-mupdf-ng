@@ -56,6 +56,10 @@ private slots:
         QTest::newRow("trailing-dot") << "1. Introduction" << true << 1;
         QTest::newRow("nested") << "1.2.3 Details" << true << 3;
         QTest::newRow("unicode") << "2 Résumé" << true << 1;
+        QTest::newRow("cjk") << "2 概要" << true << 1;
+        QTest::newRow("arabic-title") << "2 مقدمة" << true << 1;
+        QTest::newRow("unicode-currency-title") << "2 €214.00" << false << 0;
+        QTest::newRow("unicode-numeric-title") << "2 ١٢٣" << false << 0;
         QTest::newRow("whitespace") << "  10.2 Background  " << true << 2;
         QTest::newRow("bare") << "1.2" << false << 0;
         QTest::newRow("numeric-title") << "1.2 123" << false << 0;
@@ -267,6 +271,10 @@ private slots:
         QTest::newRow("grouped-amount") << "17,350.00";
         QTest::newRow("negative-amount") << "-214.00";
         QTest::newRow("currency") << "$214.00";
+        QTest::newRow("unicode-currency") << "€214.00";
+        QTest::newRow("nonbreaking-space") << "17 350.00";
+        QTest::newRow("unicode-minus") << "−214.00";
+        QTest::newRow("arabic-digits") << "١٢٣";
         QTest::newRow("percentage") << "12.5%";
     }
 

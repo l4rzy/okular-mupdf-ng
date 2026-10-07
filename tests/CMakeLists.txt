@@ -340,4 +340,4 @@ set_tests_properties(test_plugin_boundary PROPERTIES LABELS "plugin" TIMEOUT 15)
 
 add_layer_test(test_plugin_pdf_toc plugin/test_pdf_toc.cpp plugin ../src/worker/engine/pdf/generated_outline.cpp)
 target_include_directories(test_plugin_pdf_toc PRIVATE ../src ../src/worker)
-target_link_libraries(test_plugin_pdf_toc PRIVATE mupdf_plugin_cache)
+target_link_libraries(test_plugin_pdf_toc PRIVATE mupdf_plugin_cache MuPDF::Engine)

@@ -13,16 +13,33 @@
 #include <unordered_set>
 #include <utility>
 
+extern "C" {
+#include <mupdf/fitz/string-util.h>
+#include <mupdf/ucdn.h>
+}
+
 namespace Mu::Worker::Engine {
 
 namespace {
 
 bool hasTitleLetters(std::string_view text)
 {
-    // Preserve the existing UTF-8 policy so non-English titles remain usable.
-    return std::any_of(text.begin(), text.end(), [](unsigned char ch) {
-        return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch >= 128;
-    });
+    while (!text.empty()) {
+        int codepoint = 0;
+        const int length = fz_chartorunen(&codepoint, text.data(), text.size());
+        switch (ucdn_get_general_category(static_cast<std::uint32_t>(codepoint))) {
+        case UCDN_GENERAL_CATEGORY_LL:
+        case UCDN_GENERAL_CATEGORY_LM:
+        case UCDN_GENERAL_CATEGORY_LO:
+        case UCDN_GENERAL_CATEGORY_LT:
+        case UCDN_GENERAL_CATEGORY_LU:
+            return true;
+        default:
+            break;
+        }
+        text.remove_prefix(static_cast<std::size_t>(length));
+    }
+    return false;
 }
 
 } // namespace
