@@ -47,11 +47,9 @@ using namespace ::Mu::Model;
 namespace ZppCodec = ::Mu::IPC::ZppCodec;
 using ::Mu::IPC::CtrlChannel;
 using ::Mu::IPC::FdChannel;
-using ::Mu::IPC::framePixelData;
 using ::Mu::Worker::Engine::CmsResult;
 using ::Mu::Worker::Engine::DocumentBase;
 using ::Mu::Worker::Engine::OcrJobs;
-using ::Mu::Worker::Sys::createMemfd;
 using ::Mu::Worker::Sys::Mapping;
 
 namespace {
@@ -450,8 +448,7 @@ void CommandService::closeDocument() noexcept
         m_document->close();
     }
 
-    m_frameSlots.clear();
-    m_framePoolBytes = 0;
+    m_framePool.clearFrames();
     m_documentPassword.clear();
     m_annotationHandles.clear();
     m_annotationObjectHandles.clear();
@@ -581,87 +578,36 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     const auto dataSize = fitted.frameDataBytes;
     const auto total = sizeof(IPC::FrameBufferHeader) + dataSize;
 
-    if (total > Limit::MaxSharedFrameBytes)
-        return failure(request.id, ErrorCode::ResourceLimit, "render", "frame exceeds transfer limit");
-
-    std::string error;
-    FrameSlot* slot = nullptr;
-    for (auto& candidate : m_frameSlots) {
-        if (!candidate.leased && candidate.capacity >= total && (!slot || candidate.capacity < slot->capacity)) {
-            slot = &candidate;
-        }
-    }
-
-    bool newSlot = false;
-    // Pooled slots retain their descriptor and writable mapping between
-    // renders. The transient fallback preserves the existing safe lifecycle
-    // when every compatible slot is leased or either pool budget is full.
-    std::optional<Sys::FileDescriptor> transientFrame;
-    Mapping transientMapping;
-    void* address = nullptr;
-    if (slot) {
-        address = slot->mapping.data();
-    } else {
-        auto fd = createMemfd("mupdf-frame", total, &error);
-        if (!fd)
-            return failure(request.id, ErrorCode::ResourceLimit, "render", error);
-        Mapping mapping(::mmap(nullptr, total, PROT_READ | PROT_WRITE, MAP_SHARED, fd->get(), 0), total);
-        if (!mapping)
-            return failure(request.id, ErrorCode::Internal, "render", "could not map frame");
-        address = mapping.data();
-        if (m_frameSlots.size() < MaxFramePoolSlots && total <= FramePoolBytes - m_framePoolBytes) {
-            m_frameSlots.push_back({ m_nextFrameSlotId++, 0, total, std::move(*fd), std::move(mapping), false });
-            m_framePoolBytes += total;
-            slot = &m_frameSlots.back();
-            newSlot = true;
-        } else {
-            transientFrame = std::move(fd);
-            transientMapping = std::move(mapping);
-        }
-    }
+    auto frame = m_framePool.acquireFrame(total);
+    if (!frame)
+        return { request.id, std::monostate { }, std::move(frame.error()) };
+    void* address = frame->data();
 
     auto* header = static_cast<IPC::FrameBufferHeader*>(address);
     *header = { IPC::FRAME_SHM_MAGIC,           IPC::FRAME_SHM_VERSION, request.id, static_cast<std::uint32_t>(rw),
                 static_cast<std::uint32_t>(rh), outputStride,           1,          { } };
 
-    const auto discardNewSlot = [&] {
-        if (!newSlot)
-            return;
-        m_framePoolBytes -= slot->capacity;
-        m_frameSlots.pop_back();
-        slot = nullptr;
-    };
-
     // Render into the mapped frame before publishing its descriptor or lease.
+    std::string error;
     const bool rendered =
         m_document->renderToBuffer({ fitted.request.page, fitted.request.width, fitted.request.height, tile, cookie },
                                    IPC::framePixelData(address),
                                    outputStride,
                                    &error);
     if (!rendered || (cookie && cookie->abort)) {
-        discardNewSlot();
         if (cookie && cookie->abort)
             return failure(request.id, ErrorCode::Cancelled, "render", "render cancelled");
         return failure(request.id, ErrorCode::Internal, "render", error.empty() ? "MuPDF returned no image" : error);
     }
 
     std::uint64_t transferId = 0;
-    if (!slot || newSlot) {
+    if (frame->needsTransfer()) {
         transferId = m_nextFrameTransferId++;
-        const int fd = slot ? slot->fd.get() : transientFrame->get();
-        if (!m_session.fdChannel->send(transferId, fd, &error)) {
-            discardNewSlot();
+        if (!m_session.fdChannel->send(transferId, frame->descriptor(), &error)) {
             return failure(request.id, ErrorCode::Unavailable, "render", error);
         }
     }
-
-    std::uint64_t slotId = 0;
-    std::uint64_t leaseId = 0;
-    if (slot) {
-        slot->leased = true;
-        slotId = slot->id;
-        leaseId = ++slot->leaseId;
-    }
+    const auto lease = m_framePool.publishFrame(*frame);
 
     // Successful renders accumulate idle-trim pressure only. Trimming
     // happens between dispatches via maybeIdleTrim, never here.
@@ -670,8 +616,8 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
 
     return success(request.id,
                    RenderResponse { { transferId,
-                                      slotId,
-                                      leaseId,
+                                      lease.slotId,
+                                      lease.leaseId,
                                       static_cast<std::int32_t>(rw),
                                       static_cast<std::int32_t>(rh),
                                       static_cast<std::int32_t>(outputStride),
@@ -684,13 +630,7 @@ ResponseMessage CommandService::releaseFrameSlotResponse(const RequestMessage& r
     if (!release.slotId || !release.leaseId)
         return failure(request.id, ErrorCode::InvalidRequest, "release-frame-slot", "invalid slot lease");
 
-    const auto slot = std::find_if(m_frameSlots.begin(), m_frameSlots.end(), [&](const FrameSlot& candidate) {
-        return candidate.id == release.slotId;
-    });
-    if (slot == m_frameSlots.end() || !slot->leased || slot->leaseId != release.leaseId)
-        return success(request.id);
-
-    slot->leased = false;
+    m_framePool.releaseFrame(release.slotId, release.leaseId);
     return success(request.id);
 }
 

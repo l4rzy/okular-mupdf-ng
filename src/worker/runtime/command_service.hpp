@@ -16,6 +16,7 @@
 #include "engine/document_base.hpp"
 #include "engine/epub/export_jobs.hpp"
 #include "engine/ocr/jobs.hpp"
+#include "runtime/frame_pool.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
 #include "shared/transport/common.hpp"
@@ -72,8 +73,6 @@ constexpr std::size_t MaxOpenLinks = 100'000;
 constexpr std::size_t MaxEmbeddedFileBytes = 32U * 1024U * 1024U;
 constexpr std::size_t MaxEmbeddedFileCount = 1'024;
 constexpr std::size_t MaxOutlineResponseNodes = 50'000;
-constexpr std::uint64_t FramePoolBytes = ::Mu::Limit::MaxSharedFrameBytes;
-constexpr std::size_t MaxFramePoolSlots = ::Mu::Limit::MaxFrameSlotCount;
 
 // Deferred request queue limits during synchronous nested IPC loops
 constexpr std::size_t MaxDeferredFrames = 1024;
@@ -231,15 +230,6 @@ private:
         std::int32_t objectNumber = -1;
     };
 
-    struct FrameSlot {
-        std::uint64_t id = 0;
-        std::uint64_t leaseId = 0;
-        std::uint64_t capacity = 0;
-        Sys::FileDescriptor fd;
-        Sys::Mapping mapping;
-        bool leased = false;
-    };
-
     /// Incremental page-link aggregation retained between event-loop turns.
     struct PendingPageLinks {
         std::uint64_t generation = 0;
@@ -293,8 +283,7 @@ private:
 
     // Document-scoped reusable render mappings. A slot is never overwritten
     // while its lease is held by a plugin QImage.
-    std::vector<FrameSlot> m_frameSlots;
-    std::uint64_t m_framePoolBytes = 0;
+    FramePool m_framePool;
 
     // Stable annotation handle mapping (handle string -> { page, pdfObjectNumber })
     std::unordered_map<std::string, HandleLocation> m_annotationHandles;
@@ -315,7 +304,6 @@ private:
     std::uint64_t m_annotationGeneration = 0;
     std::uint64_t m_linkGeneration = 0;
     std::uint64_t m_nextFrameTransferId = 1;
-    std::uint64_t m_nextFrameSlotId = 1;
 
     // Buffer for requests received during synchronous nested operations
     std::deque<std::vector<std::byte>> m_deferredIncoming;

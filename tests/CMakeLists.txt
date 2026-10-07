@@ -16,6 +16,10 @@ function(add_layer_test target source label)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
+add_layer_test(test_worker_framepool worker/frame_pool.cpp worker
+    ../src/worker/runtime/frame_pool.cpp ../src/worker/sys/sys.cpp)
+target_include_directories(test_worker_framepool PRIVATE ../src ../src/worker)
+
 if(BUILD_OKULAR_GENERATOR)
 add_executable(test_render_worker support/render_worker.cpp ../src/worker/runtime/worker_server.cpp)
 set_target_properties(test_render_worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
