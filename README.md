@@ -11,7 +11,7 @@
   <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
 </p>
 
-A **secure** and fast PDF and ePUB generator for Okular.
+A **secure** and fast PDF and ePUB generator for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless.
 <!-- Note -->
 > [!IMPORTANT]
 > This project is in beta and is not stable yet. See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and test coverage. If you encounter any issue, please report via Github Issues. If you're working on an important PDF, use the official PDF backend (Poppler generator) that comes with Okular instead.
@@ -19,55 +19,10 @@ A **secure** and fast PDF and ePUB generator for Okular.
 ![Screenshot](docs/assets/screenshot.png)
 ---
 
-## How to install
+## Installation
 
-Prebuilt packages for supported distros are attached to each
-[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). The commands
-below install v0.3.3.
-
-Installing this plugin will override the default backend for PDF and ePUB. You
-can select the backend of your choice every time you open a document by enabling
-the "Show backend selection dialog" option in Okular.
-
-### Arch Linux
-
-```bash
-yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1-x86_64.pkg.tar.zst
-```
-
-### Fedora
-
-```bash
-# Fedora 44 x86_64
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1.fc44.x86_64.rpm
-
-# Fedora 43 aarch64/Asahi Linux
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1.fc43.aarch64.rpm
-```
-
-### openSUSE Tumbleweed
-
-```bash
-sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng-0.3.3-1.tumbleweed.x86_64.rpm
-```
-
-### Debian 13
-
-```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng_0.3.3-1_amd64_debian-13.deb
-sudo apt install ./okular-mupdf-ng_0.3.3-1_amd64_debian-13.deb
-```
-
-### Ubuntu 26.04
-
-```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.3.3/okular-mupdf-ng_0.3.3-1_amd64_ubuntu-26.04.deb
-sudo apt install ./okular-mupdf-ng_0.3.3-1_amd64_ubuntu-26.04.deb
-```
-
-### Any other distro
-
-Build from source — see [Building and testing](#building-and-testing).
+See [INSTALL.md](INSTALL.md) for prebuilt packages, build requirements, and
+instructions for building from source.
 
 ---
 
@@ -108,48 +63,16 @@ and the source-tree layout.
 | **PDF layers** | Toggle optional content in the Layers sidebar | ✓ | ✓ (PDF) |
 | **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
 
+## Limitations
 
-## Requirements to build
+- MuPDF's ePUB support is incomplete. ePUB 3.0 is not fully
+  supported, so some documents may render incorrectly.
+- The NSS cryptographic code has not been fully audited.
+- Sandbox is Linux only and its availability depends on Linux kernel and system support. Default to Strict Enforcement.
+- Worker restart can not recover unsaved forms.
 
-- A C++23 compiler (Clang preferred), CMake 3.20 or newer, Ninja, mold, `pkg-config`, and the usual
-  build tools.
-- Qt 6 development packages. The default Okular plugin build also requires
-  KDE Frameworks 6 and Okular 6 development packages.
-- NSS/NSPR for certificate and signature operations.
-- Build dependencies required by MuPDF, including FreeType, HarfBuzz, JPEG,
-  JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
-- `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
-- `patch` for applying the bundled MuPDF fixes during CMake configuration.
-
-## Building and testing
-
-The Makefile delegates to `scripts/build.sh`; both interfaces are equivalent.
-The script uses Ninja and builds MuPDF with all available CPUs.
-
-```bash
-# Debug build and full test suite
-make dev
-# or: ./scripts/build.sh dev
-
-# Optimized release build
-make release
-# or: ./scripts/build.sh release
-
-# Configure, build, and run the debug test suite
-make test
-
-# Format src/ and tests/
-make format
-
-# Remove build directories
-make clean
-```
-
-For an already configured build tree, run all tests with:
-
-```bash
-ctest --test-dir build --output-on-failure
-```
+See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and
+automated test coverage.
 
 ## Contributing
 
@@ -157,12 +80,32 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and testing guidelines.
 See [SECURITY.md](SECURITY.md) for the security contact.
 
 ## Credits
-- [Okular Poppler Backend](https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler)
-- [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf)
-- [Zathura MuPDF Backend](https://github.com/pwmt/zathura-pdf-mupdf)
-- [Sioyek](https://github.com/ahrm/sioyek)
+
+This project learned from amazing projects below
+
+- [Okular Poppler Backend](https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler) - Okular integration
+- [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf) - MuPDF API usage
+- [Zathura MuPDF Backend](https://github.com/pwmt/zathura-pdf-mupdf) - Seccomp rules
+- [Sioyek](https://github.com/ahrm/sioyek) - MuPDF API usage
 
 ## License
 
-Licensed under the [GNU General Public License v3.0 or later](COPYING)
-(`GPL-3.0-or-later`).
+Original project source code is licensed under the
+[GNU General Public License v3.0 or later](COPYING) (`GPL-3.0-or-later`),
+unless otherwise indicated.
+
+Third-party components retain their respective licenses and copyright notices:
+
+- **MuPDF**, including its [signature emblem](src/generator/config/signature_emblem.hpp):
+  [GNU Affero General Public License v3.0 or later](thirdparty/mupdf-COPYING)
+  (`AGPL-3.0-or-later`). The worker links against MuPDF; its license applies to
+  the engine as well as the emblem. GPLv3 permits this combination, with the
+  AGPL's network-interaction requirements applying to the combined work; see
+  [GPLv3 section 13](https://www.gnu.org/licenses/gpl-3.0.html#section13).
+- **Allura font**: [SIL Open Font License 1.1](thirdparty/allura/OFL.txt).
+- **zpp::bits**: [MIT License](thirdparty/zpp/LICENSE).
+- **cxxopts**: [MIT License](thirdparty/cxxopts/LICENSE).
+
+Other dependencies and bundled resources, including fonts embedded by MuPDF,
+retain their upstream licenses. This summary does not replace the full license
+texts or component-specific notices.

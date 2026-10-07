@@ -10,4 +10,4 @@ Keep changes focused and explain what they fix. Before submitting code, run:
 ./scripts/build.sh dev
 ```
 
-See the [README](README.md#requirements-to-build) for build requirements.
+See the [installation guide](INSTALL.md#requirements-to-build) for build requirements.

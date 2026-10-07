@@ -26,8 +26,11 @@ sequenceDiagram
     opt Rendering
         Runtime->>Runtime: render into memfd
         Runtime-->>Plugin: frame metadata + FD (SCM_RIGHTS)
-        Plugin->>Plugin: validate and copy into QImage
+        Plugin->>Plugin: validate and interpret as QImage
     end
+
+    Plugin-->>Generator: pass QImage
+    Generator-->>Okular: pass QImage
 ```
 
 ## Layer boundaries
@@ -96,12 +99,8 @@ cleanly instead of creating an unbounded transfer.
 Persistent cache code lives in `src/plugin/caching/` and is owned by the host,
 not the sandboxed worker.
 
-- Generated PDF outlines use a separate content-addressed cache keyed by the
-  complete source SHA-256 and heading algorithm revision. Embedded
-  outlines always win; valid empty generated outlines are also cached. The worker
-  extracts bounded native line/style records, then pure reconstruction matches
-  printed contents to body headings or infers hierarchy from typography. The host
-  reuses the bounded EPUB outline container and atomic writer.
+- Generated PDF TOCs are cached by source SHA-256 and heading algorithm revision;
+  embedded outlines take precedence, and empty generated TOCs are cached too.
 - OCR results are cached per document identity, language, DPI, and page. A
   valid empty OCR page is retained as a cache hit.
 - EPUB uses one cache file per document and layout fingerprint. The file has
@@ -128,9 +127,9 @@ On Linux, hardening is applied after IPC endpoints are established:
 - Resource limits cap address space and CPU time; release builds also disable
   worker core dumps and inherited descriptors.
 
-Hardening is best-effort for portability. The worker reports its actual
-sandbox status through the initial ping, so the host can distinguish fully
-hardened from degraded environments.
+Worker sandbox activation is best-effort for portability, and the worker reports
+its actual status through the initial ping. The Okular generator defaults to
+Strict enforcement: it withholds documents all protections are active. 
 
 The worker supports PDF and EPUB only. Its build-time tessdata default is
 `TESSDATA_DIR` (`/usr/share/tessdata` by default); the plugin may pass
@@ -141,15 +140,10 @@ operation is exclusively through private plugin IPC.
 ## Build and test layout
 
 The default build downloads and statically links the pinned MuPDF found 
-in `cmake/mupdf.version`. MuPDF is built with PDF and EPUB support while unused
-document formats, MuJS, and curl support are disabled. Linker garbage collection
+in `cmake/mupdf.version`. MuPDF is built with PDF, EPUB, and MOBI support while unused
+document formats and curl support are disabled. Linker garbage collection
 removes unused static sections. `-DUSE_SYSTEM_MUPDF=ON` opts into a compatible
 system package.
-
-MuPDF-linked worker, EPUB, OCR, signature, and integration tests are collected
-in one `test_mupdf` executable to avoid repeatedly linking large static MuPDF
-binaries. Cache, generator, security, and boundary tests remain small focused
-executables.
 
 ## Source tree
 

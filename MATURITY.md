@@ -46,19 +46,8 @@ promise that every input or workflow has been tested.
 
 ## Known limitations
 
-- PDF layers use the default configuration for viewing in the current session.
-  Alternate configurations and layer-toggle links are not supported. Layer
-  choices do not change saved defaults or printing; automatic OCR pauses while
-  layer visibility differs from the defaults.
-- MuPDF's ePUB support is limited compared with its PDF support, so some ePUB
-  content or behavior may not be handled fully.
-- XFDF coordinates are serialized in the page's rotated display frame, which
-  can displace annotations on rotated pages. Import also requires an explicit
-  rectangle and skips unsupported or malformed annotations with a warning.
-- The sandbox is best-effort: available protections depend on Linux kernel and
-  system support, and the worker reports when hardening is degraded.
-- Form and annotation changes that have not been saved can be lost if the
-  worker stops and the document must be reopened.
+See the [README limitations](README.md#limitations) for current feature restrictions
+and recovery behavior.
 
 ## Tracked Okular issues
 
