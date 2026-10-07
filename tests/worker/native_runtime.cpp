@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
 
@@ -131,26 +132,63 @@ private slots:
         QVERIFY(std::strcmp(static_cast<const char*>(mapping.data()), "ok") == 0);
     }
 
-    void cancelledJobsReleaseCapacity()
+    void cancelledJobsRetainExecutionCapacity_data()
     {
-        // Cancellation invalidates both the job generation and any completion
-        // that raced with close/reopen; no stale notification may escape.
-        OcrJobs jobs(1, completeOcrWithoutRecognition, 10);
-        const int input = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
-        QVERIFY(input >= 0);
-        const auto job = jobs.submit(input, { }, 0, "eng", 225.0f);
-        QVERIFY(job.has_value());
-        jobs.cancelAll();
-        QVERIFY(jobs.drainNotifications().empty());
-        QVERIFY(!jobs.take(*job).has_value());
+        QTest::addColumn<int>("limit");
+        QTest::newRow("single-runner") << 1;
+        QTest::newRow("multiple-runners") << 3;
+    }
 
-        // Cancellation must release capacity immediately, without waiting for
-        // the detached worker to observe its cancellation cookie.
-        const int replacementInput = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
-        QVERIFY(replacementInput >= 0);
-        const auto replacementJob = jobs.submit(replacementInput, { }, 0, "eng", 225.0f);
-        QVERIFY(replacementJob.has_value());
-        jobs.cancelAll();
+    void cancelledJobsRetainExecutionCapacity()
+    {
+        QFETCH(int, limit);
+        const auto runner =
+            +[](int fd, const std::string&, int, const std::string&, float, CancellationCookie*, const std::string&)
+            -> ::Mu::Model::OcrResult {
+            FileDescriptor input(fd);
+            // Signal entry and wait at a barrier even after cancellation. Closing
+            // the test endpoint also releases the runner if an assertion fails.
+            const char entered = 'x';
+            if (::send(fd, &entered, 1, MSG_NOSIGNAL) == 1) {
+                char release;
+                while (::read(fd, &release, 1) < 0 && errno == EINTR) { }
+            }
+            return { ::Mu::Model::OcrStatus::Success, { { "stale", 0, 0, 1, 1, true } } };
+        };
+        OcrJobs jobs(static_cast<std::size_t>(limit), runner, 100);
+        int sockets[2];
+        QVERIFY(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sockets) == 0);
+        FileDescriptor input(sockets[0]);
+        FileDescriptor barrier(sockets[1]);
+        for (int index = 0; index < limit; ++index) {
+            const int fd = ::dup(input.get());
+            QVERIFY(fd >= 0);
+            QVERIFY(jobs.submit(fd, { }, 0, "eng", 225.0f));
+            auto deadline = MonotonicDeadline::fromMilliseconds(3000);
+            QCOMPARE(waitForFd(barrier.get(), POLLIN, deadline), IoResult::Complete);
+            char entered;
+            QCOMPARE(::read(barrier.get(), &entered, 1), ssize_t(1));
+        }
+
+        const auto submitReplacement = [&] {
+            return jobs.submit(::open("/dev/null", O_RDONLY | O_CLOEXEC), { }, 0, "eng", 225.0f);
+        };
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            jobs.cancelAll();
+            QVERIFY(jobs.drainNotifications().empty());
+            QVERIFY(!submitReplacement());
+        }
+
+        // Closing the barrier releases all runners, making capacity reusable.
+        barrier.reset();
+        std::optional<std::uint64_t> replacement;
+        QTRY_VERIFY_WITH_TIMEOUT(replacement || (replacement = submitReplacement()), 3000);
+        auto deadline = MonotonicDeadline::fromMilliseconds(3000);
+        QCOMPARE(waitForFd(jobs.eventFd(), POLLIN, deadline), IoResult::Complete);
+        const auto notifications = jobs.drainNotifications();
+        QCOMPARE(notifications.size(), std::size_t(1));
+        QCOMPARE(notifications.front().id, *replacement);
+        QVERIFY(jobs.take(*replacement));
     }
 
     void completedResultsHaveOneConsumer()

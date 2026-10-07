@@ -35,7 +35,8 @@ enum class JobStatus : std::uint8_t { Queued, Running, Cancelled };
  * 4. Job entries move from Queued to Running or Cancelled under one mutex. A
  *    completion still registered in activeJobs is stored as a result and then
  *    announced through the eventfd notification queue, including watchdog
- *    cancellation. Host cancellation removes entries to discard their results.
+ *    cancellation. Host cancellation removes entries to discard their results,
+ *    while executingJobs retains capacity until the runner and watchdog finish.
  */
 class OcrJobs {
 public:
@@ -75,8 +76,8 @@ public:
     [[nodiscard]] std::optional<::Mu::Model::OcrResult> take(std::uint64_t id);
 
     /// Cancels active OCR jobs and clears completed results and notifications.
-    /// Detached workers retain shared state only long enough to observe cancellation;
-    /// removed entries prevent them from publishing results for a replaced document.
+    /// Removed entries prevent stale results from being published. Detached workers
+    /// retain their execution capacity until the runner and watchdog finish.
     void cancelAll() noexcept;
 
 private:
@@ -90,6 +91,8 @@ private:
     struct SharedState {
         std::mutex mutex;
         std::map<std::uint64_t, JobEntry> activeJobs;
+        // Includes cancelled jobs whose detached threads have not finished OCR.
+        std::size_t executingJobs = 0;
         std::map<std::uint64_t, ::Mu::Model::OcrResult> completedResults;
         std::deque<Notification> notifications;
         ::Mu::Worker::Sys::FileDescriptor event;

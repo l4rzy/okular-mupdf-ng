@@ -69,13 +69,14 @@ std::optional<std::uint64_t> OcrJobs::submit(
     std::shared_ptr<CancellationCookie> cookie;
     {
         std::lock_guard lock(m_state->mutex);
-        if (m_state->event.get() < 0 || m_state->activeJobs.size() + m_state->completedResults.size() >= m_limit) {
+        if (m_state->event.get() < 0 || m_state->executingJobs + m_state->completedResults.size() >= m_limit) {
             return std::nullopt;
         }
 
         id = m_state->nextId++;
         cookie = std::make_shared<CancellationCookie>();
         m_state->activeJobs.emplace(id, JobEntry { id, page, JobStatus::Queued, cookie });
+        ++m_state->executingJobs;
     }
 
     auto state = m_state;
@@ -102,6 +103,7 @@ std::optional<std::uint64_t> OcrJobs::submit(
                     if (it != state->activeJobs.end())
                         state->activeJobs.erase(it);
                     ::close(inputFd);
+                    --state->executingJobs;
                     return;
                 }
                 it->second.status = JobStatus::Running;
@@ -135,6 +137,7 @@ std::optional<std::uint64_t> OcrJobs::submit(
             // entry suppresses abandoned completions under this same mutex.
             {
                 std::lock_guard lock(state->mutex);
+                --state->executingJobs;
                 auto it = state->activeJobs.find(id);
                 if (it != state->activeJobs.end()) {
                     const int completedPage = it->second.page;
@@ -153,6 +156,7 @@ std::optional<std::uint64_t> OcrJobs::submit(
         MU_LOG(warning, "Mu::Worker::Ocr", std::string("could not start OCR thread: ") + e.what());
         std::lock_guard lock(m_state->mutex);
         m_state->activeJobs.erase(id);
+        --m_state->executingJobs;
         return std::nullopt;
     }
     worker.detach();
@@ -204,9 +208,8 @@ void OcrJobs::cancelAll() noexcept
         if (entry.cookie)
             entry.cookie->cancel();
     }
-    // Remove entries immediately so a reopened document does not inherit the
-    // previous document's capacity usage. Workers still hold the shared state
-    // and will close their input FD without publishing a stale result.
+    // Invalidate results immediately, but executingJobs keeps cancelled runners
+    // counted against capacity until they finish and join their watchdogs.
     m_state->activeJobs.clear();
     // Results belong to the document that produced them and cannot survive
     // cancellation or document replacement.
