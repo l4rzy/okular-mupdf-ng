@@ -1201,15 +1201,19 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
         return m_synopsis.get();
     }
 
-    if (m_placeholder.isActive())
+    if (!workerReady())
         return nullptr;
 
+    // Only lock cached Okular object
+    const bool allowHeuristic = m_document.heuristicSynopsisEnabled;
+    locker.unlock();
     bool generated = false;
-    std::vector<Model::OutlineNode> nodes;
-    if (workerReady()) {
-        nodes = m_worker.synopsis(m_document.heuristicSynopsisEnabled, &generated);
-    }
-    m_synopsis = Conversion::documentSynopsis(nodes);
+    const auto nodes = m_worker.synopsis(allowHeuristic, &generated);
+    auto synopsis = Conversion::documentSynopsis(nodes);
+    locker.relock();
+    if (!workerReady())
+        return nullptr;
+    m_synopsis = std::move(synopsis);
     if (m_synopsis && generated && !m_document.generatedSynopsisNoticeShown) {
         m_document.generatedSynopsisNoticeShown = true;
         // Deliver on the generator thread after releasing the synopsis mutex.
