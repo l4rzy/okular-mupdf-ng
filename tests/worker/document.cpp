@@ -420,8 +420,9 @@ private slots:
         document.setSettings(settings);
         fz_context* context = document.context();
         pdf_document* pdf = pdf_specifics(context, document.document());
-        if (!pdf_js_supported(context, pdf))
-            QSKIP("JavaScript is disabled in this MuPDF build");
+        if (!TEST_FORM_JAVASCRIPT)
+            QSKIP("PDF form JavaScript support is disabled in this configuration");
+        QVERIFY2(pdf_js_supported(context, pdf), "JavaScript is unavailable despite being enabled in this build");
         const auto* exceptionTop = context->error.top;
         const auto seek = pdf->file->seek;
         for (int repeat = 0; repeat < 4; ++repeat) {
@@ -2329,12 +2330,17 @@ private slots:
         QVERIFY(file.open(QIODevice::ReadOnly));
         std::string error;
         ::Mu::Worker::Engine::PdfDocument doc;
+        auto settings = doc.settings();
+        settings.formJavaScriptEnabled = true;
+        doc.setSettings(settings);
         QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_calculation.pdf", &error), error.c_str());
 
         pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
         QVERIFY(pdfDoc);
-        if (!pdf_js_supported(doc.context(), pdfDoc))
-            QSKIP("JavaScript is disabled in this MuPDF build");
+        if (!TEST_FORM_JAVASCRIPT)
+            QSKIP("PDF form JavaScript support is disabled in this configuration");
+        QVERIFY2(pdf_js_supported(doc.context(), pdfDoc),
+                 "JavaScript is unavailable despite being enabled in this build");
 
         auto details = doc.pageDetails(0, &error);
         QVERIFY2(error.empty(), error.c_str());
@@ -2388,12 +2394,17 @@ private slots:
         QVERIFY(file.open(QIODevice::ReadOnly));
         std::string error;
         ::Mu::Worker::Engine::PdfDocument doc;
+        auto settings = doc.settings();
+        settings.formJavaScriptEnabled = true;
+        doc.setSettings(settings);
         QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_button.pdf", &error), error.c_str());
 
         pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
         QVERIFY(pdfDoc);
-        if (!pdf_js_supported(doc.context(), pdfDoc))
-            QSKIP("JavaScript is disabled in this MuPDF build");
+        if (!TEST_FORM_JAVASCRIPT)
+            QSKIP("PDF form JavaScript support is disabled in this configuration");
+        QVERIFY2(pdf_js_supported(doc.context(), pdfDoc),
+                 "JavaScript is unavailable despite being enabled in this build");
 
         auto details = doc.pageDetails(0, &error);
         QVERIFY2(error.empty(), error.c_str());
@@ -2440,11 +2451,16 @@ private slots:
         QVERIFY(file.open(QIODevice::ReadOnly));
         std::string error;
         ::Mu::Worker::Engine::PdfDocument doc;
+        auto settings = doc.settings();
+        settings.formJavaScriptEnabled = true;
+        doc.setSettings(settings);
         QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_partial_error.pdf", &error), error.c_str());
         pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
         QVERIFY(pdfDoc);
-        if (!pdf_js_supported(doc.context(), pdfDoc))
-            QSKIP("JavaScript is disabled in this MuPDF build");
+        if (!TEST_FORM_JAVASCRIPT)
+            QSKIP("PDF form JavaScript support is disabled in this configuration");
+        QVERIFY2(pdf_js_supported(doc.context(), pdfDoc),
+                 "JavaScript is unavailable despite being enabled in this build");
 
         const auto details = doc.pageDetails(0, &error);
         QVERIFY2(error.empty(), error.c_str());
@@ -2490,12 +2506,17 @@ private slots:
         QVERIFY(file.open(QIODevice::ReadOnly));
         std::string error;
         ::Mu::Worker::Engine::PdfDocument doc;
+        auto settings = doc.settings();
+        settings.formJavaScriptEnabled = true;
+        doc.setSettings(settings);
         QVERIFY2(doc.openFd(::dup(file.handle()), "form_javascript_controls.pdf", &error), error.c_str());
 
         pdf_document* pdfDoc = pdf_specifics(doc.context(), doc.document());
         QVERIFY(pdfDoc);
-        if (!pdf_js_supported(doc.context(), pdfDoc))
-            QSKIP("JavaScript is disabled in this MuPDF build");
+        if (!TEST_FORM_JAVASCRIPT)
+            QSKIP("PDF form JavaScript support is disabled in this configuration");
+        QVERIFY2(pdf_js_supported(doc.context(), pdfDoc),
+                 "JavaScript is unavailable despite being enabled in this build");
 
         auto details = doc.pageDetails(0, &error);
         QVERIFY2(error.empty(), error.c_str());
