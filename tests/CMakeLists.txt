@@ -329,10 +329,12 @@ if(MU_DEBUG_BUILD)
     target_link_libraries(test_mupdf PRIVATE mupdf_ipc_debug)
 endif()
 
-# Keep the isolated process free of GUI and host-application dependencies.
+# Keep the isolated process and shared contract free of Qt and host dependencies.
 add_test(NAME test_worker_link_boundary
     COMMAND ${CMAKE_COMMAND}
         -DWORKER_PATH=$<TARGET_FILE:mupdfng-worker>
+        -DWORKER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../src/worker
+        -DSHARED_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../src/shared
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_worker_link_boundary.cmake)
 set_tests_properties(test_worker_link_boundary PROPERTIES LABELS "security" TIMEOUT 15)
 
