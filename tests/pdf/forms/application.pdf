@@ -1,0 +1,101 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 2 /Kids [3 0 R 4 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /Helv 6 0 R >> >> /Contents 17 0 R /Annots [7 0 R 9 0 R 10 0 R 11 0 R 13 0 R 14 0 R 16 0 R] >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /Font << /Helv 6 0 R >> >> /Contents 18 0 R /Annots [8 0 R 12 0 R] >>
+endobj
+5 0 obj
+<< /Fields [7 0 R 8 0 R 9 0 R 10 0 R 13 0 R 14 0 R 15 0 R 16 0 R] /DR << /Font << /Helv 6 0 R >> >> /DA (/Helv 12 Tf 0 g) /NeedAppearances true >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 660 300 690] /FT /Tx /T (Name) /V (Original) /DV (Original) /MaxLen 16 >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 4 0 R /Rect [50 500 350 600] /FT /Tx /T (Notes) /Ff 4096 /V (Initial notes) >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 600 300 630] /FT /Tx /T (Reference) /Ff 1 /V (Protected) >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 550 70 570] /FT /Btn /T (Agree) /V /Off /AS /Off /AP << /N << /Off 19 0 R /Yes 20 0 R >> >> >>
+endobj
+11 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 500 70 520] /Parent 15 0 R /AS /Email /AP << /N << /Off 19 0 R /Email 20 0 R >> >> >>
+endobj
+12 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 4 0 R /Rect [50 400 70 420] /Parent 15 0 R /AS /Off /AP << /N << /Off 19 0 R /Post 20 0 R >> >> >>
+endobj
+13 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 350 250 440] /FT /Ch /T (Languages) /Ff 2097152 /Opt [[(en) (English)] [(fr) (French)] [(de) (German)]] /V [(en)] /I [0] >>
+endobj
+14 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 280 250 310] /FT /Ch /T (City) /Ff 393216 /Opt [(London) (Paris)] /V (London) >>
+endobj
+15 0 obj
+<< /FT /Btn /T (Delivery) /Ff 32768 /V /Email /DV /Email /Kids [11 0 R 12 0 R] >>
+endobj
+16 0 obj
+<< /Type /Annot /Subtype /Widget /F 4 /P 3 0 R /Rect [50 220 150 250] /FT /Btn /T (Reset) /Ff 65536 /A << /S /ResetForm >> /MK << /CA (Reset) >> >>
+endobj
+17 0 obj
+<< /Length 49  >>
+stream
+BT /Helv 18 Tf 50 740 Td (Application form) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Length 51  >>
+stream
+BT /Helv 18 Tf 50 740 Td (Additional details) Tj ET
+endstream
+endobj
+19 0 obj
+<< /Length 14 /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << >> >>
+stream
+0 0 20 20 re S
+endstream
+endobj
+20 0 obj
+<< /Length 44 /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << >> >>
+stream
+0 0 20 20 re S 2 2 m 18 18 l 2 18 m 18 2 l S
+endstream
+endobj
+xref
+0 21
+0000000000 65535 f 
+0000000009 00000 n 
+0000000074 00000 n 
+0000000137 00000 n 
+0000000323 00000 n 
+0000000486 00000 n 
+0000000648 00000 n 
+0000000718 00000 n 
+0000000864 00000 n 
+0000000999 00000 n 
+0000001131 00000 n 
+0000001299 00000 n 
+0000001458 00000 n 
+0000001614 00000 n 
+0000001811 00000 n 
+0000001965 00000 n 
+0000002063 00000 n 
+0000002227 00000 n 
+0000002328 00000 n 
+0000002431 00000 n 
+0000002561 00000 n 
+trailer
+<< /Size 21 /Root 1 0 R >>
+startxref
+2721
+%%EOF
