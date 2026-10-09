@@ -127,9 +127,9 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
     addNodes = [&](const std::vector<Model::OutlineNode>& children, QDomNode& parent) {
         for (const auto& node : children) {
             const QString title = node.title.empty() ? QStringLiteral("Item") : QString::fromStdString(node.title);
-            QDomElement element = result->createElement(title);
-            if (element.isNull())
-                continue;
+            // Okular stores arbitrary titles as tag names, not valid XML names.
+            QDomElement element = result->createElement(QStringLiteral("item"));
+            element.setTagName(title);
             parent.appendChild(element);
             if (node.open)
                 element.setAttribute(QStringLiteral("Open"), QStringLiteral("true"));

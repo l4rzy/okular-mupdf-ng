@@ -198,6 +198,7 @@ target_link_libraries(mupdf_generator_adapters PUBLIC
     mupdf_plugin_util
 )
 target_compile_definitions(mupdf_generator_adapters PRIVATE
+    TRANSLATION_DOMAIN="okular_mupdfng"
     HAVE_NEW_SIGNATURE_API=1
     MUPDF_FORMFIELD_REMOTE_SIGNING
 )

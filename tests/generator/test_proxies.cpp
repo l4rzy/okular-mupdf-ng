@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QDateTime>
 #include <QImage>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
 #include <QTimeZone>
@@ -219,8 +220,21 @@ private slots:
         QCOMPARE(::Mu::Generator::Conversion::embeddedFile(unknownModel)->size(), -1);
     }
 
+    void documentSynopsisConstructsHierarchyAndAttributes_data()
+    {
+        QTest::addColumn<int>("invalidDataPolicy");
+        QTest::newRow("accept") << int(QDomImplementation::AcceptInvalidChars);
+        QTest::newRow("drop") << int(QDomImplementation::DropInvalidChars);
+        QTest::newRow("reject") << int(QDomImplementation::ReturnNullNode);
+    }
+
     void documentSynopsisConstructsHierarchyAndAttributes()
     {
+        QFETCH(int, invalidDataPolicy);
+        const auto originalPolicy = QDomImplementation::invalidDataPolicy();
+        const auto restorePolicy =
+            qScopeGuard([originalPolicy] { QDomImplementation::setInvalidDataPolicy(originalPolicy); });
+        QDomImplementation::setInvalidDataPolicy(QDomImplementation::InvalidDataPolicy(invalidDataPolicy));
         // 1. Empty nodes should return nullptr
         QVERIFY(!::Mu::Generator::Conversion::documentSynopsis({ }));
 
