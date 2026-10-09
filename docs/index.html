@@ -201,8 +201,14 @@
             <tr>
               <td>PDF Forms</td>
               <td>AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons</td>
-              <td class="yes">Yes (incl. JS calculation &amp; button/field-event actions; XFA detected only)</td>
-              <td class="yes">Yes (AcroForm; JS stored, not executed; XFA detected only)</td>
+              <td class="yes">Yes (AcroForm; XFA detected only)</td>
+              <td class="yes">Yes (AcroForm; XFA detected only)</td>
+            </tr>
+            <tr>
+              <td>PDF form JavaScript</td>
+              <td>Calculations and button/field-event actions</td>
+              <td class="yes">Yes (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in)</td>
+              <td class="yes">Yes (Poppler passes scripts to Okular, which executes them in QJSEngine)</td>
             </tr>
             <tr>
               <td>Signatures</td>

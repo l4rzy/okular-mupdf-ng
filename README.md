@@ -51,7 +51,8 @@ and the source-tree layout.
 | **Formats** | PDF, ePUB | ✓ | ✓ |
 | **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
 | **ePUB export** | Export ePUB to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
-| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (incl. JS calculation & button/field-event actions; XFA detected only) | ✓ (AcroForm; JS stored, not executed; XFA detected only) |
+| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
+| **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
 | **Cert Manager** | NSS certificate manager; generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
