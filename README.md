@@ -66,7 +66,7 @@ and the source-tree layout.
 
 ## Limitations
 
-- MuPDF's ePUB support is incomplete. ePUB 3.0 is not fully
+- MuPDF's ePUB & MOBI support are incomplete. ePUB 3.0 and modern MOBI are not fully
   supported, so some documents may render incorrectly.
 - The NSS cryptographic code has not been fully audited.
 - Sandbox is Linux only and its availability depends on Linux kernel and system support. Default to Strict Enforcement.

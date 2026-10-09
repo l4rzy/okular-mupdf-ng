@@ -29,6 +29,7 @@ promise that every input or workflow has been tested.
 | Render ePUB pages | 🟡 Partial | Worker and IPC integration |
 | ePUB custom CSS and page sizes | 🟡 Partial | Worker tests; settings tests |
 | Export ePUB to PDF | 🟡 Partial | Worker and IPC integration |
+| Unencrypted legacy MOBI support | 🟡 Partial | Synthetic corpus; detection, header rejection, descriptor cleanup, file/memory IPC, reopen, TOC, and PDF export tests; generator open/search tests |
 | OCR for scanned PDF pages | 🟡 Partial | Worker and plugin integration tests |
 | Outlines, links, and navigation | 🟡 Partial | Worker tests; EPUB link and outline tests 
 | PDF layers (optional content) | 🟡 Partial | Worker visibility and text tests; Qt model, IPC, and plugin response validation tests |
@@ -41,7 +42,6 @@ promise that every input or workflow has been tested.
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
 | PDF JS support | 🟣 Experimental | Basic integration tests |
-| MOBI support | 🟣 Experimental | Basic integration tests |
 | Generated PDF TOC (printed contents and typography; persistent cache) | 🟣 Experimental | Heading/hierarchy, wrapped titles, contents columns/page mapping, and cache tests; rotated worker fixtures and IPC reopen/precedence tests |
 
 ## Known limitations

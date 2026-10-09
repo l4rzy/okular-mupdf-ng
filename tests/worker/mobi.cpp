@@ -53,6 +53,8 @@ private slots:
         QTest::addColumn<QString>("fixture");
         QTest::newRow("uncompressed") << QStringLiteral("legacy-uncompressed.mobi");
         QTest::newRow("palmdoc") << QStringLiteral("legacy-palmdoc.mobi");
+        QTest::newRow("utf8") << QStringLiteral("basic-utf8.mobi");
+        QTest::newRow("version7") << QStringLiteral("basic-version7.mobi");
     }
 
     void opensLegacyMobi()
@@ -218,55 +220,74 @@ private slots:
 
     void rejectsUnsupportedMobi_data()
     {
-        QTest::addColumn<int>("offset");
-        QTest::addColumn<int>("value");
-        QTest::newRow("magic") << 60 << 0;
-        QTest::newRow("compression") << 97 << 99;
-        QTest::newRow("encrypted") << 109 << 1;
-        QTest::newRow("kf8") << 135 << 8;
-        QTest::newRow("invalid-record-offset") << 78 << 255;
-        QTest::newRow("truncated") << -1 << 0;
+        QTest::addColumn<QString>("fixture");
+        QTest::addColumn<std::string>("expectedError");
+        for (const auto* name : { "magic", "truncated" })
+            QTest::newRow(name) << QStringLiteral("invalid-%1.mobi").arg(QLatin1String(name))
+                                << std::string("invalid legacy MOBI header");
+        for (const auto* name : { "record-count", "record-offset", "record-order", "short-record" })
+            QTest::newRow(name) << QStringLiteral("invalid-%1.mobi").arg(QLatin1String(name))
+                                << std::string("invalid MOBI record table");
+        for (const auto* name : { "record-magic", "truncated-record" })
+            QTest::newRow(name) << QStringLiteral("invalid-%1.mobi").arg(QLatin1String(name))
+                                << std::string("invalid legacy MOBI record header");
+        QTest::newRow("compression")
+            << QStringLiteral("invalid-compression.mobi")
+            << std::string("unsupported MOBI compression; only uncompressed and PalmDOC are supported");
+        QTest::newRow("encrypted") << QStringLiteral("invalid-encrypted.mobi")
+                                   << std::string("encrypted MOBI documents are not supported");
+        QTest::newRow("kf8") << QStringLiteral("invalid-kf8.mobi")
+                             << std::string("only legacy MOBI documents are supported");
     }
 
     void rejectsUnsupportedMobi()
     {
-        QFETCH(int, offset);
-        QFETCH(int, value);
-        QFile source(QStringLiteral(TEST_MOBI_DIR "/legacy-uncompressed.mobi"));
-        QVERIFY(source.open(QIODevice::ReadOnly));
-        QByteArray bytes = source.readAll();
-        if (offset < 0)
-            bytes.truncate(90);
-        else
-            bytes[offset] = static_cast<char>(value);
-        QTemporaryDir directory;
-        QFile file(directory.filePath(QStringLiteral("invalid.mobi")));
-        QVERIFY(file.open(QIODevice::ReadWrite));
-        QCOMPARE(file.write(bytes), bytes.size());
-        QVERIFY(file.flush());
+        QFETCH(QString, fixture);
+        QFETCH(std::string, expectedError);
+        QFile file(QStringLiteral(TEST_MOBI_DIR "/") + fixture);
+        QVERIFY(file.open(QIODevice::ReadOnly));
         const int fd = ::dup(file.handle());
+        QVERIFY(fd >= 0);
         Worker::Engine::MobiDocument document;
+        QFile valid(QStringLiteral(TEST_MOBI_DIR "/legacy-uncompressed.mobi"));
+        QVERIFY(valid.open(QIODevice::ReadOnly));
         std::string error;
+        QVERIFY2(document.openFd(::dup(valid.handle()), "valid.mobi", &error), error.c_str());
         QVERIFY(!document.openFd(fd, "invalid.mobi", &error));
-        QVERIFY(!error.empty());
+        QCOMPARE(error, expectedError);
         QVERIFY(!document.isOpen());
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        error.clear();
+        QVERIFY2(document.openFd(::dup(valid.handle()), "valid.mobi", &error), error.c_str());
+        QVERIFY(document.isOpen());
     }
 
     void opensAndExportsThroughWorker_data()
     {
         QTest::addColumn<bool>("fromData");
-        QTest::newRow("file-and-async-export") << false;
-        QTest::newRow("data-and-sync-export") << true;
+        QTest::addColumn<QString>("fixture");
+        QTest::newRow("file-and-async-export") << false << QStringLiteral("legacy-palmdoc.mobi");
+        QTest::newRow("data-and-sync-export") << true << QStringLiteral("legacy-palmdoc.mobi");
+        QTest::newRow("utf8-file") << false << QStringLiteral("basic-utf8.mobi");
+        QTest::newRow("version7-data") << true << QStringLiteral("basic-version7.mobi");
     }
 
     void opensAndExportsThroughWorker()
     {
         QFETCH(bool, fromData);
+        QFETCH(QString, fixture);
         Plugin::WorkerClient client;
         QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
-        const QString path = QStringLiteral(TEST_MOBI_DIR "/legacy-palmdoc.mobi");
+        const QString path = QStringLiteral(TEST_MOBI_DIR "/") + fixture;
         QList<Plugin::WorkerClient::PageInfo> pages;
+        const QString rejected = QStringLiteral(TEST_MOBI_DIR "/invalid-encrypted.mobi");
+        if (fromData) {
+            QFile file(rejected);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(client.openData(file.readAll(), { }, pages, Model::DocumentType::Mobi), Model::OpenStatus::Failed);
+        } else {
+            QCOMPARE(client.open(rejected, { }, pages, Model::DocumentType::Mobi), Model::OpenStatus::Failed);
+        }
         if (fromData) {
             QFile file(path);
             QVERIFY(file.open(QIODevice::ReadOnly));
