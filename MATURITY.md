@@ -35,9 +35,9 @@ promise that every input or workflow has been tested.
 | PDF annotations | 🟡 Partial | Generator proxy and worker tests |
 | Printing and document export | 🟡 Partial | Export integration; print-output appearance, visibility, geometry and source-isolation tests; printer submission untested |
 | Flattened PDF export | 🟡 Partial | Worker appearance/source-isolation tests; IPC and CLI export integration |
+| Basic PDF AcroForm filling | 🟡 Partial | Worker and proxy tests; loaded-generator edit, undo/redo, save/reopen, reset, and print-to-PDF tests with synthetic and LibreOffice fixtures |
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
-| PDF form filling | 🟣 Experimental | Generator proxy and worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
 | PDF JS support | 🟣 Experimental | Basic integration tests |
