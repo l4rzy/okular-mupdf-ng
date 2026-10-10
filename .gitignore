@@ -8,6 +8,7 @@ thirdparty/mupdf-*/
 dist/*
 !dist/PKGBUILD
 !dist/mupdfng.png
+!dist/mupdfng.svg
 dist/aur/*
 !dist/aur/PKGBUILD
 !dist/aur/.SRCINFO
