@@ -1,6 +1,6 @@
 name: Sanitizer
 
-# ASan/LSan/UBSan validation for every CI run, required before publishing releases.
+# ASan/LSan validation for every CI run, required before publishing releases.
 on:
   workflow_call:
   workflow_dispatch:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   asan:
-    name: ASan/LSan/UBSan worker tests
+    name: ASan/LSan worker tests
     runs-on: ubuntu-26.04
     container:
       image: ubuntu:26.04
@@ -46,6 +46,7 @@ jobs:
             libnss3-tools \
             libopenjp2-7-dev \
             libseccomp-dev \
+            llvm \
             mold \
             openssl \
             libkf6config-dev \
@@ -76,4 +77,4 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           ASAN_OPTIONS: detect_leaks=1
-          UBSAN_OPTIONS: print_stacktrace=1
+          ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer
