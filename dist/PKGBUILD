@@ -2,9 +2,9 @@
 pkgbase=okular-mupdf-ng
 pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
-pkgver=0.2.0
+pkgver=0.3.6
 pkgrel=1
-pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation)"
+pkgdesc="A MuPDF-based secure and fast backend for Okular"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('GPL-3.0-or-later')
@@ -95,13 +95,13 @@ check() {
 }
 
 package_okular-mupdf-ng() {
-  pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, statically linked MuPDF)"
+  pkgdesc="A MuPDF-based secure and fast backend for Okular (statically linked MuPDF)"
   conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
   cp -a "$srcdir/stage-static/." "$pkgdir"/
 }
 
 package_okular-mupdf-ng-dynamic() {
-  pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation, dynamically linked against system MuPDF)"
+  pkgdesc="A MuPDF-based secure and fast backend for Okular (system MuPDF)"
   # The system MuPDF pulls its third-party libraries in transitively.
   local mupdf_version
   mupdf_version=$(pkg-config --modversion mupdf)

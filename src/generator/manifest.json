@@ -11,7 +11,7 @@
             }
         ],
         "Copyright": "© 2008 Pino Toscano\n© 2026 l4rzy",
-        "Description": "A secure and fast PDF and ePUB backend for Okular",
+        "Description": "A MuPDF-based secure and fast backend for Okular",
         "License": "GPLv3",
         "MimeTypes": [
             "application/x-pdf",
@@ -19,7 +19,7 @@
             "application/epub+zip",
             "application/x-mobipocket-ebook"
         ],
-        "Name": "MuPDF-NG Backend for Okular",
+        "Name": "MuPDF Backend for Okular",
         "ServiceTypes": [
             "okular/Generator"
         ],

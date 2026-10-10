@@ -14,8 +14,8 @@ Document type:
 - [ ] EPUB
 
 What happens with Okular Poppler:
-What happens with default mupdf reader:
-What happens with MuPDF-ng:
+What happens with official mupdf reader:
+What happens with Okular using this backend:
 
 Page number(s):
 
