@@ -110,8 +110,8 @@ set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/mupdfng-wo
 add_subdirectory(src)
 
 if(BUILD_OKULAR_GENERATOR)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.png"
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/mupdfng.svg"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps")
 endif()
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"

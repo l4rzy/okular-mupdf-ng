@@ -1,5 +1,5 @@
 <p align="center">
-<img src="dist/mupdfng.png" width="180px">
+<img src="dist/mupdfng.svg" width="180px">
 </p>
 
 # okular-mupdf-ng

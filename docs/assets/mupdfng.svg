@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">mupdf-ng</title>
+  <desc id="description">Shaded ivory paper with a copper folded corner over a blue-gray sheet, with a bold ng monogram, matching copper highlights, and a teal lens labeled PDF and ePUB inside the g.</desc>
+
+  <!-- Original geometry with an Oxygen-inspired material treatment. -->
+  <defs>
+    <linearGradient id="back-page" x1="130" y1="114" x2="352" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B8CDD5"/>
+      <stop offset=".35" stop-color="#7896A3"/>
+      <stop offset="1" stop-color="#405B68"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="154" y1="68" x2="368" y2="446" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".6" stop-color="#FAF9F3"/>
+      <stop offset="1" stop-color="#D9DDD8"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="330" y1="144" x2="370" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#AF6139"/>
+      <stop offset=".5" stop-color="#F5AF6B"/>
+      <stop offset="1" stop-color="#FFE3B2"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="184" y1="210" x2="310" y2="318" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5B7880"/>
+      <stop offset=".5" stop-color="#2B454F"/>
+      <stop offset="1" stop-color="#172B35"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="194" y1="216" x2="258" y2="250" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE3B2"/>
+      <stop offset=".5" stop-color="#F5AF6B"/>
+      <stop offset="1" stop-color="#AF6139"/>
+    </linearGradient>
+    <linearGradient id="hook-accent" xlink:href="#accent" x1="372" y1="302" x2="338" y2="330"/>
+    <linearGradient id="lens-glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop stop-color="#72E0CE"/>
+      <stop offset=".5" stop-color="#278F99"/>
+      <stop offset="1" stop-color="#123A53"/>
+    </linearGradient>
+    <radialGradient id="ground">
+      <stop stop-color="#15262C" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#15262C" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-25%" y="-20%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#10272D" flood-opacity=".3"/>
+    </filter>
+    <rect id="rear-sheet" x="96" y="116" width="264" height="342" rx="6"/>
+    <path id="front-sheet" d="M140 66H324L410 152V436Q410 442 404 442H140Q134 442 134 436V72Q134 66 140 66Z"/>
+    <clipPath id="rear-sheet-clip" clipPathUnits="userSpaceOnUse">
+      <use xlink:href="#rear-sheet" transform="rotate(7 256 256)"/>
+    </clipPath>
+    <!-- Concentric arcs keep each letter's stroke even through its bends. -->
+    <path id="n-shape" d="M166 295V213H224A38 38 0 0 1 262 251V295H234V251A10 10 0 0 0 224 241H204A10 10 0 0 0 194 251V295H166Z"/>
+    <path id="g-shape" d="M308 213H376V304A30 30 0 0 1 346 334H294V310H346A6 6 0 0 0 352 304V295H308Q280 295 280 267V241Q280 213 308 213Z"/>
+  </defs>
+
+  <ellipse cx="256" cy="476" rx="191" ry="26" fill="url(#ground)"/>
+
+  <!-- Rear sheet: a dark outer edge and a narrow, lit inner bevel. -->
+  <g transform="rotate(7 256 256)" filter="url(#shadow)">
+    <use xlink:href="#rear-sheet" fill="url(#back-page)" stroke="#3C5663" stroke-width="3"/>
+    <rect x="100" y="120" width="256" height="334" rx="3" stroke="#E1EDF2" stroke-opacity=".65" stroke-width="2"/>
+  </g>
+
+  <!-- The front page casts a shadow only onto the exposed rear sheet. -->
+  <g clip-path="url(#rear-sheet-clip)" fill="#10272D">
+    <use xlink:href="#front-sheet" transform="rotate(-5 256 256) translate(0 10)" opacity=".1"/>
+    <use xlink:href="#front-sheet" transform="rotate(-5 256 256) translate(0 6)" opacity=".22"/>
+  </g>
+
+  <g transform="rotate(-5 256 256)">
+    <use xlink:href="#front-sheet" fill="url(#paper)" stroke="#7D8B8E" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M142 71H321L405 154V434Q405 437 402 437H142Q139 437 139 434V74Q139 71 142 71Z" stroke="#FFFFFF" stroke-opacity=".85" stroke-width="2"/>
+
+    <!-- The fold casts a small shadow onto the paper beneath it. -->
+    <path d="M324 68L410 152L335 163Q320 163 320 148Z" fill="#52696B" fill-opacity=".13"/>
+    <path d="M324 66L410 152H339Q324 152 324 137V66Z" fill="url(#fold)" stroke="#94502E" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M329 78V136Q329 147 340 147H397" stroke="#FFF0D5" stroke-opacity=".8" stroke-width="2"/>
+
+    <!-- Equal 96-unit letter widths and a shared top/baseline; the n has
+         28-unit strokes to balance the g's 24-unit strokes and filled lens.
+         The 1-unit offset centers the monogram on the page at x=272. -->
+    <!-- Explicit silhouettes also render in viewers without SVG filter support. -->
+    <g transform="translate(1 -11)" fill="#10272D" opacity=".22">
+      <use xlink:href="#n-shape"/>
+      <use xlink:href="#g-shape"/>
+    </g>
+    <g id="monogram" transform="translate(1 -18)">
+    <use xlink:href="#n-shape" fill="url(#ink)" stroke="#17313C" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M170 291V217H190" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.6"/>
+    <path d="M194 217H224A34 34 0 0 1 258 251" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M238 291V251A14 14 0 0 0 224 237H204" stroke="#FFFFFF" stroke-opacity=".2" stroke-width="1.6"/>
+    <use xlink:href="#g-shape" fill="url(#ink)" stroke="#17313C" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M284 265V241Q284 217 308 217H372M298 314H346A10 10 0 0 0 356 304" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.6"/>
+    <path d="M372 302V304A26 26 0 0 1 346 330H338" stroke="url(#hook-accent)" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Lens center is the midpoint of the g bowl: (280..376, 213..295). -->
+    <g id="lens" transform="translate(328 254)">
+      <circle r="30" fill="#132D38" stroke="#729397" stroke-width="1.2"/>
+      <circle r="26" fill="url(#lens-glass)"/>
+      <path d="M-22 -8A23.409 23.409 0 0 1 8 -22L-22 8A23.409 23.409 0 0 1 -22 -8Z" fill="#E0FFF8" fill-opacity=".22"/>
+      <path d="M-20 -9A22 22 0 0 1 -9 -20" stroke="#E0FFF8" stroke-opacity=".8" stroke-width="1.8" stroke-linecap="round"/>
+      <text x="0" y="-1" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="12" font-weight="700" fill="#F0FFFA">PDF</text>
+      <text x="0" y="11" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="9" font-weight="600" fill="#F0FFFA">ePUB</text>
+    </g>
+    </g>
+
+    <path d="M172 361H372M209 381H335" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+    <path d="M172 359H372M209 379H335" stroke="#8B9B9B" stroke-opacity=".6" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>
