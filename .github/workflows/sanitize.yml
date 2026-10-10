@@ -73,7 +73,8 @@ jobs:
 
       - name: Build with sanitizers and run tests
         run: |
-          ./scripts/build.sh asan
+          test -f /usr/share/tesseract-ocr/5/tessdata/eng.traineddata
+          ./scripts/build.sh asan -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
         env:
           QT_QPA_PLATFORM: offscreen
           ASAN_OPTIONS: detect_leaks=1

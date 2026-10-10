@@ -18,6 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "engine/constants.hpp"
 #include "sys/operation_budget.hpp"
 #include "sys/sandbox.hpp"
 
@@ -38,6 +39,7 @@ struct ProbeResult {
     std::uint8_t seccompActive = 0;
     std::uint8_t linuxNamespaceActive = 0;
     std::uint8_t resourceLimitsActive = 0;
+    std::uint8_t addressSpaceLimitCorrect = 0;
     std::uint8_t memoryProtectionActive = 0;
     std::uint8_t allowedRead = 0;
     std::uint8_t outsideReadDenied = 0;
@@ -114,8 +116,19 @@ bool runSandboxProbe(const ProbeContext& context, ProbeResult* result)
             _exit(1);
         ::close(launcherPipe[1]);
         ProbeResult probe;
+        struct rlimit expectedAddressSpace { };
+        if (::getrlimit(RLIMIT_AS, &expectedAddressSpace) != 0)
+            _exit(1);
+#ifndef MU_ASAN_ENABLED
+        constexpr auto limit = static_cast<rlim_t>(Mu::Worker::Engine::Constant::SandboxAddressSpaceBytes);
+        expectedAddressSpace = { limit, limit };
+#endif
         const auto status = ::Mu::Worker::Sandbox::activate({ context.requiredDirectory, context.optionalDirectory },
                                                             { pipeFds[1], context.inheritedFd });
+        struct rlimit actualAddressSpace { };
+        probe.addressSpaceLimitCorrect = ::getrlimit(RLIMIT_AS, &actualAddressSpace) == 0
+            && actualAddressSpace.rlim_cur == expectedAddressSpace.rlim_cur
+            && actualAddressSpace.rlim_max == expectedAddressSpace.rlim_max;
         probe.landlockActive = status.landlock;
         probe.seccompActive = status.seccomp;
         probe.linuxNamespaceActive = status.linuxNamespace;
@@ -448,6 +461,7 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
     ::close(inheritedFd);
     ::close(unpreservedFd);
 
+    QVERIFY(result.addressSpaceLimitCorrect);
     if (!result.landlockActive && !result.seccompActive)
         QSKIP("Landlock and seccomp are unavailable on this host");
 

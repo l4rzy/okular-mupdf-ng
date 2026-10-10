@@ -39,7 +39,7 @@ case "$1" in
     RUN_TESTS=1
     ;;
   *)
-    echo "Usage: $0 [dev|release|asan|gcc|test|format|clean]"
+    echo "Usage: $0 [dev|release|asan|gcc|test|format|clean] [CMake options...]"
     exit 1
     ;;
 esac
@@ -78,7 +78,7 @@ if command -v mold > /dev/null 2>&1; then
     cmake_args+=(-DCMAKE_LINKER_TYPE=MOLD)
   fi
 fi
-cmake -B "$BUILD_DIR" -S . "${cmake_args[@]}"
+cmake -B "$BUILD_DIR" -S . "${cmake_args[@]}" "${@:2}"
 
 echo "==> Building ($BUILD_TYPE)..."
 cmake --build "$BUILD_DIR" -j$(nproc)
