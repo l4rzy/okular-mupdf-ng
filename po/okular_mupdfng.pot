@@ -956,3 +956,11 @@ msgstr ""
 #: rc.cpp:40
 msgid "Page Size"
 msgstr ""
+
+#: src/generator/mupdfng.cpp
+msgid "XFDF export does not support rotated PDF pages."
+msgstr ""
+
+#: src/generator/mupdfng.cpp
+msgid "Could not check PDF page rotation for XFDF export."
+msgstr ""

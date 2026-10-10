@@ -19,8 +19,8 @@ namespace Mu::Generator::Conversion {
 /// Okular pages report their size in device pixels, so @p dpi is used to
 /// convert those dimensions back to PDF points.
 ///
-/// Known limitation: rotated pages serialize in display space, not unrotated
-/// PDF user-space (see Plugin::Xfdf::Page).
+/// The export entry point must reject PDFs containing rotated pages before
+/// calling this adapter (see Plugin::Xfdf::Page).
 [[nodiscard]] QString annotationsToXfdf(const QVector<Okular::Page*>& pages, const QSizeF& dpi);
 
 } // namespace Mu::Generator::Conversion

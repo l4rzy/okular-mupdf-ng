@@ -1590,9 +1590,19 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 
     if (format.mimeType().name() == QLatin1String("application/xml")) {
         // Annotations are exported from the live Okular pages, so unsaved
-        // in-session changes are included and no worker round trip is needed.
+        // in-session changes are included. Only page-rotation validation needs
+        // a worker round trip; Okular's page orientation is already normalized.
         if (m_document.type != Model::DocumentType::Pdf)
             return false;
+        const auto info = m_worker.getDocumentInfo({ QStringLiteral("hasRotatedPages") });
+        const auto rotated = info.values.find("hasRotatedPages");
+        if (rotated == info.values.end() || rotated->second != "false") {
+            Q_EMIT error(rotated != info.values.end() && rotated->second == "true"
+                             ? i18n("XFDF export does not support rotated PDF pages.")
+                             : i18n("Could not check PDF page rotation for XFDF export."),
+                         NoticeMs);
+            return false;
+        }
         const QByteArray data = Conversion::annotationsToXfdf(m_okularPages, dpi()).toUtf8();
         // QSaveFile keeps the destination intact until the write fully succeeds.
         QSaveFile file(fileName);

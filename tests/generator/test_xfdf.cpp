@@ -1,18 +1,27 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../support/xfdf_fixture.hpp"
 #include "generator/conversion/xfdf.hpp"
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
 
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <QDateTime>
 #include <QFont>
+#include <QMimeDatabase>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>
+#include <QUrl>
 #include <QXmlStreamReader>
 
 #include <okular/core/annotations.h>
+#include <okular/core/document.h>
+#include <okular/core/generator.h>
 #include <okular/core/page.h>
+#include <okular/core/settings_core.h>
 
 #include <cmath>
 #include <limits>
@@ -62,7 +71,102 @@ Annotation baseAnnotation(Mu::Model::AnnotationType type, double x0, double y0, 
 class TestGeneratorXfdf : public QObject {
     Q_OBJECT
 
+    QTemporaryDir m_root;
+
 private slots:
+
+    void initTestCase()
+    {
+        QVERIFY(m_root.isValid());
+        qputenv("XDG_CONFIG_HOME", m_root.filePath("config").toUtf8());
+        qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
+        qputenv("XDG_DATA_HOME", m_root.filePath("data").toUtf8());
+        QCoreApplication::setLibraryPaths({ QStringLiteral(TEST_PLUGIN_ROOT) });
+        qputenv("PATH", QByteArray(TEST_WORKER_DIR) + ':' + qgetenv("PATH"));
+        Okular::SettingsCore::instance(QStringLiteral("xfdf-test"));
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        KConfigGroup(config, QStringLiteral("OCR")).writeEntry("OcrTriggerMode", "Never");
+        config->sync();
+    }
+
+    void checksPdfRotation_data() { addXfdfRotationRows(); }
+
+    void checksPdfRotation()
+    {
+        QFETCH(int, rotation);
+        QFETCH(bool, inherited);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, rotation, inherited));
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(
+                     pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"))),
+                 Okular::Document::OpenSuccess);
+        const Okular::ExportFormat format(QStringLiteral("XFDF"),
+                                          QMimeDatabase().mimeTypeForName(QStringLiteral("application/xml")));
+        const QString output = directory.filePath("output.xfdf");
+        for (const bool existing : { false, true }) {
+            if (existing) {
+                QFile destination(output);
+                QVERIFY(destination.open(QIODevice::WriteOnly));
+                destination.write("preserve destination");
+            }
+            QCOMPARE(document.exportTo(output, format), accepted);
+            if (accepted || existing) {
+                QFile result(output);
+                QVERIFY(result.open(QIODevice::ReadOnly));
+                const QByteArray data = result.readAll();
+                if (accepted)
+                    QVERIFY(data.contains("fixture note"));
+                else
+                    QCOMPARE(data, QByteArray("preserve destination"));
+            } else {
+                QVERIFY(!QFile::exists(output));
+            }
+            if (QFile::exists(output))
+                QVERIFY(QFile::remove(output));
+        }
+    }
+
+    void preservesCoordinatesWithViewRotation_data()
+    {
+        QTest::addColumn<int>("rotation");
+        QTest::newRow("0") << int(Okular::Rotation0);
+        QTest::newRow("90") << int(Okular::Rotation90);
+        QTest::newRow("180") << int(Okular::Rotation180);
+        QTest::newRow("270") << int(Okular::Rotation270);
+    }
+
+    void preservesCoordinatesWithViewRotation()
+    {
+        QFETCH(int, rotation);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(
+                     pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"))),
+                 Okular::Document::OpenSuccess);
+        const QString output = directory.filePath("output.xfdf");
+        const Okular::ExportFormat format(QStringLiteral("XFDF"),
+                                          QMimeDatabase().mimeTypeForName(QStringLiteral("application/xml")));
+        QVERIFY(document.exportTo(output, format));
+        QFile file(output);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray original = file.readAll();
+        QVERIFY(original.contains("fixture note"));
+        file.close();
+
+        document.setRotation(rotation);
+        QCOMPARE(document.rotation(), static_cast<Okular::Rotation>(rotation));
+        QVERIFY(document.exportTo(output, format));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), original);
+    }
 
     void emptyDocumentHasEmptyAnnots()
     {

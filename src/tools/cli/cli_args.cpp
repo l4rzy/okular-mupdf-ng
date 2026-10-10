@@ -66,7 +66,8 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
     parser.setApplicationDescription(
         "Export a document through the MuPDF worker.\n"
         "The format is inferred from the output suffix: .pdf exports an EPUB or legacy MOBI document "
-        "to PDF (or flattens a PDF with --flatten), .xfdf/.xml exports a PDF document's annotations as XFDF.");
+        "to PDF (or flattens a PDF with --flatten), .xfdf/.xml exports a PDF document's annotations as XFDF.\n"
+        "XFDF export does not support PDF documents containing rotated pages.");
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output file; alternative to the OUTPUT positional.", "file" });
     parser.addOption({ "pages", "Zero-based pages to export, e.g. 0,2,5 or 1-3. Default: all pages.", "list" });
@@ -83,7 +84,7 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
 QCommandLineParser& setupImportParser(QCommandLineParser& parser)
 {
     parser.setApplicationDescription("Apply annotations from an XFDF file to a PDF document, writing a new PDF.\n"
-                                     "Coordinates on pages with a non-zero /Rotate may be displaced.");
+                                     "PDF documents containing rotated pages are not supported.");
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output PDF file; alternative to the OUTPUT positional.", "file" });
     addSharedOptions(parser);

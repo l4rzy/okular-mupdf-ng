@@ -46,6 +46,10 @@ promise that every input or workflow has been tested.
 
 ## Known limitations
 
+XFDF import and export reject PDFs containing rotated pages, including rotation
+inherited from the page tree. Correct conversion to unrotated PDF coordinates
+is not implemented yet.
+
 See the [README limitations](README.md#limitations) for current feature restrictions
 and recovery behavior.
 

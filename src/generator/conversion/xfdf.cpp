@@ -24,8 +24,11 @@ QString annotationsToXfdf(const QVector<Okular::Page*>& pages, const QSizeF& dpi
     for (const Okular::Page* page : pages) {
         Plugin::Xfdf::Page modelPage;
         if (page) {
-            modelPage.widthPoints = page->width() * scaleX;
-            modelPage.heightPoints = page->height() * scaleY;
+            // Annotation geometry is untransformed, but page dimensions
+            // follow the user's view rotation. Undo its width/height swap.
+            const bool sideways = page->rotation() == Okular::Rotation90 || page->rotation() == Okular::Rotation270;
+            modelPage.widthPoints = (sideways ? page->height() : page->width()) * scaleX;
+            modelPage.heightPoints = (sideways ? page->width() : page->height()) * scaleY;
             for (const Okular::Annotation* annotation : page->annotations()) {
                 if (const auto model = toModel(annotation))
                     modelPage.annotations.append(*model);

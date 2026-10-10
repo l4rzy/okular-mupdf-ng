@@ -108,9 +108,7 @@ std::string toIsoTimestamp(fz_context* context, const std::string& raw)
 // Document Metadata Extraction
 // =============================================================================
 
-// Metadata is read through MuPDF's document API rather than by reaching
-// into pdf_document internals. That keeps this boundary usable for every
-// document type supported by MuPDF and bounds untrusted metadata values.
+// Metadata uses MuPDF's public APIs and bounds untrusted metadata values.
 DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std::string* error) const
 {
     DocumentMetadata result;
@@ -167,6 +165,29 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
             return { };
         }
         result.values.emplace("hasXfaForm", hasXfaForm ? "true" : "false");
+    }
+
+    if (wanted("hasRotatedPages")) {
+        volatile bool hasRotatedPages = false;
+        fz_try(m_context)
+        {
+            pdf_document* pdf = pdf_specifics(m_context, m_document);
+            for (int page = 0; page < m_pageCount; ++page) {
+                pdf_obj* object = pdf_lookup_page_obj(m_context, pdf, page);
+                // /Rotate can be inherited from the page tree. Whole turns
+                // are equivalent to zero; reject other values conservatively.
+                if (pdf_dict_get_inheritable_int(m_context, object, PDF_NAME(Rotate)) % 360 != 0) {
+                    hasRotatedPages = true;
+                    break;
+                }
+            }
+        }
+        fz_catch(m_context)
+        {
+            fail(error, fz_convert_error(m_context, nullptr));
+            return { };
+        }
+        result.values.emplace("hasRotatedPages", hasRotatedPages ? "true" : "false");
     }
 
     const bool wantHash = wanted("hash");

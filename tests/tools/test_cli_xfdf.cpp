@@ -12,6 +12,8 @@
 #include <cmath>
 #include <initializer_list>
 
+#include "../support/xfdf_fixture.hpp"
+
 namespace {
 
 QByteArray readFile(const QString& path)
@@ -91,6 +93,56 @@ class TestToolsCliXfdf : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void checksPdfRotation_data() { addXfdfRotationRows(); }
+
+    void checksPdfRotation()
+    {
+        QFETCH(int, rotation);
+        QFETCH(bool, inherited);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, rotation, inherited));
+        const QByteArray original = readFile(pdf);
+        const QString xfdf = directory.filePath("input.xfdf");
+        QFile input(xfdf);
+        QVERIFY(input.open(QIODevice::WriteOnly));
+        input.write("<xfdf><annots><text page=\"0\" rect=\"20,30,40,50\">"
+                    "<contents>imported note</contents></text></annots></xfdf>");
+        input.close();
+
+        for (const bool importing : { false, true }) {
+            for (const bool existing : { false, true }) {
+                const QString output = directory.filePath(importing ? "output.pdf" : "output.xfdf");
+                if (existing) {
+                    QFile destination(output);
+                    QVERIFY(destination.open(QIODevice::WriteOnly));
+                    destination.write("preserve destination");
+                }
+                QString error;
+                const QStringList arguments =
+                    importing ? QStringList { "import", pdf, xfdf, output } : QStringList { "export", pdf, output };
+                const int code = runCli(arguments, nullptr, &error);
+                QVERIFY2(code >= 0, qPrintable(error));
+                QCOMPARE(code == 0, accepted);
+                QCOMPARE(readFile(pdf), original);
+                if (accepted) {
+                    QVERIFY(!readFile(output).isEmpty());
+                    QVERIFY(readFile(output) != QByteArray("preserve destination"));
+                } else {
+                    QVERIFY2(error.contains("rotated PDF pages"), qPrintable(error));
+                    if (existing)
+                        QCOMPARE(readFile(output), QByteArray("preserve destination"));
+                    else
+                        QVERIFY(!QFile::exists(output));
+                }
+                if (QFile::exists(output))
+                    QVERIFY(QFile::remove(output));
+            }
+        }
+    }
 
     void flattensPdfThroughCli()
     {

@@ -1013,3 +1013,11 @@ msgstr "Phông chữ"
 #: rc.cpp:40
 msgid "Page Size"
 msgstr "Khổ giấy"
+
+#: src/generator/mupdfng.cpp
+msgid "XFDF export does not support rotated PDF pages."
+msgstr "Xuất XFDF không hỗ trợ các trang PDF được xoay."
+
+#: src/generator/mupdfng.cpp
+msgid "Could not check PDF page rotation for XFDF export."
+msgstr "Không thể kiểm tra góc xoay trang PDF để xuất XFDF."

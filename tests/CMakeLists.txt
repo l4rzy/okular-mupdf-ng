@@ -316,8 +316,12 @@ target_include_directories(test_generator_signingconversion PRIVATE ../src)
 target_link_libraries(test_generator_signingconversion PRIVATE mupdf_generator_adapters KF6::I18n)
 
 add_layer_test(test_generator_xfdf generator/test_xfdf.cpp generator)
-target_include_directories(test_generator_xfdf PRIVATE ../src)
+target_include_directories(test_generator_xfdf PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
 target_link_libraries(test_generator_xfdf PRIVATE mupdf_generator_adapters KF6::I18n)
+target_compile_definitions(test_generator_xfdf PRIVATE
+    TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
+    TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
+add_dependencies(test_generator_xfdf okularGenerator_mupdfng mupdfng-worker)
 
 # Security policy checks execute in a child because sandbox activation is irreversible.
 add_layer_test(test_security_sandbox security/sandbox.cpp security ../src/worker/sys/sandbox.cpp ../src/worker/sys/operation_budget.cpp)

@@ -299,6 +299,19 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
     return ExitOk;
 }
 
+bool checkXfdfPageRotation(Mu::Plugin::WorkerClient& client)
+{
+    const auto metadata = client.getDocumentInfo({ QStringLiteral("hasRotatedPages") });
+    const auto rotated = metadata.values.find("hasRotatedPages");
+    if (rotated == metadata.values.end() || rotated->second != "false") {
+        reportError(rotated != metadata.values.end() && rotated->second == "true"
+                        ? QStringLiteral("XFDF import and export do not support rotated PDF pages")
+                        : QStringLiteral("could not check PDF page rotation for XFDF"));
+        return false;
+    }
+    return true;
+}
+
 int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
@@ -311,6 +324,9 @@ int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options
     if (openDocument(
             client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Pdf, &pageInfo)
         < 0)
+        return ExitJobFailed;
+
+    if (!checkXfdfPageRotation(client))
         return ExitJobFailed;
 
     QVector<Mu::Plugin::Xfdf::Page> pages;
@@ -371,6 +387,9 @@ int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
     if (openDocument(
             client, file, QString::fromStdString(options.shared.password), Mu::Model::DocumentType::Pdf, &pageInfo)
         < 0)
+        return ExitJobFailed;
+
+    if (!checkXfdfPageRotation(client))
         return ExitJobFailed;
 
     QVector<QSizeF> pageSizes;

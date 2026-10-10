@@ -15,9 +15,8 @@ namespace Mu::Plugin::Xfdf {
 /// Annotation coordinates arrive already normalized against the page's rotated
 /// display bounds (top-left origin, Y down), so no rotation is applied here.
 ///
-/// Known limitation: pages with a non-zero /Rotate are serialized in their
-/// rotated display frame rather than unrotated PDF user-space, so coordinates
-/// are displaced for rotated pages.
+/// Callers must reject PDFs containing rotated pages: this representation
+/// cannot convert their display coordinates to unrotated PDF user-space.
 struct Page {
     double widthPoints = 0;
     double heightPoints = 0;
