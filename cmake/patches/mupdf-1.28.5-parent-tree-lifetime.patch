@@ -1,0 +1,24 @@
+--- a/source/pdf/pdf-clean-file.c
++++ b/source/pdf/pdf-clean-file.c
+@@ -296,9 +296,13 @@
+ 	fz_var(kids);
+ 	fz_var(marks);
+ 	fz_var(olddests);
++	fz_var(ostructparents);
+ 
+ 	fz_try(ctx)
+ 	{
++		/* Replacing ParentTree drops its dictionary reference. Retain the
++		 * original number tree until retainpage has copied its entries. */
++		ostructparents = pdf_keep_obj(ctx, ostructparents);
+ 		root = pdf_new_dict(ctx, doc, 3);
+ 		pdf_dict_put(ctx, root, PDF_NAME(Type), pdf_dict_get(ctx, oldroot, PDF_NAME(Type)));
+ 		pdf_dict_put(ctx, root, PDF_NAME(Pages), pdf_dict_get(ctx, oldroot, PDF_NAME(Pages)));
+@@ -447,6 +451,7 @@
+ 		pdf_drop_obj(ctx, root);
+ 		pdf_drop_obj(ctx, kids);
+ 		pdf_drop_obj(ctx, structparents);
++		pdf_drop_obj(ctx, ostructparents);
+ 		pdf_drop_obj(ctx, olddests);
+ 	}
+ 	fz_catch(ctx)

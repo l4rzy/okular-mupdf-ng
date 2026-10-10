@@ -1524,6 +1524,60 @@ private slots:
         QCOMPARE(renderPdfPage(reloaded, 0, 612, 792, &error), renderPdfPage(document, 0, 612, 792, &error));
     }
 
+    void flattenTaggedPageSelection_data()
+    {
+        QTest::addColumn<QList<int>>("selection");
+        QTest::newRow("all-pages") << QList<int> { };
+        QTest::newRow("explicit-first-page") << QList<int> { 0 };
+    }
+
+    void flattenTaggedPageSelection()
+    {
+        QFETCH(QList<int>, selection);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile input(QStringLiteral(TEST_SIGNATURE_PDF_DIR "/digital_signature.pdf"));
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "tagged.pdf", &error), error.c_str());
+        auto* context = document.context();
+        auto* live = pdf_specifics(context, document.document());
+        auto* parentTree = pdf_dict_getp(context, pdf_trailer(context, live), "Root/StructTreeRoot/ParentTree");
+        QVERIFY(parentTree);
+        QVERIFY(pdf_lookup_number(context, parentTree, 0));
+
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = ::Mu::Model::AnnotationType::Square;
+        annotation.x0 = annotation.y0 = .1;
+        annotation.x1 = annotation.y1 = .2;
+        annotation.color = 0xffff0000U;
+        std::int32_t object = -1;
+        QVERIFY2(document.addAnnotation(0, annotation, &object, &error), error.c_str());
+        const QString target = directory.filePath("flattened.pdf");
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        const std::vector<int> pages(selection.begin(), selection.end());
+        QVERIFY2(document.flattenPdfFd(fd, pages, &error), error.c_str());
+        QCOMPARE(pdf_dict_getp(context, pdf_trailer(context, live), "Root/StructTreeRoot/ParentTree"), parentTree);
+
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reloaded;
+        QVERIFY2(reloaded.openFd(::dup(output.handle()), "flattened.pdf", &error), error.c_str());
+        QCOMPARE(reloaded.pageCount(), 1);
+        QVERIFY(reloaded.extractAnnotations(0, &error).empty());
+        // Parent-tree preservation exercises our bundled MuPDF lifetime patch;
+        // system libraries may still contain the upstream bug.
+        if constexpr (!TEST_SYSTEM_MUPDF) {
+            auto* flattened = pdf_specifics(reloaded.context(), reloaded.document());
+            auto* retainedTree = pdf_dict_getp(
+                reloaded.context(), pdf_trailer(reloaded.context(), flattened), "Root/StructTreeRoot/ParentTree");
+            QVERIFY(retainedTree);
+            QVERIFY(pdf_lookup_number(reloaded.context(), retainedTree, 0));
+        }
+    }
+
     void flattenPageSelection_data()
     {
         QTest::addColumn<QList<int>>("selection");

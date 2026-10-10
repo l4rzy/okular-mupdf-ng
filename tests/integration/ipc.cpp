@@ -351,7 +351,13 @@ private slots:
         QCOMPARE(m_client.usesSystemMuPdf(), bool(TEST_SYSTEM_MUPDF));
 
         const auto sandbox = m_client.sandboxStatus();
-        QVERIFY(sandbox.landlock || sandbox.seccomp || sandbox.linuxNamespace || sandbox.memoryProtection);
+        if constexpr (MU_DISABLE_WORKER_SANDBOX) {
+            QVERIFY(!sandbox.landlock && !sandbox.seccomp && !sandbox.linuxNamespace && !sandbox.resourceLimits
+                    && !sandbox.memoryProtection);
+            QCOMPARE(sandbox.reason, std::string("sandbox disabled by build configuration"));
+        } else {
+            QVERIFY(sandbox.landlock || sandbox.seccomp || sandbox.linuxNamespace || sandbox.memoryProtection);
+        }
 
         QImage retained = m_client.render(0, 160, 160);
         QVERIFY(!retained.isNull());

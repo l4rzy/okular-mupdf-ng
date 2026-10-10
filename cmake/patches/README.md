@@ -6,7 +6,17 @@ It adds anchors for legacy MOBI byte-offset links before text transcoding, conve
 blockquotes form the outline hierarchy; a page-break ends the TOC. Existing heading
 outlines remain the fallback.
 
-CMake applies the patch with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
+`mupdf-1.28.5-ocr-font-release.patch` releases the OCR device's owned Courier
+font reference during destruction. Text objects and target devices retain their
+own references. Existing image OCR cases in `tests/worker/ocr.cpp` exercise this
+cleanup under LeakSanitizer.
+
+`mupdf-1.28.5-parent-tree-lifetime.patch` retains the original tagged-PDF parent
+number tree while page rearrangement replaces `/ParentTree` and copies retained
+pages' entries. This prevents use-after-free of the borrowed dictionary value.
+Coverage lives in `tests/worker/document.cpp` (`flattenTaggedPageSelection`).
+
+CMake applies the patches with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
 verifies an already-applied patch using a reverse dry run. Unexpected source changes
 fail configuration rather than silently skipping the fix. The patch and affected
 source files are build dependencies so incremental builds refresh the library.

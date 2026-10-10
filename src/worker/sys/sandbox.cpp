@@ -246,9 +246,6 @@ bool applyResourceLimits(Status& status)
     }
 #endif // MU_DEBUG_ENABLED
 
-    // ASan reserves a large virtual shadow mapping, so an address-space cap
-    // would prevent its runtime from allocating memory.
-#ifndef MU_ASAN_ENABLED
     // Cap virtual memory address space (RLIMIT_AS = 4 GB)
     // Guards against malicious or malformed documents triggering huge allocation rendering bombs.
     constexpr rlim_t AddressSpaceBytes = static_cast<rlim_t>(Engine::Constant::SandboxAddressSpaceBytes);
@@ -257,7 +254,6 @@ bool applyResourceLimits(Status& status)
         recordErrno(status, "RLIMIT_AS");
         ok = false;
     }
-#endif
 
     status.resourceLimits = ok;
     return ok;
@@ -668,6 +664,10 @@ bool activateSeccomp(Status& status)
 Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories, const std::vector<int>& preservedFds)
 {
     Sandbox::Status status;
+    if constexpr (MU_DISABLE_WORKER_SANDBOX) {
+        status.reason = "sandbox disabled by build configuration";
+        return status;
+    }
 #ifndef __linux__
     status.reason = "sandboxing is supported only on Linux";
     return status;

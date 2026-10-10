@@ -231,7 +231,7 @@ int main(int argc, char* argv[])
     if (sandbox.isPartiallyActive()) {
         MU_LOG(warning, "Mu::Worker", std::string("sandbox partially active: ") + sandbox.reason);
     } else if (!sandbox.isFullyHardened()) {
-        MU_LOG(critical, "Mu::Worker", std::string("worker unconfined; all sandboxing failed: ") + sandbox.reason);
+        MU_LOG(critical, "Mu::Worker", std::string("worker unconfined: ") + sandbox.reason);
     }
 
     // Step 5: Enter main multiplexing event loop, handling requests until client disconnects or exits.

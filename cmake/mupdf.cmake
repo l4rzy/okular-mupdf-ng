@@ -57,26 +57,31 @@ else()
     # Keep bundled fixes reproducible on a fresh source download and rerunnable
     # when multiple build directories share the same MuPDF tree.
     find_program(MUPDF_PATCH_EXECUTABLE NAMES patch REQUIRED)
-    set(_mupdf_mobi_patch "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-mobi-toc.patch")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_mupdf_mobi_patch}")
-    execute_process(
-        COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --forward --dry-run -i "${_mupdf_mobi_patch}"
-        WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
-        RESULT_VARIABLE _mupdf_patch_result OUTPUT_QUIET ERROR_QUIET)
-    if(_mupdf_patch_result EQUAL 0)
+    set(_mupdf_patches
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-mobi-toc.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-ocr-font-release.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-parent-tree-lifetime.patch")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_mupdf_patches})
+    foreach(_mupdf_patch IN LISTS _mupdf_patches)
         execute_process(
-            COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --forward -i "${_mupdf_mobi_patch}"
-            WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
-            COMMAND_ERROR_IS_FATAL ANY)
-    else()
-        execute_process(
-            COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --reverse --dry-run -i "${_mupdf_mobi_patch}"
+            COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --forward --dry-run -i "${_mupdf_patch}"
             WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
             RESULT_VARIABLE _mupdf_patch_result OUTPUT_QUIET ERROR_QUIET)
-        if(NOT _mupdf_patch_result EQUAL 0)
-            message(FATAL_ERROR "Could not apply or verify bundled MuPDF MOBI TOC patch")
+        if(_mupdf_patch_result EQUAL 0)
+            execute_process(
+                COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --forward -i "${_mupdf_patch}"
+                WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
+                COMMAND_ERROR_IS_FATAL ANY)
+        else()
+            execute_process(
+                COMMAND "${MUPDF_PATCH_EXECUTABLE}" -p1 --fuzz=0 --batch --reverse --dry-run -i "${_mupdf_patch}"
+                WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
+                RESULT_VARIABLE _mupdf_patch_result OUTPUT_QUIET ERROR_QUIET)
+            if(NOT _mupdf_patch_result EQUAL 0)
+                message(FATAL_ERROR "Could not apply or verify bundled MuPDF patch: ${_mupdf_patch}")
+            endif()
         endif()
-    endif()
+    endforeach()
 
     find_program(MUPDF_MAKE_EXECUTABLE NAMES make gmake REQUIRED)
     find_program(MUPDF_NPROC_EXECUTABLE NAMES nproc REQUIRED)
@@ -231,7 +236,9 @@ else()
             "${MUPDF_SOURCE_DIR}/Makerules"
             "${MUPDF_SOURCE_DIR}/Makethird"
             "${MUPDF_SOURCE_DIR}/include/mupdf/fitz/version.h"
-            "${_mupdf_mobi_patch}"
+            ${_mupdf_patches}
+            "${MUPDF_SOURCE_DIR}/source/fitz/ocr-device.c"
+            "${MUPDF_SOURCE_DIR}/source/pdf/pdf-clean-file.c"
             "${MUPDF_SOURCE_DIR}/source/html/mobi.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-doc.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-parse.c"

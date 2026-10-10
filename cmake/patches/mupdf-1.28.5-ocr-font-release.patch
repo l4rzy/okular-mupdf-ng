@@ -1,0 +1,12 @@
+--- a/source/fitz/ocr-device.c
++++ b/source/fitz/ocr-device.c
+@@ -385,6 +385,9 @@
+ 	fz_drop_display_list(ctx, ocr->list);
+ 	fz_drop_device(ctx, ocr->draw_dev);
+ 	fz_drop_pixmap(ctx, ocr->pixmap);
++	/* flush_word owns the font's initial reference; text objects and target
++	 * devices retain their own references independently. */
++	fz_drop_font(ctx, ocr->font);
+ 	for (i = 0; i < ocr->words_len; i++)
+ 		fz_free(ctx, ocr->words[i]);
+ 	fz_free(ctx, ocr->words);

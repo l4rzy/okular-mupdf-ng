@@ -27,6 +27,7 @@ bool applyResourceLimits(Status& status);
  * Primary activation phases are descriptor sanitization, namespace isolation, resource limits,
  * Landlock, and Seccomp. MDWE and ambient-capability clearing are optional kernel hardening.
  * Activation is best-effort; the returned status and reason describe degraded phases.
+ * DISABLE_WORKER_SANDBOX diagnostic builds return an inactive status without applying restrictions.
  *
  * @param readOnlyDirectories All directories are optional read-only paths; missing entries are skipped.
  * An empty list enforces Landlock with no read exceptions.
