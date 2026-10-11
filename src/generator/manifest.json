@@ -12,6 +12,7 @@
         ],
         "Copyright": "© 2008 Pino Toscano\n© 2026 l4rzy",
         "Description": "A MuPDF-based secure and fast backend for Okular",
+        "Description[vi]": "Một backend an toàn và tốc độ dựa trên MuPDF",
         "License": "GPLv3",
         "MimeTypes": [
             "application/x-pdf",
