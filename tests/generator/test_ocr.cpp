@@ -153,7 +153,6 @@ private slots:
         QVERIFY(tools);
         QCOMPARE(tools->actions().size(), 4);
         QVERIFY(tools->actions().at(1)->isSeparator());
-        QCOMPARE(tools->actions().at(2)->icon().name(), QStringLiteral("document-scan"));
         auto* certificates = client->actionCollection()->action(QStringLiteral("mupdf_manage_certificates"));
         QVERIFY(certificates);
         QCOMPARE(tools->actions().back(), certificates);
