@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title description">
   <title id="title">okular-mupdf-ng</title>
-  <desc id="description">Shaded ivory paper with a copper folded corner over a blue-gray sheet, with a bold ng monogram, matching copper highlights, and a teal lens labeled PDF and ePUB inside the g.</desc>
+  <desc id="description">Shaded ivory paper with a copper folded corner over a muted golden sheet, with a bold ng monogram, matching copper highlights, and a teal lens labeled PDF and ePUB inside the g.</desc>
 
   <!-- Original geometry with an Oxygen-inspired material treatment. -->
   <defs>
     <linearGradient id="back-page" x1="130" y1="114" x2="352" y2="470" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#B8CDD5"/>
-      <stop offset=".35" stop-color="#7896A3"/>
-      <stop offset="1" stop-color="#405B68"/>
+      <stop stop-color="#F4DFC0"/>
+      <stop offset=".35" stop-color="#C7A477"/>
+      <stop offset="1" stop-color="#8F6B48"/>
     </linearGradient>
     <linearGradient id="paper" x1="154" y1="68" x2="368" y2="446" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFFFFF"/>
@@ -56,8 +56,8 @@
 
   <!-- Rear sheet: a dark outer edge and a narrow, lit inner bevel. -->
   <g transform="rotate(7 256 256)" filter="url(#shadow)">
-    <use xlink:href="#rear-sheet" fill="url(#back-page)" stroke="#3C5663" stroke-width="3"/>
-    <rect x="100" y="120" width="256" height="334" rx="3" stroke="#E1EDF2" stroke-opacity=".65" stroke-width="2"/>
+    <use xlink:href="#rear-sheet" fill="url(#back-page)" stroke="#765C41" stroke-width="3"/>
+    <rect x="100" y="120" width="256" height="334" rx="3" stroke="#FFF0D5" stroke-opacity=".65" stroke-width="2"/>
   </g>
 
   <!-- The front page casts a shadow only onto the exposed rear sheet. -->
