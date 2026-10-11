@@ -168,11 +168,16 @@ private slots:
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle"));
         QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Automatic"));
         const QStringList modes { "Never", "Five", "Always" };
+        const QStringList labels { "Off", "Automatic", "On" };
+        // KDE may add access-key markers when the menu is first shown.
+        for (int i = 0; i < labels.size(); ++i)
+            menu->actions().at(i)->setText('&' + labels.at(i));
         const QString initialMenuMode = initialMode == QStringLiteral("Twenty") ? QStringLiteral("Five") : initialMode;
         for (int i = 0; i < modes.size(); ++i)
             QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
         auto* action = client->actionCollection()->action(actionName);
         QVERIFY(action);
+        QSignalSpy notices(&document, &Okular::Document::notice);
         auto clearShortcut = qScopeGuard([&] {
             action->setShortcut({ });
             client->actionCollection()->writeSettings();
@@ -196,6 +201,10 @@ private slots:
         }
         config->reparseConfiguration();
         QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), requestedMode);
+        QCOMPARE(notices.count(), 1);
+        QCOMPARE(notices.front().at(0).toString(),
+                 QStringLiteral("MuPDF OCR: %1").arg(labels.at(modes.indexOf(requestedMode))));
+        QCOMPARE(notices.front().at(1).toInt(), 1500);
         for (int i = 0; i < modes.size(); ++i)
             QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == requestedMode);
 

@@ -439,9 +439,10 @@ void Main::setupActions()
         actionCollection()->action(actionName)->trigger();
     });
     syncOcrActions();
-    connect(m_ocrActions, &QActionGroup::triggered, this, [](QAction* action) {
+    connect(m_ocrActions, &QActionGroup::triggered, this, [this](QAction* action) {
         MuPDFNGSettings::setOcrTriggerMode(action->data().toInt());
         MuPDFNGSettings::self()->save();
+        Q_EMIT notice(i18n("MuPDF OCR: %1", KLocalizedString::removeAcceleratorMarker(action->text())), ShortNoticeMs);
     });
     connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
         syncOcrActions();
