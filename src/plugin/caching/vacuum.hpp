@@ -14,6 +14,8 @@ constexpr int StaleDays = 90;
 // Minimum interval between two vacuum runs, gated by the stored timestamp.
 constexpr int ThrottleDays = 7;
 
+enum class CacheKind { All, Ocr, EpubAccelerator, PdfToc };
+
 /// Parses the hidden CacheLastVacuum config value; invalid when empty or malformed.
 [[nodiscard]] QDateTime parseLastVacuum(const QString& value);
 /// Formats a timestamp for the hidden CacheLastVacuum config value (UTC, ISO-8601).
@@ -27,13 +29,29 @@ constexpr int ThrottleDays = 7;
 struct VacuumResult {
     int filesRemoved = 0;
     int dirsRemoved = 0;
+    int errors = 0;
 };
+
+struct CacheUsage {
+    qint64 ocrBytes = 0;
+    qint64 epubAcceleratorBytes = 0;
+    qint64 pdfTocBytes = 0;
+    int errors = 0;
+
+    [[nodiscard]] qint64 totalBytes() const noexcept { return ocrBytes + epubAcceleratorBytes + pdfTocBytes; }
+};
+
+/// Totals regular file sizes in the same trees as vacuum; skips symlinks.
+/// An empty root selects the production cache root.
+[[nodiscard]] CacheUsage measureCacheUsage(const QString& root = { });
 
 /// Removes stale files from ocr, epub_accel, and pdf_toc under the
 /// production cache root. Missing trees are a no-op; symlinks are skipped.
 [[nodiscard]] VacuumResult vacuumStaleCaches(const QDateTime& now);
-/// Test seam: same vacuum scoped to an explicit root directory.
-[[nodiscard]] VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now);
+/// Removes stale files from the selected cache trees; an empty root selects
+/// the production cache root. The default kind cleans all known trees.
+[[nodiscard]] VacuumResult
+vacuumStaleCaches(const QString& root, const QDateTime& now, CacheKind kind = CacheKind::All);
 
 } // namespace Mu::Plugin::Caching::Vacuum
 

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 #include <vector>
 
 #include "plugin/caching/cache_file.hpp"
@@ -18,9 +19,18 @@ namespace Mu::Plugin::Caching::Vacuum {
 
 namespace {
 
-const std::array<QString, 3> KnownSubdirectories { QStringLiteral("ocr"),
-                                                   QStringLiteral("epub_accel"),
-                                                   QStringLiteral("pdf_toc") };
+const std::array<std::pair<CacheKind, QString>, 3> KnownSubdirectories {
+    std::pair { CacheKind::Ocr, QStringLiteral("ocr") },
+    std::pair { CacheKind::EpubAccelerator, QStringLiteral("epub_accel") },
+    std::pair { CacheKind::PdfToc, QStringLiteral("pdf_toc") }
+};
+
+bool canScanDirectory(const QFileInfo& info)
+{
+    // Listing needs read permission; inspecting children also needs search
+    // (execute) permission. Without both, a partial scan could look empty.
+    return info.isDir() && info.isReadable() && info.isExecutable();
+}
 
 } // namespace
 
@@ -58,41 +68,99 @@ bool isStale(const QDateTime& modified, const QDateTime& now)
     return modified.addDays(StaleDays) <= now;
 }
 
-VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now)
+CacheUsage measureCacheUsage(const QString& root)
+{
+    CacheUsage result;
+    const QString cacheRoot = QDir::cleanPath(root.isEmpty() ? directory(QString()) : root);
+    const QFileInfo rootInfo(cacheRoot);
+    if (!rootInfo.exists() || rootInfo.isSymLink())
+        return result;
+    if (!canScanDirectory(rootInfo)) {
+        ++result.errors;
+        return result;
+    }
+    for (const auto& [kind, name] : KnownSubdirectories) {
+        const QString base = cacheRoot + QLatin1Char('/') + name;
+        const QFileInfo baseInfo(base);
+        if (!baseInfo.exists() || baseInfo.isSymLink())
+            continue;
+        if (!canScanDirectory(baseInfo)) {
+            ++result.errors;
+            continue;
+        }
+        qint64 bytes = 0;
+        QDirIterator files(
+            base, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+        while (files.hasNext()) {
+            files.next();
+            const QFileInfo info = files.fileInfo();
+            if (info.isSymLink())
+                continue;
+            if (info.isFile())
+                bytes += info.size();
+            else if (info.isDir() && !canScanDirectory(info))
+                ++result.errors;
+        }
+        if (kind == CacheKind::Ocr)
+            result.ocrBytes = bytes;
+        else if (kind == CacheKind::EpubAccelerator)
+            result.epubAcceleratorBytes = bytes;
+        else
+            result.pdfTocBytes = bytes;
+    }
+    return result;
+}
+
+VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now, CacheKind kind)
 {
     VacuumResult result;
-    if (!now.isValid())
+    const QString cacheRoot = QDir::cleanPath(root.isEmpty() ? directory(QString()) : root);
+    const QFileInfo rootInfo(cacheRoot);
+    if (!now.isValid() || !rootInfo.exists() || rootInfo.isSymLink())
         return result;
+    if (!canScanDirectory(rootInfo)) {
+        ++result.errors;
+        return result;
+    }
 
-    for (const auto& name : KnownSubdirectories) {
-        const QString base = root.isEmpty() ? directory(name) : root + QLatin1Char('/') + name;
-        QDir baseDir(base);
-        if (!baseDir.exists())
+    for (const auto& [cacheKind, name] : KnownSubdirectories) {
+        if (kind != CacheKind::All && kind != cacheKind)
             continue;
+        const QString base = cacheRoot + QLatin1Char('/') + name;
+        const QFileInfo baseInfo(base);
+        if (!baseInfo.exists() || baseInfo.isSymLink())
+            continue;
+        if (!canScanDirectory(baseInfo)) {
+            ++result.errors;
+            continue;
+        }
 
-        QDirIterator files(base, QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+        std::vector<QString> dirs;
+        QDirIterator files(
+            base, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
         while (files.hasNext()) {
             files.next();
             const QFileInfo info = files.fileInfo();
             // Never follow or delete symlinks; only regular cache files age out.
             if (info.isSymLink())
                 continue;
-            if (!isStale(info.lastModified(), now))
+            if (info.isDir()) {
+                if (canScanDirectory(info))
+                    dirs.push_back(info.absoluteFilePath());
+                else
+                    ++result.errors;
+                continue;
+            }
+            if (!info.isFile() || !isStale(info.lastModified(), now))
                 continue;
             if (QFile::remove(info.absoluteFilePath()))
                 ++result.filesRemoved;
+            else if (QFileInfo::exists(info.absoluteFilePath()))
+                ++result.errors;
         }
 
         // Prune directories left empty, deepest first. The base itself is
         // kept so later saves never observe a missing tree.
-        std::vector<QString> dirs;
-        QDirIterator it(base, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            it.next();
-            if (it.fileInfo().isSymLink())
-                continue;
-            dirs.push_back(it.filePath());
-        }
         std::sort(dirs.begin(), dirs.end(), [](const QString& a, const QString& b) { return a.size() > b.size(); });
         for (const QString& dir : dirs) {
             if (QDir(dir).isEmpty() && QDir().rmdir(dir))

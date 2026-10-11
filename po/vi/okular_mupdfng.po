@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 20:47-0500\n"
-"PO-Revision-Date: 2026-10-10 20:47-0500\n"
+"POT-Creation-Date: 2026-10-11 01:28-0500\n"
+"PO-Revision-Date: 2026-10-11 00:39-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
 "Language: vi\n"
@@ -15,167 +15,229 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: src/generator/config/settingswidget.cpp:36
+#: src/generator/config/settingswidget.cpp:45
 msgid ""
 "PDF form JavaScript support was disabled when this application was built."
 msgstr ""
 "Hỗ trợ JavaScript cho biểu mẫu PDF đã bị tắt khi biên dịch ứng dụng này."
 
-#: src/generator/config/settingswidget.cpp:41
-#: src/generator/config/settingswidget.cpp:49
+#: src/generator/config/settingswidget.cpp:50
+#: src/generator/config/settingswidget.cpp:58
 msgid "Disabled"
 msgstr "Tắt"
 
-#: src/generator/config/settingswidget.cpp:42
-#: src/generator/config/settingswidget.cpp:50
+#: src/generator/config/settingswidget.cpp:51
+#: src/generator/config/settingswidget.cpp:59
 msgid "Minimum"
 msgstr "Tối thiểu"
 
-#: src/generator/config/settingswidget.cpp:43
-#: src/generator/config/settingswidget.cpp:51
+#: src/generator/config/settingswidget.cpp:52
+#: src/generator/config/settingswidget.cpp:60
 msgid "Low"
 msgstr "Thấp"
 
-#: src/generator/config/settingswidget.cpp:44
-#: src/generator/config/settingswidget.cpp:52
+#: src/generator/config/settingswidget.cpp:53
+#: src/generator/config/settingswidget.cpp:61
 msgid "Medium"
 msgstr "Trung bình"
 
-#: src/generator/config/settingswidget.cpp:45
-#: src/generator/config/settingswidget.cpp:53
+#: src/generator/config/settingswidget.cpp:54
+#: src/generator/config/settingswidget.cpp:62
 msgid "High"
 msgstr "Cao"
 
-#: src/generator/config/settingswidget.cpp:57
+#: src/generator/config/settingswidget.cpp:66
 msgid "Speed"
 msgstr "Tốc độ"
 
-#: src/generator/config/settingswidget.cpp:58
-#: src/generator/config/settingswidget.cpp:72
+#: src/generator/config/settingswidget.cpp:67
+#: src/generator/config/settingswidget.cpp:81
 msgid "Balanced"
 msgstr "Cân bằng"
 
-#: src/generator/config/settingswidget.cpp:59
+#: src/generator/config/settingswidget.cpp:68
 msgid "Quality"
 msgstr "Chất lượng"
 
-#: src/generator/config/settingswidget.cpp:63
+#: src/generator/config/settingswidget.cpp:72
 msgid "32 MiB"
 msgstr "32 MiB"
 
-#: src/generator/config/settingswidget.cpp:64
+#: src/generator/config/settingswidget.cpp:73
 msgid "64 MiB"
 msgstr "64 MiB"
 
-#: src/generator/config/settingswidget.cpp:65
+#: src/generator/config/settingswidget.cpp:74
 msgid "128 MiB"
 msgstr "128 MiB"
 
-#: src/generator/config/settingswidget.cpp:66
+#: src/generator/config/settingswidget.cpp:75
 msgid "256 MiB"
 msgstr "256 MiB"
 
-#: src/generator/config/settingswidget.cpp:70 src/generator/mupdfng.cpp:431
+#: src/generator/config/settingswidget.cpp:79 src/generator/mupdfng.cpp:431
 msgid "Off"
 msgstr "Tắt"
 
-#: src/generator/config/settingswidget.cpp:71
+#: src/generator/config/settingswidget.cpp:80
 msgid "Conservative"
 msgstr "Thận trọng"
 
-#: src/generator/config/settingswidget.cpp:73
+#: src/generator/config/settingswidget.cpp:82
 msgid "Aggressive"
 msgstr "Mạnh"
 
-#: src/generator/config/settingswidget.cpp:77
+#: src/generator/config/settingswidget.cpp:86
 msgid "Relaxed"
 msgstr "Nới lỏng"
 
-#: src/generator/config/settingswidget.cpp:78
+#: src/generator/config/settingswidget.cpp:87
 msgid "Strict"
 msgstr "Nghiêm ngặt"
 
-#: src/generator/config/settingswidget.cpp:82
+#: src/generator/config/settingswidget.cpp:91
 msgid "A5 (148 × 210 mm)"
 msgstr "A5 (148 × 210 mm)"
 
-#: src/generator/config/settingswidget.cpp:83
+#: src/generator/config/settingswidget.cpp:92
 msgid "6×9 (152 × 229 mm)"
 msgstr "6×9 (152 × 229 mm)"
 
-#: src/generator/config/settingswidget.cpp:84
+#: src/generator/config/settingswidget.cpp:93
 msgid "B5 (176 × 250 mm)"
 msgstr "B5 (176 × 250 mm)"
 
-#: src/generator/config/settingswidget.cpp:85
+#: src/generator/config/settingswidget.cpp:94
 msgid "Letter (216 × 279 mm)"
 msgstr "Letter (216 × 279 mm)"
 
-#: src/generator/config/settingswidget.cpp:89
+#: src/generator/config/settingswidget.cpp:98
 msgid "Default"
 msgstr "Mặc định"
 
-#: src/generator/config/settingswidget.cpp:90
+#: src/generator/config/settingswidget.cpp:99
 msgid "Serif"
 msgstr "Chữ có chân"
 
-#: src/generator/config/settingswidget.cpp:91
+#: src/generator/config/settingswidget.cpp:100
 msgid "Sans-serif"
 msgstr "Chữ không chân"
 
-#: src/generator/config/settingswidget.cpp:92
+#: src/generator/config/settingswidget.cpp:101
 msgid "Monospace"
 msgstr "Chữ đơn cách"
 
-#: src/generator/config/settingswidget.cpp:143
+#: src/generator/config/settingswidget.cpp:152
 msgid "Speed (150dpi)"
 msgstr "Tốc độ (150 dpi)"
 
-#: src/generator/config/settingswidget.cpp:144
+#: src/generator/config/settingswidget.cpp:153
 msgid "Balanced (225dpi)"
 msgstr "Cân bằng (225 dpi)"
 
-#: src/generator/config/settingswidget.cpp:145
+#: src/generator/config/settingswidget.cpp:154
 msgid "Accuracy (300dpi)"
 msgstr "Độ chính xác (300 dpi)"
 
-#: src/generator/config/settingswidget.cpp:149
+#: src/generator/config/settingswidget.cpp:158
 msgid "0 (Never)"
 msgstr "0 (Không bao giờ)"
 
-#: src/generator/config/settingswidget.cpp:150
+#: src/generator/config/settingswidget.cpp:159
 msgid "5 characters"
 msgstr "5 ký tự"
 
-#: src/generator/config/settingswidget.cpp:151
+#: src/generator/config/settingswidget.cpp:160
 msgid "20 characters"
 msgstr "20 ký tự"
 
-#: src/generator/config/settingswidget.cpp:152
+#: src/generator/config/settingswidget.cpp:161
 msgid "∞ (Always)"
 msgstr "∞ (Luôn luôn)"
 
-#: src/generator/config/settingswidget.cpp:158
+#: src/generator/config/settingswidget.cpp:167
 msgid "Complete"
 msgstr "Đầy đủ"
 
-#: src/generator/config/settingswidget.cpp:159
+#: src/generator/config/settingswidget.cpp:168
 msgid "Simple"
 msgstr "Đơn giản"
 
-#: src/generator/config/settingswidget.cpp:162
+#: src/generator/config/settingswidget.cpp:171
 msgid "None"
 msgstr "Không"
 
-#: src/generator/config/settingswidget.cpp:163 src/generator/mupdfng.cpp:417
+#: src/generator/config/settingswidget.cpp:172 src/generator/mupdfng.cpp:417
 msgid "MuPDF"
 msgstr "MuPDF"
 
-#: src/generator/config/settingswidget.cpp:164
+#: src/generator/config/settingswidget.cpp:173
 msgid "Okular"
 msgstr "Okular"
 
-#: src/generator/config/settingswidget.cpp:202
+#: src/generator/config/settingswidget.cpp:199
+msgid "Automatically removes cached files older than %1 day."
+msgid_plural "Automatically removes cached files older than %1 days."
+msgstr[0] "Tự động xóa các tệp bộ nhớ đệm cũ hơn %1 ngày."
+
+#: src/generator/config/settingswidget.cpp:205
+#: src/generator/config/settingswidget.cpp:224
+msgid "Vacuum PDF TOCs"
+msgstr "Dọn dẹp mục lục PDF"
+
+#: src/generator/config/settingswidget.cpp:206
+#: src/generator/config/settingswidget.cpp:225
+msgid "Vacuum ePUB Accels"
+msgstr "Dọn dẹp dữ liệu tăng tốc ePUB"
+
+#: src/generator/config/settingswidget.cpp:207
+#: src/generator/config/settingswidget.cpp:226
+msgid "Vacuum OCR"
+msgstr "Dọn dẹp bộ nhớ đệm OCR"
+
+#: src/generator/config/settingswidget.cpp:209
+msgid "Vacuum All"
+msgstr "Dọn dẹp tất cả"
+
+#: src/generator/config/settingswidget.cpp:219
+msgctxt "Cache cleanup action and its storage size"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: src/generator/config/settingswidget.cpp:236
+msgid "Vacuuming…"
+msgstr "Đang dọn dẹp…"
+
+#: src/generator/config/settingswidget.cpp:236
+msgid "Calculating…"
+msgstr "Đang tính…"
+
+#: src/generator/config/settingswidget.cpp:243 rc.cpp:57
+msgid "Click to calculate cache storage size"
+msgstr "Nhấn để tính dung lượng bộ nhớ đệm"
+
+#: src/generator/config/settingswidget.cpp:246
+msgid "No expired cache files."
+msgstr "Không có tệp bộ nhớ đệm hết hạn."
+
+#: src/generator/config/settingswidget.cpp:248
+msgid "Some cache files could not be cleaned up."
+msgstr "Không thể dọn dẹp một số tệp bộ nhớ đệm."
+
+#: src/generator/config/settingswidget.cpp:250
+msgid "Removed %1 cached file."
+msgid_plural "Removed %1 cached files."
+msgstr[0] "Đã xóa %1 tệp bộ nhớ đệm."
+
+#: src/generator/config/settingswidget.cpp:254
+msgid "Could not calculate cache storage size."
+msgstr "Không thể tính dung lượng bộ nhớ đệm."
+
+#: src/generator/config/settingswidget.cpp:257
+msgid "Using %1"
+msgstr "Đang dùng %1"
+
+#: src/generator/config/settingswidget.cpp:281
 msgid ""
 "Smooth the edges of vector graphics. Higher levels improve smoothness but "
 "require more processing."
@@ -183,7 +245,7 @@ msgstr ""
 "Làm mịn các cạnh của đồ họa vector. Mức cao hơn cho cạnh mịn hơn nhưng cần "
 "xử lý nhiều hơn."
 
-#: src/generator/config/settingswidget.cpp:204
+#: src/generator/config/settingswidget.cpp:283
 msgid ""
 "Smooth the edges of text. Higher levels improve smoothness but require more "
 "processing."
@@ -191,15 +253,15 @@ msgstr ""
 "Làm mịn các cạnh của chữ. Mức cao hơn cho chữ mịn hơn nhưng cần xử lý nhiều "
 "hơn."
 
-#: src/generator/config/settingswidget.cpp:206
+#: src/generator/config/settingswidget.cpp:285
 msgid "Choose the balance between image rendering speed and quality."
 msgstr "Chọn mức cân bằng giữa tốc độ và chất lượng hiển thị hình ảnh."
 
-#: src/generator/config/settingswidget.cpp:207
+#: src/generator/config/settingswidget.cpp:286
 msgid "Smooth images when scaling them to reduce jagged edges."
 msgstr "Làm mịn hình ảnh khi thay đổi kích thước để giảm răng cưa."
 
-#: src/generator/config/settingswidget.cpp:209
+#: src/generator/config/settingswidget.cpp:288
 msgid ""
 "Preview how overlapping inks appear in a PDF. This affects viewing only; "
 "printing is unchanged."
@@ -207,7 +269,7 @@ msgstr ""
 "Xem trước cách các lớp mực chồng lên nhau hiển thị trong PDF. Chỉ ảnh hưởng "
 "đến việc xem; không thay đổi khi in."
 
-#: src/generator/config/settingswidget.cpp:211
+#: src/generator/config/settingswidget.cpp:290
 msgid ""
 "Limit the worker’s rendering cache memory. This is not a limit on total "
 "process memory usage."
@@ -215,11 +277,11 @@ msgstr ""
 "Giới hạn bộ nhớ đệm hiển thị của worker. Đây không phải là giới hạn tổng bộ "
 "nhớ mà tiến trình sử dụng."
 
-#: src/generator/config/settingswidget.cpp:213
+#: src/generator/config/settingswidget.cpp:292
 msgid "Choose how eagerly the worker releases cached memory while idle."
 msgstr "Chọn mức độ giải phóng bộ nhớ đệm của worker khi ở trạng thái nghỉ."
 
-#: src/generator/config/settingswidget.cpp:215
+#: src/generator/config/settingswidget.cpp:294
 msgid ""
 "Stop rendering pages that are no longer needed. When disabled, rendering "
 "finishes before obsolete results are discarded."
@@ -227,7 +289,7 @@ msgstr ""
 "Dừng kết xuất các trang không còn cần thiết. Khi tắt, quá trình kết xuất sẽ "
 "hoàn tất trước khi các kết quả không còn cần thiết bị loại bỏ."
 
-#: src/generator/config/settingswidget.cpp:218
+#: src/generator/config/settingswidget.cpp:297
 msgid ""
 "Strict refuses to process documents unless the worker sandbox is fully "
 "hardened on this host."
@@ -235,13 +297,13 @@ msgstr ""
 "Chế độ Nghiêm ngặt từ chối xử lý tài liệu nếu hộp cát của worker chưa được "
 "gia cố đầy đủ trên máy này."
 
-#: src/generator/config/settingswidget.cpp:220
+#: src/generator/config/settingswidget.cpp:299
 msgid ""
 "Show a notification when the worker sandbox cannot provide its full "
 "protection."
 msgstr "Hiện thông báo khi hộp cát của worker không thể bảo vệ đầy đủ."
 
-#: src/generator/config/settingswidget.cpp:222
+#: src/generator/config/settingswidget.cpp:301
 msgid ""
 "Infer a table of contents from document headings when an embedded table of "
 "contents is absent. Generation may delay opening. Changes apply when the "
@@ -251,7 +313,7 @@ msgstr ""
 "nhúng. Việc tạo mục lục có thể làm chậm quá trình mở tài liệu. Thay đổi có "
 "hiệu lực khi mở lại tài liệu."
 
-#: src/generator/config/settingswidget.cpp:226
+#: src/generator/config/settingswidget.cpp:305
 msgid ""
 "Run JavaScript embedded in PDF forms. Disabled by default; enable only for "
 "documents you trust."
@@ -259,7 +321,7 @@ msgstr ""
 "Chạy JavaScript nhúng trong biểu mẫu PDF. Tắt theo mặc định; chỉ bật cho tài "
 "liệu mà bạn tin cậy."
 
-#: src/generator/config/settingswidget.cpp:228
+#: src/generator/config/settingswidget.cpp:307
 msgid ""
 "Select an installed Tesseract model for recognizing text in scanned pages. "
 "OCR is disabled when no usable model is available."
@@ -267,28 +329,28 @@ msgstr ""
 "Chọn mô hình Tesseract đã cài đặt để nhận dạng chữ trên các trang quét. OCR "
 "bị tắt khi không có mô hình dùng được."
 
-#: src/generator/config/settingswidget.cpp:231
+#: src/generator/config/settingswidget.cpp:310
 msgid "Choose OCR resolution. Higher resolution requires more processing."
 msgstr "Chọn độ phân giải OCR. Độ phân giải cao hơn cần xử lý nhiều hơn."
 
-#: src/generator/config/settingswidget.cpp:234
+#: src/generator/config/settingswidget.cpp:313
 msgid ""
 "Automatically run OCR when the page contains fewer extracted characters than "
 "the selected threshold."
 msgstr ""
 "Tự động chạy OCR khi số ký tự trích xuất trên trang ít hơn ngưỡng đã chọn."
 
-#: src/generator/config/settingswidget.cpp:235
+#: src/generator/config/settingswidget.cpp:314
 msgid "Show notifications about OCR progress and results."
 msgstr "Hiện thông báo về tiến độ và kết quả OCR."
 
-#: src/generator/config/settingswidget.cpp:237
+#: src/generator/config/settingswidget.cpp:316
 msgid ""
 "Use the default NSS certificate database for signing and validating "
 "signatures."
 msgstr "Dùng cơ sở dữ liệu chứng chỉ NSS mặc định để ký và xác thực chữ ký."
 
-#: src/generator/config/settingswidget.cpp:239
+#: src/generator/config/settingswidget.cpp:318
 msgid ""
 "Use an existing local NSS certificate database directory for signing and "
 "validating signatures."
@@ -296,7 +358,7 @@ msgstr ""
 "Dùng thư mục cơ sở dữ liệu chứng chỉ NSS có sẵn trên máy để ký và xác thực "
 "chữ ký."
 
-#: src/generator/config/settingswidget.cpp:242
+#: src/generator/config/settingswidget.cpp:321
 msgid ""
 "Open the certificate manager for the active NSS database to add, inspect, or "
 "delete certificates."
@@ -304,7 +366,7 @@ msgstr ""
 "Mở trình quản lý chứng chỉ của cơ sở dữ liệu NSS đang dùng để thêm, xem hoặc "
 "xóa chứng chỉ."
 
-#: src/generator/config/settingswidget.cpp:244
+#: src/generator/config/settingswidget.cpp:323
 msgid ""
 "Check certificate revocation while validating signatures. An unreachable "
 "OCSP responder does not invalidate signatures."
@@ -312,23 +374,23 @@ msgstr ""
 "Kiểm tra trạng thái thu hồi chứng chỉ khi xác thực chữ ký. Không liên lạc "
 "được với máy chủ OCSP không làm chữ ký mất hiệu lực."
 
-#: src/generator/config/settingswidget.cpp:247
+#: src/generator/config/settingswidget.cpp:326
 msgid "Choose the appearance of signatures added to the document."
 msgstr "Chọn kiểu hiển thị của chữ ký được thêm vào tài liệu."
 
-#: src/generator/config/settingswidget.cpp:249
+#: src/generator/config/settingswidget.cpp:328
 msgid "Render the signature appearance timestamp in UTC instead of local time."
 msgstr "Hiển thị dấu thời gian trên chữ ký theo UTC thay vì giờ địa phương."
 
-#: src/generator/config/settingswidget.cpp:251
+#: src/generator/config/settingswidget.cpp:330
 msgid "Choose an emblem to include in the signature appearance."
 msgstr "Chọn biểu tượng để hiển thị trong chữ ký."
 
-#: src/generator/config/settingswidget.cpp:252
+#: src/generator/config/settingswidget.cpp:331
 msgid "Draw a border around the signed signature appearance."
 msgstr "Vẽ đường viền quanh phần hiển thị chữ ký đã ký."
 
-#: src/generator/config/settingswidget.cpp:254
+#: src/generator/config/settingswidget.cpp:333
 msgid ""
 "Preview the selected signature profile, emblem, and time format using sample "
 "identity data."
@@ -336,38 +398,38 @@ msgstr ""
 "Xem trước kiểu chữ ký, biểu tượng và định dạng thời gian đã chọn bằng thông "
 "tin danh tính mẫu."
 
-#: src/generator/config/settingswidget.cpp:256
+#: src/generator/config/settingswidget.cpp:335
 msgid "Set the base font size for EPUB text."
 msgstr "Đặt cỡ chữ cơ bản cho văn bản EPUB."
 
-#: src/generator/config/settingswidget.cpp:258
+#: src/generator/config/settingswidget.cpp:337
 msgid ""
 "Choose the base font family for EPUB text. Default uses the document’s font "
 "selection."
 msgstr ""
 "Chọn phông chữ cơ bản cho văn bản EPUB. Mặc định dùng phông chữ của tài liệu."
 
-#: src/generator/config/settingswidget.cpp:260
+#: src/generator/config/settingswidget.cpp:339
 msgid "Choose the page dimensions used to lay out EPUB content."
 msgstr "Chọn kích thước trang để dàn nội dung EPUB."
 
-#: src/generator/config/settingswidget.cpp:262
+#: src/generator/config/settingswidget.cpp:341
 msgid "Customize EPUB appearance with CSS rules."
 msgstr "Tùy chỉnh cách hiển thị EPUB bằng các quy tắc CSS."
 
-#: src/generator/config/settingswidget.cpp:273
+#: src/generator/config/settingswidget.cpp:352
 msgid "Custom CSS (configured)"
 msgstr "CSS tùy chỉnh (đã cấu hình)"
 
-#: src/generator/config/settingswidget.cpp:273 rc.cpp:123
+#: src/generator/config/settingswidget.cpp:352 rc.cpp:129
 msgid "Custom CSS"
 msgstr "CSS tùy chỉnh"
 
-#: src/generator/config/settingswidget.cpp:281
+#: src/generator/config/settingswidget.cpp:360
 msgid "NSS database unavailable"
 msgstr "Không có cơ sở dữ liệu NSS"
 
-#: src/generator/config/settingswidget.cpp:283
+#: src/generator/config/settingswidget.cpp:362
 msgid "Manage Certificates - %1"
 msgstr "Quản lý chứng chỉ - %1"
 
@@ -955,93 +1017,97 @@ msgid "Enable JavaScript support"
 msgstr "Bật hỗ trợ JavaScript"
 
 #: rc.cpp:54
+msgid "Cache Management"
+msgstr "Quản lý bộ nhớ đệm"
+
+#: rc.cpp:60
 msgid "PDF"
 msgstr "PDF"
 
-#: rc.cpp:57
+#: rc.cpp:63
 msgid "Optical Character Recognition"
 msgstr "Nhận dạng ký tự quang học (OCR)"
 
-#: rc.cpp:60
+#: rc.cpp:66
 msgid "Tesseract Model"
 msgstr "Mô hình Tesseract"
 
-#: rc.cpp:63
+#: rc.cpp:69
 msgid "Tesseract Quality"
 msgstr "Chất lượng Tesseract"
 
-#: rc.cpp:66
+#: rc.cpp:72
 msgid "Auto-trigger OCR when page has less than"
 msgstr "Tự động chạy OCR khi trang có ít hơn"
 
-#: rc.cpp:69
+#: rc.cpp:75
 msgid "Show notifications on OCR status"
 msgstr "Hiện thông báo về trạng thái OCR"
 
-#: rc.cpp:72
+#: rc.cpp:78
 msgid "Crypto Engine"
 msgstr "Bộ máy mật mã"
 
-#: rc.cpp:75
+#: rc.cpp:81
 msgid "Default Certificate Database:"
 msgstr "Cơ sở dữ liệu chứng chỉ mặc định:"
 
-#: rc.cpp:78
+#: rc.cpp:84
 msgid "/etc/pki/nssdb"
 msgstr "/etc/pki/nssdb"
 
-#: rc.cpp:81
+#: rc.cpp:87
 msgid "Custom Certificate Database"
 msgstr "Cơ sở dữ liệu chứng chỉ tùy chỉnh"
 
-#: rc.cpp:84
+#: rc.cpp:90
 msgid "Manage Certificates"
 msgstr "Quản lý chứng chỉ"
 
-#: rc.cpp:87
+#: rc.cpp:93
 msgid "Check certificate revocation via OCSP (requires network)"
 msgstr "Kiểm tra thu hồi chứng chỉ qua OCSP (cần mạng)"
 
-#: rc.cpp:90
+#: rc.cpp:96
 msgid "Signature"
 msgstr "Chữ ký"
 
-#: rc.cpp:93
+#: rc.cpp:99
 msgid "Signature profile:"
 msgstr "Hồ sơ chữ ký:"
 
-#: rc.cpp:96
+#: rc.cpp:102
 msgid "Signature emblem:"
 msgstr "Biểu tượng chữ ký:"
 
-#: rc.cpp:99
+#: rc.cpp:105
 msgid "Use UTC time for signatures"
 msgstr "Dùng giờ UTC cho chữ ký"
 
-#: rc.cpp:102
+#: rc.cpp:108
 msgid "Draw signature border"
 msgstr "Vẽ đường viền chữ ký"
 
-#: rc.cpp:105
+#: rc.cpp:111
 msgid "ePUB"
 msgstr "ePUB"
 
-#: rc.cpp:108
+#: rc.cpp:114
 msgid "Page Layout"
 msgstr "Bố cục trang"
 
-#: rc.cpp:111
+#: rc.cpp:117
 msgid "Font Size"
 msgstr "Cỡ chữ"
 
-#: rc.cpp:114
+#: rc.cpp:120
 msgid " pt"
 msgstr " pt"
 
-#: rc.cpp:117
+#: rc.cpp:123
 msgid "Font Family"
 msgstr "Phông chữ"
 
-#: rc.cpp:120
+#: rc.cpp:126
 msgid "Page Size"
 msgstr "Khổ giấy"

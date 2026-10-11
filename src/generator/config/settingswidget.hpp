@@ -5,6 +5,9 @@
 #define MU_GENERATOR_CONFIG_SETTINGSWIDGET_HPP
 
 #include <QWidget>
+#include <optional>
+
+#include "plugin/caching/vacuum.hpp"
 
 class Ui_MuPDFNGSettingsWidgetBase;
 
@@ -22,6 +25,8 @@ public:
 private:
     void setupToolTips();
     void updateManageCertificatesButton();
+    void refreshCacheUsage(std::optional<Plugin::Caching::Vacuum::CacheKind> vacuum = std::nullopt);
+    void updateCacheMenu(const Plugin::Caching::Vacuum::CacheUsage* usage = nullptr);
     /// Refreshes the signature preview from the widgets' pending state so it
     /// tracks unapplied changes.
     void updateSignaturePreview();

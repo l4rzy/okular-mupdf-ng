@@ -342,6 +342,45 @@
         </widget>
        </item>
        <item>
+        <widget class="QGroupBox" name="cacheManagementGroupBox">
+         <property name="title">
+          <string>Cache Management</string>
+         </property>
+         <layout class="QVBoxLayout" name="cacheManagementLayout">
+          <item>
+           <widget class="QToolButton" name="cacheStorageButton">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Click to calculate cache storage size</string>
+            </property>
+            <property name="popupMode">
+             <enum>QToolButton::MenuButtonPopup</enum>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="cacheRetentionLabel">
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="cacheResultLabel">
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <spacer name="generalVerticalSpacer">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>

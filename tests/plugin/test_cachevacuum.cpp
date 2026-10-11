@@ -5,10 +5,12 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>
 
+#include <unistd.h>
 #include <utime.h>
 
 #include "plugin/caching/vacuum.hpp"
@@ -40,6 +42,167 @@ private:
     }
 
 private slots:
+
+    void vacuumsSelectedCache_data()
+    {
+        QTest::addColumn<Vacuum::CacheKind>("kind");
+        QTest::addColumn<QString>("selected");
+        QTest::newRow("ocr") << Vacuum::CacheKind::Ocr << QStringLiteral("ocr");
+        QTest::newRow("epub") << Vacuum::CacheKind::EpubAccelerator << QStringLiteral("epub_accel");
+        QTest::newRow("toc") << Vacuum::CacheKind::PdfToc << QStringLiteral("pdf_toc");
+        QTest::newRow("all") << Vacuum::CacheKind::All << QString();
+    }
+
+    void vacuumsSelectedCache()
+    {
+        QFETCH(Vacuum::CacheKind, kind);
+        QFETCH(QString, selected);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto now = utcNow();
+        const auto old = now.addDays(-100);
+        const QStringList trees { "ocr", "epub_accel", "pdf_toc" };
+        for (const auto& tree : trees) {
+            QVERIFY(!writeFile(root.filePath(tree + "/.expired/deep/.old"), "old", old).isEmpty());
+            QVERIFY(!writeFile(root.filePath(tree + "/fresh"), tree.toUtf8(), now).isEmpty());
+        }
+        const auto foreign = writeFile(root.filePath("other/keep"), "ignored", old);
+        QVERIFY(!foreign.isEmpty());
+        const auto before = Vacuum::measureCacheUsage(root.path());
+        QCOMPARE(before.errors, 0);
+        QCOMPARE(before.ocrBytes, 6);
+        QCOMPARE(before.epubAcceleratorBytes, 13);
+        QCOMPARE(before.pdfTocBytes, 10);
+        QCOMPARE(before.totalBytes(), 29);
+
+        const auto result = Vacuum::vacuumStaleCaches(root.path(), now, kind);
+        QCOMPARE(result.errors, 0);
+        QCOMPARE(result.filesRemoved, selected.isEmpty() ? 3 : 1);
+        const auto after = Vacuum::measureCacheUsage(root.path());
+        QCOMPARE(after.errors, 0);
+        QCOMPARE(after.totalBytes(), selected.isEmpty() ? 20 : 26);
+        QCOMPARE(after.ocrBytes, selected.isEmpty() || selected == "ocr" ? 3 : 6);
+        QCOMPARE(after.epubAcceleratorBytes, selected.isEmpty() || selected == "epub_accel" ? 10 : 13);
+        QCOMPARE(after.pdfTocBytes, selected.isEmpty() || selected == "pdf_toc" ? 7 : 10);
+        for (const auto& tree : trees) {
+            const bool retained = !selected.isEmpty() && tree != selected;
+            QCOMPARE(QFile::exists(root.filePath(tree + "/.expired/deep/.old")), retained);
+            QCOMPARE(QDir(root.filePath(tree + "/.expired")).exists(), retained);
+            QVERIFY(QFile::exists(root.filePath(tree + "/fresh")));
+        }
+        QVERIFY(QFile::exists(foreign));
+    }
+
+    void skipsSymlinks_data()
+    {
+        QTest::addColumn<QString>("linkPath");
+        QTest::addColumn<bool>("linkFile");
+        QTest::newRow("file") << QStringLiteral("ocr/file") << true;
+        QTest::newRow("nested-directory") << QStringLiteral("ocr/linked") << false;
+        QTest::newRow("cache-directory") << QStringLiteral("ocr") << false;
+        QTest::newRow("cache-root") << QStringLiteral("linked-root") << false;
+    }
+
+    void skipsSymlinks()
+    {
+        QFETCH(QString, linkPath);
+        QFETCH(bool, linkFile);
+        QTemporaryDir root;
+        QTemporaryDir outside;
+        QVERIFY(root.isValid());
+        QVERIFY(outside.isValid());
+        const auto now = utcNow();
+        const QString targetFile = writeFile(outside.filePath("ocr/old"), "outside", now.addDays(-100));
+        QVERIFY(!targetFile.isEmpty());
+        const QString link = root.filePath(linkPath);
+        QVERIFY(QFileInfo(link).dir().mkpath("."));
+        const bool rootLink = linkPath == "linked-root";
+        QVERIFY(QFile::link(linkFile ? targetFile : rootLink ? outside.path() : outside.filePath("ocr"), link));
+        const QString scanRoot = rootLink ? link + '/' : root.path();
+        QCOMPARE(Vacuum::measureCacheUsage(scanRoot).totalBytes(), 0);
+        QCOMPARE(Vacuum::vacuumStaleCaches(scanRoot, now).filesRemoved, 0);
+        QVERIFY(QFile::exists(targetFile));
+        QVERIFY(QFileInfo(link).isSymLink());
+    }
+
+    void reportsRemovalFailure()
+    {
+        if (::geteuid() == 0)
+            QSKIP("Root bypasses directory write permissions");
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto now = utcNow();
+        const QString file = writeFile(root.filePath("ocr/old"), "old", now.addDays(-100));
+        QVERIFY(!file.isEmpty());
+        const QString directory = root.filePath("ocr");
+        const auto permissions = QFile::permissions(directory);
+        const auto restore = qScopeGuard([&] { QFile::setPermissions(directory, permissions); });
+        QVERIFY(QFile::setPermissions(directory, QFile::ReadOwner | QFile::ExeOwner));
+        const auto result = Vacuum::vacuumStaleCaches(root.path(), now);
+        QCOMPARE(result.filesRemoved, 0);
+        QCOMPARE(result.errors, 1);
+        QVERIFY(QFile::exists(file));
+    }
+
+    void reportsInvalidCacheDirectory_data()
+    {
+        QTest::addColumn<bool>("invalidRoot");
+        QTest::newRow("root") << true;
+        QTest::newRow("tree") << false;
+    }
+
+    void reportsInvalidCacheDirectory()
+    {
+        QFETCH(bool, invalidRoot);
+        QTemporaryDir parent;
+        QVERIFY(parent.isValid());
+        const auto now = utcNow();
+        const auto file = writeFile(parent.filePath("ocr"), "unexpected", now.addDays(-100));
+        QVERIFY(!file.isEmpty());
+        const auto root = invalidRoot ? file : parent.path();
+        const auto usage = Vacuum::measureCacheUsage(root);
+        QCOMPARE(usage.totalBytes(), 0);
+        QCOMPARE(usage.errors, 1);
+        const auto cleanup = Vacuum::vacuumStaleCaches(root, now);
+        QCOMPARE(cleanup.filesRemoved, 0);
+        QCOMPARE(cleanup.errors, 1);
+        QVERIFY(QFile::exists(file));
+    }
+
+    void reportsInaccessibleCache_data()
+    {
+        QTest::addColumn<QString>("restrictedPath");
+        QTest::addColumn<int>("permissions");
+        QTest::newRow("unreadable-root") << QString() << int(QFile::ExeOwner);
+        QTest::newRow("unsearchable-root") << QString() << int(QFile::ReadOwner);
+        QTest::newRow("unreadable-tree") << QStringLiteral("ocr") << int(QFile::ExeOwner);
+        QTest::newRow("unsearchable-tree") << QStringLiteral("ocr") << int(QFile::ReadOwner);
+        QTest::newRow("unreadable-nested") << QStringLiteral("ocr/nested") << int(QFile::ExeOwner);
+        QTest::newRow("unsearchable-nested") << QStringLiteral("ocr/nested") << int(QFile::ReadOwner);
+    }
+
+    void reportsInaccessibleCache()
+    {
+        if (::geteuid() == 0)
+            QSKIP("Root bypasses directory permissions");
+        QFETCH(QString, restrictedPath);
+        QFETCH(int, permissions);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto now = utcNow();
+        const auto file = writeFile(root.filePath("ocr/nested/old"), "old", now.addDays(-100));
+        QVERIFY(!file.isEmpty());
+        const auto path = restrictedPath.isEmpty() ? root.path() : root.filePath(restrictedPath);
+        const auto original = QFile::permissions(path);
+        const auto restore = qScopeGuard([&] { QFile::setPermissions(path, original); });
+        QVERIFY(QFile::setPermissions(path, QFile::Permissions(permissions)));
+        QVERIFY(Vacuum::measureCacheUsage(root.path()).errors > 0);
+        const auto cleanup = Vacuum::vacuumStaleCaches(root.path(), now);
+        QVERIFY(cleanup.errors > 0);
+        QCOMPARE(cleanup.filesRemoved, 0);
+        QVERIFY(QFile::setPermissions(path, original));
+        QVERIFY(QFile::exists(file));
+    }
 
     void parsesStoredTimestamp()
     {
@@ -76,48 +239,15 @@ private slots:
         QVERIFY(Vacuum::isStale(now.addDays(-120), now));
     }
 
-    void removesOnlyStaleCacheFiles()
-    {
-        QTemporaryDir root;
-        QVERIFY(root.isValid());
-        const QDateTime now = utcNow();
-        const QDateTime old = now.addDays(-100);
-
-        const QString staleOcr = writeFile(root.filePath(QStringLiteral("ocr/hash/p0_eng_300dpi.bin")), "old", old);
-        const QString freshOcr = writeFile(root.filePath(QStringLiteral("ocr/hash/p1_eng_300dpi.bin")), "new", now);
-        const QString staleOnlyDoc = writeFile(root.filePath(QStringLiteral("ocr/gone/p0_eng.bin")), "old", old);
-        const QString staleEpub = writeFile(root.filePath(QStringLiteral("epub_accel/abc.bin")), "old", old);
-        const QString freshEpub = writeFile(root.filePath(QStringLiteral("epub_accel/fresh.bin")), "new", now);
-        const QString stalePdfToc = writeFile(root.filePath(QStringLiteral("pdf_toc/old.bin")), "old", old);
-        const QString freshPdfToc = writeFile(root.filePath(QStringLiteral("pdf_toc/fresh.bin")), "new", now);
-        const QString foreign = writeFile(root.filePath(QStringLiteral("other/keep.bin")), "old", old);
-        for (const QString& path :
-             { staleOcr, freshOcr, staleOnlyDoc, staleEpub, freshEpub, stalePdfToc, freshPdfToc, foreign })
-            QVERIFY2(!path.isEmpty(), qPrintable(QStringLiteral("fixture setup failed")));
-        QCOMPARE(QFileInfo(staleOcr).lastModified().toSecsSinceEpoch(), old.toSecsSinceEpoch());
-
-        const auto result = Vacuum::vacuumStaleCaches(root.path(), now);
-        QCOMPARE(result.filesRemoved, 4);
-        QVERIFY(!QFile::exists(staleOcr));
-        QVERIFY(!QFile::exists(staleOnlyDoc));
-        QVERIFY(!QFile::exists(staleEpub));
-        QVERIFY(QFile::exists(freshOcr));
-        QVERIFY(QFile::exists(freshEpub));
-        QVERIFY(!QFile::exists(stalePdfToc));
-        QVERIFY(QFile::exists(freshPdfToc));
-        // Unknown trees are out of scope even when their files are old.
-        QVERIFY(QFile::exists(foreign));
-        // The emptied document directory is pruned; the live one survives.
-        QVERIFY(!QDir(root.filePath(QStringLiteral("ocr/gone"))).exists());
-        QVERIFY(QDir(root.filePath(QStringLiteral("ocr/hash"))).exists());
-        QVERIFY(result.dirsRemoved >= 1);
-    }
-
     void ignoresMissingTrees()
     {
         QTemporaryDir root;
         QVERIFY(root.isValid());
+        const auto usage = Vacuum::measureCacheUsage(root.path());
+        QCOMPARE(usage.totalBytes(), 0);
+        QCOMPARE(usage.errors, 0);
         const auto result = Vacuum::vacuumStaleCaches(root.path(), utcNow());
+        QCOMPARE(result.errors, 0);
         QCOMPARE(result.filesRemoved, 0);
         QCOMPARE(result.dirsRemoved, 0);
     }
