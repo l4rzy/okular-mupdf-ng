@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-#include "generator/config/signature_emblem.hpp"
+#include "generator/config/mupdf_emblem.hpp"
 #include "plugin/util/signing_timestamp.hpp"
 #include "shared/logging.hpp"
 

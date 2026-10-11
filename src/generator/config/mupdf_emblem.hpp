@@ -3,8 +3,8 @@
 //
 // MuPDF signature emblem geometry from source/pdf/pdf-appearance.c.
 // See thirdparty/mupdf-COPYING for the license.
-#ifndef MU_GENERATOR_CONFIG_SIGNATURE_EMBLEM_HPP
-#define MU_GENERATOR_CONFIG_SIGNATURE_EMBLEM_HPP
+#ifndef MU_GENERATOR_CONFIG_MUPDF_EMBLEM_HPP
+#define MU_GENERATOR_CONFIG_MUPDF_EMBLEM_HPP
 
 #include <QPainterPath>
 
