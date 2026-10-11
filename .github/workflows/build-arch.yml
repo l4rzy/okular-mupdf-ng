@@ -52,6 +52,8 @@ jobs:
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
+          # Explicitly enable GCC LTO for both makepkg build variants.
+          printf '\nOPTIONS=("${OPTIONS[@]/!lto/lto}" lto)\n' >> /etc/makepkg.conf
           cd dist
           sudo -u builder CC=gcc CXX=g++ makepkg -sf --noconfirm
 

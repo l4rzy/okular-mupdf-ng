@@ -56,6 +56,8 @@ Build from source — see [Building and testing](#building-and-testing).
   build tools.
 - Qt 6 development packages. The default Okular plugin build also requires
   KDE Frameworks 6 and Okular 6 development packages.
+- For Clang LTO: LLVM tools (`llvm-ar`, `llvm-ranlib`) and the matching LLVMgold
+  plugin for mold/GNU ld. Install `llvm`; on openSUSE also install `llvm-gold`.
 - NSS/NSPR for certificate and signature operations.
 - Build dependencies required by MuPDF, including FreeType, HarfBuzz, JPEG,
   JBIG2, OpenJPEG, Brotli, Leptonica, and Zlib.
@@ -85,6 +87,12 @@ make format
 # Remove build directories
 make clean
 ```
+
+LTO is enabled by default for CMake targets in Release, RelWithDebInfo, and
+MinSizeRel builds when the compiler and linker support it. Disable it with
+`-DENABLE_LTO=OFF`. Debug and sanitizer builds are excluded; Arch's `None`
+configuration continues to use makepkg's flags. The separately built bundled
+MuPDF archives keep their existing compiler flags.
 
 For an already configured build tree, run all tests with:
 

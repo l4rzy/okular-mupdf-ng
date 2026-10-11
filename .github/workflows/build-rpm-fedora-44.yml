@@ -27,6 +27,7 @@ jobs:
             brotli-devel \
             ca-certificates \
             clang \
+            llvm \
             cmake \
             cpio \
             extra-cmake-modules \

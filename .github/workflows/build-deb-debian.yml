@@ -22,6 +22,7 @@ jobs:
           apt-get install --yes --no-install-recommends \
             ca-certificates \
             clang \
+            llvm \
             cmake \
             dpkg-dev \
             extra-cmake-modules \
@@ -64,6 +65,7 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_LTO=OFF \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_INSTALL_PREFIX=/usr \

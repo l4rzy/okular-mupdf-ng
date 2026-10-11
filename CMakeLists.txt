@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(BUILD_OKULAR_GENERATOR "Build the Okular generator and KDE integration" ON)
 option(ENABLE_SANITIZERS "Enable Address/LeakSanitizer instrumentation" OFF)
+option(ENABLE_LTO "Enable supported LTO in optimized CMake configurations" ON)
 option(DISABLE_WORKER_SANDBOX "Disable worker sandboxing for diagnostic builds" OFF)
 add_compile_definitions(MU_DISABLE_WORKER_SANDBOX=$<BOOL:${DISABLE_WORKER_SANDBOX}>)
 find_package(PkgConfig REQUIRED)
@@ -39,6 +40,26 @@ else()
     endif()
 endif()
 include(CTest)
+
+# Keep Debug/sanitizer builds and packaging's None configuration under their
+# existing flag policy. IPO applies to CMake targets, not MuPDF's external Make build.
+set(MU_LTO_ENABLED OFF)
+if(ENABLE_LTO AND NOT ENABLE_SANITIZERS AND
+   (CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$"))
+    include(CheckIPOSupported)
+    if(POLICY CMP0138)
+        cmake_policy(SET CMP0138 NEW)
+    endif()
+    check_ipo_supported(RESULT MU_LTO_SUPPORTED OUTPUT MU_LTO_ERROR LANGUAGES C CXX)
+    if(MU_LTO_SUPPORTED)
+        foreach(config RELEASE RELWITHDEBINFO MINSIZEREL)
+            set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_${config} ON)
+        endforeach()
+        set(MU_LTO_ENABLED ON)
+    else()
+        message(WARNING "LTO unavailable; continuing without it: ${MU_LTO_ERROR}")
+    endif()
+endif()
 
 # Only the exact Debug configuration enables verbose diagnostics. None is used
 # by Arch packaging so that makepkg owns the compiler flags; it must still
@@ -134,6 +155,7 @@ install(FILES
 
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "LTO for optimized configurations: ${MU_LTO_ENABLED}")
 message(STATUS "MuPDF build profile: ${MUPDF_BUILD_PROFILE}")
 message(STATUS "MuPDF CJK fallback: ${MUPDF_CJK_FALLBACK}")
 message(STATUS "PDF form JavaScript: ${ENABLE_FORM_JAVASCRIPT}")

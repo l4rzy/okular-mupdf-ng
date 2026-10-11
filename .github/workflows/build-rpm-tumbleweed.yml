@@ -21,6 +21,8 @@ jobs:
           zypper --non-interactive install --no-recommends \
             ca-certificates \
             clang \
+            llvm \
+            llvm-gold \
             cmake \
             dejavu-fonts \
             kf6-extra-cmake-modules \
