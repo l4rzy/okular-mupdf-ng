@@ -26,9 +26,9 @@ promise that every input or workflow has been tested.
 | Text extraction and search | 🟢 Stable | Worker tests; text-page conversion tests |
 | Metadata, fonts, and embedded files | 🟢 Stable | Worker and generator tests |
 | Linux sandboxed document processing | 🟢 Stable | Security and IPC integration tests |
-| Render ePUB pages | 🟡 Partial | Worker and IPC integration |
+| Render ePUB pages | 🟡 Partial | Worker and IPC integration; loaded-generator mixed-layout fixtures, cold/cached rendering and text geometry |
 | ePUB custom CSS and page sizes | 🟡 Partial | Worker tests; settings tests |
-| Export ePUB to PDF | 🟡 Partial | Worker and IPC integration |
+| Export ePUB to PDF | 🟡 Partial | Worker and IPC integration; loaded-generator cold/cached export and PDF reopen, images, embedded font, captions, tables, and chapter navigation |
 | Unencrypted legacy MOBI support | 🟡 Partial | Synthetic corpus; detection, header rejection, descriptor cleanup, file/memory IPC, reopen, TOC, and PDF export tests; generator open/search tests |
 | OCR for scanned PDF pages | 🟡 Partial | Worker and plugin integration tests |
 | Outlines, links, and navigation | 🟡 Partial | Worker tests; EPUB link and outline tests 
@@ -36,12 +36,12 @@ promise that every input or workflow has been tested.
 | PDF annotations | 🟡 Partial | Generator proxy and worker tests |
 | Printing and document export | 🟡 Partial | Export integration; print-output appearance, visibility, geometry and source-isolation tests; printer submission untested |
 | Flattened PDF export | 🟡 Partial | Worker appearance/source-isolation tests; IPC and CLI export integration |
-| Basic PDF AcroForm filling | 🟡 Partial | Worker and proxy tests; loaded-generator edit, undo/redo, save/reopen, reset, and print-to-PDF tests with synthetic and LibreOffice fixtures |
+| Basic PDF AcroForm filling | 🟡 Partial | Worker and proxy tests; loaded-generator edit, undo/redo, save/reopen, reset, print-to-PDF, and repeated worker recovery (unsaved edit loss, history clearing, proxy reuse, and post-recovery save/reopen) tests with synthetic and LibreOffice fixtures |
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
 | XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
-| PDF JS support | 🟣 Experimental | Basic integration tests |
+| PDF JS support | 🟣 Experimental | Worker calculation and control-event tests; loaded-generator validation, cross-page dependent updates, undo/redo, and save/reopen tests |
 | Generated PDF TOC (printed contents and typography; persistent cache) | 🟣 Experimental | Heading/hierarchy, wrapped titles, contents columns/page mapping, and cache tests; rotated worker fixtures and IPC reopen/precedence tests |
 
 ## Known limitations

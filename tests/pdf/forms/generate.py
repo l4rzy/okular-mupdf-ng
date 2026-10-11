@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate an original, two-page AcroForm fixture without third-party content."""
+"""Generate original, two-page AcroForm fixtures without third-party content."""
 from pathlib import Path
 
 
@@ -35,14 +35,50 @@ objects = [
     stream("0 0 20 20 re S", "/Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << >>"),
     stream("0 0 20 20 re S 2 2 m 18 18 l 2 18 m 18 2 l S", "/Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << >>"),
 ]
-data = bytearray(b"%PDF-1.7\n")
-offsets = []
-for number, body in enumerate(objects, 1):
-    offsets.append(len(data))
-    data.extend(f"{number} 0 obj\n{body}\nendobj\n".encode("ascii"))
-xref = len(data)
-data.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
-for offset in offsets:
-    data.extend(f"{offset:010} 00000 n \n".encode("ascii"))
-data.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
-Path(__file__).with_name("application.pdf").write_bytes(data)
+
+
+def write_pdf(path, pdf_objects):
+    data = bytearray(b"%PDF-1.7\n")
+    offsets = []
+    for number, body in enumerate(pdf_objects, 1):
+        offsets.append(len(data))
+        data.extend(f"{number} 0 obj\n{body}\nendobj\n".encode("ascii"))
+    xref = len(data)
+    data.extend(f"xref\n0 {len(pdf_objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
+    for offset in offsets:
+        data.extend(f"{offset:010} 00000 n \n".encode("ascii"))
+    data.extend(f"trailer\n<< /Size {len(pdf_objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
+    path.write_bytes(data)
+
+
+write_pdf(Path(__file__).with_name("application.pdf"), objects)
+
+
+def javascript_action(script):
+    escaped = script.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return f"<< /S /JavaScript /JS ({escaped}) >>"
+
+
+nonnegative = javascript_action("event.rc = !isNaN(Number(event.value)) && Number(event.value) >= 0;")
+percentage = javascript_action(
+    "event.rc = !isNaN(Number(event.value)) && Number(event.value) >= 0 && Number(event.value) <= 100;"
+)
+calculate = javascript_action(
+    "var total = this.getField('Quantity').value * this.getField('UnitPrice').value "
+    "* (1 - this.getField('DiscountPercent').value / 100); "
+    "event.value = (Math.round(total * 100) / 100).toFixed(2);"
+)
+write_pdf(Path(__file__).with_name("javascript.pdf"), [
+    "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>",
+    "<< /Type /Pages /Count 2 /Kids [3 0 R 4 0 R] >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /Helv 6 0 R >> >> /Contents 11 0 R /Annots [7 0 R 8 0 R 9 0 R] >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /Helv 6 0 R >> >> /Contents 12 0 R /Annots [10 0 R] >>",
+    "<< /Fields [7 0 R 8 0 R 9 0 R 10 0 R] /CO [10 0 R] /DR << /Font << /Helv 6 0 R >> >> /DA (/Helv 12 Tf 0 g) /NeedAppearances true >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    widget(f"/FT /Tx /T (Quantity) /V (3) /AA << /V {nonnegative} >>", "50 660 300 690"),
+    widget(f"/FT /Tx /T (UnitPrice) /V (20) /AA << /V {nonnegative} >>", "50 600 300 630"),
+    widget(f"/FT /Tx /T (DiscountPercent) /V (10) /AA << /V {percentage} >>", "50 540 300 570"),
+    widget(f"/FT /Tx /T (Total) /Ff 1 /V (54.00) /AA << /C {calculate} >>", "50 660 300 690", 4),
+    stream("BT /Helv 18 Tf 50 740 Td (Order inputs) Tj ET"),
+    stream("BT /Helv 18 Tf 50 740 Td (Calculated total) Tj ET"),
+])

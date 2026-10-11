@@ -261,10 +261,22 @@ add_layer_test(test_generator_forms generator/test_forms.cpp generator)
 target_include_directories(test_generator_forms PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
 target_link_libraries(test_generator_forms PRIVATE Qt6::Gui Qt6::PrintSupport Okular::Core KF6::ConfigCore)
 target_compile_definitions(test_generator_forms PRIVATE
+    TEST_FORM_JAVASCRIPT=$<BOOL:${ENABLE_FORM_JAVASCRIPT}>
     TEST_FORM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf/forms"
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
 add_dependencies(test_generator_forms okularGenerator_mupdfng mupdfng-worker)
+
+add_layer_test(test_generator_epub generator/test_epub.cpp "generator;integration")
+target_include_directories(test_generator_epub PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore mupdf_plugin_cache MuPDF::Engine)
+target_compile_definitions(test_generator_epub PRIVATE
+    TEST_BUNDLED_MUPDF=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
+    TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
+    TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
+    TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
+add_dependencies(test_generator_epub okularGenerator_mupdfng mupdfng-worker)
+set_tests_properties(test_generator_epub PROPERTIES TIMEOUT 150)
 
 add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
 target_include_directories(test_generator_ocr PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
