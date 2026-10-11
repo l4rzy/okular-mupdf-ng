@@ -14,6 +14,7 @@
 #include <KLocalizedString>
 #include <KPluginFactory>
 #include <QActionGroup>
+#include <QApplication>
 #include <QBuffer>
 #include <QByteArray>
 #include <QCoreApplication>
@@ -40,6 +41,7 @@
 #include <functional>
 #include <unordered_map>
 
+#include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/config/settingswidget.hpp"
 #include "generator/conversion/annotation.hpp"
@@ -117,7 +119,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     // selection create and initialize the missing database on first launch.
     (void)Plugin::Crypto::initializeNss(Config::usesDefaultCertificateDatabase() ? QString { } : certDbPath);
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
-    setupOcrActions();
+    setupActions();
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
         &m_worker,
         [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages, bool changed) {
@@ -410,7 +412,7 @@ bool Main::reparseConfig()
     return changed;
 }
 
-void Main::setupOcrActions()
+void Main::setupActions()
 {
     setComponentName(QStringLiteral("okular_mupdfng"), i18n("MuPDF"));
     auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("document-scan")), i18n("MuPDF OCR"), this);
@@ -444,6 +446,14 @@ void Main::setupOcrActions()
     connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
         syncOcrActions();
         observeOcrFocus();
+    });
+    auto* certificates =
+        new QAction(QIcon::fromTheme(QStringLiteral("view-certificate")), i18n("Manage Certificates…"), this);
+    actionCollection()->addAction(QStringLiteral("mupdf_manage_certificates"), certificates);
+    KActionCollection::setShortcutsConfigurable(certificates, false);
+    connect(certificates, &QAction::triggered, this, [] {
+        CertificateManagerDialog dialog(Plugin::Crypto::activeNssDatabasePath(), QApplication::activeWindow());
+        dialog.exec();
     });
     setXMLFile(QStringLiteral("mupdfngui.rc"));
 }

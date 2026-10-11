@@ -139,7 +139,7 @@ private:
 
     // Updates OCR scheduling from the pages currently visible in Okular.
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
-    void setupOcrActions();
+    void setupActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
     // still represents the active Okular document. Sandbox enforcement is rechecked

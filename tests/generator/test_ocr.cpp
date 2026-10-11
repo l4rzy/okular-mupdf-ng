@@ -92,7 +92,8 @@ private slots:
             const bool expected = currentPath == QStringLiteral(TEST_PDF_PATH) || enabled;
             QCOMPARE(action->isEnabled(), expected);
             for (QAction* registered : client->actionCollection()->actions())
-                QCOMPARE(registered->isEnabled(), expected);
+                QCOMPARE(registered->isEnabled(),
+                         registered->objectName() == QStringLiteral("mupdf_manage_certificates") || expected);
             document.reparseConfig();
             QCOMPARE(action->isEnabled(), expected);
             document.closeDocument();
@@ -150,8 +151,9 @@ private slots:
         });
         auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
         QVERIFY(tools);
-        QCOMPARE(tools->actions().size(), 3);
+        QCOMPARE(tools->actions().size(), 4);
         QVERIFY(tools->actions().at(1)->isSeparator());
+        QCOMPARE(tools->actions().at(2)->icon().name(), QStringLiteral("document-scan"));
         auto* certificates = client->actionCollection()->action(QStringLiteral("mupdf_manage_certificates"));
         QVERIFY(certificates);
         QCOMPARE(tools->actions().back(), certificates);
@@ -160,7 +162,7 @@ private slots:
         QVERIFY(menu);
         QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
         QCOMPARE(menu->actions().size(), 3);
-        QCOMPARE(client->actionCollection()->actions().count(), 5);
+        QCOMPARE(client->actionCollection()->actions().count(), 6);
         for (QAction* registered : client->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle"));
