@@ -1,5 +1,5 @@
 <p align="center">
-<img src="dist/mupdfng.svg" width="180px">
+<img src="dist/mupdfng.svg" width="200px">
 </p>
 
 # okular-mupdf-ng
@@ -27,10 +27,10 @@ instructions for building from source.
 ---
 
 ## Motivation
-Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's PDF and ePUB backends, with the hope of making it more complete:
+Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's backends, with the hope of making it more complete:
  - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined.
  - PDF backend with Poppler is rich in features, but sluggish on big PDFs. This is a known weakness of Poppler.
- - Rendering quality of the default ePUB backend is terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
+ - Rendering quality of the default ePUB & MOBI backends are terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
 
 ---
 
@@ -45,12 +45,12 @@ and the source-tree layout.
 
 ## Feature Comparison
 
-| Feature Category | Capabilities | okular-mupdf-ng | Okular official PDF & ePUB backends |
+| Feature Category | Capabilities | okular-mupdf-ng | Okular official backends |
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
-| **Formats** | PDF, ePUB | ✓ | ✓ |
+| **Formats** | PDF, ePUB, MOBI | ✓ | ✓ |
 | **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
-| **ePUB export** | Export ePUB to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
+| **ePUB/MOBI export** | Export ePUB/MOBI to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
 | **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
 | **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |

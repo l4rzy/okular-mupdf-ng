@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>okular-mupdf-ng — Secure &amp; Fast PDF/ePUB Backend for Okular</title>
-  <meta name="description" content="A MuPDF-based secure and fast backend for Okular. Sandboxed MuPDF worker, quality ePUB rendering, NSS signatures, built-in OCR.">
+  <title>okular-mupdf-ng — Sandboxed MuPDF Backend for Okular</title>
+  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures. Currently in beta.">
   <meta name="author" content="l4rzy">
-  <meta name="robots" content="index, follow">
+  <meta name="robots" content="index, follow, max-image-preview:large">
   <meta name="theme-color" content="#232629">
   <link rel="canonical" href="https://l4rzy.github.io/okular-mupdf-ng/">
   <link rel="icon" type="image/svg+xml" href="assets/mupdfng.svg">
@@ -14,28 +14,33 @@
   <meta property="og:site_name" content="okular-mupdf-ng">
   <meta property="og:locale" content="en_US">
   <meta property="og:url" content="https://l4rzy.github.io/okular-mupdf-ng/">
-  <meta property="og:title" content="okular-mupdf-ng — Secure &amp; Fast PDF/ePUB Backend for Okular">
-  <meta property="og:description" content="A MuPDF-based secure and fast backend for Okular. Sandboxed MuPDF worker, quality ePUB rendering, NSS signatures, built-in OCR.">
-  <meta property="og:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/advanced.png">
-  <meta property="og:image:alt" content="okular-mupdf-ng advanced PDF features screenshot">
-  <meta property="og:image:width" content="1306">
-  <meta property="og:image:height" content="799">
+  <meta property="og:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
+  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures. Currently in beta.">
+  <meta property="og:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
+  <meta property="og:image:alt" content="okular-mupdf-ng screenshot">
+  <meta property="og:image:width" content="1665">
+  <meta property="og:image:height" content="963">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="okular-mupdf-ng — Secure &amp; Fast PDF/ePUB Backend for Okular">
-  <meta name="twitter:description" content="A MuPDF-based secure and fast backend for Okular. Sandboxed MuPDF worker, quality ePUB rendering, NSS signatures, built-in OCR.">
-  <meta name="twitter:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/advanced.png">
+  <meta name="twitter:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
+  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures. Currently in beta.">
+  <meta name="twitter:image:alt" content="okular-mupdf-ng document viewer screenshot">
+  <meta name="twitter:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "okular-mupdf-ng",
-      "description": "A MuPDF-based secure and fast backend for Okular.",
+      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures. Currently in beta.",
       "url": "https://l4rzy.github.io/okular-mupdf-ng/",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Linux",
+      "softwareRequirements": "Okular 24.12 or later",
+      "isAccessibleForFree": true,
+      "sameAs": "https://github.com/l4rzy/okular-mupdf-ng",
+      "image": "https://l4rzy.github.io/okular-mupdf-ng/assets/mupdfng.svg",
       "license": "https://www.gnu.org/licenses/gpl-3.0.html",
       "downloadUrl": "https://github.com/l4rzy/okular-mupdf-ng/releases",
-      "screenshot": "https://l4rzy.github.io/okular-mupdf-ng/assets/advanced.png",
+      "screenshot": "https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png",
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -71,8 +76,10 @@
       <div class="wrap">
         <img class="hero-logo" src="assets/mupdfng.svg" alt="okular-mupdf-ng logo" width="180" height="180">
         <h1>okular-mupdf-ng</h1>
-        <p class="tagline">A MuPDF-based secure and fast backend for Okular.</p>
+        <p class="tagline">A MuPDF-based <strong>secure</strong> and fast backend for Okular.</p>
+        <p>Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular&rsquo;s desktop integration seamless.</p>
         <p class="badges">
+          <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
           <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING" rel="noopener"><img src="https://img.shields.io/github/license/l4rzy/okular-mupdf-ng" alt="License"></a>
           <a href="https://github.com/l4rzy/okular-mupdf-ng/actions" rel="noopener"><img src="https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml" alt="CI status"></a>
           <a href="https://github.com/l4rzy/okular-mupdf-ng/releases" rel="noopener"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Latest release"></a>
@@ -86,8 +93,8 @@
           See the <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/MATURITY.md">feature maturity matrix</a> for feature-specific maturity and test coverage.
           If you hit an issue, please report it via
           <a href="https://github.com/l4rzy/okular-mupdf-ng/issues" rel="noopener">GitHub Issues</a>.
-          If you are editing (annotations, forms) an important PDF, use the official
-          Poppler generator that ships with Okular instead.
+          If you are working on an important PDF, use the official PDF backend
+          (Poppler generator) that ships with Okular instead.
         </aside>
       </div>
     </section>
@@ -98,25 +105,25 @@
       <div class="gallery">
         <figure>
           <a href="assets/advanced.png" class="glightbox" data-gallery="shots">
-            <img src="assets/advanced.png" alt="Advanced PDF features in okular-mupdf-ng" width="1306" height="799" loading="lazy">
+            <img src="assets/advanced.png" alt="okular-mupdf-ng screenshot" width="1665" height="963" loading="lazy" decoding="async">
           </a>
-          <figcaption>Advanced PDF features</figcaption>
+          <figcaption>okular-mupdf-ng</figcaption>
         </figure>
         <figure>
           <a href="assets/epub_config.png" class="glightbox" data-gallery="shots">
-            <img src="assets/epub_config.png" alt="ePUB rendering configuration options" width="772" height="790" loading="lazy">
+            <img src="assets/epub_config.png" alt="ePUB rendering configuration options" width="772" height="790" loading="lazy" decoding="async">
           </a>
           <figcaption>ePUB config</figcaption>
         </figure>
         <figure>
           <a href="assets/pdf_config.png" class="glightbox" data-gallery="shots">
-            <img src="assets/pdf_config.png" alt="PDF rendering configuration options" width="773" height="791" loading="lazy">
+            <img src="assets/pdf_config.png" alt="PDF rendering configuration options" width="773" height="791" loading="lazy" decoding="async">
           </a>
           <figcaption>PDF config</figcaption>
         </figure>
         <figure>
           <a href="assets/about_dialog.png" class="glightbox" data-gallery="shots">
-            <img src="assets/about_dialog.png" alt="About dialog showing version and credits" width="502" height="433" loading="lazy">
+            <img src="assets/about_dialog.png" alt="About dialog showing version and credits" width="502" height="433" loading="lazy" decoding="async">
           </a>
           <figcaption>About dialog</figcaption>
         </figure>
@@ -135,8 +142,8 @@
           <p>The Poppler backend is feature-rich but sluggish on large documents &mdash; a known weakness of Poppler. MuPDF renders quickly even where Poppler stalls.</p>
         </article>
         <article class="card">
-          <h3>ePUB done right</h3>
-          <p>The default ePUB backend renders poorly and slowly, even on a high-end CPU. okular-mupdf-ng brings quality typesetting plus custom CSS, page sizes, and ePUB-to-PDF export.</p>
+          <h3>ePUB &amp; MOBI rendering</h3>
+          <p>The default ePUB and MOBI backends render poorly and slowly, even on a high-end CPU. This backend supports custom CSS and page sizes for ePUB, plus ePUB/MOBI-to-PDF export.</p>
         </article>
       </div>
     </section>
@@ -144,20 +151,10 @@
     <section class="wrap" id="security">
       <h2>Architecture &amp; security</h2>
       <p>
-        Document parsing, rendering, and mutation live in a separate native worker.
-        The Qt host bridge owns IPC, frame mapping, OCR scheduling, caches, and NSS crypto.
-        Control messages are serialized shared models; documents and outputs pass only as
-        file descriptors &mdash; the worker never opens arbitrary paths.
-      </p>
-      <ul class="ticks">
-        <li><strong>Filesystem:</strong> Landlock restricts the worker to the tessdata directory and configured paths.</li>
-        <li><strong>Isolation:</strong> user, network, and IPC namespaces where available.</li>
-        <li><strong>Syscalls:</strong> Seccomp filter when libseccomp and the kernel support it.</li>
-        <li><strong>Limits:</strong> capped address space and CPU time; no core dumps or inherited FDs in release builds.</li>
-        <li><strong>Rendering:</strong> zero-copy <code>memfd</code> frames (up to 8 slots, 128&nbsp;MiB budget, 128&nbsp;MiB per-frame cap) validated before display.</li>
-      </ul>
-      <p>
-        <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/ARCHITECTURE.md" rel="noopener">Read ARCHITECTURE.md &rarr;</a>
+        The document engine runs in an isolated worker process, where potentially unsafe
+        documents are parsed and rendered. See <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/ARCHITECTURE.md" rel="noopener">ARCHITECTURE.md</a>
+        for component responsibilities, IPC, shared rendering buffers, sandboxing, caches,
+        and the source-tree layout.
       </p>
     </section>
 
@@ -170,7 +167,7 @@
               <th scope="col">Feature Category</th>
               <th scope="col">Capabilities</th>
               <th scope="col">okular-mupdf-ng</th>
-              <th scope="col">Okular official PDF &amp; ePUB backends</th>
+              <th scope="col">Okular official backends</th>
             </tr>
           </thead>
           <tbody>
@@ -178,11 +175,17 @@
               <td>Safety &amp; Isolation</td>
               <td>Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits)</td>
               <td class="yes">Yes</td>
-              <td class="no">No (in-process)</td>
+              <td class="no">No (in-process execution)</td>
+            </tr>
+            <tr>
+              <td>Caching</td>
+              <td>ePUB &amp; OCR &amp; PDF cachings</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
             </tr>
             <tr>
               <td>Formats</td>
-              <td>PDF, ePUB</td>
+              <td>PDF, ePUB, MOBI</td>
               <td class="yes">Yes</td>
               <td class="yes">Yes</td>
             </tr>
@@ -193,8 +196,8 @@
               <td class="no">No</td>
             </tr>
             <tr>
-              <td>ePUB export</td>
-              <td>Export ePUB to PDF</td>
+              <td>ePUB/MOBI export</td>
+              <td>Export ePUB/MOBI to PDF</td>
               <td class="yes">Yes (via MuPDF rendering)</td>
               <td class="yes">Yes (basic, via document print)</td>
             </tr>
@@ -205,7 +208,7 @@
               <td class="yes">Yes (AcroForm; XFA detected only)</td>
             </tr>
             <tr>
-              <td>PDF form JavaScript</td>
+              <td>PDF JavaScript</td>
               <td>Calculations and button/field-event actions</td>
               <td class="yes">Yes (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in)</td>
               <td class="yes">Yes (Poppler passes scripts to Okular, which executes them in QJSEngine)</td>
@@ -214,7 +217,7 @@
               <td>Signatures</td>
               <td>Verification and creation (NSS crypto)</td>
               <td class="yes">Yes</td>
-              <td class="yes">Yes (+ GPG)</td>
+              <td class="yes">Yes (plus GPG)</td>
             </tr>
             <tr>
               <td>Cert Manager</td>
@@ -226,7 +229,7 @@
               <td>Annotations</td>
               <td>Text, highlight, line, shape, ink, stamp, caret</td>
               <td class="yes">Yes</td>
-              <td class="yes">Yes (+ sound, movie &amp; file-attachment annotations)</td>
+              <td class="yes">Yes (plus sound, movie &amp; file-attachment annotations)</td>
             </tr>
             <tr>
               <td>Annotations export</td>
@@ -245,6 +248,12 @@
               <td>Text search, outline/TOC, links, fonts, metadata, embedded files</td>
               <td class="yes">Yes</td>
               <td class="yes">Yes</td>
+            </tr>
+            <tr>
+              <td>PDF Heuristic Outline</td>
+              <td>Generation for PDFs that don&#x27;t have embedded outline</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
             </tr>
             <tr>
               <td>Printing &amp; Exporting</td>
@@ -272,10 +281,8 @@
     <section class="wrap" id="install">
       <h2>Install</h2>
       <p>
-        Prebuilt packages for common KDE distros (Arch, Debian, Ubuntu, Fedora, openSUSE Tumbleweed)
-        are available on the Releases page. Installing this plugin overrides the default backend
-        for PDF and ePUB &mdash; you can pick a backend per document by enabling
-        <em>Show backend selection dialog</em> in Okular.
+        See <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> for prebuilt packages,
+        build requirements, and instructions for building from source.
       </p>
       <p class="cta">
         <a class="btn btn-primary" href="https://github.com/l4rzy/okular-mupdf-ng/releases" rel="noopener">Download prebuilt packages</a>
@@ -294,9 +301,10 @@
       </p>
       <p class="credits">
         Credits:
-        <a href="https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler" rel="noopener">Okular Poppler backend</a> &middot;
-        <a href="https://github.com/sumatrapdfreader/sumatrapdf" rel="noopener">SumatraPDF</a> &middot;
-        <a href="https://github.com/pwmt/zathura-pdf-mupdf" rel="noopener">Zathura MuPDF backend</a>
+        <a href="https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler" rel="noopener">Okular Poppler Backend</a> &mdash; Okular integration (GPLv2) &middot;
+        <a href="https://github.com/sumatrapdfreader/sumatrapdf" rel="noopener">SumatraPDF</a> &mdash; MuPDF API usage (GPLv3) &middot;
+        <a href="https://github.com/pwmt/zathura" rel="noopener">Zathura</a> &mdash; Seccomp rules (Zlib License) &middot;
+        <a href="https://github.com/ahrm/sioyek" rel="noopener">Sioyek</a> &mdash; MuPDF API usage (GPLv3.0)
       </p>
     </div>
   </footer>
