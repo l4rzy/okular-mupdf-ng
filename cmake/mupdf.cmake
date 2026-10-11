@@ -60,7 +60,8 @@ else()
     set(_mupdf_patches
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-mobi-toc.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-ocr-font-release.patch"
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-parent-tree-lifetime.patch")
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-parent-tree-lifetime.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-image-vertical-align.patch")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_mupdf_patches})
     foreach(_mupdf_patch IN LISTS _mupdf_patches)
         execute_process(
@@ -242,6 +243,7 @@ else()
             "${MUPDF_SOURCE_DIR}/source/html/mobi.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-doc.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-parse.c"
+            "${MUPDF_SOURCE_DIR}/source/html/html-layout.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-imp.h"
         WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
         VERBATIM

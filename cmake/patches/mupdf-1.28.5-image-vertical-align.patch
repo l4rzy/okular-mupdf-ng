@@ -1,0 +1,113 @@
+--- a/source/html/html-layout.c
++++ b/source/html/html-layout.c
+@@ -360,6 +360,34 @@
+ }
+ 
+ 
++/* Image top relative to the baseline. Top/bottom alignment is relative to the
++ * completed line box and is handled separately in measurement and placement. */
++static float image_baseline_offset(fz_html_flow *node)
++{
++	float em = node->box->s.layout.em;
++	switch (node->box->style->vertical_align)
++	{
++	default:
++	case VA_BASELINE:
++		return -node->h;
++	case VA_SUB:
++		return -node->h + em / 5;
++	case VA_SUPER:
++		return -node->h - em / 3;
++	case VA_MIDDLE:
++		return -em * 0.25f - node->h * 0.5f;
++	case VA_TEXT_TOP:
++		return -em * 0.8f;
++	case VA_TEXT_BOTTOM:
++		return em * 0.2f - node->h;
++	case VA_PERCENT:
++	case VA_LENGTH:
++		return -node->h - fz_from_css_number(
++			node->box->style->vertical_align_number, em,
++			fz_from_css_number_scale(node->box->style->line_height, em), 0);
++	}
++}
++
+ static float measure_line(fz_html_flow *node, fz_html_flow *end, float *baseline)
+ {
+ 	float max_a = 0, max_d = 0, h = node->h;
+@@ -367,8 +395,14 @@
+ 	{
+ 		if (node->type == FLOW_IMAGE)
+ 		{
+-			if (node->h > max_a)
+-				max_a = node->h;
++			/* Line-relative images only impose a minimum line height. */
++			if (node->box->style->vertical_align != VA_TOP &&
++				node->box->style->vertical_align != VA_BOTTOM)
++			{
++				float top = image_baseline_offset(node);
++				max_a = fz_max(max_a, -top);
++				max_d = fz_max(max_d, top + node->h);
++			}
+ 		}
+ 		else if (node->type != FLOW_SBREAK && node->type != FLOW_BREAK && node->type != FLOW_ANCHOR)
+ 		{
+@@ -384,6 +418,8 @@
+ 			h = node->h;
+ 		node = node->next;
+ 	}
++	/* The baseline-relative extents can exceed any individual node height. */
++	h = fz_max(h, max_a + max_d);
+ 	*baseline = max_a + (h - max_a - max_d) / 2;
+ 	return h;
+ }
+@@ -490,45 +526,12 @@
+ 
+ 		if (node->type == FLOW_IMAGE)
+ 		{
+-			switch (node->box->style->vertical_align)
+-			{
+-			default:
+-			case VA_BASELINE:
+-				node->y = y + baseline - node->h;
+-				break;
+-			case VA_SUB:
+-				node->y = y + baseline - node->h + node->box->s.layout.em / 5;
+-				break;
+-			case VA_SUPER:
+-				node->y = y + baseline - node->h - node->box->s.layout.em / 3;
+-				break;
+-			case VA_MIDDLE:
+-				// middle of the element with the baseline plus half the x-height of the parent
+-				node->y = y + baseline - node->box->s.layout.em * 0.25f - node->h * 0.5f;
+-				break;
+-			case VA_TOP:
++			if (node->box->style->vertical_align == VA_TOP)
+ 				node->y = y;
+-				break;
+-			case VA_TEXT_TOP:
+-				node->y = y + baseline - node->box->s.layout.em * 0.8f;
+-				break;
+-			case VA_BOTTOM:
++			else if (node->box->style->vertical_align == VA_BOTTOM)
+ 				node->y = y + line_h - node->h;
+-				break;
+-			case VA_TEXT_BOTTOM:
+-				node->y = y + baseline + node->box->s.layout.em * 0.2f - node->h;
+-				break;
+-			case VA_PERCENT:
+-			case VA_LENGTH:
+-				node->y = y + baseline - node->h -
+-					fz_from_css_number(
+-						node->box->style->vertical_align_number,
+-						node->box->s.layout.em,
+-						fz_from_css_number_scale(node->box->style->line_height, node->box->s.layout.em),
+-						0
+-					);
+-				break;
+-			}
++			else
++				node->y = y + baseline + image_baseline_offset(node);
+ 		}
+ 		else
+ 		{

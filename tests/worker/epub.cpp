@@ -8,8 +8,10 @@
 #include "shared/compat.hpp"
 #include "shared/model/types.hpp"
 #include "shared/transport/fd_channel.hpp"
+#include <QBuffer>
 #include <QByteArray>
 #include <QFile>
+#include <QImage>
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
@@ -525,6 +527,168 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QVERIFY(!boxes.empty());
         file.close();
+    }
+
+    void testImageVerticalAlignment_data()
+    {
+        QTest::addColumn<QString>("alignment");
+        QTest::addColumn<int>("imageHeight");
+        QTest::addColumn<bool>("inlineText");
+        QTest::addColumn<bool>("nearPageEnd");
+        QTest::addColumn<bool>("secondImage");
+        for (const auto* alignment : { "baseline",
+                                       "middle",
+                                       "text-top",
+                                       "text-bottom",
+                                       "top",
+                                       "bottom",
+                                       "sub",
+                                       "super",
+                                       "25%",
+                                       "-25%",
+                                       "18pt",
+                                       "-18pt" }) {
+            for (const int height : { 6, 80, 180 }) {
+                for (const bool inlineText : { false, true }) {
+                    for (const bool nearPageEnd : { false, true }) {
+                        const QByteArray name = QByteArray(alignment) + '-' + QByteArray::number(height)
+                            + (inlineText ? "-inline" : "-alone") + (nearPageEnd ? "-page-end" : "-page-start");
+                        QTest::newRow(name.constData())
+                            << QString::fromLatin1(alignment) << height << inlineText << nearPageEnd << false;
+                        QTest::newRow((name + "-mixed-images").constData())
+                            << QString::fromLatin1(alignment) << height << inlineText << nearPageEnd << true;
+                    }
+                }
+            }
+        }
+    }
+
+    void testImageVerticalAlignment()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF image alignment patch");
+#endif
+        QFETCH(QString, alignment);
+        QFETCH(int, imageHeight);
+        QFETCH(bool, inlineText);
+        QFETCH(bool, nearPageEnd);
+        QFETCH(bool, secondImage);
+
+        QImage image(2, 2, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("alignment.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const QByteArray content =
+            QStringLiteral("<html><head><style>@page { margin: 12pt; } body { margin: 0; font-size: 12pt; }"
+                           "p { margin: 0; line-height: 2; } img { width: 40pt; height: %1pt; vertical-align: %2; }"
+                           "</style></head><body><p>Before</p><div style='height: %3pt'></div>"
+                           "<figure style='margin: 0'><img src='data:image/png;base64,%4'/>%5%6"
+                           "<figcaption><p>After</p></figcaption></figure></body></html>")
+                .arg(imageHeight)
+                .arg(alignment)
+                .arg(nearPageEnd ? 150 : 0)
+                .arg(QString::fromLatin1(png.toBase64()))
+                .arg(inlineText ? QStringLiteral("Inline") : QString())
+                .arg(secondImage ? QStringLiteral("<img style='height: 24pt; vertical-align: baseline' "
+                                                  "src='data:image/png;base64,%1'/>")
+                                       .arg(QString::fromLatin1(png.toBase64()))
+                                 : QString())
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+
+        // Open HTML directly so plugin CSS cannot mask a MuPDF layout regression.
+        ::Mu::Worker::Engine::EpubDocument owner;
+        fz_context* context = owner.context();
+        fz_document* document = nullptr;
+        fz_stext_page* text = nullptr;
+        fz_var(document);
+        fz_var(text);
+        fz_rect imageBounds = fz_empty_rect;
+        fz_rect firstImageBounds = fz_empty_rect;
+        fz_rect beforeBounds = fz_empty_rect;
+        fz_rect afterBounds = fz_empty_rect;
+        float inlineBaseline = 0;
+        int imageCount = 0;
+        bool fitsPage = true;
+        bool failed = false;
+        fz_stext_options options { };
+        options.flags = FZ_STEXT_PRESERVE_IMAGES;
+        const QByteArray path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 240, 240, 12);
+            for (int page = 0; page < fz_count_pages(context, document); ++page) {
+                text = fz_new_stext_page_from_page_number(context, document, page, &options);
+                for (auto* block = text->first_block; block; block = block->next) {
+                    if (block->type == FZ_STEXT_BLOCK_IMAGE) {
+                        ++imageCount;
+                        fitsPage = fitsPage && block->bbox.y0 >= 12 - 0.01f && block->bbox.y1 <= 228 + 0.01f;
+                        fz_rect bounds = block->bbox;
+                        bounds.y0 += static_cast<float>(page) * 240;
+                        bounds.y1 += static_cast<float>(page) * 240;
+                        if (imageCount == 1)
+                            firstImageBounds = bounds;
+                        imageBounds = fz_union_rect(imageBounds, bounds);
+                    } else if (block->type == FZ_STEXT_BLOCK_TEXT) {
+                        for (auto* line = block->u.t.first_line; line; line = line->next) {
+                            if (!line->first_char)
+                                continue;
+                            fz_rect bounds = line->bbox;
+                            bounds.y0 += static_cast<float>(page) * 240;
+                            bounds.y1 += static_cast<float>(page) * 240;
+                            if (line->first_char->c == 'B')
+                                beforeBounds = bounds;
+                            else if (line->first_char->c == 'A')
+                                afterBounds = bounds;
+                            else if (line->first_char->c == 'I')
+                                inlineBaseline = line->first_char->origin.y + static_cast<float>(page) * 240;
+                        }
+                    }
+                }
+                fz_drop_stext_page(context, text);
+                text = nullptr;
+            }
+        }
+        fz_always(context)
+        {
+            fz_drop_stext_page(context, text);
+            fz_drop_document(context, document);
+        }
+        fz_catch(context)
+        {
+            failed = true;
+        }
+        QVERIFY2(!failed, fz_caught_message(context));
+        QCOMPARE(imageCount, secondImage ? 2 : 1);
+        QVERIFY2(fitsPage,
+                 qPrintable(QStringLiteral("Image page bounds: %1, %2").arg(imageBounds.y0).arg(imageBounds.y1)));
+        QVERIFY(!fz_is_empty_rect(beforeBounds));
+        QVERIFY(!fz_is_empty_rect(afterBounds));
+        QVERIFY2(beforeBounds.y1 <= imageBounds.y0 + 0.01f,
+                 qPrintable(QStringLiteral("Preceding paragraph bottom %1 exceeds image top %2")
+                                .arg(beforeBounds.y1)
+                                .arg(imageBounds.y0)));
+        QVERIFY2(
+            afterBounds.y0 >= imageBounds.y1 - 0.01f,
+            qPrintable(
+                QStringLiteral("Caption top %1 precedes image bottom %2").arg(afterBounds.y0).arg(imageBounds.y1)));
+        if (inlineText) {
+            QVERIFY(inlineBaseline > 0);
+            // Preserve author alignment rather than forcing every image to baseline.
+            if (alignment == QStringLiteral("baseline"))
+                QVERIFY(std::abs(firstImageBounds.y1 - inlineBaseline) < 0.01f);
+            else if (alignment == QStringLiteral("middle"))
+                QVERIFY(std::abs((firstImageBounds.y0 + firstImageBounds.y1) / 2 - (inlineBaseline - 3)) < 0.01f);
+        }
     }
 
     void testOutline()

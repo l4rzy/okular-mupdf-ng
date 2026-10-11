@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QCryptographicHash>
 #include <QDataStream>
 #include <QDateTime>
 #include <QDirIterator>
@@ -11,6 +12,7 @@
 
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/epub_cache.hpp"
+#include "shared/compat.hpp"
 
 class TestEpubCache : public QObject {
     Q_OBJECT
@@ -73,6 +75,49 @@ private slots:
 
         settings.epub.fontSize++;
         QVERIFY(!::Mu::Plugin::Caching::EPUB::Cache::load(m_documentPath, settings));
+    }
+
+    void ignoresUnpatchedLayoutCache_data()
+    {
+        QTest::addColumn<bool>("accelerator");
+        QTest::newRow("accelerator") << true;
+        QTest::newRow("outline") << false;
+    }
+
+    void ignoresUnpatchedLayoutCache()
+    {
+        QFETCH(bool, accelerator);
+        clearCacheFiles();
+        ::Mu::Model::DocumentSettings settings;
+        QFile source(m_documentPath);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const QByteArray bytes = source.readAll();
+
+        // Reproduce the key used before the image alignment layout fix.
+        QByteArray legacyLayout;
+        QDataStream layoutStream(&legacyLayout, QIODevice::WriteOnly);
+        layoutStream.setVersion(QDataStream::Qt_6_0);
+        layoutStream << settings.epub.fontSize << static_cast<quint8>(settings.epub.pageSize)
+                     << static_cast<quint8>(settings.epub.fontFamily)
+                     << QCryptographicHash::hash(QByteArray::fromStdString(settings.epub.customCssBase64),
+                                                 QCryptographicHash::Sha256);
+        QByteArray payload;
+        QDataStream stream(&payload, QIODevice::WriteOnly);
+        stream.setVersion(QDataStream::Qt_6_0);
+        stream << QByteArray(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size()))
+               << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
+               << static_cast<quint64>(bytes.size()) << bytes << bytes << legacyLayout;
+        const QString legacyPath = ::Mu::Plugin::Caching::directory(QStringLiteral("epub_accel")) + QLatin1Char('/')
+            + QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex())
+            + QStringLiteral(".bin");
+        using Cache = ::Mu::Plugin::Caching::EPUB::Cache;
+        if (accelerator)
+            QVERIFY(Cache::saveAcceleratorAt(legacyPath, QByteArrayLiteral("old page counts")));
+        else
+            QVERIFY(Cache::saveOutlineAt(legacyPath, { }));
+        QVERIFY(Cache::loadAt(legacyPath));
+        QVERIFY(Cache::cacheFilePath(m_documentPath, settings) != legacyPath);
+        QVERIFY(!Cache::load(m_documentPath, settings));
     }
 
     void preservesValidEmptyOutline()

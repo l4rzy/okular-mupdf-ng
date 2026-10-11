@@ -25,6 +25,8 @@ namespace {
 // layouts without trying to interpret their payload as current data.
 constexpr quint32 V3Magic = 0x45504133; // 'EPA3'
 constexpr quint32 V3Version = 3;
+// Bump when bundled layout fixes change pagination without a MuPDF version bump.
+constexpr quint32 LayoutRevision = 1; // Inline image vertical alignment.
 constexpr qint64 V3HeaderBytes = 16;
 // Bytes probed from each end of the source to derive the content-addressed key.
 constexpr qint64 IdentityProbeBytes = 64LL * 1024LL;
@@ -45,7 +47,7 @@ QByteArray layoutFingerprint(const Model::DocumentSettings& settings)
     QByteArray encoded;
     QDataStream stream(&encoded, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_6_0);
-    stream << settings.epub.fontSize << static_cast<quint8>(settings.epub.pageSize)
+    stream << LayoutRevision << settings.epub.fontSize << static_cast<quint8>(settings.epub.pageSize)
            << static_cast<quint8>(settings.epub.fontFamily)
            << QCryptographicHash::hash(QByteArray::fromStdString(settings.epub.customCssBase64),
                                        QCryptographicHash::Sha256);
