@@ -283,6 +283,10 @@ kcoreaddons_add_plugin(okularGenerator_mupdfng
     INSTALL_NAMESPACE "okular_generators"
     SOURCES ${okularGenerator_mupdfng_SRCS}
 )
+qt_add_resources(okularGenerator_mupdfng "mupdfng_xmlgui"
+    PREFIX "/kxmlgui5/okular_mupdfng"
+    BASE "generator"
+    FILES generator/mupdfngui.rc)
 
 if(MU_DEBUG_BUILD)
     target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_DEBUG_ENABLED)
@@ -316,6 +320,8 @@ target_link_libraries(okularGenerator_mupdfng
     KF6::ConfigCore
     KF6::ConfigWidgets
     KF6::KIOWidgets
+    KF6::XmlGui
+    KF6::WidgetsAddons
     Qt6::PrintSupport
     Qt6::Concurrent
     Qt6::Network

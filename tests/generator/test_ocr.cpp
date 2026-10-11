@@ -1,14 +1,22 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <KActionCollection>
 #include <KConfigGroup>
 #include <KSharedConfig>
+#include <KXMLGUIBuilder>
+#include <KXMLGUIClient>
+#include <KXMLGUIFactory>
+#include <QAction>
 #include <QDateTime>
 #include <QFile>
 #include <QImage>
+#include <QMainWindow>
+#include <QMenu>
 #include <QMimeDatabase>
 #include <QPainter>
 #include <QPdfWriter>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -19,6 +27,17 @@
 #include <okular/core/settings_core.h>
 
 #include <algorithm>
+
+class TestGuiClient : public KXMLGUIClient {
+public:
+    TestGuiClient()
+    {
+        actionCollection()->addAction(QStringLiteral("previous"),
+                                      new QAction(QStringLiteral("Previous"), actionCollection()));
+        setXML(QStringLiteral("<gui name=\"test\" translationDomain=\"okular_mupdfng\"><MenuBar><Menu name=\"tools\">"
+                              "<text>Tools</text><Action name=\"previous\"/></Menu></MenuBar></gui>"));
+    }
+};
 
 class TestGeneratorOcr : public QObject {
     Q_OBJECT
@@ -42,6 +61,152 @@ private slots:
         KConfigGroup advanced(config, QStringLiteral("Advanced"));
         advanced.writeEntry("CacheLastVacuum", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         config->sync();
+    }
+
+    void ocrMenuAvailability_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("enabled");
+        QTest::newRow("pdf") << QStringLiteral(TEST_PDF_PATH) << true;
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_PATH) << false;
+        QTest::newRow("mobi") << QStringLiteral(TEST_MOBI_PATH) << false;
+    }
+
+    void ocrMenuAvailability()
+    {
+        QFETCH(QString, path);
+        QFETCH(bool, enabled);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        config->sync();
+        Okular::Document document(nullptr);
+        // Reopen a PDF after each format to check that the cached generator resets the menu state.
+        for (const auto& currentPath : { path, QStringLiteral(TEST_PDF_PATH) }) {
+            QCOMPARE(document.openDocument(
+                         currentPath, QUrl::fromLocalFile(currentPath), QMimeDatabase().mimeTypeForFile(currentPath)),
+                     Okular::Document::OpenSuccess);
+            auto* client = document.guiClient();
+            QVERIFY(client);
+            auto* action = client->actionCollection()->action(QStringLiteral("mupdf_ocr"));
+            QVERIFY(action);
+            const bool expected = currentPath == QStringLiteral(TEST_PDF_PATH) || enabled;
+            QCOMPARE(action->isEnabled(), expected);
+            for (QAction* registered : client->actionCollection()->actions())
+                QCOMPARE(registered->isEnabled(), expected);
+            document.reparseConfig();
+            QCOMPARE(action->isEnabled(), expected);
+            document.closeDocument();
+            QVERIFY(!action->isEnabled());
+        }
+    }
+
+    void ocrMenu_data()
+    {
+        QTest::addColumn<QString>("initialMode");
+        QTest::addColumn<QString>("actionName");
+        QTest::addColumn<QString>("requestedMode");
+        QTest::newRow("off") << QStringLiteral("Always") << QStringLiteral("mupdf_ocr_off") << QStringLiteral("Never");
+        QTest::newRow("automatic") << QStringLiteral("Never") << QStringLiteral("mupdf_ocr_auto")
+                                   << QStringLiteral("Five");
+        QTest::newRow("on") << QStringLiteral("Five") << QStringLiteral("mupdf_ocr_on") << QStringLiteral("Always");
+        QTest::newRow("automatic-twenty")
+            << QStringLiteral("Twenty") << QStringLiteral("mupdf_ocr_auto") << QStringLiteral("Five");
+        QTest::newRow("toggle-from-off") << QStringLiteral("Never") << QStringLiteral("mupdf_ocr_toggle")
+                                         << QStringLiteral("Always");
+        QTest::newRow("toggle-from-five")
+            << QStringLiteral("Five") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Never");
+        QTest::newRow("toggle-from-twenty")
+            << QStringLiteral("Twenty") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Never");
+        QTest::newRow("toggle-from-on") << QStringLiteral("Always") << QStringLiteral("mupdf_ocr_toggle")
+                                        << QStringLiteral("Never");
+    }
+
+    void ocrMenu()
+    {
+        QFETCH(QString, initialMode);
+        QFETCH(QString, actionName);
+        QFETCH(QString, requestedMode);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        KConfigGroup ocr(config, QStringLiteral("OCR"));
+        ocr.writeEntry("OcrTriggerMode", initialMode);
+        config->sync();
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        auto* client = document.guiClient();
+        QVERIFY(client);
+        QMainWindow window;
+        KXMLGUIBuilder builder(&window);
+        KXMLGUIFactory factory(&builder);
+        TestGuiClient host;
+        factory.addClient(&host);
+        factory.addClient(client);
+        auto cleanup = qScopeGuard([&] {
+            factory.removeClient(client);
+            factory.removeClient(&host);
+        });
+        auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
+        QVERIFY(tools);
+        QCOMPARE(tools->actions().size(), 3);
+        QVERIFY(tools->actions().at(1)->isSeparator());
+        auto* certificates = client->actionCollection()->action(QStringLiteral("mupdf_manage_certificates"));
+        QVERIFY(certificates);
+        QCOMPARE(tools->actions().back(), certificates);
+        QCOMPARE(certificates->text(), QStringLiteral("Manage Certificates…"));
+        auto* menu = tools->actions().at(2)->menu();
+        QVERIFY(menu);
+        QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
+        QCOMPARE(menu->actions().size(), 3);
+        QCOMPARE(client->actionCollection()->actions().count(), 5);
+        for (QAction* registered : client->actionCollection()->actions())
+            QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
+                     registered->objectName() == QStringLiteral("mupdf_ocr_toggle"));
+        QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Automatic"));
+        const QStringList modes { "Never", "Five", "Always" };
+        const QString initialMenuMode = initialMode == QStringLiteral("Twenty") ? QStringLiteral("Five") : initialMode;
+        for (int i = 0; i < modes.size(); ++i)
+            QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
+        auto* action = client->actionCollection()->action(actionName);
+        QVERIFY(action);
+        auto clearShortcut = qScopeGuard([&] {
+            action->setShortcut({ });
+            client->actionCollection()->writeSettings();
+        });
+        if (actionName == QStringLiteral("mupdf_ocr_toggle")) {
+            QVERIFY(KActionCollection::isShortcutsConfigurable(action));
+            const QKeySequence shortcut(Qt::CTRL | Qt::ALT | Qt::Key_F9);
+            action->setShortcut(shortcut);
+            client->actionCollection()->writeSettings();
+            action->setShortcut({ });
+            factory.refreshActionProperties();
+            QCOMPARE(action->shortcut(), shortcut);
+            window.show();
+            window.activateWindow();
+            QTRY_VERIFY(window.isActiveWindow());
+            QSignalSpy triggered(action, &QAction::triggered);
+            QTest::keyClick(&window, Qt::Key_F9, Qt::ControlModifier | Qt::AltModifier);
+            QTRY_COMPARE(triggered.count(), 1);
+        } else {
+            action->trigger();
+        }
+        config->reparseConfiguration();
+        QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), requestedMode);
+        for (int i = 0; i < modes.size(); ++i)
+            QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == requestedMode);
+
+        // Changes from the configuration dialog refresh the same menu state.
+        ocr.writeEntry("OcrTriggerMode", initialMode);
+        config->sync();
+        document.reparseConfig();
+        for (int i = 0; i < modes.size(); ++i)
+            QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
+        factory.removeClient(client);
+        QCOMPARE(tools->actions().size(), 1);
+        factory.removeClient(&host);
+        cleanup.dismiss();
     }
 
     void preservesNativeText_data()
@@ -177,7 +342,7 @@ private slots:
         general.writeEntry("SandboxEnforcement", "Relaxed");
         KConfigGroup ocr(config, QStringLiteral("OCR"));
         ocr.writeEntry("OcrLanguage", "eng.traineddata");
-        ocr.writeEntry("OcrTriggerMode", mode);
+        ocr.writeEntry("OcrTriggerMode", "Never");
         ocr.writeEntry("OcrQuality", "Speed");
         ocr.writeEntry("OcrDebounceMs", 100);
         config->sync();
@@ -212,6 +377,14 @@ private slots:
         for (int page = 0; page < 2; ++page) {
             QVERIFY(!document.page(page)->hasTextPage());
             document.setVisiblePageRects({ new Okular::VisiblePageRect(page, { 0, 0, 1, 1 }) });
+            if (page == 0) {
+                const QString actionName = mode == QStringLiteral("Five") ? QStringLiteral("mupdf_ocr_auto")
+                    : mode == QStringLiteral("Always")                    ? QStringLiteral("mupdf_ocr_on")
+                                                                          : QStringLiteral("mupdf_ocr_off");
+                auto* action = document.guiClient()->actionCollection()->action(actionName);
+                QVERIFY(action);
+                action->trigger();
+            }
             if (enabled) {
                 QTRY_VERIFY_WITH_TIMEOUT(document.page(page)->hasTextPage(), 10000);
                 QVERIFY(document.page(page)->text().contains(QStringLiteral("HELLO")));

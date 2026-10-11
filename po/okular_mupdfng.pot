@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 00:53-0500\n"
+"POT-Creation-Date: 2026-10-10 18:16-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -77,7 +77,7 @@ msgstr ""
 msgid "256 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:70
+#: src/generator/config/settingswidget.cpp:70 src/generator/mupdfng.cpp:429
 msgid "Off"
 msgstr ""
 
@@ -169,7 +169,7 @@ msgstr ""
 msgid "None"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:163
+#: src/generator/config/settingswidget.cpp:163 src/generator/mupdfng.cpp:415
 msgid "MuPDF"
 msgstr ""
 
@@ -332,7 +332,7 @@ msgstr ""
 msgid "Custom CSS (configured)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:273 rc.cpp:41
+#: src/generator/config/settingswidget.cpp:273 rc.cpp:123
 msgid "Custom CSS"
 msgstr ""
 
@@ -346,7 +346,7 @@ msgstr ""
 
 #: src/generator/config/certmanager/manager_dialog.cpp:39
 #: src/generator/config/certmanager/manager_dialog.cpp:123
-#: src/generator/mupdfng.cpp:723
+#: src/generator/mupdfng.cpp:782
 msgid "Unknown"
 msgstr ""
 
@@ -546,130 +546,146 @@ msgstr ""
 msgid "Create"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:156
+#: src/generator/mupdfng.cpp:161
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:160
+#: src/generator/mupdfng.cpp:165
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:161
+#: src/generator/mupdfng.cpp:166
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:196
+#: src/generator/mupdfng.cpp:201
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:207
+#: src/generator/mupdfng.cpp:212
 msgid "The document renderer stopped responding. Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:241
+#: src/generator/mupdfng.cpp:246
 msgid "Export to PDF failed: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:244
+#: src/generator/mupdfng.cpp:249
 msgid "Export to PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:261
+#: src/generator/mupdfng.cpp:266
 msgid "OCR failed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:349
+#: src/generator/mupdfng.cpp:355
 msgid ""
 "PDF JavaScript will be enabled or disabled when this document is next opened."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:370
+#: src/generator/mupdfng.cpp:376
 msgid ""
 "The PDF could not be refreshed after changing its JavaScript setting. "
 "Restart Okular."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:389
+#: src/generator/mupdfng.cpp:395
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:413
+#: src/generator/mupdfng.cpp:416
+msgid "MuPDF OCR"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:430
+msgid "Automatic"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:431
+msgid "On"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:432
+msgid "Toggle MuPDF OCR"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:471
 msgid "MuPDF-NG"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:415
+#: src/generator/mupdfng.cpp:473
 msgid "MuPDF-NG Configuration"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:421
+#: src/generator/mupdfng.cpp:479
 msgid "Restart needed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:421
+#: src/generator/mupdfng.cpp:479
 msgid "You need to restart Okular to apply this change."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:695
+#: src/generator/mupdfng.cpp:754
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:708
+#: src/generator/mupdfng.cpp:767
 msgid ""
 "[WARN] The MuPDF worker is partially hardened: Okular's protection is "
 "limited."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:710
+#: src/generator/mupdfng.cpp:769
 msgid ""
 "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
 "you from malicious documents."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:730
+#: src/generator/mupdfng.cpp:789
 msgid "MuPDF: %1 (system library)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:731
+#: src/generator/mupdfng.cpp:790
 msgid "MuPDF: %1 (bundled)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:735
+#: src/generator/mupdfng.cpp:794
 msgid "Sandbox: Fully hardened [OK]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:737
+#: src/generator/mupdfng.cpp:796
 msgid "Sandbox: Partially hardened [WARN]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:739
+#: src/generator/mupdfng.cpp:798
 msgid "Sandbox: Unconfined [CRIT]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:745
+#: src/generator/mupdfng.cpp:804
 msgid "unknown"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:746
+#: src/generator/mupdfng.cpp:805
 msgid "Worker memory: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:749
+#: src/generator/mupdfng.cpp:808
 msgid "Worker restarts: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:774
+#: src/generator/mupdfng.cpp:833
 msgid ""
 "[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
@@ -678,96 +694,104 @@ msgid ""
 "Error: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:863
+#: src/generator/mupdfng.cpp:923
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:893
+#: src/generator/mupdfng.cpp:953
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1176
+#: src/generator/mupdfng.cpp:1237
 msgid "Format"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1179 rc.cpp:14
+#: src/generator/mupdfng.cpp:1240 rc.cpp:42
 msgid "Security"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1181
+#: src/generator/mupdfng.cpp:1242
 msgid "Yes"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1181
+#: src/generator/mupdfng.cpp:1242
 msgid "No"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1182
+#: src/generator/mupdfng.cpp:1243
 msgid "Optimized"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1185
+#: src/generator/mupdfng.cpp:1246
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/generator/mupdfng.cpp:1185
+#: src/generator/mupdfng.cpp:1246
 msgid "Not Signed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1186
+#: src/generator/mupdfng.cpp:1247
 msgid "Digital Signatures"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1217
+#: src/generator/mupdfng.cpp:1282
 msgid ""
 "This document has no embedded table of contents. A generated table of "
 "contents is being used."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1330 src/generator/mupdfng.cpp:1353
+#: src/generator/mupdfng.cpp:1395 src/generator/mupdfng.cpp:1418
 msgid "The PDF layers could not be loaded."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1341
+#: src/generator/mupdfng.cpp:1406
 msgid "The PDF layer visibility could not be changed."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1382
+#: src/generator/mupdfng.cpp:1447
 msgid "OCR completed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1527
+#: src/generator/mupdfng.cpp:1592
 msgid "Strict sandbox enforcement blocks this document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1528 src/generator/mupdfng.cpp:1539
+#: src/generator/mupdfng.cpp:1593 src/generator/mupdfng.cpp:1604
 msgid "MuPDF worker is unavailable."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1535
+#: src/generator/mupdfng.cpp:1600
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1552
+#: src/generator/mupdfng.cpp:1617
 msgid "Flattened PDF"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1558
+#: src/generator/mupdfng.cpp:1623
 msgid "Annotation File (XFDF)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1572
+#: src/generator/mupdfng.cpp:1637
 msgid "Export to flattened PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1583
+#: src/generator/mupdfng.cpp:1648
 msgid "Starting to export to PDF."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1599
+#: src/generator/mupdfng.cpp:1662
+msgid "XFDF export does not support rotated PDF pages."
+msgstr ""
+
+#: src/generator/mupdfng.cpp:1663
+msgid "Could not check PDF page rotation for XFDF export."
+msgstr ""
+
+#: src/generator/mupdfng.cpp:1674
 msgid "Export to XFDF finished."
 msgstr ""
 
@@ -801,166 +825,158 @@ msgid ""
 "Placeholder"
 msgstr ""
 
-#: rc.cpp:1
+#: rc.cpp:3
 msgid "General"
 msgstr ""
 
-#: rc.cpp:2
+#: rc.cpp:6
 msgid "Behavior"
 msgstr ""
 
-#: rc.cpp:3
+#: rc.cpp:9
 msgid "Generate a table of contents when none is embedded"
 msgstr ""
 
-#: rc.cpp:4
+#: rc.cpp:12
 msgid "Rendering Quality"
 msgstr ""
 
-#: rc.cpp:5
+#: rc.cpp:15
 msgid "Graphics Antialiasing"
 msgstr ""
 
-#: rc.cpp:6
+#: rc.cpp:18
 msgid "Text Antialiasing"
 msgstr ""
 
-#: rc.cpp:7
+#: rc.cpp:21
 msgid "Image Quality"
 msgstr ""
 
-#: rc.cpp:8
+#: rc.cpp:24
 msgid "Interpolate images"
 msgstr ""
 
-#: rc.cpp:9
+#: rc.cpp:27
 msgid "Simulate overprinting"
 msgstr ""
 
-#: rc.cpp:10
+#: rc.cpp:30
 msgid "Performance"
 msgstr ""
 
-#: rc.cpp:11
+#: rc.cpp:33
 msgid "Texture Cache Memory Usage"
 msgstr ""
 
-#: rc.cpp:12
+#: rc.cpp:36
 msgid "Idle Memory Trim"
 msgstr ""
 
-#: rc.cpp:13
+#: rc.cpp:39
 msgid "Cancel obsolete renders"
 msgstr ""
 
-#: rc.cpp:15
+#: rc.cpp:45
 msgid "Sandbox Enforcement"
 msgstr ""
 
-#: rc.cpp:16
+#: rc.cpp:48
 msgid "Show notification when sandbox is degraded"
 msgstr ""
 
-#: rc.cpp:17
+#: rc.cpp:51
 msgid "Enable JavaScript support"
 msgstr ""
 
-#: rc.cpp:18
+#: rc.cpp:54
 msgid "PDF"
 msgstr ""
 
-#: rc.cpp:19
+#: rc.cpp:57
 msgid "Optical Character Recognition"
 msgstr ""
 
-#: rc.cpp:20
+#: rc.cpp:60
 msgid "Tesseract Model"
 msgstr ""
 
-#: rc.cpp:21
+#: rc.cpp:63
 msgid "Tesseract Quality"
 msgstr ""
 
-#: rc.cpp:22
+#: rc.cpp:66
 msgid "Auto-trigger OCR when page has less than"
 msgstr ""
 
-#: rc.cpp:23
+#: rc.cpp:69
 msgid "Show notifications on OCR status"
 msgstr ""
 
-#: rc.cpp:24
+#: rc.cpp:72
 msgid "Crypto Engine"
 msgstr ""
 
-#: rc.cpp:25
+#: rc.cpp:75
 msgid "Default Certificate Database:"
 msgstr ""
 
-#: rc.cpp:26
+#: rc.cpp:78
 msgid "/etc/pki/nssdb"
 msgstr ""
 
-#: rc.cpp:27
+#: rc.cpp:81
 msgid "Custom Certificate Database"
 msgstr ""
 
-#: rc.cpp:28
+#: rc.cpp:84
 msgid "Manage Certificates"
 msgstr ""
 
-#: rc.cpp:29
+#: rc.cpp:87
 msgid "Check certificate revocation via OCSP (requires network)"
 msgstr ""
 
-#: rc.cpp:30
+#: rc.cpp:90
 msgid "Signature"
 msgstr ""
 
-#: rc.cpp:31
+#: rc.cpp:93
 msgid "Signature profile:"
 msgstr ""
 
-#: rc.cpp:32
+#: rc.cpp:96
 msgid "Signature emblem:"
 msgstr ""
 
-#: rc.cpp:33
+#: rc.cpp:99
 msgid "Use UTC time for signatures"
 msgstr ""
 
-#: rc.cpp:34
+#: rc.cpp:102
 msgid "Draw signature border"
 msgstr ""
 
-#: rc.cpp:35
+#: rc.cpp:105
 msgid "ePUB"
 msgstr ""
 
-#: rc.cpp:36
+#: rc.cpp:108
 msgid "Page Layout"
 msgstr ""
 
-#: rc.cpp:37
+#: rc.cpp:111
 msgid "Font Size"
 msgstr ""
 
-#: rc.cpp:38
+#: rc.cpp:114
 msgid " pt"
 msgstr ""
 
-#: rc.cpp:39
+#: rc.cpp:117
 msgid "Font Family"
 msgstr ""
 
-#: rc.cpp:40
+#: rc.cpp:120
 msgid "Page Size"
-msgstr ""
-
-#: src/generator/mupdfng.cpp
-msgid "XFDF export does not support rotated PDF pages."
-msgstr ""
-
-#: src/generator/mupdfng.cpp
-msgid "Could not check PDF page rotation for XFDF export."
 msgstr ""

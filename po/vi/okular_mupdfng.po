@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 00:53-0500\n"
-"PO-Revision-Date: 2026-10-04 15:30-0500\n"
+"POT-Creation-Date: 2026-10-10 18:16-0500\n"
+"PO-Revision-Date: 2026-10-10 18:16-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
 "Language: vi\n"
@@ -75,7 +75,7 @@ msgstr "128 MiB"
 msgid "256 MiB"
 msgstr "256 MiB"
 
-#: src/generator/config/settingswidget.cpp:70
+#: src/generator/config/settingswidget.cpp:70 src/generator/mupdfng.cpp:429
 msgid "Off"
 msgstr "Tắt"
 
@@ -167,7 +167,7 @@ msgstr "Đơn giản"
 msgid "None"
 msgstr "Không"
 
-#: src/generator/config/settingswidget.cpp:163
+#: src/generator/config/settingswidget.cpp:163 src/generator/mupdfng.cpp:415
 msgid "MuPDF"
 msgstr "MuPDF"
 
@@ -359,7 +359,7 @@ msgstr "Tùy chỉnh cách hiển thị EPUB bằng các quy tắc CSS."
 msgid "Custom CSS (configured)"
 msgstr "CSS tùy chỉnh (đã cấu hình)"
 
-#: src/generator/config/settingswidget.cpp:273 rc.cpp:41
+#: src/generator/config/settingswidget.cpp:273 rc.cpp:123
 msgid "Custom CSS"
 msgstr "CSS tùy chỉnh"
 
@@ -373,7 +373,7 @@ msgstr "Quản lý chứng chỉ - %1"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:39
 #: src/generator/config/certmanager/manager_dialog.cpp:123
-#: src/generator/mupdfng.cpp:723
+#: src/generator/mupdfng.cpp:782
 msgid "Unknown"
 msgstr "Không xác định"
 
@@ -573,7 +573,7 @@ msgstr "Khóa ký:"
 msgid "Create"
 msgstr "Tạo"
 
-#: src/generator/mupdfng.cpp:156
+#: src/generator/mupdfng.cpp:161
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
@@ -581,7 +581,7 @@ msgstr ""
 "Bộ kết xuất tài liệu đã dừng khi còn thay đổi biểu mẫu và chú thích chưa "
 "lưu. Các thay đổi đó đã bị mất."
 
-#: src/generator/mupdfng.cpp:160
+#: src/generator/mupdfng.cpp:165
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
@@ -589,7 +589,7 @@ msgstr ""
 "Bộ kết xuất tài liệu đã dừng khi còn thay đổi biểu mẫu chưa lưu. Các thay "
 "đổi đó đã bị mất."
 
-#: src/generator/mupdfng.cpp:161
+#: src/generator/mupdfng.cpp:166
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
@@ -597,7 +597,7 @@ msgstr ""
 "Bộ kết xuất tài liệu đã dừng khi còn thay đổi chú thích chưa lưu. Các thay "
 "đổi đó đã bị mất."
 
-#: src/generator/mupdfng.cpp:196
+#: src/generator/mupdfng.cpp:201
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
@@ -605,29 +605,29 @@ msgstr ""
 "Bộ kết xuất tài liệu đã khởi động lại nhưng không thể mở lại tài liệu. Hãy "
 "khởi động lại Okular để thử lại."
 
-#: src/generator/mupdfng.cpp:207
+#: src/generator/mupdfng.cpp:212
 msgid "The document renderer stopped responding. Restart Okular to try again."
 msgstr ""
 "Bộ kết xuất tài liệu đã ngừng phản hồi. Hãy khởi động lại Okular để thử lại."
 
-#: src/generator/mupdfng.cpp:241
+#: src/generator/mupdfng.cpp:246
 msgid "Export to PDF failed: %1"
 msgstr "Xuất PDF không thành công: %1"
 
-#: src/generator/mupdfng.cpp:244
+#: src/generator/mupdfng.cpp:249
 msgid "Export to PDF finished."
 msgstr "Đã xuất PDF xong."
 
-#: src/generator/mupdfng.cpp:261
+#: src/generator/mupdfng.cpp:266
 msgid "OCR failed for page %1"
 msgstr "OCR không thành công trên trang %1"
 
-#: src/generator/mupdfng.cpp:349
+#: src/generator/mupdfng.cpp:355
 msgid ""
 "PDF JavaScript will be enabled or disabled when this document is next opened."
 msgstr "JavaScript trong PDF sẽ được bật hoặc tắt khi bạn mở lại tài liệu này."
 
-#: src/generator/mupdfng.cpp:370
+#: src/generator/mupdfng.cpp:376
 msgid ""
 "The PDF could not be refreshed after changing its JavaScript setting. "
 "Restart Okular."
@@ -635,7 +635,7 @@ msgstr ""
 "Không thể tải lại PDF sau khi đổi cài đặt JavaScript. Hãy khởi động lại "
 "Okular."
 
-#: src/generator/mupdfng.cpp:389
+#: src/generator/mupdfng.cpp:395
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
@@ -643,23 +643,39 @@ msgstr ""
 "Không thể bật chế độ thực thi hộp cát nghiêm ngặt khi còn thay đổi chưa lưu. "
 "Hãy lưu hoặc hủy các thay đổi đó rồi khởi động lại Okular."
 
-#: src/generator/mupdfng.cpp:413
+#: src/generator/mupdfng.cpp:416
+msgid "MuPDF OCR"
+msgstr "OCR MuPDF"
+
+#: src/generator/mupdfng.cpp:430
+msgid "Automatic"
+msgstr "Tự động"
+
+#: src/generator/mupdfng.cpp:431
+msgid "On"
+msgstr "Bật"
+
+#: src/generator/mupdfng.cpp:432
+msgid "Toggle MuPDF OCR"
+msgstr "Bật/tắt OCR MuPDF"
+
+#: src/generator/mupdfng.cpp:471
 msgid "MuPDF-NG"
 msgstr "MuPDF-NG"
 
-#: src/generator/mupdfng.cpp:415
+#: src/generator/mupdfng.cpp:473
 msgid "MuPDF-NG Configuration"
 msgstr "Cấu hình MuPDF-NG"
 
-#: src/generator/mupdfng.cpp:421
+#: src/generator/mupdfng.cpp:479
 msgid "Restart needed"
 msgstr "Cần khởi động lại"
 
-#: src/generator/mupdfng.cpp:421
+#: src/generator/mupdfng.cpp:479
 msgid "You need to restart Okular to apply this change."
 msgstr "Bạn cần khởi động lại Okular để áp dụng thay đổi này."
 
-#: src/generator/mupdfng.cpp:695
+#: src/generator/mupdfng.cpp:754
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
@@ -667,7 +683,7 @@ msgstr ""
 "Đã phát hiện một số lỗi trong tài liệu; Okular có thể không hiển thị nội "
 "dung chính xác"
 
-#: src/generator/mupdfng.cpp:708
+#: src/generator/mupdfng.cpp:767
 msgid ""
 "[WARN] The MuPDF worker is partially hardened: Okular's protection is "
 "limited."
@@ -675,7 +691,7 @@ msgstr ""
 "[CẢNH BÁO] Worker MuPDF chỉ được gia cố một phần: khả năng bảo vệ của Okular "
 "bị hạn chế."
 
-#: src/generator/mupdfng.cpp:710
+#: src/generator/mupdfng.cpp:769
 msgid ""
 "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
 "you from malicious documents."
@@ -683,39 +699,39 @@ msgstr ""
 "[NGHIÊM TRỌNG] Worker MuPDF không bị giới hạn: Okular không thể bảo vệ bạn "
 "khỏi tài liệu độc hại."
 
-#: src/generator/mupdfng.cpp:730
+#: src/generator/mupdfng.cpp:789
 msgid "MuPDF: %1 (system library)"
 msgstr "MuPDF: %1 (thư viện hệ thống)"
 
-#: src/generator/mupdfng.cpp:731
+#: src/generator/mupdfng.cpp:790
 msgid "MuPDF: %1 (bundled)"
 msgstr "MuPDF: %1 (đi kèm)"
 
-#: src/generator/mupdfng.cpp:735
+#: src/generator/mupdfng.cpp:794
 msgid "Sandbox: Fully hardened [OK]"
 msgstr "Hộp cát: Được gia cố đầy đủ [OK]"
 
-#: src/generator/mupdfng.cpp:737
+#: src/generator/mupdfng.cpp:796
 msgid "Sandbox: Partially hardened [WARN]"
 msgstr "Hộp cát: Được gia cố một phần [CẢNH BÁO]"
 
-#: src/generator/mupdfng.cpp:739
+#: src/generator/mupdfng.cpp:798
 msgid "Sandbox: Unconfined [CRIT]"
 msgstr "Hộp cát: Không bị giới hạn [NGHIÊM TRỌNG]"
 
-#: src/generator/mupdfng.cpp:745
+#: src/generator/mupdfng.cpp:804
 msgid "unknown"
 msgstr "không xác định"
 
-#: src/generator/mupdfng.cpp:746
+#: src/generator/mupdfng.cpp:805
 msgid "Worker memory: %1"
 msgstr "Bộ nhớ worker: %1"
 
-#: src/generator/mupdfng.cpp:749
+#: src/generator/mupdfng.cpp:808
 msgid "Worker restarts: %1"
 msgstr "Số lần khởi động lại worker: %1"
 
-#: src/generator/mupdfng.cpp:774
+#: src/generator/mupdfng.cpp:833
 msgid ""
 "[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
@@ -729,52 +745,52 @@ msgstr ""
 "tác này sẽ giảm mức bảo vệ.\n"
 "Lỗi: %1"
 
-#: src/generator/mupdfng.cpp:863
+#: src/generator/mupdfng.cpp:923
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 "Đã chuyển sang chế độ thực thi Nới lỏng. Vui lòng mở lại tài liệu theo cách "
 "thủ công."
 
-#: src/generator/mupdfng.cpp:893
+#: src/generator/mupdfng.cpp:953
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 "Không thể tải lại tài liệu sau khi lưu. Hãy khởi động lại Okular để tiếp tục."
 
-#: src/generator/mupdfng.cpp:1176
+#: src/generator/mupdfng.cpp:1237
 msgid "Format"
 msgstr "Định dạng"
 
-#: src/generator/mupdfng.cpp:1179 rc.cpp:14
+#: src/generator/mupdfng.cpp:1240 rc.cpp:42
 msgid "Security"
 msgstr "Bảo mật"
 
-#: src/generator/mupdfng.cpp:1181
+#: src/generator/mupdfng.cpp:1242
 msgid "Yes"
 msgstr "Có"
 
-#: src/generator/mupdfng.cpp:1181
+#: src/generator/mupdfng.cpp:1242
 msgid "No"
 msgstr "Không"
 
-#: src/generator/mupdfng.cpp:1182
+#: src/generator/mupdfng.cpp:1243
 msgid "Optimized"
 msgstr "Đã tối ưu hóa"
 
-#: src/generator/mupdfng.cpp:1185
+#: src/generator/mupdfng.cpp:1246
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] "Đã ký (%1 chữ ký)"
 
-#: src/generator/mupdfng.cpp:1185
+#: src/generator/mupdfng.cpp:1246
 msgid "Not Signed"
 msgstr "Chưa ký"
 
-#: src/generator/mupdfng.cpp:1186
+#: src/generator/mupdfng.cpp:1247
 msgid "Digital Signatures"
 msgstr "Chữ ký số"
 
-#: src/generator/mupdfng.cpp:1217
+#: src/generator/mupdfng.cpp:1282
 msgid ""
 "This document has no embedded table of contents. A generated table of "
 "contents is being used."
@@ -782,47 +798,55 @@ msgstr ""
 "Tài liệu này không có mục lục nhúng. Một mục lục được tạo tự động đang được "
 "sử dụng."
 
-#: src/generator/mupdfng.cpp:1330 src/generator/mupdfng.cpp:1353
+#: src/generator/mupdfng.cpp:1395 src/generator/mupdfng.cpp:1418
 msgid "The PDF layers could not be loaded."
 msgstr "Không thể tải các lớp PDF."
 
-#: src/generator/mupdfng.cpp:1341
+#: src/generator/mupdfng.cpp:1406
 msgid "The PDF layer visibility could not be changed."
 msgstr "Không thể thay đổi trạng thái hiển thị của lớp PDF."
 
-#: src/generator/mupdfng.cpp:1382
+#: src/generator/mupdfng.cpp:1447
 msgid "OCR completed for page %1"
 msgstr "Đã hoàn tất OCR cho trang %1"
 
-#: src/generator/mupdfng.cpp:1527
+#: src/generator/mupdfng.cpp:1592
 msgid "Strict sandbox enforcement blocks this document."
 msgstr "Chế độ thực thi hộp cát nghiêm ngặt đã chặn tài liệu này."
 
-#: src/generator/mupdfng.cpp:1528 src/generator/mupdfng.cpp:1539
+#: src/generator/mupdfng.cpp:1593 src/generator/mupdfng.cpp:1604
 msgid "MuPDF worker is unavailable."
 msgstr "Worker MuPDF không khả dụng."
 
-#: src/generator/mupdfng.cpp:1535
+#: src/generator/mupdfng.cpp:1600
 msgid "Failed to save PDF document."
 msgstr "Không thể lưu tài liệu PDF."
 
-#: src/generator/mupdfng.cpp:1552
+#: src/generator/mupdfng.cpp:1617
 msgid "Flattened PDF"
 msgstr "PDF đã làm phẳng"
 
-#: src/generator/mupdfng.cpp:1558
+#: src/generator/mupdfng.cpp:1623
 msgid "Annotation File (XFDF)"
 msgstr "Tệp chú thích (XFDF)"
 
-#: src/generator/mupdfng.cpp:1572
+#: src/generator/mupdfng.cpp:1637
 msgid "Export to flattened PDF finished."
 msgstr "Đã xuất PDF làm phẳng xong."
 
-#: src/generator/mupdfng.cpp:1583
+#: src/generator/mupdfng.cpp:1648
 msgid "Starting to export to PDF."
 msgstr "Đang bắt đầu xuất PDF."
 
-#: src/generator/mupdfng.cpp:1599
+#: src/generator/mupdfng.cpp:1662
+msgid "XFDF export does not support rotated PDF pages."
+msgstr "Xuất XFDF không hỗ trợ các trang PDF được xoay."
+
+#: src/generator/mupdfng.cpp:1663
+msgid "Could not check PDF page rotation for XFDF export."
+msgstr "Không thể kiểm tra góc xoay trang PDF để xuất XFDF."
+
+#: src/generator/mupdfng.cpp:1674
 msgid "Export to XFDF finished."
 msgstr "Đã xuất XFDF xong."
 
@@ -858,166 +882,158 @@ msgstr ""
 "Vị trí\n"
 "chữ ký"
 
-#: rc.cpp:1
+#: rc.cpp:3
 msgid "General"
 msgstr "Chung"
 
-#: rc.cpp:2
+#: rc.cpp:6
 msgid "Behavior"
 msgstr "Hành vi"
 
-#: rc.cpp:3
+#: rc.cpp:9
 msgid "Generate a table of contents when none is embedded"
 msgstr "Tạo mục lục khi chưa có mục lục nhúng"
 
-#: rc.cpp:4
+#: rc.cpp:12
 msgid "Rendering Quality"
 msgstr "Chất lượng kết xuất"
 
-#: rc.cpp:5
+#: rc.cpp:15
 msgid "Graphics Antialiasing"
 msgstr "Khử răng cưa đồ họa"
 
-#: rc.cpp:6
+#: rc.cpp:18
 msgid "Text Antialiasing"
 msgstr "Khử răng cưa văn bản"
 
-#: rc.cpp:7
+#: rc.cpp:21
 msgid "Image Quality"
 msgstr "Chất lượng hình ảnh"
 
-#: rc.cpp:8
+#: rc.cpp:24
 msgid "Interpolate images"
 msgstr "Nội suy hình ảnh"
 
-#: rc.cpp:9
+#: rc.cpp:27
 msgid "Simulate overprinting"
 msgstr "Mô phỏng in chồng màu"
 
-#: rc.cpp:10
+#: rc.cpp:30
 msgid "Performance"
 msgstr "Hiệu năng"
 
-#: rc.cpp:11
+#: rc.cpp:33
 msgid "Texture Cache Memory Usage"
 msgstr "Bộ nhớ bộ đệm kết cấu"
 
-#: rc.cpp:12
+#: rc.cpp:36
 msgid "Idle Memory Trim"
 msgstr "Giải phóng bộ nhớ khi nghỉ"
 
-#: rc.cpp:13
+#: rc.cpp:39
 msgid "Cancel obsolete renders"
 msgstr "Hủy kết xuất không còn cần thiết"
 
-#: rc.cpp:15
+#: rc.cpp:45
 msgid "Sandbox Enforcement"
 msgstr "Thực thi hộp cát"
 
-#: rc.cpp:16
+#: rc.cpp:48
 msgid "Show notification when sandbox is degraded"
 msgstr "Hiện thông báo khi hộp cát bị suy giảm"
 
-#: rc.cpp:17
+#: rc.cpp:51
 msgid "Enable JavaScript support"
 msgstr "Bật hỗ trợ JavaScript"
 
-#: rc.cpp:18
+#: rc.cpp:54
 msgid "PDF"
 msgstr "PDF"
 
-#: rc.cpp:19
+#: rc.cpp:57
 msgid "Optical Character Recognition"
 msgstr "Nhận dạng ký tự quang học (OCR)"
 
-#: rc.cpp:20
+#: rc.cpp:60
 msgid "Tesseract Model"
 msgstr "Mô hình Tesseract"
 
-#: rc.cpp:21
+#: rc.cpp:63
 msgid "Tesseract Quality"
 msgstr "Chất lượng Tesseract"
 
-#: rc.cpp:22
+#: rc.cpp:66
 msgid "Auto-trigger OCR when page has less than"
 msgstr "Tự động chạy OCR khi trang có ít hơn"
 
-#: rc.cpp:23
+#: rc.cpp:69
 msgid "Show notifications on OCR status"
 msgstr "Hiện thông báo về trạng thái OCR"
 
-#: rc.cpp:24
+#: rc.cpp:72
 msgid "Crypto Engine"
 msgstr "Bộ máy mật mã"
 
-#: rc.cpp:25
+#: rc.cpp:75
 msgid "Default Certificate Database:"
 msgstr "Cơ sở dữ liệu chứng chỉ mặc định:"
 
-#: rc.cpp:26
+#: rc.cpp:78
 msgid "/etc/pki/nssdb"
 msgstr "/etc/pki/nssdb"
 
-#: rc.cpp:27
+#: rc.cpp:81
 msgid "Custom Certificate Database"
 msgstr "Cơ sở dữ liệu chứng chỉ tùy chỉnh"
 
-#: rc.cpp:28
+#: rc.cpp:84
 msgid "Manage Certificates"
 msgstr "Quản lý chứng chỉ"
 
-#: rc.cpp:29
+#: rc.cpp:87
 msgid "Check certificate revocation via OCSP (requires network)"
 msgstr "Kiểm tra thu hồi chứng chỉ qua OCSP (cần mạng)"
 
-#: rc.cpp:30
+#: rc.cpp:90
 msgid "Signature"
 msgstr "Chữ ký"
 
-#: rc.cpp:31
+#: rc.cpp:93
 msgid "Signature profile:"
 msgstr "Hồ sơ chữ ký:"
 
-#: rc.cpp:32
+#: rc.cpp:96
 msgid "Signature emblem:"
 msgstr "Biểu tượng chữ ký:"
 
-#: rc.cpp:33
+#: rc.cpp:99
 msgid "Use UTC time for signatures"
 msgstr "Dùng giờ UTC cho chữ ký"
 
-#: rc.cpp:34
+#: rc.cpp:102
 msgid "Draw signature border"
 msgstr "Vẽ đường viền chữ ký"
 
-#: rc.cpp:35
+#: rc.cpp:105
 msgid "ePUB"
 msgstr "ePUB"
 
-#: rc.cpp:36
+#: rc.cpp:108
 msgid "Page Layout"
 msgstr "Bố cục trang"
 
-#: rc.cpp:37
+#: rc.cpp:111
 msgid "Font Size"
 msgstr "Cỡ chữ"
 
-#: rc.cpp:38
+#: rc.cpp:114
 msgid " pt"
 msgstr " pt"
 
-#: rc.cpp:39
+#: rc.cpp:117
 msgid "Font Family"
 msgstr "Phông chữ"
 
-#: rc.cpp:40
+#: rc.cpp:120
 msgid "Page Size"
 msgstr "Khổ giấy"
-
-#: src/generator/mupdfng.cpp
-msgid "XFDF export does not support rotated PDF pages."
-msgstr "Xuất XFDF không hỗ trợ các trang PDF được xoay."
-
-#: src/generator/mupdfng.cpp
-msgid "Could not check PDF page rotation for XFDF export."
-msgstr "Không thể kiểm tra góc xoay trang PDF để xuất XFDF."

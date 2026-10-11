@@ -11,6 +11,7 @@
 #include <okular/core/observer.h>
 #include <okular/core/version.h>
 #include <okular/interfaces/configinterface.h>
+#include <okular/interfaces/guiinterface.h>
 #include <okular/interfaces/printinterface.h>
 #include <okular/interfaces/saveinterface.h>
 
@@ -33,6 +34,8 @@
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/worker_client.hpp"
 
+class QActionGroup;
+
 namespace Mu::Generator {
 
 /// Okular-facing coordinator for the isolated MuPDF worker.
@@ -48,11 +51,13 @@ class Main : public Okular::Generator,
              public Okular::DocumentObserver,
              public Okular::SaveInterface,
              public Okular::ConfigInterface,
+             public Okular::GuiInterface,
              public Okular::PrintInterface {
     Q_OBJECT
     Q_INTERFACES(Okular::Generator)
     Q_INTERFACES(Okular::SaveInterface)
     Q_INTERFACES(Okular::ConfigInterface)
+    Q_INTERFACES(Okular::GuiInterface)
     Q_INTERFACES(Okular::PrintInterface)
 
 public:
@@ -134,6 +139,8 @@ private:
 
     // Updates OCR scheduling from the pages currently visible in Okular.
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
+    void setupOcrActions();
+    void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
     // still represents the active Okular document. Sandbox enforcement is rechecked
     // before transferring document data to the worker.
@@ -214,6 +221,7 @@ private:
     // Owns asynchronous OCR scheduling, focus tracking, and result retention;
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
+    QActionGroup* m_ocrActions = nullptr;
     bool m_observingVisiblePages = false;
 
     std::unique_ptr<LayersModel> m_layersModel;

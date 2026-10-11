@@ -77,7 +77,7 @@ pkg_check_modules(SECCOMP QUIET libseccomp)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 if(BUILD_OKULAR_GENERATOR)
     find_package(Okular6 REQUIRED)
-    find_package(KF6 REQUIRED COMPONENTS CoreAddons I18n Config ConfigWidgets KIO)
+    find_package(KF6 REQUIRED COMPONENTS CoreAddons I18n Config ConfigWidgets KIO XmlGui WidgetsAddons)
     find_package(Qt6 REQUIRED COMPONENTS Concurrent PrintSupport Network Xml)
 endif()
 

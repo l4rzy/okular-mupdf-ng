@@ -8,14 +8,18 @@
 #include <okular/core/page.h>
 #include <okular/core/textpage.h>
 
+#include <KActionCollection>
+#include <KActionMenu>
 #include <KConfigDialog>
 #include <KLocalizedString>
 #include <KPluginFactory>
+#include <QActionGroup>
 #include <QBuffer>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
+#include <QIcon>
 #include <QImage>
 #include <QLocale>
 #include <QMessageBox>
@@ -113,6 +117,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     // selection create and initialize the missing database on first launch.
     (void)Plugin::Crypto::initializeNss(Config::usesDefaultCertificateDatabase() ? QString { } : certDbPath);
     m_ocrController = std::make_unique<Plugin::OCR::Controller>(&m_worker, this);
+    setupOcrActions();
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
         &m_worker,
         [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages, bool changed) {
@@ -325,6 +330,7 @@ void Main::refreshPaperColor()
 bool Main::reparseConfig()
 {
     Config::reloadSettings();
+    syncOcrActions();
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
@@ -402,6 +408,58 @@ bool Main::reparseConfig()
 
     observeOcrFocus();
     return changed;
+}
+
+void Main::setupOcrActions()
+{
+    setComponentName(QStringLiteral("okular_mupdfng"), i18n("MuPDF"));
+    auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("document-scan")), i18n("MuPDF OCR"), this);
+    actionCollection()->addAction(QStringLiteral("mupdf_ocr"), menu);
+    KActionCollection::setShortcutsConfigurable(menu, false);
+    m_ocrActions = new QActionGroup(this);
+    const auto addMode = [&](const QString& name, const QString& text, int mode) {
+        auto* action = new QAction(text, m_ocrActions);
+        action->setCheckable(true);
+        action->setData(mode);
+        KActionCollection::setShortcutsConfigurable(action, false);
+        actionCollection()->addAction(name, action);
+        menu->addAction(action);
+    };
+    using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
+    addMode(QStringLiteral("mupdf_ocr_off"), i18n("Off"), Mode::Never);
+    addMode(QStringLiteral("mupdf_ocr_auto"), i18n("Automatic"), Mode::Five);
+    addMode(QStringLiteral("mupdf_ocr_on"), i18n("On"), Mode::Always);
+    auto* toggle = new QAction(menu->icon(), i18n("Toggle MuPDF OCR"), this);
+    actionCollection()->addAction(QStringLiteral("mupdf_ocr_toggle"), toggle);
+    connect(toggle, &QAction::triggered, this, [this] {
+        const QString actionName = MuPDFNGSettings::ocrTriggerMode() == Mode::Never ? QStringLiteral("mupdf_ocr_on")
+                                                                                    : QStringLiteral("mupdf_ocr_off");
+        actionCollection()->action(actionName)->trigger();
+    });
+    syncOcrActions();
+    connect(m_ocrActions, &QActionGroup::triggered, this, [](QAction* action) {
+        MuPDFNGSettings::setOcrTriggerMode(action->data().toInt());
+        MuPDFNGSettings::self()->save();
+    });
+    connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
+        syncOcrActions();
+        observeOcrFocus();
+    });
+    setXMLFile(QStringLiteral("mupdfngui.rc"));
+}
+
+void Main::syncOcrActions()
+{
+    const bool enabled =
+        m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_placeholder.isActive();
+    actionCollection()->action(QStringLiteral("mupdf_ocr"))->setEnabled(enabled);
+    actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->setEnabled(enabled);
+    m_ocrActions->setEnabled(enabled);
+    using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
+    const int configuredMode = MuPDFNGSettings::ocrTriggerMode();
+    const int menuMode = configuredMode == Mode::Twenty ? Mode::Five : configuredMode;
+    for (QAction* action : m_ocrActions->actions())
+        action->setChecked(action->data().toInt() == menuMode);
 }
 
 // Okular Generator Func: adds the generator settings page to Okular.
@@ -571,6 +629,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
+    syncOcrActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
@@ -821,6 +880,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPlaceholderDerivedState()
 {
+    syncOcrActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
     m_formsDirty = false;
@@ -1102,6 +1162,7 @@ bool Main::doCloseDocument()
 
     // Step 3: Reset local identity before asking the worker to discard its copy.
     m_document = { };
+    syncOcrActions();
     // Closing is best effort: an unavailable worker has already lost its copy.
     if (m_worker.isConnected())
         m_worker.close();
