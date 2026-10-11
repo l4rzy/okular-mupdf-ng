@@ -55,11 +55,10 @@ jobs:
           cd dist
           sudo -u builder CC=gcc CXX=g++ makepkg -sf --noconfirm
 
-      - name: Upload Arch Linux package
+      # Build and test both variants; publish only the patched bundled-MuPDF package.
+      - name: Upload bundled-MuPDF Arch Linux package
         uses: actions/upload-artifact@v7
         with:
           name: arch-package
-          path: |
-            dist/okular-mupdf-ng-[0-9]*.pkg.tar.zst
-            dist/okular-mupdf-ng-dynamic-[0-9]*.pkg.tar.zst
+          path: dist/okular-mupdf-ng-[0-9]*.pkg.tar.zst
           if-no-files-found: error

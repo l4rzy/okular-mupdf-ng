@@ -82,7 +82,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            release-assets/*.pkg.tar.zst
+            release-assets/okular-mupdf-ng-[0-9]*.pkg.tar.zst
             release-assets/*.deb
             release-assets/*.rpm
           body_path: changelog.md
