@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title description">
   <title id="title">okular-mupdf-ng</title>
-  <desc id="description">Shaded ivory paper with a copper folded corner over a muted golden sheet, with a bold ng monogram, matching copper highlights, and a teal lens labeled PDF and ePUB inside the g.</desc>
+  <desc id="description">Shaded ivory paper with a copper folded corner over a muted golden sheet, with a bold ng monogram, matching copper highlights, and a teal lens labeled MuPDF inside the g.</desc>
 
   <!-- Original geometry with an Oxygen-inspired material treatment. -->
   <defs>
@@ -98,8 +98,7 @@
       <circle r="26" fill="url(#lens-glass)"/>
       <path d="M-22 -8A23.409 23.409 0 0 1 8 -22L-22 8A23.409 23.409 0 0 1 -22 -8Z" fill="#E0FFF8" fill-opacity=".22"/>
       <path d="M-20 -9A22 22 0 0 1 -9 -20" stroke="#E0FFF8" stroke-opacity=".8" stroke-width="1.8" stroke-linecap="round"/>
-      <text x="0" y="-1" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="12" font-weight="700" fill="#F0FFFA">PDF</text>
-      <text x="0" y="11" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="9" font-weight="600" fill="#F0FFFA">ePUB</text>
+      <text x="0" y="4" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="12" font-weight="700" fill="#F0FFFA">MuPDF</text>
     </g>
     </g>
 
