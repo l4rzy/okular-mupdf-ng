@@ -61,7 +61,7 @@ if(ENABLE_LTO AND NOT ENABLE_SANITIZERS AND
     endif()
 endif()
 
-# Only the exact Debug configuration enables verbose diagnostics. None is used
+# Only the exact Debug configuration defaults to verbose diagnostics. None is used
 # by Arch packaging so that makepkg owns the compiler flags; it must still
 # produce a release-profile MuPDF build. The bundled MuPDF profile itself is
 # controlled by MUPDF_OPTIMIZED_BUILD (default ON: release profile in every
@@ -106,9 +106,9 @@ option(ENABLE_BUILD_TREE_WORKER
     "Embed the build-tree worker for uninstalled developer runs"
     ${MU_IS_DEBUG_BUILD})
 
-option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics (Debug builds only)" ${MU_IS_DEBUG_BUILD})
+option(ENABLE_MU_DEBUG "Compile verbose Mu diagnostics" ${MU_IS_DEBUG_BUILD})
 set(MU_DEBUG_BUILD OFF)
-if(MU_IS_DEBUG_BUILD AND ENABLE_MU_DEBUG)
+if(ENABLE_MU_DEBUG)
     set(MU_DEBUG_BUILD ON)
 endif()
 

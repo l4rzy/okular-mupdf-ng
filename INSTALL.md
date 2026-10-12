@@ -74,7 +74,7 @@ The script uses Ninja and builds MuPDF with all available CPUs.
 make dev
 # or: ./scripts/build.sh dev
 
-# Optimized release build
+# Optimized release build with LTO, verbose diagnostics, and the build-tree worker
 make release
 # or: ./scripts/build.sh release
 
@@ -98,4 +98,27 @@ For an already configured build tree, run all tests with:
 
 ```bash
 ctest --test-dir build --output-on-failure
+```
+
+### Test the built plugin in Okular
+
+After `make release`, run these commands from the repository root to link the
+built plugin into Qt 6's Okular generator directory:
+
+```bash
+okular_generator_dir="$(qmake6 -query QT_INSTALL_PLUGINS)/okular_generators"
+sudo ln -s "$(pwd)/build-release/bin/okular_generators/okularGenerator_mupdfng.so" \
+  "$okular_generator_dir/okularGenerator_mupdfng.so"
+```
+
+For `make dev`, replace `build-release` with `build`. Both presets use the worker
+from their build tree, so keep that directory available. Close all Okular
+instances and reopen Okular after linking or rebuilding the plugin. Enable
+Okular's backend selection dialog to choose the MuPDF backend.
+
+The command refuses to overwrite an existing plugin. If a packaged version is
+installed, uninstall it before creating the link. To remove the test symlink:
+
+```bash
+sudo unlink "$okular_generator_dir/okularGenerator_mupdfng.so"
 ```
