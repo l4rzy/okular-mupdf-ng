@@ -75,6 +75,10 @@ and the source-tree layout.
 See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and
 automated test coverage.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release highlights, fixes, and other changes.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and testing guidelines.
