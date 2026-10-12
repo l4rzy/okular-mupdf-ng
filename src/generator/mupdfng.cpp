@@ -431,19 +431,32 @@ void Main::setupActions()
     addMode(QStringLiteral("mupdf_ocr_off"), i18n("Off"), Mode::Never);
     addMode(QStringLiteral("mupdf_ocr_auto"), i18n("Automatic"), Mode::Five);
     addMode(QStringLiteral("mupdf_ocr_on"), i18n("On"), Mode::Always);
+    const auto setMode = [this](int mode) {
+        MuPDFNGSettings::setOcrTriggerMode(mode);
+        MuPDFNGSettings::self()->save();
+        const int menuMode = mode == Mode::Twenty ? Mode::Five : mode;
+        for (QAction* action : m_ocrActions->actions()) {
+            if (action->data().toInt() == menuMode) {
+                Q_EMIT notice(i18n("MuPDF OCR: %1", KLocalizedString::removeAcceleratorMarker(action->text())),
+                              ShortNoticeMs);
+                break;
+            }
+        }
+    };
     auto* toggle = new QAction(menu->icon(), i18n("Toggle MuPDF OCR"), this);
     actionCollection()->addAction(QStringLiteral("mupdf_ocr_toggle"), toggle);
-    connect(toggle, &QAction::triggered, this, [this] {
-        const QString actionName = MuPDFNGSettings::ocrTriggerMode() == Mode::Never ? QStringLiteral("mupdf_ocr_on")
-                                                                                    : QStringLiteral("mupdf_ocr_off");
-        actionCollection()->action(actionName)->trigger();
+    connect(toggle, &QAction::triggered, this, [setMode, previousMode = int(Mode::Never)]() mutable {
+        const int mode = MuPDFNGSettings::ocrTriggerMode();
+        if (mode == Mode::Always) {
+            setMode(previousMode);
+        } else {
+            previousMode = mode;
+            setMode(Mode::Always);
+        }
     });
     syncOcrActions();
-    connect(m_ocrActions, &QActionGroup::triggered, this, [this](QAction* action) {
-        MuPDFNGSettings::setOcrTriggerMode(action->data().toInt());
-        MuPDFNGSettings::self()->save();
-        Q_EMIT notice(i18n("MuPDF OCR: %1", KLocalizedString::removeAcceleratorMarker(action->text())), ShortNoticeMs);
-    });
+    connect(
+        m_ocrActions, &QActionGroup::triggered, this, [setMode](QAction* action) { setMode(action->data().toInt()); });
     connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
         syncOcrActions();
         observeOcrFocus();

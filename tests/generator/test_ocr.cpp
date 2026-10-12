@@ -115,9 +115,9 @@ private slots:
         QTest::newRow("toggle-from-off") << QStringLiteral("Never") << QStringLiteral("mupdf_ocr_toggle")
                                          << QStringLiteral("Always");
         QTest::newRow("toggle-from-five")
-            << QStringLiteral("Five") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Never");
+            << QStringLiteral("Five") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Always");
         QTest::newRow("toggle-from-twenty")
-            << QStringLiteral("Twenty") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Never");
+            << QStringLiteral("Twenty") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Always");
         QTest::newRow("toggle-from-on") << QStringLiteral("Always") << QStringLiteral("mupdf_ocr_toggle")
                                         << QStringLiteral("Never");
     }
@@ -207,12 +207,47 @@ private slots:
         for (int i = 0; i < modes.size(); ++i)
             QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == requestedMode);
 
+        if (actionName == QStringLiteral("mupdf_ocr_toggle")) {
+            int expectedNotices = 1;
+            for (const auto& expectedMode : { initialMode, requestedMode, initialMode }) {
+                QTest::keyClick(&window, Qt::Key_F9, Qt::ControlModifier | Qt::AltModifier);
+                ++expectedNotices;
+                QTRY_COMPARE(notices.count(), expectedNotices);
+                config->reparseConfiguration();
+                QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expectedMode);
+                const QString menuMode =
+                    expectedMode == QStringLiteral("Twenty") ? QStringLiteral("Five") : expectedMode;
+                for (int i = 0; i < modes.size(); ++i)
+                    QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == menuMode);
+                QCOMPARE(notices.back().at(0).toString(),
+                         QStringLiteral("MuPDF OCR: %1").arg(labels.at(modes.indexOf(menuMode))));
+            }
+            QCOMPARE(notices.count(), 4);
+        }
+
         // Changes from the configuration dialog refresh the same menu state.
         ocr.writeEntry("OcrTriggerMode", initialMode);
         config->sync();
         document.reparseConfig();
         for (int i = 0; i < modes.size(); ++i)
             QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
+        if (actionName == QStringLiteral("mupdf_ocr_toggle")) {
+            // A settings change replaces the mode remembered by the next toggle.
+            ocr.writeEntry("OcrTriggerMode", "Twenty");
+            config->sync();
+            document.reparseConfig();
+            for (const auto& expected : { QStringLiteral("Always"), QStringLiteral("Twenty") }) {
+                action->trigger();
+                config->reparseConfiguration();
+                QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expected);
+            }
+            client->actionCollection()->action(QStringLiteral("mupdf_ocr_off"))->trigger();
+            for (const auto& expected : { QStringLiteral("Always"), QStringLiteral("Never") }) {
+                action->trigger();
+                config->reparseConfiguration();
+                QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expected);
+            }
+        }
         factory.removeClient(client);
         QCOMPARE(tools->actions().size(), 1);
         factory.removeClient(&host);
