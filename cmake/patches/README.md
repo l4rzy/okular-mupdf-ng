@@ -5,6 +5,12 @@ It adds anchors for legacy MOBI byte-offset links before text transcoding, conve
 `filepos` links to anchor links, and reads the guide's explicit TOC. Nested lists and
 blockquotes form the outline hierarchy; a page-break ends the TOC. Existing heading
 outlines remain the fallback.
+Skipped nesting levels preserve the preceding parent's children, and offsets
+inside comments wait until the comment closes before inserting a destination.
+The reader also clears dropped record streams, frees extracted text on
+transcoding failure, and releases the entry tree if archive construction fails.
+Synthetic TOC fixtures and allocation-failure tests in `tests/worker/mobi.cpp`
+cover these paths, including under AddressSanitizer and LeakSanitizer.
 
 `mupdf-1.28.5-ocr-font-release.patch` releases the OCR device's owned Courier
 font reference during destruction. Text objects and target devices retain their

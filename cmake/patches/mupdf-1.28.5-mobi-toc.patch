@@ -1,6 +1,6 @@
 --- a/source/html/mobi.c
 +++ b/source/html/mobi.c
-@@ -36,6 +36,236 @@
+@@ -36,6 +36,243 @@
  #define TEXT_ENCODING_1252 1252
  #define TEXT_ENCODING_UTF8 65001
  
@@ -51,7 +51,7 @@
 +	fz_buffer *out = NULL;
 +	uint32_t *positions = NULL, position;
 +	size_t count = 0, index = 0, i;
-+	int in_tag = 0, quote = 0, in_entity = 0;
++	int in_tag = 0, quote = 0, in_entity = 0, in_comment = 0;
 +	fz_var(xml);
 +	fz_var(out);
 +	fz_var(positions);
@@ -77,7 +77,7 @@
 +				int c = buffer->data[i];
 +				/* If a bad offset lands in markup, an entity, or a UTF-8
 +				 * sequence, wait for a safe insertion point. */
-+				if (!in_tag && !in_entity && c != '<' && (c & 0xc0) != 0x80)
++				if (!in_tag && !in_entity && !in_comment && c != '<' && (c & 0xc0) != 0x80)
 +					while (index < count && positions[index] <= i)
 +					{
 +						position = positions[index++];
@@ -86,12 +86,21 @@
 +							++index;
 +					}
 +				fz_append_byte(ctx, out, c);
-+				if (in_tag)
++				if (in_comment)
++				{
++					/* Match the HTML5 parser's tolerated --!> close too. */
++					if (c == '>' && ((i >= 2 && buffer->data[i-2] == '-' && buffer->data[i-1] == '-') ||
++						(i >= 3 && buffer->data[i-3] == '-' && buffer->data[i-2] == '-' && buffer->data[i-1] == '!')))
++						in_comment = 0;
++				}
++				else if (in_tag)
 +				{
 +					if (quote && c == quote) quote = 0;
 +					else if (!quote && (c == '\'' || c == '"')) quote = c;
 +					else if (!quote && c == '>') in_tag = 0;
 +				}
++				else if (c == '<' && buffer->len - i >= 4 && !memcmp(buffer->data + i, "<!--", 4))
++					in_comment = 1;
 +				else if (c == '<') in_tag = 1;
 +				else if (c == '&') in_entity = 1;
 +				else if (c == ';' || c == ' ' || c == '\n') in_entity = 0;
@@ -201,17 +210,15 @@
 +					++depth;
 +			if (depth > 64 || ++count > 50000)
 +				fz_throw(ctx, FZ_ERROR_LIMIT, "MOBI outline limit exceeded");
-+			if (last && depth > levels[level])
-+			{
-+				levels[++level] = depth;
-+				tails[level] = &last->down;
-+			}
-+			else
-+				while (level && depth < levels[level]) --level;
++			/* Reconsider descent after popping a skipped nesting level.
++			 * Keep the parent's child tail so existing children are retained. */
++			while (level && depth < levels[level]) --level;
++			if (head && depth > levels[level]) ++level;
 +			levels[level] = depth;
 +			last = fz_new_outline(ctx);
 +			*tails[level] = last;
 +			tails[level] = &last->next;
++			if (level < 64) tails[level+1] = &last->down;
 +			last->title = fz_strdup(ctx, fz_string_from_buffer(ctx, label));
 +			last->uri = fz_strdup(ctx, uri);
 +			last->is_open = 1;
@@ -237,16 +244,150 @@
  static void
  skip_bytes(fz_context *ctx, fz_stream *stm, size_t len)
  {
-@@ -183,6 +413,9 @@
- 		if (!memcmp(out->data, "<html>", 6) || !memcmp(out->data, "<HTML>", 6))
+@@ -145,7 +382,10 @@
+ 		}
+ 	}
+ 	fz_always(ctx)
++	{
+ 		fz_drop_stream(ctx, rec);
++		rec = NULL;
++	}
+ 	fz_catch(ctx)
+ 		fz_rethrow(ctx);
+ 
+@@ -173,7 +413,10 @@
+ 				mobi_read_text_palmdoc(ctx, out, rec, size);
+ 		}
+ 		fz_always(ctx)
++		{
+ 			fz_drop_stream(ctx, rec);
++			rec = NULL;
++		}
+ 		fz_catch(ctx)
+ 			fz_rethrow(ctx);
+ 	}
+@@ -184,44 +427,54 @@
  			format = FORMAT_HTML;
  	}
-+
+ 
 +	if (format == FORMAT_HTML)
 +		mobi_add_targets(ctx, out);
- 
++
  	if (text_encoding != TEXT_ENCODING_UTF8 || format == FORMAT_TEXT)
  	{
+-		unsigned char *p;
+-		size_t j, z = fz_buffer_extract(ctx, out, &p);
+-		fz_resize_buffer(ctx, out, 0);
+-		if (format == FORMAT_TEXT)
+-			fz_append_string(ctx, out, "<html><head><style>body{white-space:pre-wrap}</style></head><body>");
+-		for (j = 0; j < z; ++j)
+-		{
+-			int c = p[j];
+-			if (format == FORMAT_TEXT && (c == '<' || c == '>' || c == '&'))
+-			{
+-				if (c == '<')
+-					fz_append_string(ctx, out, "&lt;");
+-				else if (c == '>')
+-					fz_append_string(ctx, out, "&gt;");
+-				else if (c == '&')
+-					fz_append_string(ctx, out, "&amp;");
+-			}
+-			else
+-			{
+-				switch (text_encoding)
++		unsigned char *p = NULL;
++		fz_var(p);
++		fz_try(ctx)
++		{
++			size_t j, z = fz_buffer_extract(ctx, out, &p);
++			fz_resize_buffer(ctx, out, 0);
++			if (format == FORMAT_TEXT)
++				fz_append_string(ctx, out, "<html><head><style>body{white-space:pre-wrap}</style></head><body>");
++			for (j = 0; j < z; ++j)
++			{
++				int c = p[j];
++				if (format == FORMAT_TEXT && (c == '<' || c == '>' || c == '&'))
+ 				{
+-				case TEXT_ENCODING_UTF8:
+-					fz_append_byte(ctx, out, c);
+-					break;
+-				case TEXT_ENCODING_LATIN_1:
+-					fz_append_rune(ctx, out, c);
+-					break;
+-				case TEXT_ENCODING_1252:
+-					fz_append_rune(ctx, out, fz_unicode_from_windows_1252[c]);
+-					break;
++					if (c == '<')
++						fz_append_string(ctx, out, "&lt;");
++					else if (c == '>')
++						fz_append_string(ctx, out, "&gt;");
++					else if (c == '&')
++						fz_append_string(ctx, out, "&amp;");
+ 				}
+-			}
+-		}
+-		if (format == FORMAT_TEXT)
+-			fz_append_string(ctx, out, "</body></html>");
+-		fz_free(ctx, p);
++				else
++				{
++					switch (text_encoding)
++					{
++					case TEXT_ENCODING_UTF8:
++						fz_append_byte(ctx, out, c);
++						break;
++					case TEXT_ENCODING_LATIN_1:
++						fz_append_rune(ctx, out, c);
++						break;
++					case TEXT_ENCODING_1252:
++						fz_append_rune(ctx, out, fz_unicode_from_windows_1252[c]);
++						break;
++					}
++				}
++			}
++			if (format == FORMAT_TEXT)
++				fz_append_string(ctx, out, "</body></html>");
++		}
++		fz_always(ctx)
++			fz_free(ctx, p);
++		fz_catch(ctx)
++			fz_rethrow(ctx);
+ 	}
+ 
+ 	return record_count;
+@@ -238,6 +491,7 @@
+ 	fz_stream *stm = NULL;
+ 	fz_buffer *buffer = NULL;
+ 	fz_tree *tree = NULL;
++	fz_archive *archive = NULL;
+ 	uint32_t *offsets = NULL;
+ 	char buf[32];
+ 	uint32_t i, k, extra;
+@@ -252,6 +506,7 @@
+ 	fz_var(buffer);
+ 	fz_var(offsets);
+ 	fz_var(tree);
++	fz_var(archive);
+ 
+ 	fz_try(ctx)
+ 	{
+@@ -330,6 +585,8 @@
+ 				}
+ 			}
+ 		}
++		archive = fz_new_tree_archive(ctx, tree);
++		tree = NULL;
+ 	}
+ 	fz_always(ctx)
+ 	{
+@@ -343,5 +600,5 @@
+ 		fz_rethrow(ctx);
+ 	}
+ 
+-	return fz_new_tree_archive(ctx, tree);
+-}
++	return archive;
++}
 --- a/source/html/html-doc.c
 +++ b/source/html/html-doc.c
 @@ -197,7 +197,10 @@

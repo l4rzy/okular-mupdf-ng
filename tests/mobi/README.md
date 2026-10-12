@@ -14,3 +14,12 @@ Run `python3 tests/mobi/generate-basic.py` to regenerate the following adapter c
 The existing worker suite checks our error messages, descriptor ownership, clearing an already-open document after rejection, and successful reopening. File and memory IPC tests reject an encrypted fixture before opening and exporting a valid book. These fixtures exercise our adapter and transport paths; they do not establish MuPDF rendering fidelity or real-book compatibility.
 
 The `toc-*.mobi` fixtures contain multiple text records, styled paragraphs without semantic headings, and a guide pointing to a nested TOC with `filepos` links. Invalid destinations and a link after the TOC's page-break boundary exercise filtering. They cover uncompressed UTF-8, PalmDOC UTF-8, and PalmDOC Windows-1252 text, including a multibyte character before the destinations. Regenerate them with `python3 tests/mobi/generate-toc.py`.
+
+`toc-skipped-levels.mobi` checks a list-depth transition of 1 → 3 → 2 and a
+subsequent root entry, preserving both children of the first entry.
+`toc-comment.mobi` checks an imprecise destination inside a comment containing
+`>`, quotes, and tag-like text. The marker must be placed after the comment.
+`toc-comment-bang.mobi` covers HTML5's tolerated `--!>` comment terminator.
+The UTF-8 and Windows-1252 fixtures also exercise every allocation-failure point
+in HTML extraction with a fresh context and a counted allocator, checking that
+all allocations are released. These tests run only with bundled MuPDF.

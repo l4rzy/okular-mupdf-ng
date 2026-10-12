@@ -18,17 +18,36 @@ html = '''<html><head><guide><reference type="toc" filepos="TOC_OFFSET"/></guide
 html = html.replace('First chapter text.', 'First chapter text. ' + 'Book text for pagination. ' * 300)
 html = html.replace('Nested section text.', 'Nested section text. ' + 'Section text for pagination. ' * 300)
 
-for name, encoding, codepage, compression in [
-    ('toc-uncompressed.mobi', 'utf-8', 65001, 1),
-    ('toc-palmdoc.mobi', 'utf-8', 65001, 2),
-    ('toc-cp1252.mobi', 'cp1252', 1252, 2),
-    ('toc-link-start.mobi', 'utf-8', 65001, 2),
+nesting = '''<html><head><guide><reference type="toc" filepos="TOC_OFFSET"/></guide></head>
+<body><p id="contents">Contents</p><ul><li><a filepos="FIRST_POS_">First</a><ul><li><ul>
+<li><a filepos="DETAIL_POS">Detail</a></li></ul></li>
+<li><a filepos="SECOND_POS">Second</a></li></ul></li>
+<li><a filepos="THIRD_POS_">Third</a></li></ul><mbp:pagebreak/>
+<p id="first">First chapter</p><p id="detail">Detail chapter</p>
+<p id="second">Second chapter</p><p id="third">Third chapter</p></body></html>'''
+comment = '''<html><head><guide><reference type="toc" filepos="TOC_OFFSET"/></guide></head>
+<body><p id="contents">Contents</p><a filepos="FIRST_POS_">First</a><mbp:pagebreak/>
+<!-- > comment destination with ' quotes and <tags> -->
+<p>First chapter</p></body></html>'''
+
+for name, encoding, codepage, compression, source in [
+    ('toc-uncompressed.mobi', 'utf-8', 65001, 1, html),
+    ('toc-palmdoc.mobi', 'utf-8', 65001, 2, html),
+    ('toc-cp1252.mobi', 'cp1252', 1252, 2, html),
+    ('toc-link-start.mobi', 'utf-8', 65001, 2, html),
+    ('toc-skipped-levels.mobi', 'utf-8', 65001, 1, nesting),
+    ('toc-comment.mobi', 'utf-8', 65001, 1, comment),
+    ('toc-comment-bang.mobi', 'utf-8', 65001, 1, comment.replace(' -->', ' --!>')),
 ]:
-    text = html.encode(encoding)
+    text = source.encode(encoding)
     toc_start = b'<a filepos="FIRST_POS_' if name == 'toc-link-start.mobi' else b'<p id="contents"'
     for marker, target in [('TOC_OFFSET', toc_start), ('FIRST_POS_', b'<p id="first"'),
-                           ('DETAIL_POS', b'<p id="detail"'), ('SECOND_POS', b'<p id="second"')]:
-        text = text.replace(marker.encode(), f'{text.index(target):010d}'.encode())
+                           ('DETAIL_POS', b'<p id="detail"'), ('SECOND_POS', b'<p id="second"'),
+                           ('THIRD_POS_', b'<p id="third"')]:
+        if marker.encode() in text:
+            if marker == 'FIRST_POS_' and name.startswith('toc-comment'):
+                target = b'comment destination'
+            text = text.replace(marker.encode(), f'{text.index(target):010d}'.encode())
     seed = (root / 'legacy-uncompressed.mobi').read_bytes()
     database = bytearray(seed[:78])
     header = bytearray(seed[96:344])

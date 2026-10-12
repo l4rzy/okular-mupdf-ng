@@ -14,15 +14,173 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdlib>
 #include <fcntl.h>
 #include <unistd.h>
 
 using namespace Mu;
 
+#if TEST_BUNDLED_MOBI_TOC
+extern "C" fz_archive* fz_extract_html_from_mobi(fz_context*, fz_buffer*);
+
+namespace {
+
+struct AllocationState {
+    std::size_t live = 0;
+    std::size_t requests = 0;
+    std::size_t failAt = 0;
+
+    bool reject()
+    {
+        ++requests;
+        return failAt && requests >= failAt;
+    }
+
+    static void* allocate(void* user, std::size_t size)
+    {
+        auto& state = *static_cast<AllocationState*>(user);
+        if (state.reject())
+            return nullptr;
+        void* result = std::malloc(size);
+        if (result)
+            ++state.live;
+        return result;
+    }
+
+    static void release(void* user, void* pointer)
+    {
+        if (pointer) {
+            --static_cast<AllocationState*>(user)->live;
+            std::free(pointer);
+        }
+    }
+
+    static void* resize(void* user, void* pointer, std::size_t size)
+    {
+        if (!pointer)
+            return allocate(user, size);
+        if (!size) {
+            release(user, pointer);
+            return nullptr;
+        }
+        if (static_cast<AllocationState*>(user)->reject())
+            return nullptr;
+        return std::realloc(pointer, size);
+    }
+};
+
+} // namespace
+#endif
+
 class TestMobi : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void allocationFailures_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::newRow("utf8") << QStringLiteral("toc-uncompressed.mobi");
+        QTest::newRow("cp1252") << QStringLiteral("toc-cp1252.mobi");
+    }
+
+    void allocationFailures()
+    {
+#if TEST_BUNDLED_MOBI_TOC
+        QFETCH(QString, fixture);
+        QFile file(QStringLiteral(TEST_MOBI_DIR "/") + fixture);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        std::size_t allocationCount = 0;
+        // First count allocations on success, then fail each allocation and
+        // all retries. Each iteration owns a fresh context and source buffer.
+        for (std::size_t failAt = 0; failAt <= allocationCount; ++failAt) {
+            AllocationState state;
+            fz_alloc_context allocator {
+                &state, AllocationState::allocate, AllocationState::resize, AllocationState::release
+            };
+            fz_context* ctx = fz_new_context(&allocator, nullptr, 0);
+            QVERIFY(ctx);
+            fz_set_error_callback(ctx, [](void*, const char*) { }, nullptr);
+            fz_buffer* source = nullptr;
+            fz_archive* archive = nullptr;
+            int error = 0;
+            fz_var(source);
+            fz_var(archive);
+            fz_var(error);
+            fz_var(state);
+            fz_try(ctx)
+            {
+                source = fz_new_buffer_from_copied_data(
+                    ctx, reinterpret_cast<const unsigned char*>(bytes.constData()), std::size_t(bytes.size()));
+                state.requests = 0;
+                state.failAt = failAt;
+                archive = fz_extract_html_from_mobi(ctx, source);
+            }
+            fz_catch(ctx)
+            {
+                error = fz_caught(ctx);
+                fz_ignore_error(ctx);
+            }
+            const auto requests = state.requests;
+            state.failAt = 0;
+            fz_drop_archive(ctx, archive);
+            fz_drop_buffer(ctx, source);
+            fz_drop_context(ctx);
+            QCOMPARE(state.live, std::size_t { 0 });
+            if (failAt == 0) {
+                QCOMPARE(error, 0);
+                allocationCount = requests;
+                QVERIFY(allocationCount > 0);
+            } else {
+                QCOMPARE(error, int(FZ_ERROR_SYSTEM));
+            }
+        }
+#else
+        QSKIP("Allocation cleanup requires the bundled MuPDF patch");
+#endif
+    }
+
+    void repairsToc_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::addColumn<QStringList>("roots");
+        QTest::addColumn<QStringList>("children");
+        QTest::newRow("skipped-levels") << QStringLiteral("toc-skipped-levels.mobi") << QStringList { "First", "Third" }
+                                        << QStringList { "Detail", "Second" };
+        QTest::newRow("comment-offset") << QStringLiteral("toc-comment.mobi") << QStringList { "First" }
+                                        << QStringList { };
+        QTest::newRow("comment-bang-close")
+            << QStringLiteral("toc-comment-bang.mobi") << QStringList { "First" } << QStringList { };
+    }
+
+    void repairsToc()
+    {
+        if (!TEST_BUNDLED_MOBI_TOC)
+            QSKIP("TOC repair requires the bundled MuPDF patch");
+        QFETCH(QString, fixture);
+        QFETCH(QStringList, roots);
+        QFETCH(QStringList, children);
+        QFile file(QStringLiteral(TEST_MOBI_DIR "/") + fixture);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        Worker::Engine::MobiDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "toc.mobi", &error), error.c_str());
+        const auto outline = document.outline(&error);
+        QCOMPARE(outline.size(), std::size_t(roots.size()));
+        for (std::size_t i = 0; i < outline.size(); ++i) {
+            QCOMPARE(QString::fromStdString(outline[i].title), roots.at(qsizetype(i)));
+            QVERIFY(outline[i].link.valid);
+            QCOMPARE(outline[i].children.size(), i == 0 ? std::size_t(children.size()) : std::size_t { 0 });
+        }
+        for (std::size_t i = 0; i < outline.front().children.size(); ++i) {
+            const auto& child = outline.front().children[i];
+            QCOMPARE(QString::fromStdString(child.title), children.at(qsizetype(i)));
+            QVERIFY(child.link.valid);
+            QVERIFY(child.children.empty());
+        }
+        QVERIFY2(error.empty(), error.c_str());
+    }
 
     void detectsMobi_data()
     {
