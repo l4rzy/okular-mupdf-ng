@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -111,12 +112,14 @@ CacheUsage measureCacheUsage(const QString& root)
     return result;
 }
 
-VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now, CacheKind kind)
+namespace {
+
+VacuumResult removeCacheFiles(const QString& root, const std::optional<QDateTime>& now, CacheKind kind)
 {
     VacuumResult result;
     const QString cacheRoot = QDir::cleanPath(root.isEmpty() ? directory(QString()) : root);
     const QFileInfo rootInfo(cacheRoot);
-    if (!now.isValid() || !rootInfo.exists() || rootInfo.isSymLink())
+    if ((now && !now->isValid()) || !rootInfo.exists() || rootInfo.isSymLink())
         return result;
     if (!canScanDirectory(rootInfo)) {
         ++result.errors;
@@ -141,7 +144,7 @@ VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now, CacheK
         while (files.hasNext()) {
             files.next();
             const QFileInfo info = files.fileInfo();
-            // Never follow or delete symlinks; only regular cache files age out.
+            // Never follow or delete symlinks; remove only regular cache files.
             if (info.isSymLink())
                 continue;
             if (info.isDir()) {
@@ -151,7 +154,7 @@ VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now, CacheK
                     ++result.errors;
                 continue;
             }
-            if (!info.isFile() || !isStale(info.lastModified(), now))
+            if (!info.isFile() || (now && !isStale(info.lastModified(), *now)))
                 continue;
             if (QFile::remove(info.absoluteFilePath()))
                 ++result.filesRemoved;
@@ -168,6 +171,18 @@ VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now, CacheK
         }
     }
     return result;
+}
+
+} // namespace
+
+VacuumResult clearCaches(const QString& root, CacheKind kind)
+{
+    return removeCacheFiles(root, std::nullopt, kind);
+}
+
+VacuumResult vacuumStaleCaches(const QString& root, const QDateTime& now, CacheKind kind)
+{
+    return removeCacheFiles(root, now, kind);
 }
 
 VacuumResult vacuumStaleCaches(const QDateTime& now)

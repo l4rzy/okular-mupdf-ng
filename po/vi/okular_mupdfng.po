@@ -217,8 +217,8 @@ msgid "Click to calculate cache storage size"
 msgstr "Nhấn để tính dung lượng bộ nhớ đệm"
 
 #: src/generator/config/settingswidget.cpp:246
-msgid "No expired cache files."
-msgstr "Không có tệp bộ nhớ đệm hết hạn."
+msgid "No cache files to remove."
+msgstr "Không có tệp bộ nhớ đệm để xóa."
 
 #: src/generator/config/settingswidget.cpp:248
 msgid "Some cache files could not be cleaned up."

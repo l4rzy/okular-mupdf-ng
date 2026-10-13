@@ -47,16 +47,22 @@ private slots:
     {
         QTest::addColumn<Vacuum::CacheKind>("kind");
         QTest::addColumn<QString>("selected");
-        QTest::newRow("ocr") << Vacuum::CacheKind::Ocr << QStringLiteral("ocr");
-        QTest::newRow("epub") << Vacuum::CacheKind::EpubAccelerator << QStringLiteral("epub_accel");
-        QTest::newRow("toc") << Vacuum::CacheKind::PdfToc << QStringLiteral("pdf_toc");
-        QTest::newRow("all") << Vacuum::CacheKind::All << QString();
+        QTest::addColumn<bool>("manual");
+        QTest::newRow("ocr") << Vacuum::CacheKind::Ocr << QStringLiteral("ocr") << false;
+        QTest::newRow("epub") << Vacuum::CacheKind::EpubAccelerator << QStringLiteral("epub_accel") << false;
+        QTest::newRow("toc") << Vacuum::CacheKind::PdfToc << QStringLiteral("pdf_toc") << false;
+        QTest::newRow("all") << Vacuum::CacheKind::All << QString() << false;
+        QTest::newRow("manual-ocr") << Vacuum::CacheKind::Ocr << QStringLiteral("ocr") << true;
+        QTest::newRow("manual-epub") << Vacuum::CacheKind::EpubAccelerator << QStringLiteral("epub_accel") << true;
+        QTest::newRow("manual-toc") << Vacuum::CacheKind::PdfToc << QStringLiteral("pdf_toc") << true;
+        QTest::newRow("manual-all") << Vacuum::CacheKind::All << QString() << true;
     }
 
     void vacuumsSelectedCache()
     {
         QFETCH(Vacuum::CacheKind, kind);
         QFETCH(QString, selected);
+        QFETCH(bool, manual);
         QTemporaryDir root;
         QVERIFY(root.isValid());
         const auto now = utcNow();
@@ -64,7 +70,8 @@ private slots:
         const QStringList trees { "ocr", "epub_accel", "pdf_toc" };
         for (const auto& tree : trees) {
             QVERIFY(!writeFile(root.filePath(tree + "/.expired/deep/.old"), "old", old).isEmpty());
-            QVERIFY(!writeFile(root.filePath(tree + "/fresh"), tree.toUtf8(), now).isEmpty());
+            const auto freshTime = tree == "pdf_toc" ? now.addDays(1) : now;
+            QVERIFY(!writeFile(root.filePath(tree + "/fresh"), tree.toUtf8(), freshTime).isEmpty());
         }
         const auto foreign = writeFile(root.filePath("other/keep"), "ignored", old);
         QVERIFY(!foreign.isEmpty());
@@ -75,20 +82,21 @@ private slots:
         QCOMPARE(before.pdfTocBytes, 10);
         QCOMPARE(before.totalBytes(), 29);
 
-        const auto result = Vacuum::vacuumStaleCaches(root.path(), now, kind);
+        const auto result =
+            manual ? Vacuum::clearCaches(root.path(), kind) : Vacuum::vacuumStaleCaches(root.path(), now, kind);
         QCOMPARE(result.errors, 0);
-        QCOMPARE(result.filesRemoved, selected.isEmpty() ? 3 : 1);
+        QCOMPARE(result.filesRemoved, (selected.isEmpty() ? 3 : 1) * (manual ? 2 : 1));
         const auto after = Vacuum::measureCacheUsage(root.path());
         QCOMPARE(after.errors, 0);
-        QCOMPARE(after.totalBytes(), selected.isEmpty() ? 20 : 26);
-        QCOMPARE(after.ocrBytes, selected.isEmpty() || selected == "ocr" ? 3 : 6);
-        QCOMPARE(after.epubAcceleratorBytes, selected.isEmpty() || selected == "epub_accel" ? 10 : 13);
-        QCOMPARE(after.pdfTocBytes, selected.isEmpty() || selected == "pdf_toc" ? 7 : 10);
+        QCOMPARE(after.ocrBytes, selected.isEmpty() || selected == "ocr" ? (manual ? 0 : 3) : 6);
+        QCOMPARE(after.epubAcceleratorBytes, selected.isEmpty() || selected == "epub_accel" ? (manual ? 0 : 10) : 13);
+        QCOMPARE(after.pdfTocBytes, selected.isEmpty() || selected == "pdf_toc" ? (manual ? 0 : 7) : 10);
         for (const auto& tree : trees) {
             const bool retained = !selected.isEmpty() && tree != selected;
             QCOMPARE(QFile::exists(root.filePath(tree + "/.expired/deep/.old")), retained);
             QCOMPARE(QDir(root.filePath(tree + "/.expired")).exists(), retained);
-            QVERIFY(QFile::exists(root.filePath(tree + "/fresh")));
+            QCOMPARE(QFile::exists(root.filePath(tree + "/fresh")), !manual || retained);
+            QVERIFY(QDir(root.filePath(tree)).exists());
         }
         QVERIFY(QFile::exists(foreign));
     }
@@ -121,6 +129,7 @@ private slots:
         const QString scanRoot = rootLink ? link + '/' : root.path();
         QCOMPARE(Vacuum::measureCacheUsage(scanRoot).totalBytes(), 0);
         QCOMPARE(Vacuum::vacuumStaleCaches(scanRoot, now).filesRemoved, 0);
+        QCOMPARE(Vacuum::clearCaches(scanRoot).filesRemoved, 0);
         QVERIFY(QFile::exists(targetFile));
         QVERIFY(QFileInfo(link).isSymLink());
     }

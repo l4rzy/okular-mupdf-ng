@@ -243,7 +243,7 @@ void MuPDFNGSettingsWidget::refreshCacheUsage(std::optional<Plugin::Caching::Vac
         m_mupdfsw->cacheStorageButton->setText(i18n("Click to calculate cache storage size"));
         m_mupdfsw->cacheStorageButton->setEnabled(true);
         if (vacuum) {
-            QString message = i18n("No expired cache files.");
+            QString message = i18n("No cache files to remove.");
             if (cleanup.errors)
                 message = i18n("Some cache files could not be cleaned up.");
             else if (cleanup.filesRemoved)
@@ -263,7 +263,7 @@ void MuPDFNGSettingsWidget::refreshCacheUsage(std::optional<Plugin::Caching::Vac
     const QString root = Cache::directory(QString());
     watcher->setFuture(QtConcurrent::run([root, vacuum] {
         if (vacuum)
-            return Result { Cache::Vacuum::vacuumStaleCaches(root, QDateTime::currentDateTimeUtc(), *vacuum), { } };
+            return Result { Cache::Vacuum::clearCaches(root, *vacuum), { } };
         return Result { { }, Cache::Vacuum::measureCacheUsage(root) };
     }));
 }

@@ -9,7 +9,7 @@
 
 namespace Mu::Plugin::Caching::Vacuum {
 
-// Files whose mtime is older than this are removed by the vacuum.
+// Files whose mtime is older than this are removed by automatic vacuuming.
 constexpr int StaleDays = 90;
 // Minimum interval between two vacuum runs, gated by the stored timestamp.
 constexpr int ThrottleDays = 7;
@@ -44,6 +44,10 @@ struct CacheUsage {
 /// Totals regular file sizes in the same trees as vacuum; skips symlinks.
 /// An empty root selects the production cache root.
 [[nodiscard]] CacheUsage measureCacheUsage(const QString& root = { });
+
+/// Removes all regular files from the selected cache trees, regardless of age.
+/// An empty root selects the production cache root; symlinks are skipped.
+[[nodiscard]] VacuumResult clearCaches(const QString& root = { }, CacheKind kind = CacheKind::All);
 
 /// Removes stale files from ocr, epub_accel, and pdf_toc under the
 /// production cache root. Missing trees are a no-op; symlinks are skipped.

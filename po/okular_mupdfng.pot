@@ -220,7 +220,7 @@ msgid "Click to calculate cache storage size"
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:246
-msgid "No expired cache files."
+msgid "No cache files to remove."
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:248
