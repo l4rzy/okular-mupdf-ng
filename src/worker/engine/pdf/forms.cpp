@@ -213,7 +213,7 @@ const char* choiceOption(fz_context* context, pdf_obj* field, int index, bool us
     return pdf_choice_field_option(context, field, useExportValues ? 1 : 0, index);
 }
 
-void updateAllPages(fz_context* context, fz_document* document, int pageCount)
+void updateAllPages(fz_context* context, fz_document* document, int pageCount, pdf_obj* changedChoiceField = nullptr)
 {
     // Field values can be shared by widgets on different pages. Rebuild every
     // page's appearance stream before extracting mutation results.
@@ -222,7 +222,21 @@ void updateAllPages(fz_context* context, fz_document* document, int pageCount)
         fz_try(context)
         {
             page = fz_load_page(context, document, pageNumber);
-            pdf_update_page(context, pdf_page_from_fz_page(context, page));
+            pdf_page* pdfPage = pdf_page_from_fz_page(context, page);
+            if (changedChoiceField) {
+                // Direct choice-value writes do not dirty inherited widget
+                // appearances. Invalidate every copy of this logical field.
+                for (pdf_annot* widget = pdf_first_widget(context, pdfPage); widget;
+                     widget = pdf_next_widget(context, widget)) {
+                    const auto type = pdf_widget_type(context, widget);
+                    if (type != PDF_WIDGET_TYPE_COMBOBOX && type != PDF_WIDGET_TYPE_LISTBOX)
+                        continue;
+                    pdf_obj* head = resolveFieldHead(context, pdf_annot_obj(context, widget));
+                    if (pdf_resolve_indirect(context, head) == changedChoiceField)
+                        pdf_dirty_annot(context, widget);
+                }
+            }
+            pdf_update_page(context, pdfPage);
         }
         fz_always(context)
         {
@@ -538,6 +552,7 @@ bool PdfDocument::updateFormField(int page,
         return false;
 
     pdf_obj* volatile newValue = nullptr;
+    pdf_obj* volatile changedChoiceField = nullptr;
     volatile int effectsPossible = 0;
     std::string operationError;
 
@@ -665,6 +680,9 @@ bool PdfDocument::updateFormField(int page,
 
             const bool useExportValues = pdf_choice_widget_options(m_context, targetWidget, 1, nullptr) == numOpts;
             effectsPossible = 1;
+            // Retain the resolved dictionary through page-cache eviction so
+            // updateAllPages can match widgets by logical field identity.
+            changedChoiceField = pdf_keep_obj(m_context, pdf_resolve_indirect(m_context, logicalField));
             if (selectionVal.selectedIndices.empty()) {
                 pdf_dict_del(m_context, logicalField, PDF_NAME(V));
                 pdf_dict_del(m_context, logicalField, PDF_NAME(I));
@@ -685,7 +703,6 @@ bool PdfDocument::updateFormField(int page,
             }
             pdf_dict_del(m_context, logicalField, PDF_NAME(I));
             pdf_dirty_obj(m_context, logicalField);
-            pdf_dirty_annot(m_context, targetWidget);
         } else if (std::holds_alternative<FormChoiceCustomText>(value)) {
             // Custom text is valid only for an editable combo box; list boxes and
             // fixed-choice combos must use indexed selections.
@@ -719,7 +736,8 @@ bool PdfDocument::updateFormField(int page,
 
     // Refresh and collect even after a late MuPDF error so callers learn about
     // any field changes that the action committed before it failed.
-    updateAllPages(m_context, m_document, pageCount());
+    updateAllPages(m_context, m_document, pageCount(), changedChoiceField);
+    pdf_drop_obj(m_context, changedChoiceField);
     clearPageCache();
     return collectFormMutations(mutations, error);
 }

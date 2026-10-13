@@ -2727,6 +2727,133 @@ private slots:
         QCOMPARE(persistedCombo->text, std::string("Custom"));
     }
 
+    void sharedChoiceAppearancesSynchronize_data()
+    {
+        QTest::addColumn<int>("editedPage");
+        QTest::addColumn<bool>("warmPages");
+        QTest::addColumn<bool>("deepSignature");
+        QTest::newRow("first-page-cold") << 0 << false << false;
+        QTest::newRow("first-page-warm") << 0 << true << false;
+        QTest::newRow("second-page-cold") << 1 << false << false;
+        QTest::newRow("second-page-warm") << 1 << true << false;
+        QTest::newRow("unrelated-deep-signature") << 0 << false << true;
+    }
+
+    void sharedChoiceAppearancesSynchronize()
+    {
+        QFETCH(int, editedPage);
+        QFETCH(bool, warmPages);
+        QFETCH(bool, deepSignature);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("shared-choice.pdf");
+        const QByteArray appearance("BT /Helv 10 Tf 2 5 Td (Old) Tj ET\n");
+        const QByteArray stream = "<< /Type /XObject /Subtype /Form /BBox [0 0 80 20] "
+                                  "/Resources << /Font << /Helv 10 0 R >> >> /Length "
+            + QByteArray::number(appearance.size()) + " >>\nstream\n" + appearance + "endstream";
+        QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R] /DR << /Font << /Helv 10 0 R >> >> >> >>",
+            "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Annots [5 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Annots ["
+                + QByteArray(deepSignature ? "11 0 R " : "") + "6 0 R] >>",
+            "<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R /Rect [10 10 90 30] /AP << /N 8 0 R >> >>",
+            "<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 4 0 R /Rect [10 10 90 30] /AP << /N 9 0 R >> >>",
+            "<< /T (SharedChoice) /FT /Ch /Ff 131072 /V (Old) /I [0] /Opt [(Old) (New)] "
+            "/DA (/Helv 10 Tf 0 g) /Kids [5 0 R 6 0 R] >>",
+            stream,
+            stream,
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+        };
+        if (deepSignature) {
+            // Signatures are outside form mutation extraction. Their hierarchy
+            // must not block appearance refresh for unrelated choice widgets.
+            objects.append("<< /Type /Annot /Subtype /Widget /FT /Sig /Ff 0 /T (UnrelatedSignature) /F 2 "
+                           "/Parent 12 0 R /P 4 0 R /Rect [10 50 90 70] /AP << /N 8 0 R >> >>");
+            for (int i = 0; i < 128; ++i)
+                objects.append(i == 127 ? QByteArray("<< /T (Container) >>")
+                                        : "<< /Parent " + QByteArray::number(13 + i) + " 0 R >>");
+        }
+        QVERIFY(writePdfObjects(path, objects));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument doc;
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "shared-choice.pdf", &error), error.c_str());
+        if (warmPages) {
+            for (int page = 0; page < 2; ++page) {
+                QCOMPARE(doc.pageDetails(page, &error).formFields.size(), 1u);
+                QVERIFY2(error.empty(), error.c_str());
+            }
+        }
+        const auto renderedText = [](auto& document, int pageNumber) {
+            auto* context = document.context();
+            auto* page = fz_load_page(context, document.document(), pageNumber);
+            auto* text = fz_new_stext_page(context, fz_bound_page(context, page));
+            auto* device = fz_new_stext_device(context, text, nullptr);
+            const auto cleanup = qScopeGuard([&] {
+                fz_drop_device(context, device);
+                fz_drop_stext_page(context, text);
+                fz_drop_page(context, page);
+            });
+            fz_run_page_widgets(context, page, device, fz_identity, nullptr);
+            fz_close_device(context, device);
+            QString result;
+            for (auto* block = text->first_block; block; block = block->next) {
+                if (block->type != FZ_STEXT_BLOCK_TEXT)
+                    continue;
+                for (auto* line = block->u.t.first_line; line; line = line->next) {
+                    for (auto* character = line->first_char; character; character = character->next)
+                        result.append(QChar(static_cast<char16_t>(character->c)));
+                }
+            }
+            return result;
+        };
+        for (int selection : { 1, 0, -1, 1 }) {
+            const std::vector<int> indices = selection >= 0 ? std::vector<int> { selection } : std::vector<int> { };
+            std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+            QVERIFY2(doc.updateFormField(
+                         editedPage, 5 + editedPage, ::Mu::Model::FormChoiceSelection { indices }, &mutations, &error),
+                     error.c_str());
+            QCOMPARE(mutations.size(), 2u);
+            const QString expected = selection == 1 ? QStringLiteral("New")
+                : selection == 0                    ? QStringLiteral("Old")
+                                                    : QString();
+            for (int page = 0; page < 2; ++page) {
+                const auto details = doc.pageDetails(page, &error);
+                QVERIFY2(error.empty(), error.c_str());
+                QCOMPARE(details.formFields.size(), 1u);
+                QCOMPARE(details.formFields.front().currentChoices, indices);
+                const auto* value = std::get_if<::Mu::Model::FormChoiceSelection>(
+                    &mutations[static_cast<std::size_t>(page)].actualValue);
+                QVERIFY(value);
+                QCOMPARE(value->selectedIndices, indices);
+                QCOMPARE(renderedText(doc, page), expected);
+            }
+            if (deepSignature) {
+                auto* context = doc.context();
+                auto* signature = pdf_new_indirect(context, pdf_specifics(context, doc.document()), 11, 0);
+                auto* buffer = pdf_load_stream(context, pdf_dict_getp(context, signature, "AP/N"));
+                unsigned char* bytes = nullptr;
+                const auto length = fz_buffer_storage(context, buffer, &bytes);
+                const QByteArray retained(reinterpret_cast<const char*>(bytes), static_cast<qsizetype>(length));
+                fz_drop_buffer(context, buffer);
+                pdf_drop_obj(context, signature);
+                QCOMPARE(retained, appearance);
+            }
+        }
+        const auto savedPath = directory.filePath("shared-choice-saved.pdf");
+        const int outputFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outputFd >= 0);
+        QVERIFY2(doc.saveFd(outputFd, &error), error.c_str());
+        QFile savedFile(savedPath);
+        QVERIFY(savedFile.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reopened;
+        QVERIFY2(reopened.openFd(::dup(savedFile.handle()), "shared-choice-saved.pdf", &error), error.c_str());
+        for (int page = 0; page < 2; ++page)
+            QCOMPARE(renderedText(reopened, page), QStringLiteral("New"));
+    }
+
     void autoSizedFormTextFits_data()
     {
         QTest::addColumn<QByteArray>("value");
