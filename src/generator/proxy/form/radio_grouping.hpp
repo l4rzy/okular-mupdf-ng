@@ -11,37 +11,51 @@
 
 namespace Mu::Generator::Proxy::Form {
 
-/// Minimal identity needed to reconstruct radio groups across document pages.
+/// Minimal identity needed to reconstruct UI radio groups.
 struct RadioGroupMember {
     int id = 0;
     std::string groupName;
     std::int32_t fieldObjectNumber = -1;
+    int page = -1;
+    std::string onState { };
 };
 
 inline std::unordered_map<int, std::vector<int>> radioSiblingIds(const std::vector<RadioGroupMember>& members)
 {
-    // Prefer the explicit group name; fall back to the field object number for
-    // documents that omit a group name.
-    std::unordered_map<std::string, std::vector<int>> groups;
+    // Preserve logical groups across pages unless they contain mirrored options:
+    // Qt exclusivity cannot represent several copies of the selected option.
+    std::unordered_map<std::string, std::vector<const RadioGroupMember*>> groups;
     for (const auto& member : members) {
         if (!member.groupName.empty())
-            groups.try_emplace("name:" + member.groupName).first->second.push_back(member.id);
+            groups["name:" + member.groupName].push_back(&member);
         else if (member.fieldObjectNumber > 0)
-            groups.try_emplace("object:" + std::to_string(member.fieldObjectNumber)).first->second.push_back(member.id);
+            groups["object:" + std::to_string(member.fieldObjectNumber)].push_back(&member);
     }
 
     std::unordered_map<int, std::vector<int>> siblings;
-    // Expose only groups with at least two members and omit each button itself
-    // from its sibling list as required by Okular.
-    for (const auto& group : groups) {
-        const auto& ids = group.second;
-        if (ids.size() < 2)
-            continue;
-        for (int id : ids) {
-            auto& siblingIds = siblings[id];
-            for (int sibling : ids) {
-                if (sibling != id)
-                    siblingIds.push_back(sibling);
+    for (const auto& [key, group] : groups) {
+        std::unordered_map<std::string, int> optionPages;
+        bool mirrored = false;
+        for (const auto* member : group) {
+            if (member->onState.empty())
+                continue;
+            const auto [it, inserted] = optionPages.emplace(member->onState, member->page);
+            if (!inserted && it->second != member->page)
+                mirrored = true;
+        }
+        // The worker still synchronizes the logical field across every page.
+        std::unordered_map<int, std::vector<int>> uiGroups;
+        for (const auto* member : group)
+            uiGroups[mirrored ? member->page : -1].push_back(member->id);
+        for (const auto& [page, ids] : uiGroups) {
+            if (ids.size() < 2)
+                continue;
+            for (int id : ids) {
+                auto& siblingIds = siblings[id];
+                for (int sibling : ids) {
+                    if (sibling != id)
+                        siblingIds.push_back(sibling);
+                }
             }
         }
     }

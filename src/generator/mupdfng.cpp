@@ -616,7 +616,11 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
                 m_formCoordinator->registerField(radio->model().handle, radio);
                 formFields.append(radio);
 
-                radioMembers.push_back({ radio->id(), radio->model().groupName, radio->model().fieldObjectNumber });
+                radioMembers.push_back({ radio->id(),
+                                         radio->model().groupName,
+                                         radio->model().fieldObjectNumber,
+                                         radio->model().page,
+                                         radio->model().onState });
                 radioProxies.emplace(radio->id(), radio);
                 break;
             }
@@ -645,8 +649,8 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         pages.append(okularPage);
     }
 
-    // Radio siblings can span pages, so resolve their groups after every proxy
-    // has been created.
+    // Split mirrored UI radio groups by page; canonical worker responses
+    // synchronize copies of the logical PDF field across pages.
     for (const auto& [id, siblings] : Proxy::Form::radioSiblingIds(radioMembers)) {
         auto proxy = radioProxies.find(id);
         if (proxy != radioProxies.end()) {

@@ -61,7 +61,8 @@ else()
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-mobi-toc.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-ocr-font-release.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-parent-tree-lifetime.patch"
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-layout.patch")
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-layout.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-form-autosize.patch")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_mupdf_patches})
     foreach(_mupdf_patch IN LISTS _mupdf_patches)
         execute_process(
@@ -240,6 +241,7 @@ else()
             ${_mupdf_patches}
             "${MUPDF_SOURCE_DIR}/source/fitz/ocr-device.c"
             "${MUPDF_SOURCE_DIR}/source/pdf/pdf-clean-file.c"
+            "${MUPDF_SOURCE_DIR}/source/pdf/pdf-appearance.c"
             "${MUPDF_SOURCE_DIR}/source/html/mobi.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-doc.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-parse.c"

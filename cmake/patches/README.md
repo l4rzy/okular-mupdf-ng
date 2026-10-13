@@ -46,6 +46,13 @@ images, tables and restartable stories. A small original EPUB covers separate ch
 the actual plugin, cold/warm caches, PDF export and reopen. Cache revision 2
 invalidates accelerators and outlines laid out before the `rem` correction.
 
+`mupdf-1.28.5-form-autosize.patch` fits auto-sized plain form values to the
+widget width and height, counting CR, LF and CRLF line breaks. Multiline values
+retain the existing 12-point ceiling and shrink when needed. Explicit PDF font
+sizes, single-line fields and rich text styles retain their existing behavior.
+Worker regression coverage uses synthetic Latin and Japanese text to check line
+endings, empty lines, long values, single-line fitting and explicit sizes.
+
 CMake applies the patches with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
 verifies an already-applied patch using a reverse dry run. Unexpected source changes
 fail configuration rather than silently skipping the fix. The patch and affected

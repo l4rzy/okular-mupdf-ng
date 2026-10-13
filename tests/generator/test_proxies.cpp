@@ -1161,8 +1161,10 @@ private slots:
 
     void documentWideRadioGroupingLinksAcrossPages()
     {
-        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds(
-            { { 1, "GroupA", -1 }, { 2, "GroupA", -1 }, { 3, "GroupA", -1 }, { 4, "GroupB", -1 } });
+        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds({ { 1, "GroupA", -1, 0, "A" },
+                                                                              { 2, "GroupA", -1, 1, "B" },
+                                                                              { 3, "GroupA", -1, 2, "C" },
+                                                                              { 4, "GroupB", -1, 0, "A" } });
         QCOMPARE(siblings.at(1), std::vector<int>({ 2, 3 }));
         QCOMPARE(siblings.at(2), std::vector<int>({ 1, 3 }));
         QCOMPARE(siblings.at(3), std::vector<int>({ 1, 2 }));
@@ -1172,6 +1174,25 @@ private slots:
             { { 5, "", 42 }, { 6, "", 42 }, { 7, "Named", 42 }, { 8, "Named", 99 } });
         QCOMPARE(fallbackSiblings.at(5), std::vector<int>({ 6 }));
         QCOMPARE(fallbackSiblings.at(7), std::vector<int>({ 8 }));
+    }
+
+    void mirroredRadioGroupsStayIndependent_data()
+    {
+        QTest::addColumn<bool>("named");
+        QTest::newRow("named") << true;
+        QTest::newRow("object-fallback") << false;
+    }
+
+    void mirroredRadioGroupsStayIndependent()
+    {
+        QFETCH(bool, named);
+        const std::string name = named ? "TestOptions" : "";
+        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds(
+            { { 1, name, 42, 0, "A" }, { 2, name, 42, 0, "B" }, { 3, name, 42, 1, "A" }, { 4, name, 42, 1, "B" } });
+        QCOMPARE(siblings.at(1), std::vector<int>({ 2 }));
+        QCOMPARE(siblings.at(2), std::vector<int>({ 1 }));
+        QCOMPARE(siblings.at(3), std::vector<int>({ 4 }));
+        QCOMPARE(siblings.at(4), std::vector<int>({ 3 }));
     }
 
     void anonymousRadiosAreIsolated()

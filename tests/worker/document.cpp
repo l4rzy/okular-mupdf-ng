@@ -4,6 +4,7 @@
 #include "runtime/command_service.hpp"
 #include "shared/model/types.hpp"
 #include <QFile>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
@@ -2724,6 +2725,86 @@ private slots:
         QCOMPARE(persistedList->currentChoices, std::vector<int>({ 0, 2 }));
         QVERIFY(persistedCombo->currentChoices.empty());
         QCOMPARE(persistedCombo->text, std::string("Custom"));
+    }
+
+    void autoSizedFormTextFits_data()
+    {
+        QTest::addColumn<QByteArray>("value");
+        QTest::addColumn<bool>("multiline");
+        QTest::addColumn<int>("fontSize");
+        QTest::newRow("latin-lines") << QByteArray("SampleValueA\nSAMPLEVALUEB") << true << 0;
+        QTest::newRow("japanese-cr") << QString::fromUtf8("カタカナテスト\rSAMPLEVALUEB").toUtf8() << true << 0;
+        QTest::newRow("japanese-crlf") << QString::fromUtf8("カタカナテスト\r\nSAMPLEVALUEB").toUtf8() << true << 0;
+        QTest::newRow("empty-line") << QByteArray("SampleA\n\nSampleB") << true << 0;
+        QTest::newRow("long-line") << QByteArray(80, 'X') << true << 0;
+        QTest::newRow("fixed-multiline") << QByteArray("SampleData") << true << 14;
+        QTest::newRow("single-line") << QByteArray("SAMPLEVALUEASAMPLEVALUEB") << false << 0;
+        QTest::newRow("fixed-size") << QByteArray("SampleData") << false << 14;
+    }
+
+    void autoSizedFormTextFits()
+    {
+        QFETCH(QByteArray, value);
+        QFETCH(bool, multiline);
+        QFETCH(int, fontSize);
+        if (TEST_SYSTEM_MUPDF && multiline && fontSize == 0)
+            QSKIP("Auto-sizing regression requires the bundled MuPDF patch");
+        QTemporaryDir directory;
+        const QString path = directory.filePath("autosize.pdf");
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DR << /Font << /Helv 6 0 R >> >> >> >>",
+              "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [4 0 R] >>",
+              "<< /Type /Annot /Subtype /Widget /FT /Tx /T (TestField) /Rect [50 50 141 74] /F 4 /Ff "
+                  + QByteArray::number(multiline ? PDF_TX_FIELD_IS_MULTILINE : 0) + " /DA (/Helv "
+                  + QByteArray::number(fontSize) + " Tf 0 g) /AP << /N 5 0 R >> >>",
+              "<< /Type /XObject /Subtype /Form /BBox [0 0 91 24] /Resources << >> /Length 0 >>\nstream\nendstream",
+              "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument doc;
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "autosize.pdf", &error), error.c_str());
+        const auto fields = doc.pageDetails(0, &error).formFields;
+        QCOMPARE(fields.size(), 1u);
+        QVERIFY2(
+            doc.updateFormField(
+                0, fields.front().pdfObjectNumber, ::Mu::Model::FormTextValue { value.toStdString() }, nullptr, &error),
+            error.c_str());
+        auto* context = doc.context();
+        auto* page = fz_load_page(context, doc.document(), 0);
+        auto* text = fz_new_stext_page(context, fz_bound_page(context, page));
+        auto* device = fz_new_stext_device(context, text, nullptr);
+        fz_run_page_widgets(context, page, device, fz_identity, nullptr);
+        fz_close_device(context, device);
+        fz_drop_device(context, device);
+        const auto cleanup = qScopeGuard([&] {
+            fz_drop_stext_page(context, text);
+            fz_drop_page(context, page);
+        });
+        int characters = 0;
+        for (auto* block = text->first_block; block; block = block->next) {
+            if (block->type != FZ_STEXT_BLOCK_TEXT)
+                continue;
+            for (auto* line = block->u.t.first_line; line; line = line->next) {
+                for (auto* character = line->first_char; character; character = character->next) {
+                    ++characters;
+                    if (fontSize) {
+                        QVERIFY(std::abs(character->size - static_cast<float>(fontSize)) < 0.01);
+                    } else {
+                        QVERIFY(character->size < 11);
+                        const auto bounds = fz_rect_from_quad(character->quad);
+                        QVERIFY2(bounds.x0 >= 49.9f && bounds.x1 <= 141.1f, "text exceeds field width");
+                        // Font-wide quads include unused ascender/descender space.
+                        QVERIFY2(bounds.y0 >= 225.0f && bounds.y1 <= 251.0f, "text exceeds field height");
+                    }
+                }
+            }
+        }
+        QString expected = QString::fromUtf8(value);
+        expected.remove('\r').remove('\n');
+        QCOMPARE(characters, expected.size());
     }
 
     void updateRadioGroupAtomicallySynchronizesSiblings()

@@ -1,0 +1,58 @@
+--- a/source/pdf/pdf-appearance.c
++++ b/source/pdf/pdf-appearance.c
+@@ -1847,6 +1847,37 @@
+ }
+ 
+ 
++/* Fit auto-sized plain form text using the same fallback metrics as drawing.
++ * Treat CRLF as one break, including empty lines in the height calculation. */
++static float
++auto_multiline_text_size(fz_context *ctx, fz_text_language lang, fz_font *font,
++    const char *text, float w, float h, float lineheight)
++{
++    struct text_walk_state state;
++    float width = 0, maxwidth = 0;
++    int lines = 1, previous = 0;
++    float size;
++    init_text_walk(ctx, &state, lang, font, text, NULL);
++    while (next_text_walk(ctx, &state))
++    {
++        if (state.u == '\r' || state.u == '\n')
++        {
++            maxwidth = fz_max(maxwidth, width);
++            width = 0;
++            if (state.u != '\n' || previous != '\r')
++                ++lines;
++        }
++        else
++            width += state.w;
++        previous = state.u;
++    }
++    maxwidth = fz_max(maxwidth, width);
++    size = fz_min(12, h / (lines * lineheight));
++    if (maxwidth > 0)
++        size = fz_min(size, w / maxwidth);
++    return fz_max(size, 0.1f);
++}
++
+ static float
+ break_string(fz_context *ctx, fz_text_language lang, fz_font *font, float size, const char *text, const char **endp, float maxw)
+ {
+@@ -2138,7 +2169,7 @@
+ 		if (size == 0)
+ 		{
+ 			if (multiline)
+-				size = 12;
++				size = auto_multiline_text_size(ctx, lang, font, text, w, h, lineheight);
+ 			else
+ 			{
+ 				float ms = measure_string(ctx, lang, font, text);
+@@ -2210,7 +2241,7 @@
+ 		if (size == 0)
+ 		{
+ 			if (multiline)
+-				size = 12;
++				size = auto_multiline_text_size(ctx, lang, font, text, w, h, lineheight);
+ 			else
+ 			{
+ 				float ms = measure_string(ctx, lang, font, text);

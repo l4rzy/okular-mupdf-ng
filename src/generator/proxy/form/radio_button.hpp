@@ -32,7 +32,7 @@ public:
     bool state() const override;
     void setState(bool state) override;
     QList<int> siblings() const override;
-    // Set after all pages are translated because siblings may cross page bounds.
+    // Set after all pages are translated, splitting mirrored groups by page.
     void setSiblings(const QList<int>& siblings);
 
     // Applies the worker's checked state after radio-group canonicalization.
