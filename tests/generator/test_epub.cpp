@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plugin/caching/epub_cache.hpp"
+#include "support/text_inspection.hpp"
 
 #include <KConfigGroup>
 #include <KSharedConfig>
+#include <QDateTime>
 #include <QFile>
 #include <QMimeDatabase>
 #include <QScopeGuard>
@@ -23,6 +25,7 @@
 #include <mupdf/fitz.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -31,6 +34,7 @@ struct PdfInspection {
     bool embeddedFont = false;
     bool overlappingText = false;
     QString error;
+    Mu::Test::TextInspection text;
 };
 
 PdfInspection inspectPdf(const QString& path)
@@ -80,6 +84,7 @@ PdfInspection inspectPdf(const QString& path)
             fz_drop_stext_page(context, text);
             text = nullptr;
         }
+        result.text = Mu::Test::inspectDocumentText(context, document);
     }
     fz_always(context)
     {
@@ -99,6 +104,19 @@ class TestGeneratorEpub : public QObject {
     Q_OBJECT
 
     QTemporaryDir m_root;
+
+    void reloadPluginSettings()
+    {
+        // EPUB layout settings take effect on the next generator instance.
+        // Reload through Okular, then destroy this temporary PDF session.
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path,
+                                       QUrl::fromLocalFile(path),
+                                       QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"))),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+    }
 
     void checkPage(Okular::Document& document, Okular::DocumentObserver& observer, int page)
     {
@@ -148,6 +166,9 @@ private slots:
         KConfigGroup(config, QStringLiteral("OCR")).writeEntry("OcrTriggerMode", "Never");
         KConfigGroup(config, QStringLiteral("EPUB")).writeEntry("EpubFontSize", 11);
         KConfigGroup(config, QStringLiteral("EPUB")).writeEntry("EpubPageSize", "A5");
+        // Keep asynchronous maintenance writes out of settings-change checks.
+        KConfigGroup(config, QStringLiteral("Advanced"))
+            .writeEntry("CacheLastVacuum", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         config->sync();
     }
 
@@ -156,6 +177,126 @@ private slots:
         QTest::addColumn<QString>("fixture");
         QTest::newRow("middle") << QStringLiteral("middle");
         QTest::newRow("top") << QStringLiteral("top");
+    }
+
+    void rootRelativeRoundTrip_data()
+    {
+        QTest::addColumn<int>("fontSize");
+        QTest::newRow("small") << 10;
+        QTest::newRow("large") << 20;
+    }
+
+    void rootRelativeRoundTrip()
+    {
+        if (!TEST_BUNDLED_MUPDF)
+            QSKIP("Regression coverage for the bundled MuPDF rem patch");
+        QFETCH(int, fontSize);
+        const QString source = QStringLiteral(TEST_EPUB_DIR "/layout/rem.epub");
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup epub(config, QStringLiteral("EPUB"));
+        epub.writeEntry("EpubFontSize", fontSize);
+        epub.writeEntry("EpubPageSize", "Letter");
+        config->sync();
+        auto restore = qScopeGuard([&] {
+            epub.writeEntry("EpubFontSize", 11);
+            epub.writeEntry("EpubPageSize", "A5");
+            config->sync();
+            reloadPluginSettings();
+        });
+        reloadPluginSettings();
+        QVERIFY(!QTest::currentTestFailed());
+        Mu::Model::DocumentSettings settings;
+        settings.epub.fontSize = fontSize;
+        settings.epub.pageSize = Mu::Model::EpubPageSize::Letter;
+        QVERIFY(!Mu::Plugin::Caching::EPUB::Cache::load(source, settings));
+        Okular::DocumentObserver observer;
+        Okular::Document document(nullptr);
+        document.addObserver(&observer);
+        auto cleanup = qScopeGuard([&] {
+            document.closeDocument();
+            document.removeObserver(&observer);
+        });
+        QList<Okular::TextEntity::List> coldWords;
+        for (const bool warm : { false, true }) {
+            QCOMPARE(document.openDocument(source,
+                                           QUrl::fromLocalFile(source),
+                                           QMimeDatabase().mimeTypeForName(QStringLiteral("application/epub+zip"))),
+                     Okular::Document::OpenSuccess);
+            QCOMPARE(document.pages(), 2U);
+            QVERIFY(document.documentSynopsis());
+            QCOMPARE(document.documentSynopsis()->childNodes().size(), 2);
+            for (int page = 0; page < 2; ++page) {
+                document.requestTextPage(static_cast<unsigned int>(page));
+                QTRY_VERIFY(document.page(page)->hasTextPage());
+                document.requestPixmaps({ new Okular::PixmapRequest(
+                    &observer, page, 600, 850, 1, 0, Okular::PixmapRequest::Asynchronous) });
+                QTRY_VERIFY(document.page(page)->hasPixmap(&observer));
+                const QString prefix = page == 0 ? QStringLiteral("One") : QStringLiteral("Two");
+                QVERIFY(document.page(page)->text().contains(prefix + QStringLiteral("Paragraph")));
+                const auto words =
+                    document.page(page)->words(nullptr, Okular::TextPage::AnyPixelTextAreaInclusionBehaviour);
+                if (!warm) {
+                    coldWords.append(words);
+                } else {
+                    QCOMPARE(words.size(), coldWords[page].size());
+                    for (int index = 0; index < words.size(); ++index) {
+                        QCOMPARE(words[index].text(), coldWords[page][index].text());
+                        QCOMPARE(words[index].area(), coldWords[page][index].area());
+                    }
+                }
+                const auto hasChapterLink = [&] {
+                    for (const auto* object : document.page(page)->objectRects()) {
+                        if (object->objectType() != Okular::ObjectRect::Action)
+                            continue;
+                        const auto* action = static_cast<const Okular::Action*>(object->object());
+                        if (action->actionType() == Okular::Action::Goto
+                            && static_cast<const Okular::GotoAction*>(action)->destViewport().pageNumber == 1 - page)
+                            return true;
+                    }
+                    return false;
+                };
+                QTRY_VERIFY(hasChapterLink());
+            }
+            const auto cache = Mu::Plugin::Caching::EPUB::Cache::load(source, settings);
+            QVERIFY(cache && cache->accelerator && !cache->accelerator->isEmpty() && cache->outline);
+            const QString output = m_root.filePath(QStringLiteral("rem-%1-%2.pdf").arg(fontSize).arg(warm));
+            QSignalSpy notices(&document, &Okular::Document::notice);
+            QVERIFY(document.exportTo(output, Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF)));
+            const auto completed = [&] {
+                return std::any_of(notices.cbegin(), notices.cend(), [](const auto& notice) {
+                    return notice.front().toString().contains(QStringLiteral("Export to PDF finished"));
+                });
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(completed(), 20000);
+            document.closeDocument();
+            const auto inspection = inspectPdf(output);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QVERIFY2(inspection.text.error.isEmpty(), qPrintable(inspection.text.error));
+            for (const QString& prefix : { QStringLiteral("One"), QStringLiteral("Two") }) {
+                const float root = static_cast<float>(fontSize) * (prefix == QStringLiteral("One") ? 0.85f : 1.25f);
+                const QMap<QString, float> expected {
+                    { "Heading", 1.35f * root }, { "Paragraph", root },    { "List", root },
+                    { "Nestedrem", root },       { "Nestedem", 3 * root }, { "Fixed", 16 }
+                };
+                for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
+                    const QString label = prefix + it.key();
+                    QVERIFY2(inspection.text.lines.contains(label), qPrintable(label));
+                    QVERIFY2(std::abs(inspection.text.lines[label].size - it.value()) < 0.02f, qPrintable(label));
+                }
+            }
+            QCOMPARE(document.openDocument(output,
+                                           QUrl::fromLocalFile(output),
+                                           QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"))),
+                     Okular::Document::OpenSuccess);
+            QCOMPARE(document.pages(), 2U);
+            for (int page = 0; page < 2; ++page) {
+                document.requestTextPage(static_cast<unsigned int>(page));
+                QTRY_VERIFY(document.page(page)->hasTextPage());
+                const QString prefix = page == 0 ? QStringLiteral("One") : QStringLiteral("Two");
+                QVERIFY(document.page(page)->text().contains(prefix + QStringLiteral("Paragraph")));
+            }
+            document.closeDocument();
+        }
     }
 
     void roundTrip()

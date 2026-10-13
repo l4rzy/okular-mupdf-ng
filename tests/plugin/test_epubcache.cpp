@@ -80,23 +80,29 @@ private slots:
     void ignoresUnpatchedLayoutCache_data()
     {
         QTest::addColumn<bool>("accelerator");
-        QTest::newRow("accelerator") << true;
-        QTest::newRow("outline") << false;
+        QTest::addColumn<quint32>("revision");
+        QTest::newRow("original-accelerator") << true << quint32(0);
+        QTest::newRow("original-outline") << false << quint32(0);
+        QTest::newRow("pre-rem-accelerator") << true << quint32(1);
+        QTest::newRow("pre-rem-outline") << false << quint32(1);
     }
 
     void ignoresUnpatchedLayoutCache()
     {
         QFETCH(bool, accelerator);
+        QFETCH(quint32, revision);
         clearCacheFiles();
         ::Mu::Model::DocumentSettings settings;
         QFile source(m_documentPath);
         QVERIFY(source.open(QIODevice::ReadOnly));
         const QByteArray bytes = source.readAll();
 
-        // Reproduce the key used before the image alignment layout fix.
+        // Reproduce keys predating image alignment and root-relative lengths.
         QByteArray legacyLayout;
         QDataStream layoutStream(&legacyLayout, QIODevice::WriteOnly);
         layoutStream.setVersion(QDataStream::Qt_6_0);
+        if (revision != 0)
+            layoutStream << revision;
         layoutStream << settings.epub.fontSize << static_cast<quint8>(settings.epub.pageSize)
                      << static_cast<quint8>(settings.epub.fontFamily)
                      << QCryptographicHash::hash(QByteArray::fromStdString(settings.epub.customCssBase64),

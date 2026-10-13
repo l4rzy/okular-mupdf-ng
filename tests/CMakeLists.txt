@@ -273,6 +273,7 @@ target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Okular::Core KF6::Con
 target_compile_definitions(test_generator_epub PRIVATE
     TEST_BUNDLED_MUPDF=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
+    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
 add_dependencies(test_generator_epub okularGenerator_mupdfng mupdfng-worker)

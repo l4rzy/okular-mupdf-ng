@@ -8,10 +8,12 @@
 #include "shared/compat.hpp"
 #include "shared/model/types.hpp"
 #include "shared/transport/fd_channel.hpp"
+#include "support/text_inspection.hpp"
 #include <QBuffer>
 #include <QByteArray>
 #include <QFile>
 #include <QImage>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
@@ -71,6 +73,257 @@ waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::
 class TestEpub : public QObject {
     Q_OBJECT
 private slots:
+
+    void testRootRelativeLengths_data()
+    {
+        QTest::addColumn<QString>("rootStyle");
+        QTest::addColumn<float>("rootScale");
+        QTest::addColumn<float>("rootFixed");
+        QTest::newRow("default") << QString() << 1.0f << 0.0f;
+        QTest::newRow("percent") << QStringLiteral("font-size: 85%;") << 0.85f << 0.0f;
+        QTest::newRow("em") << QStringLiteral("font-size: 1.25em;") << 1.25f << 0.0f;
+        QTest::newRow("root-rem") << QStringLiteral("font-size: 2rem;") << 2.0f << 0.0f;
+        QTest::newRow("fixed") << QStringLiteral("font-size: 18pt;") << 0.0f << 18.0f;
+    }
+
+    void testRootRelativeLengths()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF rem patch");
+#endif
+        QFETCH(QString, rootStyle);
+        QFETCH(float, rootScale);
+        QFETCH(float, rootFixed);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage image(2, 2, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QFile html(directory.filePath(QStringLiteral("rem.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto content =
+            QStringLiteral("<html><head><style>@page { margin: 1rem; } html { %1 }"
+                           "body { margin: 0; } p, h2 { margin: 0; line-height: 2rem; }"
+                           "p { font-size: 1rem; } h2 { font-size: 1.35rem; }"
+                           "ul { margin: 0; padding: 0; list-style: none; }"
+                           ".offset { margin-left: 2rem; padding-left: 1rem; border-left: .5rem solid black; }"
+                           "</style></head><body><p>Paragraph</p><p>Next</p><h2>Heading</h2><ul><li>List</li></ul>"
+                           "<div style='font-size: 2em'><p>Nestedrem</p>"
+                           "<p style='font-size: 1.5em'>Nestedem</p>"
+                           "<p style='font-size: 50%'>Percent</p></div>"
+                           "<p style='font-size: 16pt'>Fixed</p><p class='offset'>Offset</p>"
+                           "<p style='text-indent: 2rem'>Indent</p>"
+                           "<div style='font-size: 2em; margin-left: 1rem'>Inherited</div>"
+                           "<p><img style='width: 2rem; height: 1rem' src='data:image/png;base64,%2'/></p>"
+                           "<table style='border-spacing: 1rem'><tr>"
+                           "<td style='padding: 0; height: 3rem; font-size: 1pt; line-height: 1pt'>CellOne</td></tr>"
+                           "<tr><td style='padding: 0; height: 3rem; font-size: 1pt; line-height: "
+                           "1pt'>CellTwo</td></tr></table>"
+                           "<table style='border-spacing: 1rem'><tr style='height: 4rem'>"
+                           "<td style='padding: 0; font-size: 1pt; line-height: 1pt'>RowOne</td></tr>"
+                           "<tr style='height: 4rem'><td style='padding: 0; font-size: 1pt; line-height: "
+                           "1pt'>RowTwo</td></tr></table>"
+                           "</body></html>")
+                .arg(rootStyle)
+                .arg(QString::fromLatin1(png.toBase64()))
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        for (const float base : { 10.0f, 20.0f, 10.0f }) {
+            fz_try(context)
+            {
+                fz_layout_document(context, document, 1000, 4000, base);
+            }
+            fz_catch(context)
+            {
+                error = QString::fromUtf8(fz_caught_message(context));
+            }
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const auto inspection = Mu::Test::inspectDocumentText(context, document);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            const float root = rootScale * base + rootFixed;
+            const QMap<QString, float> expected { { "Paragraph", root },    { "Heading", 1.35f * root },
+                                                  { "List", root },         { "Nestedrem", root },
+                                                  { "Nestedem", 3 * root }, { "Percent", root },
+                                                  { "Fixed", 16 },          { "Inherited", 2 * root } };
+            for (auto it = expected.cbegin(); it != expected.cend(); ++it) {
+                QVERIFY2(inspection.lines.contains(it.key()), qPrintable(it.key()));
+                QVERIFY2(std::abs(inspection.lines[it.key()].size - it.value()) < 0.01f, qPrintable(it.key()));
+            }
+            const auto& lines = inspection.lines;
+            QVERIFY(lines.contains("Next") && lines.contains("Offset") && lines.contains("Indent"));
+            QVERIFY(std::abs(lines["Paragraph"].origin.x - root) < 0.01f);
+            QVERIFY(std::abs(lines["Next"].origin.y - lines["Paragraph"].origin.y - 2 * root) < 0.01f);
+            QVERIFY(std::abs(lines["Offset"].origin.x - lines["Paragraph"].origin.x - 3.5f * root) < 0.01f);
+            QVERIFY(std::abs(lines["Indent"].origin.x - lines["Paragraph"].origin.x - 2 * root) < 0.01f);
+            QVERIFY(std::abs(lines["Inherited"].origin.x - lines["Paragraph"].origin.x - root) < 0.01f);
+            QCOMPARE(inspection.images.size(), 1);
+            const auto imageBounds = inspection.images.front();
+            QVERIFY(std::abs(imageBounds.x1 - imageBounds.x0 - 2 * root) < 0.01f);
+            QVERIFY(std::abs(imageBounds.y1 - imageBounds.y0 - root) < 0.01f);
+            QVERIFY(lines.contains("CellOne") && lines.contains("CellTwo"));
+            QVERIFY(std::abs(lines["CellTwo"].origin.y - lines["CellOne"].origin.y - 4 * root) < 0.01f);
+            QVERIFY(lines.contains("RowOne") && lines.contains("RowTwo"));
+            QVERIFY(std::abs(lines["RowTwo"].origin.y - lines["RowOne"].origin.y - 5 * root) < 0.01f);
+        }
+    }
+
+    void testInlineRootRelativeFontSize()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF rem patch");
+#endif
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("inline.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const QByteArray content("<html style='display:inline; font-size:2rem'>"
+                                 "<body style='display:inline'>Inline</body></html>");
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        for (const float base : { 10.0f, 20.0f, 10.0f }) {
+            fz_try(context)
+            {
+                fz_layout_document(context, document, 1000, 1000, base);
+            }
+            fz_catch(context)
+            {
+                error = QString::fromUtf8(fz_caught_message(context));
+            }
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const auto inspection = Mu::Test::inspectDocumentText(context, document);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QVERIFY(inspection.lines.contains("Inline"));
+            QVERIFY(std::abs(inspection.lines["Inline"].size - 2 * base) < 0.01f);
+        }
+    }
+
+    void testStoryRootRelativeLengths_data() { testRootRelativeLengths_data(); }
+
+    void testStoryRootRelativeLengths()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF rem patch");
+#endif
+        QFETCH(QString, rootStyle);
+        QFETCH(float, rootScale);
+        QFETCH(float, rootFixed);
+        const auto content =
+            QStringLiteral("<html><head><style>html { %1 } body { margin: 0; }"
+                           "p { margin: 0; font-size: 1rem; line-height: 2rem; }</style></head>"
+                           "<body><p>A</p><p>B</p><p>C</p><p>D</p><p>E</p><p>F</p><p>G</p><p>H</p></body></html>")
+                .arg(rootStyle)
+                .toUtf8();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        for (const float base : { 10.0f, 20.0f }) {
+            fz_buffer* buffer = nullptr;
+            fz_story* story = nullptr;
+            fz_display_list* list = nullptr;
+            fz_device* device = nullptr;
+            fz_stext_page* text = nullptr;
+            int characters = 0;
+            int placements = 0;
+            bool correctSize = true;
+            QString error;
+            fz_var(buffer);
+            fz_var(story);
+            fz_var(list);
+            fz_var(device);
+            fz_var(text);
+            fz_var(characters);
+            fz_var(placements);
+            fz_var(correctSize);
+            const float root = rootScale * base + rootFixed;
+            const fz_rect bounds { 0, 0, 1000, 4 * root + 0.1f };
+            fz_try(context)
+            {
+                buffer = fz_new_buffer_from_copied_data(context,
+                                                        reinterpret_cast<const unsigned char*>(content.constData()),
+                                                        static_cast<std::size_t>(content.size()));
+                story = fz_new_story(context, buffer, nullptr, base, nullptr);
+                int more = 1;
+                while (more && placements < 8) {
+                    fz_rect filled;
+                    more = fz_place_story(context, story, bounds, &filled);
+                    list = fz_new_display_list(context, bounds);
+                    device = fz_new_list_device(context, list);
+                    fz_draw_story(context, story, device, fz_identity);
+                    fz_close_device(context, device);
+                    fz_drop_device(context, device);
+                    device = nullptr;
+                    text = fz_new_stext_page_from_display_list(context, list, nullptr);
+                    for (auto* block = text->first_block; block; block = block->next) {
+                        if (block->type != FZ_STEXT_BLOCK_TEXT)
+                            continue;
+                        for (auto* line = block->u.t.first_line; line; line = line->next) {
+                            for (auto* ch = line->first_char; ch; ch = ch->next) {
+                                ++characters;
+                                correctSize = correctSize && std::abs(ch->size - root) < 0.01f;
+                            }
+                        }
+                    }
+                    fz_drop_stext_page(context, text);
+                    text = nullptr;
+                    fz_drop_display_list(context, list);
+                    list = nullptr;
+                    ++placements;
+                }
+            }
+            fz_always(context)
+            {
+                fz_drop_stext_page(context, text);
+                fz_drop_device(context, device);
+                fz_drop_display_list(context, list);
+                fz_drop_story(context, story);
+                fz_drop_buffer(context, buffer);
+            }
+            fz_catch(context)
+            {
+                error = QString::fromUtf8(fz_caught_message(context));
+            }
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            QCOMPARE(characters, 8);
+            QVERIFY(placements > 1 && placements < 8);
+            QVERIFY(correctSize);
+        }
+    }
 
     void testOpenAndMetadata()
     {

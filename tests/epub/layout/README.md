@@ -29,3 +29,12 @@ Font License 1.1. Each EPUB includes the font's complete `OFL.txt` license.
 
 All cache, configuration, and exported files are isolated in a temporary root.
 The fixture EPUBs are never modified by the tests.
+
+`rem.epub` is a small two-chapter book generated deterministically by
+`python3 tests/epub/layout/generate-rem.py`. Its original text and generator
+use the same GPL-3.0-or-later license and copyright as the fixtures above.
+It contains no embedded fonts or material from commercial books. Chapter roots
+use 85% and 125% font sizes; paragraphs and headings use `rem`, list items
+inherit, nested elements distinguish `rem` from `em`, and fixed text uses `pt`.
+The plugin tests open it at two configured sizes and compare cold/warm text
+geometry, chapter navigation and exported PDF font sizes before reopening.
