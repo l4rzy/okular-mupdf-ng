@@ -679,7 +679,11 @@ msgstr ""
 msgid "On"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:434
+#: src/generator/mupdfng.cpp:436
+msgid "No OCR models available. Please install a Tesseract language model."
+msgstr ""
+
+#: src/generator/mupdfng.cpp:450
 msgid "Toggle MuPDF OCR"
 msgstr ""
 

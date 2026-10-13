@@ -717,7 +717,11 @@ msgstr "Tự động"
 msgid "On"
 msgstr "Bật"
 
-#: src/generator/mupdfng.cpp:434
+#: src/generator/mupdfng.cpp:436
+msgid "No OCR models available. Please install a Tesseract language model."
+msgstr "Chưa có mô hình OCR. Vui lòng cài đặt một mô hình ngôn ngữ Tesseract."
+
+#: src/generator/mupdfng.cpp:450
 msgid "Toggle MuPDF OCR"
 msgstr "Bật/tắt OCR MuPDF"
 

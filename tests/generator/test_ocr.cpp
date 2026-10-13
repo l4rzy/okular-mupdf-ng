@@ -28,6 +28,8 @@
 
 #include <algorithm>
 
+#include "generator/config/settings.hpp"
+
 class TestGuiClient : public KXMLGUIClient {
 public:
     TestGuiClient()
@@ -90,14 +92,78 @@ private slots:
             auto* action = client->actionCollection()->action(QStringLiteral("mupdf_ocr"));
             QVERIFY(action);
             const bool expected = currentPath == QStringLiteral(TEST_PDF_PATH) || enabled;
+            const bool hasModels =
+                !Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR) }).isEmpty();
             QCOMPARE(action->isEnabled(), expected);
             for (QAction* registered : client->actionCollection()->actions())
                 QCOMPARE(registered->isEnabled(),
-                         registered->objectName() == QStringLiteral("mupdf_manage_certificates") || expected);
+                         registered->objectName() == QStringLiteral("mupdf_manage_certificates")
+                             || (expected && (registered == action || hasModels)));
             document.reparseConfig();
             QCOMPARE(action->isEnabled(), expected);
             document.closeDocument();
             QVERIFY(!action->isEnabled());
+        }
+    }
+
+    void ocrMenuModels_data()
+    {
+        QTest::addColumn<QStringList>("files");
+        QTest::newRow("empty") << QStringList();
+        QTest::newRow("support-only") << QStringList { "osd.traineddata", "equ.traineddata" };
+        QTest::newRow("language") << QStringList { "test.traineddata" };
+    }
+
+    void ocrMenuModels()
+    {
+        QFETCH(QStringList, files);
+        QTemporaryDir models;
+        QVERIFY(models.isValid());
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        KConfigGroup advanced(config, QStringLiteral("Advanced"));
+        advanced.writeEntry("TessDataDirectories", QStringList { models.path() });
+        config->sync();
+        auto restore = qScopeGuard([&] {
+            advanced.deleteEntry("TessDataDirectories");
+            config->sync();
+        });
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        auto* client = document.guiClient();
+        QVERIFY(client);
+        auto* actions = client->actionCollection();
+        auto* ocrMenu = actions->action(QStringLiteral("mupdf_ocr"));
+        QVERIFY(ocrMenu);
+        auto* menu = ocrMenu->menu();
+        QVERIFY(menu);
+        // Refresh on opening, including models installed/removed while Okular is running.
+        for (const bool installed : { true, false }) {
+            for (const QString& file : files) {
+                QFile model(models.filePath(file));
+                if (installed)
+                    QVERIFY(model.open(QIODevice::WriteOnly));
+                else
+                    QVERIFY(model.remove());
+            }
+            QVERIFY(QMetaObject::invokeMethod(menu, "aboutToShow"));
+            const bool hasModels =
+                !Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR), models.path() }).isEmpty();
+            QList<QAction*> visible;
+            for (QAction* action : menu->actions()) {
+                if (action->isVisible())
+                    visible.append(action);
+            }
+            QCOMPARE(visible.size(), hasModels ? 3 : 1);
+            QCOMPARE(actions->action(QStringLiteral("mupdf_ocr_toggle"))->isEnabled(), hasModels);
+            for (QAction* action : visible)
+                QCOMPARE(action->isEnabled(), hasModels);
+            if (!hasModels)
+                QCOMPARE(visible.front()->text(),
+                         QStringLiteral("No OCR models available. Please install a Tesseract language model."));
         }
     }
 
@@ -124,6 +190,8 @@ private slots:
 
     void ocrMenu()
     {
+        if (Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR) }).isEmpty())
+            QSKIP("OCR menu modes require an installed language model");
         QFETCH(QString, initialMode);
         QFETCH(QString, actionName);
         QFETCH(QString, requestedMode);
@@ -160,7 +228,8 @@ private slots:
         auto* menu = tools->actions().at(2)->menu();
         QVERIFY(menu);
         QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
-        QCOMPARE(menu->actions().size(), 3);
+        QCOMPARE(menu->actions().size(), 4);
+        QVERIFY(!menu->actions().back()->isVisible());
         QCOMPARE(client->actionCollection()->actions().count(), 6);
         for (QAction* registered : client->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),

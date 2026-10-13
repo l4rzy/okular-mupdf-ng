@@ -23,6 +23,7 @@
 #include <QIcon>
 #include <QImage>
 #include <QLocale>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMimeDatabase>
 #include <QMimeType>
@@ -431,6 +432,9 @@ void Main::setupActions()
     addMode(QStringLiteral("mupdf_ocr_off"), i18n("Off"), Mode::Never);
     addMode(QStringLiteral("mupdf_ocr_auto"), i18n("Automatic"), Mode::Five);
     addMode(QStringLiteral("mupdf_ocr_on"), i18n("On"), Mode::Always);
+    m_ocrUnavailableAction =
+        menu->menu()->addAction(i18n("No OCR models available. Please install a Tesseract language model."));
+    m_ocrUnavailableAction->setEnabled(false);
     const auto setMode = [this](int mode) {
         MuPDFNGSettings::setOcrTriggerMode(mode);
         MuPDFNGSettings::self()->save();
@@ -455,6 +459,7 @@ void Main::setupActions()
         }
     });
     syncOcrActions();
+    connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncOcrActions);
     connect(
         m_ocrActions, &QActionGroup::triggered, this, [setMode](QAction* action) { setMode(action->data().toInt()); });
     connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
@@ -476,9 +481,12 @@ void Main::syncOcrActions()
 {
     const bool enabled =
         m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_placeholder.isActive();
+    const bool hasModels = !Config::installedOcrModels().isEmpty();
     actionCollection()->action(QStringLiteral("mupdf_ocr"))->setEnabled(enabled);
-    actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->setEnabled(enabled);
-    m_ocrActions->setEnabled(enabled);
+    actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->setEnabled(enabled && hasModels);
+    m_ocrActions->setEnabled(enabled && hasModels);
+    m_ocrActions->setVisible(hasModels);
+    m_ocrUnavailableAction->setVisible(!hasModels);
     using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
     const int configuredMode = MuPDFNGSettings::ocrTriggerMode();
     const int menuMode = configuredMode == Mode::Twenty ? Mode::Five : configuredMode;

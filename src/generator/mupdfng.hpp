@@ -222,6 +222,7 @@ private:
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
     QActionGroup* m_ocrActions = nullptr;
+    QAction* m_ocrUnavailableAction = nullptr;
     bool m_observingVisiblePages = false;
 
     std::unique_ptr<LayersModel> m_layersModel;

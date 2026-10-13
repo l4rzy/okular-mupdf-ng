@@ -279,8 +279,8 @@ add_dependencies(test_generator_epub okularGenerator_mupdfng mupdfng-worker)
 set_tests_properties(test_generator_epub PROPERTIES TIMEOUT 150)
 
 add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
-target_include_directories(test_generator_ocr PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
-target_link_libraries(test_generator_ocr PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore KF6::XmlGui)
+target_include_directories(test_generator_ocr PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_link_libraries(test_generator_ocr PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore KF6::XmlGui mupdf_generator_settings)
 target_compile_definitions(test_generator_ocr PRIVATE
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
     TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub"
