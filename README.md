@@ -2,7 +2,7 @@
 <img src="dist/mupdfng.svg" width="200px">
 </p>
 
-# okular-mupdf-ng
+# [okular-mupdf-ng](https://l4rzy.github.io/okular-mupdf-ng)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
@@ -12,11 +12,9 @@
 </p>
 
 A MuPDF-based **secure** and fast backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.
-<!-- Note -->
-> [!IMPORTANT]
-> This project is in beta and is not stable yet. See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and test coverage. If you encounter any issue, please report via Github Issues. If you're working on an important PDF, use the official PDF backend (Poppler generator) that comes with Okular instead.
 
-![Screenshot](docs/assets/screenshot.png)
+[![Screenshot](docs/assets/screenshot.png)](https://l4rzy.github.io/okular-mupdf-ng/#demo)
+
 ---
 
 ## Installation

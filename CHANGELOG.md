@@ -61,6 +61,6 @@ Changes since 0.3.0, including the 0.3.1–0.3.8 releases.
 - Expanded legacy MOBI, generated PDF outlines, OCR, cache cleanup, signatures,
   XFDF, and worker-boundary regression coverage.
 
-The project remains in beta. Worker recovery discards unsaved form edits;
+Worker recovery discards unsaved form edits;
 JavaScript forms, generated PDF outlines, signatures, and XFDF remain
 experimental. See [MATURITY.md](MATURITY.md) for feature status and coverage.

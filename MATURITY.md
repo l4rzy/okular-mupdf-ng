@@ -2,9 +2,6 @@
 
 This page summarizes the maturity of the features users can access in
 okular-mupdf-ng and the kind of automated testing currently present for them.
-The project is in beta; even features marked **Stable** are not a guarantee of
-production readiness. For important PDF editing, use Okular's official PDF
-backend as recommended in the project README.
 
 ## Ratings
 
