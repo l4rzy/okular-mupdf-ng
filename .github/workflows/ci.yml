@@ -14,25 +14,65 @@ permissions:
   contents: read
 
 jobs:
+  check-build:
+    name: Check whether to build
+    runs-on: ubuntu-26.04
+    outputs:
+      build: ${{ steps.decision.outputs.build }}
+    steps:
+      - name: Checkout branch with tags
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Skip branch builds for tagged commits
+        id: decision
+        shell: bash
+        run: |
+          build=true
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF_TYPE" == branch ]]; then
+            tags=$(git tag --points-at "$GITHUB_SHA")
+            if [[ -n "$tags" ]]; then
+              build=false
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   sanitizer:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/sanitize.yml
 
   package-arch:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-arch.yml
 
   package-deb-ubuntu:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-deb-ubuntu.yml
 
   package-deb-debian:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-deb-debian.yml
 
   package-rpm-tumbleweed:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-rpm-tumbleweed.yml
 
   package-rpm-fedora-arm:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-rpm-fedora-arm.yml
 
   package-rpm-fedora:
+    needs: check-build
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-rpm-fedora-44.yml
 
   release:
