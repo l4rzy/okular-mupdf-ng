@@ -269,6 +269,13 @@ private slots:
         QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::importCertificate(
             database, QByteArrayLiteral("not a certificate"), QStringLiteral("nickname"), &error));
         QVERIFY(error.contains(QStringLiteral("read-only"), Qt::CaseInsensitive));
+        QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::importTrustedSigner(
+            database, QByteArrayLiteral("invalid"), QStringLiteral("signer"), &error));
+        QVERIFY(error.contains(QStringLiteral("read-only"), Qt::CaseInsensitive));
+        QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::removeSignerTrust(database, { }, &error));
+        QVERIFY(error.contains(QStringLiteral("read-only"), Qt::CaseInsensitive));
+        QVERIFY(::Mu::Plugin::Crypto::CertificateDatabase::listTrustedSigners(database, &error).isEmpty());
+        QVERIFY2(error.isEmpty(), qPrintable(error));
 
         const auto signingResult = ::Mu::Plugin::Crypto::createDetachedCmsFromDigest(
             QStringLiteral("nickname"), { }, std::array<std::uint8_t, 32> { });

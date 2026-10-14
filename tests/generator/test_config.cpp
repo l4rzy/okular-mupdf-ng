@@ -8,16 +8,23 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QTabWidget>
+#include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTimeZone>
+#include <QTimer>
 #include <array>
 #include <cstdint>
 #include <string_view>
 
 #include "generator/config/certmanager/dialog_utils.hpp"
+#include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/config/certmanager/self_signed_dialog.hpp"
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
+#include "plugin/crypto/nss.hpp"
 #include "shared/model/validation.hpp"
 
 using Mu::Generator::Config::SignatureEmblem;
@@ -37,6 +44,68 @@ private slots:
         qputenv("XDG_DATA_HOME", m_root.filePath("data").toUtf8());
         qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
         KLocalizedString::setApplicationDomain("okular_mupdfng");
+    }
+
+    void certificateManagerSeparatesSigningAndPeople()
+    {
+        namespace Database = ::Mu::Plugin::Crypto::CertificateDatabase;
+        const auto path = m_root.filePath("certmanager-db");
+        QVERIFY(QDir().mkpath(path));
+        QCOMPARE(::Mu::Plugin::Crypto::initializeNss(path), ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
+        Database::SelfSignedCertificateOptions options;
+        options.nickname = QStringLiteral("synthetic-ui-signer");
+        options.commonName = QStringLiteral("Synthetic UI Signer");
+        options.validFrom = QDateTime::currentDateTime().addSecs(-60);
+        options.validUntil = options.validFrom.addDays(1);
+        options.signingKey = Database::SigningKey::EcdsaP256;
+        QString error;
+        QVERIFY2(Database::createSelfSignedCertificate(path, options, &error), qPrintable(error));
+        auto records = Database::listCertificates(path, &error);
+        QCOMPARE(records.size(), 1);
+        const auto& certificate = records.front().certificate;
+        const QByteArray der(reinterpret_cast<const char*>(certificate.der.data()),
+                             static_cast<qsizetype>(certificate.der.size()));
+        ::Mu::Generator::CertificateManagerDialog dialog(path);
+        auto* tabs = dialog.findChild<QTabWidget*>();
+        QVERIFY(tabs);
+        QCOMPARE(tabs->count(), 2);
+        QCOMPARE(tabs->tabText(0), QStringLiteral("My Certificates"));
+        QCOMPARE(tabs->tabText(1), QStringLiteral("People"));
+        auto* signing = tabs->widget(0)->findChild<QTableWidget*>();
+        auto* people = tabs->widget(1)->findChild<QTableWidget*>();
+        QVERIFY(signing);
+        QVERIFY(people);
+        QCOMPARE(signing->rowCount(), 1);
+        tabs->setCurrentIndex(1);
+        QCOMPARE(people->rowCount(), 0);
+        QVERIFY2(Database::importTrustedSigner(path, der, options.nickname, &error), qPrintable(error));
+        tabs->setCurrentIndex(0);
+        tabs->setCurrentIndex(1);
+        QCOMPARE(people->rowCount(), 1);
+        people->selectRow(0);
+        QPushButton* remove = nullptr;
+        for (auto* button : dialog.findChildren<QPushButton*>()) {
+            if (button->text() == QStringLiteral("Remove Trust"))
+                remove = button;
+        }
+        QVERIFY(remove);
+        QVERIFY(remove->isEnabled());
+        tabs->setCurrentIndex(0);
+        tabs->setCurrentIndex(1);
+        people->selectRow(0);
+        QVERIFY(remove->isEnabled());
+        QTimer::singleShot(0, &dialog, [&dialog] {
+            for (auto* message : dialog.findChildren<QMessageBox*>())
+                message->button(QMessageBox::Yes)->click();
+        });
+        remove->click();
+        QCOMPARE(people->rowCount(), 0);
+        QCOMPARE(Database::listTrustedSigners(path).size(), 0);
+        tabs->setCurrentIndex(0);
+        QCOMPARE(signing->rowCount(), 1);
+        QCOMPARE(::Mu::Plugin::Crypto::createDetachedCmsFromDigest(options.nickname, { }, { }).result,
+                 ::Mu::Model::SigningResult::Success);
+        QVERIFY2(Database::deleteCertificate(path, records.front().identity, &error), qPrintable(error));
     }
 
     void defaultsRenderCancellationToDisabled() { QVERIFY(!::Mu::Generator::Config::readRenderCancellationEnabled()); }

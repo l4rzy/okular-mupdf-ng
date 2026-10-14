@@ -85,6 +85,8 @@ private slots:
         QTest::newRow("original-outline") << false << quint32(0);
         QTest::newRow("pre-rem-accelerator") << true << quint32(1);
         QTest::newRow("pre-rem-outline") << false << quint32(1);
+        QTest::newRow("pre-page-margins-accelerator") << true << quint32(2);
+        QTest::newRow("pre-page-margins-outline") << false << quint32(2);
     }
 
     void ignoresUnpatchedLayoutCache()
@@ -97,7 +99,7 @@ private slots:
         QVERIFY(source.open(QIODevice::ReadOnly));
         const QByteArray bytes = source.readAll();
 
-        // Reproduce keys predating image alignment and root-relative lengths.
+        // Reproduce keys predating image alignment, root-relative lengths, and page margins.
         QByteArray legacyLayout;
         QDataStream layoutStream(&legacyLayout, QIODevice::WriteOnly);
         layoutStream.setVersion(QDataStream::Qt_6_0);

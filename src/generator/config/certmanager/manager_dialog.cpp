@@ -3,6 +3,7 @@
 
 #include "manager_dialog.hpp"
 
+#include <QCryptographicHash>
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QFileDialog>
@@ -15,6 +16,7 @@
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
@@ -51,6 +53,7 @@ QString certificateName(const Model::Certificate& certificate)
 
 CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget* parent)
     : QDialog(parent)
+    , m_tabs(new QTabWidget(this))
     , m_table(new QTableWidget(this))
     , m_addButton(new QPushButton(i18n("Add Certificate"), this))
     , m_deleteButton(new QPushButton(i18n("Delete Selected"), this))
@@ -61,18 +64,38 @@ CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget
     setWindowTitle(CertificateManager::dialogTitle(i18n("Manage NSS Certificates"), m_databasePath));
     resize(760, 420);
 
-    m_table->setColumnCount(6);
-    m_table->setHorizontalHeaderLabels({ i18n("Nickname"),
-                                         i18n("Subject"),
-                                         i18n("Issuer"),
-                                         i18n("Algorithm"),
-                                         i18n("Valid From"),
-                                         i18n("Valid Until") });
-    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_table->horizontalHeader()->setStretchLastSection(true);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    auto* peopleTable = new QTableWidget(this);
+    const QList<QTableWidget*> tables { m_table, peopleTable };
+    const QStringList tabLabels { i18n("My Certificates"), i18n("People") };
+    const QStringList descriptions { i18n("Certificates with private keys used to sign documents."),
+                                     i18n("Individual certificates trusted for PDF signature verification. Trust also "
+                                          "applies to S/MIME in this NSS database.") };
+    for (int index = 0; index < tables.size(); ++index) {
+        auto* table = tables.at(index);
+        table->setColumnCount(7);
+        table->setHorizontalHeaderLabels({ i18n("Nickname"),
+                                           i18n("Subject"),
+                                           i18n("Issuer"),
+                                           i18n("Algorithm"),
+                                           i18n("Valid From"),
+                                           i18n("Valid Until"),
+                                           i18n("SHA-256 Fingerprint") });
+        table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setSelectionMode(QAbstractItemView::SingleSelection);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->horizontalHeader()->setStretchLastSection(true);
+        table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+        auto* page = new QWidget(m_tabs);
+        auto* pageLayout = new QVBoxLayout(page);
+        auto* description = new QLabel(descriptions.at(index), page);
+        description->setWordWrap(true);
+        pageLayout->addWidget(description);
+        pageLayout->addWidget(table);
+        m_tabs->addTab(page, tabLabels.at(index));
+        connect(table, &QTableWidget::itemSelectionChanged, this, [this] {
+            m_deleteButton->setEnabled(m_table->currentRow() >= 0);
+        });
+    }
 
     auto* buttons = new QHBoxLayout;
     buttons->addWidget(m_addButton);
@@ -81,16 +104,17 @@ CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget
     buttons->addWidget(m_closeButton);
 
     auto* layout = new QVBoxLayout(this);
-    layout->addWidget(new QLabel(i18n("Signing certificates in this NSS database:"), this));
-    layout->addWidget(m_table);
+    layout->addWidget(m_tabs);
     layout->addLayout(buttons);
 
     m_deleteButton->setEnabled(false);
     m_closeButton->setDefault(true);
     // Step 2: Keep the delete action tied to the current row and route all
     // mutations through slots so the table can be refreshed from NSS.
-    connect(m_table, &QTableWidget::itemSelectionChanged, this, [this] {
-        m_deleteButton->setEnabled(m_table->currentRow() >= 0);
+    connect(m_tabs, &QTabWidget::currentChanged, this, [this] {
+        m_table = m_tabs->currentWidget()->findChild<QTableWidget*>();
+        m_deleteButton->setText(showsPeople() ? i18n("Remove Trust") : i18n("Delete Selected"));
+        refreshCertificates();
     });
     connect(m_addButton, &QPushButton::clicked, this, &CertificateManagerDialog::addCertificate);
     connect(m_deleteButton, &QPushButton::clicked, this, &CertificateManagerDialog::deleteSelectedCertificate);
@@ -99,12 +123,18 @@ CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget
     refreshCertificates();
 }
 
+bool CertificateManagerDialog::showsPeople() const
+{
+    return m_tabs->currentIndex() == 1;
+}
+
 void CertificateManagerDialog::refreshCertificates()
 {
     // Query NSS on every refresh so imports/deletions made by this dialog are
     // reflected in both the table and its exact deletion records.
     QString error;
-    m_certificates = Plugin::Crypto::CertificateDatabase::listCertificates(m_databasePath, &error);
+    m_certificates = showsPeople() ? Plugin::Crypto::CertificateDatabase::listTrustedSigners(m_databasePath, &error)
+                                   : Plugin::Crypto::CertificateDatabase::listCertificates(m_databasePath, &error);
     if (!error.isEmpty()) {
         m_certificates.clear();
         m_table->clearContents();
@@ -113,6 +143,7 @@ void CertificateManagerDialog::refreshCertificates()
         showWarning(i18n("Certificate Database"), error);
         return;
     }
+    m_table->setRowCount(0);
     m_table->setRowCount(static_cast<int>(m_certificates.size()));
     for (int row = 0; row < static_cast<int>(m_certificates.size()); ++row) {
         const auto& certificate = m_certificates.at(row).certificate;
@@ -122,7 +153,8 @@ void CertificateManagerDialog::refreshCertificates()
                                    QString::fromStdString(certificate.issuerCommonName),
                                    algorithm.isEmpty() ? i18n("Unknown") : algorithm,
                                    formatDate(certificate.validityStart),
-                                   formatDate(certificate.validityEnd) };
+                                   formatDate(certificate.validityEnd),
+                                   QString::fromLatin1(m_certificates.at(row).identity.sha256Fingerprint.toHex(':')) };
         for (int column = 0; column < values.size(); ++column)
             m_table->setItem(row, column, new QTableWidgetItem(values.at(column)));
         m_table->item(row, 0)->setData(Qt::UserRole, row);
@@ -143,7 +175,7 @@ void CertificateManagerDialog::addCertificate()
     QMenu menu(this);
     QAction* fileAction = menu.addAction(i18n("Import from File..."));
     QAction* pasteAction = menu.addAction(i18n("Paste PEM Certificate..."));
-    QAction* selfSignedAction = menu.addAction(i18n("Create Self-Signed Certificate..."));
+    QAction* selfSignedAction = showsPeople() ? nullptr : menu.addAction(i18n("Create Self-Signed Certificate..."));
     QAction* selected = menu.exec(m_addButton->mapToGlobal(QPoint(0, m_addButton->height())));
     if (!selected)
         return;
@@ -196,11 +228,12 @@ void CertificateManagerDialog::importCertificateFile()
 {
     // Read the complete file before handing bytes to the crypto adapter; the
     // selected extension determines whether a PKCS#12 password is required.
-    const QString path =
-        QFileDialog::getOpenFileName(this,
-                                     CertificateManager::dialogTitle(i18n("Import Certificate"), m_databasePath),
-                                     { },
-                                     i18n("PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"));
+    const QString path = QFileDialog::getOpenFileName(
+        this,
+        CertificateManager::dialogTitle(i18n("Import Certificate"), m_databasePath),
+        { },
+        showsPeople() ? i18n("Certificates (*.pem *.der *.crt *.cer);;All Files (*)")
+                      : i18n("PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"));
     if (path.isEmpty())
         return;
     QFile file(path);
@@ -208,9 +241,18 @@ void CertificateManagerDialog::importCertificateFile()
         showWarning(i18n("Import Certificate"), file.errorString());
         return;
     }
-    const QByteArray certificateData = file.readAll();
+    if (showsPeople() && file.size() > Plugin::Crypto::CertificateDatabase::MaxSignerCertificateBytes) {
+        showWarning(i18n("Import Certificate"), i18n("The certificate file exceeds the 1 MiB limit."));
+        return;
+    }
+    const QByteArray certificateData =
+        showsPeople() ? file.read(Plugin::Crypto::CertificateDatabase::MaxSignerCertificateBytes + 1) : file.readAll();
     if (file.error() != QFileDevice::NoError) {
         showWarning(i18n("Import Certificate"), file.errorString());
+        return;
+    }
+    if (showsPeople()) {
+        importCertificateData(certificateData);
         return;
     }
     if (path.endsWith(QStringLiteral(".p12"), Qt::CaseInsensitive)
@@ -272,6 +314,37 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& certifica
         return;
     }
 
+    if (showsPeople()) {
+        QString error;
+        const auto certificate =
+            Plugin::Crypto::CertificateDatabase::inspectSignerCertificate(m_databasePath, certificateData, &error);
+        if (!certificate) {
+            showWarning(i18n("Import Certificate"), error);
+            return;
+        }
+        const QByteArray der(reinterpret_cast<const char*>(certificate->der.data()),
+                             static_cast<qsizetype>(certificate->der.size()));
+        const QString fingerprint =
+            QString::fromLatin1(QCryptographicHash::hash(der, QCryptographicHash::Sha256).toHex(':'));
+        QMessageBox confirmation(QMessageBox::Question,
+                                 CertificateManager::dialogTitle(i18n("Trust PDF Signer"), m_databasePath),
+                                 i18n("Trust this certificate for PDF signature verification?"),
+                                 QMessageBox::Yes | QMessageBox::Cancel,
+                                 this);
+        confirmation.setTextFormat(Qt::PlainText);
+        confirmation.setDefaultButton(QMessageBox::Cancel);
+        confirmation.setInformativeText(
+            i18n("Subject: %1\nIssuer: %2\nValid from: %3\nValid until: %4\nSHA-256: %5\n\n"
+                 "This also grants S/MIME trust in this NSS database. Reopen documents to refresh signature results.",
+                 QString::fromStdString(certificate->subjectDistinguishedName),
+                 QString::fromStdString(certificate->issuerDistinguishedName),
+                 formatDate(certificate->validityStart),
+                 formatDate(certificate->validityEnd),
+                 fingerprint));
+        if (confirmation.exec() != QMessageBox::Yes)
+            return;
+    }
+
     bool accepted = false;
     const QString nickname =
         QInputDialog::getText(this,
@@ -286,7 +359,10 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& certifica
     QString error;
     // CertificateDatabase performs parsing and private-key checks; refresh only
     // after it reports a successful import.
-    if (!Plugin::Crypto::CertificateDatabase::importCertificate(m_databasePath, certificateData, nickname, &error)) {
+    const bool imported = showsPeople()
+        ? Plugin::Crypto::CertificateDatabase::importTrustedSigner(m_databasePath, certificateData, nickname, &error)
+        : Plugin::Crypto::CertificateDatabase::importCertificate(m_databasePath, certificateData, nickname, &error);
+    if (!imported) {
         showWarning(i18n("Import Certificate"), error);
         return;
     }
@@ -306,14 +382,20 @@ void CertificateManagerDialog::deleteSelectedCertificate()
         return;
     const auto& record = m_certificates.at(certificateIndex);
     const QString name = certificateName(record.certificate);
-    if (QMessageBox::question(this,
-                              CertificateManager::dialogTitle(i18n("Delete Certificate"), m_databasePath),
-                              i18n("Delete certificate \"%1\" from the NSS database?", name))
+    if (QMessageBox::question(
+            this,
+            CertificateManager::dialogTitle(showsPeople() ? i18n("Remove Signer Trust") : i18n("Delete Certificate"),
+                                            m_databasePath),
+            showsPeople() ? i18n("Remove trust for %1? The certificate and any private key will be kept.", name)
+                          : i18n("Delete certificate \"%1\" from the NSS database?", name))
         != QMessageBox::Yes)
         return;
 
     QString error;
-    if (!Plugin::Crypto::CertificateDatabase::deleteCertificate(m_databasePath, record.identity, &error)) {
+    const bool removed = showsPeople()
+        ? Plugin::Crypto::CertificateDatabase::removeSignerTrust(m_databasePath, record.identity, &error)
+        : Plugin::Crypto::CertificateDatabase::deleteCertificate(m_databasePath, record.identity, &error);
+    if (!removed) {
         showWarning(i18n("Delete Certificate"), error);
         return;
     }

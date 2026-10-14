@@ -910,6 +910,175 @@ private slots:
         QVERIFY(CERT_ClearOCSPCache() == SECSuccess);
     }
 
+    void importsPublicTrustedSigner_data()
+    {
+        QTest::addColumn<bool>("pem");
+        QTest::newRow("pem") << true;
+        QTest::newRow("der") << false;
+    }
+
+    void importsPublicTrustedSigner()
+    {
+        using namespace Mu::Plugin::Crypto::CertificateDatabase;
+        QFETCH(bool, pem);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto keyPath = root.filePath("key.pem");
+        const auto certPath = root.filePath("cert.pem");
+        QVERIFY(runOpenSsl({ "req",
+                             "-x509",
+                             "-newkey",
+                             "ec",
+                             "-pkeyopt",
+                             "ec_paramgen_curve:prime256v1",
+                             "-nodes",
+                             "-keyout",
+                             keyPath,
+                             "-out",
+                             certPath,
+                             "-subj",
+                             "/CN=Synthetic Public Signer",
+                             "-days",
+                             "1",
+                             "-addext",
+                             "basicConstraints=critical,CA:FALSE",
+                             "-addext",
+                             "keyUsage=critical,digitalSignature",
+                             "-addext",
+                             "extendedKeyUsage=emailProtection" }));
+        QFile certificateFile(certPath);
+        QVERIFY(certificateFile.open(QIODevice::ReadOnly));
+        const QByteArray pemData = certificateFile.readAll();
+        QString error;
+        const auto inspected = inspectSignerCertificate(m_nssDb.path(), pemData, &error);
+        QVERIFY2(inspected.has_value(), qPrintable(error));
+        const QByteArray der(reinterpret_cast<const char*>(inspected->der.data()),
+                             static_cast<qsizetype>(inspected->der.size()));
+        QVERIFY(!inspectSignerCertificate(m_nssDb.path(), der + QByteArray("trailing"), &error));
+        QVERIFY(!inspectSignerCertificate(m_nssDb.path(), pemData + pemData, &error));
+        const QByteArray data = pem ? pemData : der;
+        const QString nickname = pem ? QStringLiteral("public-trusted-pem") : QStringLiteral("public-trusted-der");
+        const auto signingCount = listCertificates(m_nssDb.path()).size();
+        const auto trustedCount = listTrustedSigners(m_nssDb.path()).size();
+        QVERIFY2(importTrustedSigner(m_nssDb.path(), data, nickname, &error), qPrintable(error));
+        QCOMPARE(listCertificates(m_nssDb.path()).size(), signingCount);
+        auto trusted = listTrustedSigners(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(trusted.size(), trustedCount + 1);
+        auto found = findManagedCertificate(trusted, nickname.toStdString());
+        QVERIFY(found != trusted.cend());
+        const auto identity = found->identity;
+        QCOMPARE(identity.sha256Fingerprint, QCryptographicHash::hash(der, QCryptographicHash::Sha256));
+        QVERIFY2(importTrustedSigner(m_nssDb.path(), data, QStringLiteral("different-label"), &error),
+                 qPrintable(error));
+        QCOMPARE(listTrustedSigners(m_nssDb.path()).size(), trusted.size());
+        QVERIFY(runCertutil({ "-L", "-d", "sql:" + m_nssDb.path(), "-n", nickname }));
+        // Reusing a nickname for a different certificate must not replace it.
+        QVERIFY(runOpenSsl({ "req",
+                             "-x509",
+                             "-newkey",
+                             "ec",
+                             "-pkeyopt",
+                             "ec_paramgen_curve:prime256v1",
+                             "-nodes",
+                             "-keyout",
+                             keyPath,
+                             "-out",
+                             certPath,
+                             "-subj",
+                             "/CN=Synthetic Other Signer",
+                             "-days",
+                             "1",
+                             "-addext",
+                             "basicConstraints=critical,CA:FALSE" }));
+        certificateFile.close();
+        QVERIFY(certificateFile.open(QIODevice::ReadOnly));
+        QVERIFY(!importTrustedSigner(m_nssDb.path(), certificateFile.readAll(), nickname, &error));
+        QVERIFY(error.contains("nickname"));
+        QCOMPARE(listTrustedSigners(m_nssDb.path()).size(), trusted.size());
+        auto wrongIdentity = identity;
+        ++wrongIdentity.slotId;
+        QVERIFY(!removeSignerTrust(m_nssDb.path(), wrongIdentity, &error));
+        QVERIFY2(removeSignerTrust(m_nssDb.path(), identity, &error), qPrintable(error));
+        QVERIFY2(removeSignerTrust(m_nssDb.path(), identity, &error), qPrintable(error));
+        QCOMPARE(listTrustedSigners(m_nssDb.path()).size(), trustedCount);
+        Mu::Plugin::Crypto::NssCertificate retained(
+            CERT_FindCertByNickname(CERT_GetDefaultCertDB(), nickname.toUtf8().constData()));
+        QVERIFY(retained);
+        Mu::Plugin::Crypto::NssSlot slot(PK11_GetInternalKeySlot());
+        Mu::Plugin::Crypto::NssPrivateKey key(PK11_FindPrivateKeyFromCert(slot.get(), retained.get(), nullptr));
+        QVERIFY(!key);
+        QVERIFY2(deleteCertificate(m_nssDb.path(), identity, &error), qPrintable(error));
+    }
+
+    void rejectsInvalidTrustedSigner_data()
+    {
+        QTest::addColumn<QByteArray>("data");
+        QTest::addColumn<QString>("nickname");
+        QTest::newRow("empty") << QByteArray() << QStringLiteral("test");
+        QTest::newRow("invalid-der") << QByteArray("invalid") << QStringLiteral("test");
+        QTest::newRow("invalid-pem") << QByteArray("-----BEGIN CERTIFICATE-----\n!\n-----END CERTIFICATE-----")
+                                     << QStringLiteral("test");
+        QTest::newRow("multiple-pem") << QByteArray(
+            "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nAA==\n-----END "
+            "CERTIFICATE-----") << QStringLiteral("test");
+        QTest::newRow("too-large") << QByteArray(
+            ::Mu::Plugin::Crypto::CertificateDatabase::MaxSignerCertificateBytes + 1, 'X')
+                                   << QStringLiteral("test");
+        QTest::newRow("empty-nickname") << QByteArray("invalid") << QString();
+        QTest::newRow("long-nickname") << QByteArray("invalid") << QString(129, 'X');
+        QTest::newRow("nul-nickname") << QByteArray("invalid") << QString(QChar(0));
+    }
+
+    void rejectsInvalidTrustedSigner()
+    {
+        using namespace Mu::Plugin::Crypto::CertificateDatabase;
+        QFETCH(QByteArray, data);
+        QFETCH(QString, nickname);
+        const auto before = listTrustedSigners(m_nssDb.path());
+        QString error;
+        QVERIFY(!importTrustedSigner(m_nssDb.path(), data, nickname, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(listTrustedSigners(m_nssDb.path()).size(), before.size());
+        QTemporaryDir inactive;
+        QVERIFY(inactive.isValid());
+        QVERIFY(!importTrustedSigner(inactive.path(), data, QStringLiteral("test"), &error));
+        QVERIFY(!removeSignerTrust(inactive.path(), { }, &error));
+    }
+
+    void rejectsTrustedCertificateAuthority()
+    {
+        using namespace Mu::Plugin::Crypto::CertificateDatabase;
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto path = root.filePath("ca.pem");
+        QVERIFY(runOpenSsl({ "req",
+                             "-x509",
+                             "-newkey",
+                             "ec",
+                             "-pkeyopt",
+                             "ec_paramgen_curve:prime256v1",
+                             "-nodes",
+                             "-keyout",
+                             root.filePath("key.pem"),
+                             "-out",
+                             path,
+                             "-subj",
+                             "/CN=Synthetic CA",
+                             "-days",
+                             "1",
+                             "-addext",
+                             "basicConstraints=critical,CA:TRUE" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto data = file.readAll();
+        QString error;
+        QVERIFY(!inspectSignerCertificate(m_nssDb.path(), data, &error));
+        QVERIFY(error.contains("CA certificates"));
+        QVERIFY(!importTrustedSigner(m_nssDb.path(), data, QStringLiteral("rejected-ca"), &error));
+        QVERIFY(error.contains("CA certificates"));
+    }
+
     void validatesSelfSignedCertificateWithoutChainRecursion()
     {
         const QString nickname = QStringLiteral("okular-mupdf-self-signed-validation");
@@ -951,9 +1120,23 @@ private slots:
         QVERIFY(certificate);
         CERTCertTrust trust { };
         QVERIFY(CERT_GetCertTrust(certificate, &trust) == SECSuccess);
-        trust.emailFlags |= CERTDB_TRUSTED;
+        trust.sslFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
+        trust.objectSigningFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
         QVERIFY(CERT_ChangeCertTrust(certdb, certificate, &trust) == SECSuccess);
+        QVERIFY(CERT_GetCertTrust(certificate, &trust) == SECSuccess);
         CERT_DestroyCertificate(certificate);
+        const QByteArray der(reinterpret_cast<const char*>(field.certificate.der.data()),
+                             static_cast<qsizetype>(field.certificate.der.size()));
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importTrustedSigner(
+                     m_nssDb.path(), der, QStringLiteral("preserve-original-label"), &error),
+                 qPrintable(error));
+        Mu::Plugin::Crypto::NssCertificate after(CERT_FindCertByNickname(certdb, nicknameBytes.constData()));
+        QVERIFY(after);
+        CERTCertTrust actual { };
+        QVERIFY(CERT_GetCertTrust(after.get(), &actual) == SECSuccess);
+        QCOMPARE(actual.sslFlags, trust.sslFlags);
+        QCOMPARE(actual.objectSigningFlags, trust.objectSigningFlags);
+        QCOMPARE(actual.emailFlags & trust.emailFlags, trust.emailFlags);
 
         auto trustedField = field;
         ::Mu::Plugin::Crypto::validateDetachedPdfSignature(trustedField, source);
@@ -971,6 +1154,17 @@ private slots:
         QVERIFY2(error.isEmpty(), qPrintable(error));
         const auto managedCertificate = findManagedCertificate(certificates, nickname.toStdString());
         QVERIFY(managedCertificate != certificates.cend());
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::removeSignerTrust(
+                     m_nssDb.path(), managedCertificate->identity, &error),
+                 qPrintable(error));
+        QCOMPARE(createCms(digest, nickname.toStdString()).result, ::Mu::Model::SigningResult::Success);
+        auto untrustedField = field;
+        ::Mu::Plugin::Crypto::validateDetachedPdfSignature(untrustedField, source);
+        QCOMPARE(untrustedField.certificateStatus, ::Mu::Model::CertificateStatus::UntrustedIssuer);
+        QVERIFY(CERT_GetCertTrust(after.get(), &actual) == SECSuccess);
+        QCOMPARE(actual.sslFlags, trust.sslFlags);
+        QCOMPARE(actual.objectSigningFlags, trust.objectSigningFlags);
+        QCOMPARE(actual.emailFlags & trust.emailFlags, trust.emailFlags);
         QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(
                      m_nssDb.path(), managedCertificate->identity, &error),
                  qPrintable(error));

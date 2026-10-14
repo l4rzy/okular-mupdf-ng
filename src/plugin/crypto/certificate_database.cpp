@@ -13,6 +13,7 @@
 #include <pk11pub.h>
 #include <prerror.h>
 #include <secasn1.h>
+#include <secder.h>
 #include <secerr.h>
 #include <secoid.h>
 #include <secport.h>
@@ -275,6 +276,52 @@ CertificateHandle findCertificateInSlot(PK11SlotInfo* slot, const QByteArray& fi
     return nullptr;
 }
 
+CertificateHandle decodeSignerCertificate(const QByteArray& data, QString* error)
+{
+    if (data.isEmpty() || data.size() > MaxSignerCertificateBytes) {
+        setError(error, QStringLiteral("The certificate data is empty or exceeds the 1 MiB limit"));
+        return nullptr;
+    }
+    QByteArray der = data;
+    const QByteArray trimmed = data.trimmed();
+    const QByteArray begin("-----BEGIN CERTIFICATE-----");
+    const QByteArray end("-----END CERTIFICATE-----");
+    if (trimmed.startsWith(begin)) {
+        if (!trimmed.endsWith(end) || trimmed.count(begin) != 1 || trimmed.count(end) != 1) {
+            setError(error, QStringLiteral("Exactly one PEM or DER certificate is required"));
+            return nullptr;
+        }
+        QByteArray encoded = trimmed.mid(begin.size(), trimmed.size() - begin.size() - end.size());
+        for (const char whitespace : { ' ', '\t', '\r', '\n' })
+            encoded.replace(QByteArray(1, whitespace), QByteArray());
+        const auto decoded = QByteArray::fromBase64Encoding(encoded, QByteArray::AbortOnBase64DecodingErrors);
+        if (!decoded || decoded.decoded.isEmpty()) {
+            setError(error, QStringLiteral("The certificate data is invalid"));
+            return nullptr;
+        }
+        der = decoded.decoded;
+    }
+    SECItem item { siBuffer, reinterpret_cast<unsigned char*>(der.data()), static_cast<unsigned int>(der.size()) };
+    int headerLength = 0;
+    unsigned int contentLength = 0;
+    if (der.isEmpty() || static_cast<unsigned char>(der.front()) != 0x30
+        || DER_Lengths(&item, &headerLength, &contentLength) != SECSuccess || headerLength <= 0
+        || static_cast<quint64>(headerLength) + contentLength != static_cast<quint64>(der.size())) {
+        setError(error, QStringLiteral("Exactly one PEM or DER certificate is required"));
+        return nullptr;
+    }
+    CertificateHandle certificate(CERT_NewTempCertificate(CERT_GetDefaultCertDB(), &item, nullptr, PR_FALSE, PR_TRUE));
+    if (!certificate) {
+        setError(error, QStringLiteral("The certificate data is invalid"));
+        return nullptr;
+    }
+    if (CERT_IsCACert(certificate.get(), nullptr)) {
+        setError(error, QStringLiteral("CA certificates cannot be added as individual trusted PDF signers"));
+        return nullptr;
+    }
+    return certificate;
+}
+
 QSet<QByteArray> certificateFingerprintsInSlot(PK11SlotInfo* slot)
 {
     QSet<QByteArray> fingerprints;
@@ -527,9 +574,7 @@ bool encodeSignAndImport(SlotHandle& slot,
     return true;
 }
 
-} // namespace
-
-QList<CertificateRecord> listCertificates(const QString& databasePath, QString* error)
+QList<CertificateRecord> listManagedCertificates(const QString& databasePath, bool trustedSigners, QString* error)
 {
     clearError(error);
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadOnly, error))
@@ -548,14 +593,141 @@ QList<CertificateRecord> listCertificates(const QString& databasePath, QString* 
          node = CERT_LIST_NEXT(node)) {
         if (!node->cert)
             continue;
-        PrivateKeyHandle privateKey(PK11_FindPrivateKeyFromCert(slot.get(), node->cert, nullptr));
-        if (!privateKey)
-            continue;
+        if (trustedSigners) {
+            CERTCertTrust trust { };
+            if (CERT_IsCACert(node->cert, nullptr) || CERT_GetCertTrust(node->cert, &trust) != SECSuccess
+                || (trust.emailFlags & CERTDB_TRUSTED) == 0)
+                continue;
+        } else {
+            PrivateKeyHandle privateKey(PK11_FindPrivateKeyFromCert(slot.get(), node->cert, nullptr));
+            if (!privateKey)
+                continue;
+        }
         const CertificateIdentity identity = certificateIdentity(slot.get(), node->cert);
         if (!identity.sha256Fingerprint.isEmpty())
             result.append({ Plugin::Crypto::Internal::describeCertificate(node->cert), identity });
     }
     return result;
+}
+
+} // namespace
+
+QList<CertificateRecord> listCertificates(const QString& databasePath, QString* error)
+{
+    return listManagedCertificates(databasePath, false, error);
+}
+
+QList<CertificateRecord> listTrustedSigners(const QString& databasePath, QString* error)
+{
+    return listManagedCertificates(databasePath, true, error);
+}
+
+std::optional<Model::Certificate>
+inspectSignerCertificate(const QString& databasePath, const QByteArray& data, QString* error)
+{
+    clearError(error);
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadOnly, error))
+        return std::nullopt;
+    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    const auto certificate = decodeSignerCertificate(data, error);
+    if (!certificate)
+        return std::nullopt;
+    return Plugin::Crypto::Internal::describeCertificate(certificate.get());
+}
+
+bool importTrustedSigner(const QString& databasePath, const QByteArray& data, const QString& nickname, QString* error)
+{
+    clearError(error);
+    const QString name = nickname.trimmed();
+    if (name.isEmpty() || name.size() > 128 || name.contains(QChar(0))) {
+        setError(error, QStringLiteral("A certificate nickname of 1 to 128 characters without NUL is required"));
+        return false;
+    }
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
+        return false;
+    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    auto certificate = decodeSignerCertificate(data, error);
+    if (!certificate)
+        return false;
+    SlotHandle slot(PK11_GetInternalKeySlot());
+    if (!slot) {
+        setError(error, nssError());
+        return false;
+    }
+    const auto fingerprint = certificateFingerprint(certificate.get());
+    auto existing = findCertificateInSlot(slot.get(), fingerprint);
+    const QByteArray nameBytes = name.toUtf8();
+    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
+    if (!certificates) {
+        setError(error, nssError());
+        return false;
+    }
+    for (CERTCertListNode* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
+         node = CERT_LIST_NEXT(node)) {
+        if (node->cert && node->cert->nickname && nameBytes == node->cert->nickname
+            && certificateFingerprint(node->cert) != fingerprint) {
+            setError(error, QStringLiteral("That nickname belongs to a different certificate"));
+            return false;
+        }
+    }
+    const bool imported = !existing;
+    CERTCertTrust originalTrust { };
+    if (existing) {
+        certificate = std::move(existing);
+        if (CERT_GetCertTrust(certificate.get(), &originalTrust) != SECSuccess) {
+            setError(error, nssError());
+            return false;
+        }
+    }
+    if (imported
+        && PK11_ImportCert(slot.get(), certificate.get(), CK_INVALID_HANDLE, nameBytes.constData(), PR_FALSE)
+            != SECSuccess) {
+        setError(error, nssError());
+        return false;
+    }
+    CERTCertTrust trust = originalTrust;
+    trust.emailFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
+    if (CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate.get(), &trust) != SECSuccess) {
+        QString failure = nssError();
+        const auto rollback = imported
+            ? SEC_DeletePermCertificate(certificate.get())
+            : CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate.get(), &originalTrust);
+        if (rollback != SECSuccess)
+            failure += QStringLiteral("; certificate trust rollback failed: ") + nssError();
+        setError(error, failure);
+        return false;
+    }
+    return true;
+}
+
+bool removeSignerTrust(const QString& databasePath, const CertificateIdentity& identity, QString* error)
+{
+    clearError(error);
+    if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
+        return false;
+    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    SlotHandle slot(PK11_GetInternalKeySlot());
+    auto certificate = matchesSlot(identity, slot.get()) ? findCertificateInSlot(slot.get(), identity.sha256Fingerprint)
+                                                         : CertificateHandle();
+    if (!certificate || CERT_IsCACert(certificate.get(), nullptr)) {
+        setError(error, QStringLiteral("The selected signer certificate was not found"));
+        return false;
+    }
+    CERTCertTrust trust { };
+    if (CERT_GetCertTrust(certificate.get(), &trust) != SECSuccess) {
+        setError(error, nssError());
+        return false;
+    }
+    if ((trust.emailFlags & CERTDB_TRUSTED) == 0)
+        return true;
+    // Leaving a terminal record without peer trust would explicitly distrust
+    // the signer. Return to ordinary chain validation instead.
+    trust.emailFlags &= ~(CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD);
+    if (CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate.get(), &trust) != SECSuccess) {
+        setError(error, nssError());
+        return false;
+    }
+    return true;
 }
 
 bool importCertificate(const QString& databasePath, const QByteArray& data, const QString& nickname, QString* error)

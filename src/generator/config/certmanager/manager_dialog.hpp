@@ -12,6 +12,7 @@
 
 class QTableWidget;
 class QPushButton;
+class QTabWidget;
 
 namespace Mu::Generator {
 
@@ -45,6 +46,9 @@ private:
     // Adds the selected NSS database to the warning title for disambiguation.
     void showWarning(const QString& title, const QString& message);
 
+    bool showsPeople() const;
+
+    QTabWidget* m_tabs;
     QTableWidget* m_table;
     QPushButton* m_addButton;
     QPushButton* m_deleteButton;

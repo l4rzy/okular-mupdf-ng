@@ -10,6 +10,8 @@
 #include <QString>
 #include <QtGlobal>
 
+#include <optional>
+
 #include "shared/model/types.hpp"
 
 namespace Mu::Plugin::Crypto::CertificateDatabase {
@@ -26,6 +28,23 @@ struct CertificateRecord {
     Model::Certificate certificate;
     CertificateIdentity identity;
 };
+
+/// Public certificate input is bounded before parsing or displaying it.
+inline constexpr qsizetype MaxSignerCertificateBytes = 1024 * 1024;
+
+/// Parses one PEM/DER end-entity certificate without changing persistent trust.
+[[nodiscard]] std::optional<Model::Certificate>
+inspectSignerCertificate(const QString& databasePath, const QByteArray& data, QString* error = nullptr);
+/// Imports or reuses an exact certificate and grants email-signing peer trust.
+/// Existing nicknames, private keys, and other trust categories are preserved.
+bool importTrustedSigner(const QString& databasePath,
+                         const QByteArray& data,
+                         const QString& nickname,
+                         QString* error = nullptr);
+/// Lists explicitly trusted internal-slot end-entity certificates, including public-only ones.
+[[nodiscard]] QList<CertificateRecord> listTrustedSigners(const QString& databasePath, QString* error = nullptr);
+/// Removes email-signing peer trust, preserving the certificate and its keys.
+bool removeSignerTrust(const QString& databasePath, const CertificateIdentity& identity, QString* error = nullptr);
 
 enum class SigningKey { Rsa2048, Rsa3072, Rsa4096, EcdsaP256 };
 
