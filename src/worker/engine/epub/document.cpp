@@ -109,15 +109,21 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
     const float marginY = dimensions.heightPoints * Constant::PageMarginFraction;
 
     std::array<char, 128> marginRule { };
-    std::snprintf(marginRule.data(), marginRule.size(), "body { margin: %.3fpt %.3fpt !important; }", marginY, marginX);
+    // Page margins repeat on every page; reset body margins to avoid a second inset.
+    // Append user CSS last so specialized books can opt into custom margins.
+    std::snprintf(marginRule.data(),
+                  marginRule.size(),
+                  "@page { margin: %.3fpt %.3fpt !important; } body { margin: 0 !important; } ",
+                  marginY,
+                  marginX);
+    std::string css = marginRule.data();
 
     // Some EPUBs specify both width and height as 100% for images. During
     // reflow, the containing block may not have a definite height, causing
     // the image to collapse or overlap nearby text. Keep the image's natural
     // aspect ratio and cap it at the available content width, matching the
     // image safeguards used by SumatraPDF.
-    std::string css = "img { height: auto !important; max-width: 100% !important; } ";
-    css += marginRule.data();
+    css += "img { height: auto !important; max-width: 100% !important; } ";
     if (const char* fontRule = fontFamilyCss(settings.epub.fontFamily)) {
         css += ' ';
         css += fontRule;

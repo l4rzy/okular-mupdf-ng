@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/constants.hpp"
 #include "engine/epub/document.hpp"
 #include "engine/epub/export_jobs.hpp"
 #include "engine/pdf/document.hpp"
@@ -756,6 +757,83 @@ private slots:
         QVERIFY(secondGeometry.widthPoints < firstGeometry.widthPoints);
         QVERIFY(secondGeometry.heightPoints < firstGeometry.heightPoints);
         file.close();
+    }
+
+    void testPageMargins_data()
+    {
+        QTest::addColumn<QString>("publisherCss");
+        QTest::addColumn<QByteArray>("customCss");
+        QTest::addColumn<double>("pageMargin");
+        QTest::newRow("default") << QString() << QByteArray() << 0.0;
+        QTest::newRow("zero") << QStringLiteral("@page { margin: 0; }") << QByteArray() << 0.0;
+        QTest::newRow("positive") << QStringLiteral("@page { margin: 24pt; }") << QByteArray() << 0.0;
+        QTest::newRow("negative") << QStringLiteral("@page { margin: -20em 4em 1em 2em; }") << QByteArray() << 0.0;
+        QTest::newRow("publisher-important")
+            << QStringLiteral("@page { margin: -20em !important; }") << QByteArray() << 0.0;
+        QTest::newRow("custom") << QStringLiteral("@page { margin: -20em; }")
+                                << QByteArrayLiteral("@page { margin: 24pt !important; }") << 24.0;
+    }
+
+    void testPageMargins()
+    {
+        QFETCH(QString, publisherCss);
+        QFETCH(QByteArray, customCss);
+        QFETCH(double, pageMargin);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(directory.filePath(QStringLiteral("margins.html")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QString content = QStringLiteral("<html><head><style>%1 p { margin: 0; line-height: 24pt; }</style>"
+                                         "</head><body>")
+                              .arg(publisherCss);
+        constexpr int lineCount = 100;
+        for (int line = 0; line < lineCount; ++line)
+            content += QStringLiteral("<p>Line%1</p>").arg(line);
+        content += QStringLiteral("</body></html>");
+        const auto bytes = content.toUtf8();
+        QCOMPARE(file.write(bytes), bytes.size());
+        file.close();
+        QVERIFY(file.open(QIODevice::ReadOnly));
+
+        ::Mu::Worker::Engine::EpubDocument doc;
+        ::Mu::Model::DocumentSettings settings;
+        settings.epub.customCssBase64 = customCss.toBase64().toStdString();
+        doc.setSettings(settings);
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "margins.html", &error), error.c_str());
+        QVERIFY(doc.pageCount() > 1);
+
+        QStringList lines;
+        for (int page = 0; page < doc.pageCount(); ++page) {
+            const auto geometry = doc.pageGeometry(page, &error);
+            const auto boxes = doc.textBoxes(page, 72, 72, 10000, false, &error);
+            QVERIFY2(error.empty(), error.c_str());
+            const double marginX = customCss.isEmpty()
+                ? geometry.widthPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction
+                : pageMargin;
+            const double marginY = customCss.isEmpty()
+                ? geometry.heightPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction
+                : pageMargin;
+            QString line;
+            for (const auto& box : boxes) {
+                QVERIFY(box.left >= marginX - 0.01);
+                QVERIFY(box.top >= marginY - 0.01);
+                QVERIFY(box.right <= geometry.widthPoints - marginX + 0.01);
+                QVERIFY(box.bottom <= geometry.heightPoints - marginY + 0.01);
+                line += QString::fromStdString(box.text);
+                if (box.endOfLine) {
+                    lines.append(line);
+                    line.clear();
+                }
+            }
+            QVERIFY(line.isEmpty());
+            if (!boxes.empty()) {
+                QVERIFY(std::abs(boxes.front().left - marginX) < 0.1);
+            }
+        }
+        QCOMPARE(lines.size(), lineCount);
+        for (int line = 0; line < lineCount; ++line)
+            QCOMPARE(lines[line], QStringLiteral("Line%1").arg(line));
     }
 
     void testCustomCss()
