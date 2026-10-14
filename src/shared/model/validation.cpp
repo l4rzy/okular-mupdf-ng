@@ -341,7 +341,8 @@ bool isValidFormField(const FormField& field, std::string_view* reason)
         return fail("form field rectangle is invalid");
 
     const std::string_view stringsToCheck[] = { field.partialName, field.uiName, field.fullyQualifiedName,
-                                                field.groupName,   field.text,   field.onState };
+                                                field.groupName,   field.text,   field.onState,
+                                                field.formatHint };
     for (const auto& s : stringsToCheck) {
         // All user-visible field strings share the same encoding and C-string
         // safety requirements before they reach Qt or the worker.
@@ -360,6 +361,9 @@ bool isValidFormField(const FormField& field, std::string_view* reason)
 
     if (field.text.size() > Limit::MaxFormFieldStringBytes)
         return fail("form field text exceeds limit");
+
+    if (field.formatHint.size() > Limit::MaxFormFormatHintBytes)
+        return fail("form field format hint exceeds limit");
 
     if (field.choices.size() > Limit::MaxFormChoices)
         return fail("form field choices count exceeds limit");

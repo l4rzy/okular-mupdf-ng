@@ -440,6 +440,39 @@ private slots:
         QCOMPARE(embedded->data(), QByteArray("%PDF"));
     }
 
+    void formatHintTooltip_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QString>("label");
+        QTest::addColumn<QString>("format");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("existing-tooltip")
+            << QStringLiteral("Date") << QStringLiteral("Application date") << QStringLiteral("yyyy/mm/dd")
+            << QStringLiteral("Application date\nExpected format: yyyy/mm/dd");
+        QTest::newRow("name-fallback") << QStringLiteral("Date") << QStringLiteral("") << QStringLiteral("dd.mm.yyyy")
+                                       << QStringLiteral("Date\nExpected format: dd.mm.yyyy");
+        QTest::newRow("unnamed") << QStringLiteral("") << QStringLiteral("") << QStringLiteral("mm/dd/yyyy")
+                                 << QStringLiteral("Expected format: mm/dd/yyyy");
+        QTest::newRow("time-format") << QStringLiteral("Time") << QStringLiteral("") << QStringLiteral("HH:MM")
+                                     << QStringLiteral("Time\nExpected format: HH:MM");
+        QTest::newRow("ordinary-text") << QStringLiteral("Name") << QStringLiteral("Your name") << QStringLiteral("")
+                                       << QStringLiteral("Your name");
+    }
+
+    void formatHintTooltip()
+    {
+        QFETCH(QString, name);
+        QFETCH(QString, label);
+        QFETCH(QString, format);
+        QFETCH(QString, expected);
+        ::Mu::Model::FormField field;
+        field.partialName = name.toStdString();
+        field.uiName = label.toStdString();
+        field.formatHint = format.toStdString();
+        ::Mu::Generator::Proxy::Form::Text proxy(1, field, nullptr);
+        QCOMPARE(proxy.uiName(), expected);
+    }
+
     void formFieldTextProxyExposesProperties()
     {
         ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);

@@ -3,6 +3,8 @@
 
 #include "generator/proxy/form/text.hpp"
 
+#include <KLocalizedString>
+
 #include "generator/proxy/form/coordinator.hpp"
 
 namespace Mu::Generator::Proxy::Form {
@@ -35,7 +37,13 @@ QString Text::name() const
 
 QString Text::uiName() const
 {
-    return QString::fromStdString(m_data.uiName.empty() ? m_data.partialName : m_data.uiName);
+    QString tooltip = QString::fromStdString(m_data.uiName.empty() ? m_data.partialName : m_data.uiName);
+    if (!m_data.formatHint.empty()) {
+        if (!tooltip.isEmpty())
+            tooltip += QLatin1Char('\n');
+        tooltip += i18n("Expected format: %1", QString::fromStdString(m_data.formatHint));
+    }
+    return tooltip;
 }
 
 QString Text::fullyQualifiedName() const

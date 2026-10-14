@@ -87,6 +87,7 @@ inline constexpr std::size_t MaxLayerTextBytes = 256 * 1024;
 inline constexpr std::size_t MaxPageFormFields = 512;
 inline constexpr std::size_t MaxOpenFormFields = 32'768;
 inline constexpr std::size_t MaxFormFieldStringBytes = 64 * 1024;
+inline constexpr std::size_t MaxFormFormatHintBytes = 128;
 inline constexpr std::size_t MaxAggregateFormTextBytes = 4 * 1024 * 1024;
 inline constexpr std::size_t MaxFormChoices = 2048;
 inline constexpr std::size_t MaxFormSelectedIndices = 256;

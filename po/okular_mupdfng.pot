@@ -1131,3 +1131,8 @@ msgstr ""
 #: rc.cpp:126
 msgid "Page Size"
 msgstr ""
+
+#: src/generator/proxy/form/text.cpp:44
+#, kde-format
+msgid "Expected format: %1"
+msgstr ""

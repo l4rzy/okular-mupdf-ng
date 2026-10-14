@@ -2163,6 +2163,116 @@ private slots:
             << QByteArray("TU") << (QByteArray(textLimit - 1, 'X') + QByteArray("\xc3\xa9")) << false;
     }
 
+    void extractFormatHint_data()
+    {
+        QTest::addColumn<QByteArray>("script");
+        QTest::addColumn<QByteArray>("expected");
+        QTest::addColumn<int>("storage");
+        QTest::addColumn<bool>("inherited");
+        const QByteArray call("AFDate_FormatEx(\"yyyy/mm/dd\");");
+        QTest::newRow("literal-string") << call << QByteArray("yyyy/mm/dd") << 0 << false;
+        QTest::newRow("literal-stream") << call << QByteArray("yyyy/mm/dd") << 1 << false;
+        QTest::newRow("inherited") << call << QByteArray("yyyy/mm/dd") << 0 << true;
+        QTest::newRow("whitespace-single-quotes")
+            << QByteArray(" \nAFDate_FormatEx ( 'dd.mm.yyyy' ) \n") << QByteArray("dd.mm.yyyy") << 0 << false;
+        QTest::newRow("literal-time") << QByteArray("AFTime_FormatEx(\"HH:MM:ss\");") << QByteArray("HH:MM:ss") << 0
+                                      << false;
+        QTest::newRow("literal-time-whitespace")
+            << QByteArray(" AFTime_FormatEx ( 'h:MM tt' ) ") << QByteArray("h:MM tt") << 1 << true;
+        const QList<QByteArray> dateFormats { "m/d",         "m/d/yy",       "mm/dd/yy",       "mm/yy",       "d-mmm",
+                                              "d-mmm-yy",    "dd-mm-yy",     "yy-mm-dd",       "mmm-yy",      "mmmm-yy",
+                                              "mmm d, yyyy", "mmmm d, yyyy", "m/d/yy h:MM tt", "m/d/yy HH:MM" };
+        const QList<QByteArray> timeFormats { "HH:MM", "h:MM tt", "HH:MM:ss", "h:MM:ss tt" };
+        for (int index = 0; index < dateFormats.size(); ++index) {
+            const QByteArray script = "AFDate_Format(" + QByteArray::number(index) + ");";
+            QTest::newRow(script.constData()) << script << dateFormats[index] << 0 << false;
+        }
+        for (int index = 0; index < timeFormats.size(); ++index) {
+            const QByteArray script = " AFTime_Format ( " + QByteArray::number(index) + " ) ";
+            QTest::newRow(script.constData()) << script << timeFormats[index] << 1 << true;
+        }
+        for (const auto& function : { QByteArray("AFDate_Format"), QByteArray("AFTime_Format") }) {
+            for (const auto& argument : { QByteArray("-1"),
+                                          QByteArray("14"),
+                                          QByteArray("999999999999999999999"),
+                                          QByteArray("'0'"),
+                                          QByteArray("0.0"),
+                                          QByteArray("1+1"),
+                                          QByteArray("010"),
+                                          QByteArray("+1"),
+                                          QByteArray("index"),
+                                          QByteArray() }) {
+                const QByteArray script = function + "(" + argument + ");";
+                QTest::newRow(script.constData()) << script << QByteArray() << 0 << false;
+            }
+        }
+        QTest::newRow("time-index-out-of-range") << QByteArray("AFTime_Format(4);") << QByteArray() << 0 << false;
+        QByteArray utf16("\xfe\xff", 2);
+        for (char c : call) {
+            utf16.append('\0');
+            utf16.append(c);
+        }
+        QTest::newRow("utf16-stream") << utf16 << QByteArray("yyyy/mm/dd") << 1 << false;
+        QTest::newRow("utf16-nul") << (utf16 + QByteArray(2, '\0')) << QByteArray() << 1 << false;
+        QTest::newRow("utf16-truncated") << (utf16 + QByteArray(1, '\0')) << QByteArray() << 1 << false;
+        QByteArray utf16le("\xff\xfe", 2);
+        for (char c : call) {
+            utf16le.append(c);
+            utf16le.append('\0');
+        }
+        QTest::newRow("utf16le-string") << utf16le << QByteArray("yyyy/mm/dd") << 0 << false;
+        QTest::newRow("corrupt-stream") << QByteArray("invalid compressed stream") << QByteArray() << 2 << false;
+        for (const auto& script : { QByteArray("// AFDate_FormatEx(\"yyyy/mm/dd\");"),
+                                    QByteArray("var s = 'AFDate_FormatEx(\"yyyy/mm/dd\");';"),
+                                    QByteArray("AFDate_FormatEx(pattern);"),
+                                    QByteArray("AFDate_FormatEx(\"yyyy/mm/dd\", extra);"),
+                                    QByteArray("AFDate_FormatEx(\"yyyy/mm/dd\"); other();"),
+                                    QByteArray("AFDate_FormatEx(\"\");"),
+                                    QByteArray("AFDate_FormatEx(\"yyyy/mm/dd)"),
+                                    QByteArray("AFDate_FormatEx(\"yyyy\\nmm\\ndd\");"),
+                                    QByteArray("AFDate_FormatEx(\"") + QByteArray(129, 'd') + "\");" }) {
+            QTest::newRow(script.constData()) << script << QByteArray() << 0 << false;
+        }
+        QTest::newRow("oversized-string") << (call + QByteArray(4096, ' ')) << QByteArray() << 0 << false;
+        QTest::newRow("oversized-stream") << (call + QByteArray(4096, ' ')) << QByteArray() << 1 << false;
+        QTest::newRow("embedded-nul") << (call + QByteArray(1, '\0') + "other();") << QByteArray() << 0 << false;
+    }
+
+    void extractFormatHint()
+    {
+        QFETCH(QByteArray, script);
+        QFETCH(QByteArray, expected);
+        QFETCH(int, storage);
+        QFETCH(bool, inherited);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("date-format.pdf");
+        const QByteArray action("/AA << /F 6 0 R >> ");
+        const QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [5 0 R] >>",
+            "<< /FT /Tx /T (Date) /TU (Existing tooltip) /Kids [5 0 R] " + (inherited ? action : QByteArray()) + ">>",
+            "<< /Type /Annot /Subtype /Widget /Parent 4 0 R /P 3 0 R /Rect [10 10 150 30] "
+                + (inherited ? QByteArray() : action) + ">>",
+            "<< /S /JavaScript /JS 7 0 R >>",
+            storage != 0 ? "<< /Length " + QByteArray::number(script.size())
+                    + (storage == 2 ? " /Filter /FlateDecode" : "") + " >>\nstream\n" + script + "\nendstream"
+                         : "<" + script.toHex() + ">"
+        };
+        QVERIFY(writePdfObjects(path, objects));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "date-format.pdf", &error), error.c_str());
+        const auto fields = document.pageDetails(0, &error).formFields;
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(fields.size(), 1u);
+        QCOMPARE(fields.front().formatHint, expected.toStdString());
+        QCOMPARE(fields.front().uiName, std::string("Existing tooltip"));
+    }
+
     void extractFormFieldsStringLimits()
     {
         QFETCH(QByteArray, key);

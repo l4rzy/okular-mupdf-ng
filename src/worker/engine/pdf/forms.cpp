@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include "engine/constants.hpp"
+#include "engine/pdf/format_hint.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 #include "shared/protocol/limits.hpp"
@@ -211,6 +212,56 @@ void appendChoiceValue(fz_context* context, pdf_obj* value, std::vector<const ch
 const char* choiceOption(fz_context* context, pdf_obj* field, int index, bool useExportValues)
 {
     return pdf_choice_field_option(context, field, useExportValues ? 1 : 0, index);
+}
+
+std::string readFormatHint(fz_context* context, pdf_obj* field)
+{
+    // Optional tooltip metadata must not load an unbounded script stream or
+    // prevent filling a form when a script is malformed.
+    constexpr std::size_t MaxScriptBytes = 4096;
+    std::array<char, MaxScriptBytes + 1> bytes { };
+    fz_stream* volatile stream = nullptr;
+    char* volatile decoded = nullptr;
+    fz_try(context)
+    {
+        pdf_obj* action = pdf_dict_getp_inheritable(context, field, "AA/F");
+        if (pdf_name_eq(context, pdf_dict_get(context, action, PDF_NAME(S)), PDF_NAME(JavaScript))) {
+            pdf_obj* script = pdf_dict_get(context, action, PDF_NAME(JS));
+            std::string_view raw;
+            if (pdf_is_string(context, script) && pdf_to_str_len(context, script) <= MaxScriptBytes) {
+                raw = { pdf_to_str_buf(context, script), pdf_to_str_len(context, script) };
+            } else if (pdf_is_stream(context, script)) {
+                stream = pdf_open_stream(context, script);
+                const auto length =
+                    fz_read(context, stream, reinterpret_cast<unsigned char*>(bytes.data()), bytes.size());
+                if (length < bytes.size())
+                    raw = { bytes.data(), length };
+            }
+            // Reject embedded NULs before conversion to a C string. UTF-16
+            // scripts may contain zero bytes, but not zero code units.
+            const bool utf16 = raw.starts_with("\xfe\xff") || raw.starts_with("\xff\xfe");
+            bool embeddedNul = utf16 ? raw.size() % 2 != 0 : raw.find('\0') != std::string_view::npos;
+            if (utf16) {
+                for (std::size_t i = 2; i + 1 < raw.size(); i += 2)
+                    embeddedNul |= raw[i] == '\0' && raw[i + 1] == '\0';
+            }
+            if (!raw.empty() && !embeddedNul)
+                decoded = pdf_new_utf8_from_pdf_string(context, raw.data(), raw.size());
+        }
+    }
+    fz_always(context)
+    {
+        fz_drop_stream(context, stream);
+    }
+    fz_catch(context)
+    {
+        fz_warn(context, "could not read form format hint: %s", fz_caught_message(context));
+    }
+    const auto freeScript = [context](char* value) {
+        fz_free(context, value);
+    };
+    const std::unique_ptr<char, decltype(freeScript)> script(decoded, freeScript);
+    return script ? std::string(parseFormatHint(script.get())) : std::string { };
 }
 
 void updateAllPages(fz_context* context, fz_document* document, int pageCount, pdf_obj* changedChoiceField = nullptr)
@@ -409,6 +460,9 @@ std::vector<FormField> PdfDocument::extractPageFormFields(
                 formField.maximumLength = pdf_text_widget_max_len(m_context, widget);
                 formField.multiline = (fieldFlags & PDF_TX_FIELD_IS_MULTILINE) != 0;
                 formField.password = (fieldFlags & PDF_TX_FIELD_IS_PASSWORD) != 0;
+                formField.formatHint = readFormatHint(m_context, field);
+                if (!budget.charge(formField.formatHint.size()))
+                    fz_throw(m_context, FZ_ERROR_LIMIT, "resource limit: document form text size exceeded");
             } else if (widgetType == PDF_WIDGET_TYPE_CHECKBOX) {
                 formField.type = FormFieldType::CheckBox;
                 // MuPDF reports a non-Off appearance state as checked; preserve

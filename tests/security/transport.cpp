@@ -54,7 +54,7 @@ private slots:
         QVERIFY(render);
         QCOMPARE(render->cancelTransferId, transfer);
         auto oldVersion = *bytes;
-        oldVersion[4] = std::byte { 5 };
+        oldVersion[4] = std::byte { 10 };
         QVERIFY(!IPC::ZppCodec::decode(oldVersion, &decoded, &error));
     }
 
@@ -581,6 +581,7 @@ private slots:
         field.visible = true;
         field.printable = true;
         field.text = "Canada";
+        field.formatHint = "yyyy/mm/dd";
         field.maximumLength = 100;
         field.multiline = false;
         field.password = false;
@@ -629,6 +630,7 @@ private slots:
         QCOMPARE(decField.visible, field.visible);
         QCOMPARE(decField.printable, field.printable);
         QCOMPARE(decField.text, field.text);
+        QCOMPARE(decField.formatHint, field.formatHint);
         QCOMPARE(decField.maximumLength, field.maximumLength);
         QCOMPARE(decField.radiosInUnison, field.radiosInUnison);
         QCOMPARE(decField.choices, field.choices);
@@ -723,6 +725,31 @@ private slots:
         field.page = 0;
         field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
         field.uiName.assign(static_cast<std::size_t>(bytes), 'X');
+        QCOMPARE(::Mu::Model::isValidFormField(field), accepted);
+    }
+
+    void formFieldFormatHintLimits_data()
+    {
+        QTest::addColumn<QByteArray>("format");
+        QTest::addColumn<bool>("accepted");
+        const int limit = static_cast<int>(::Mu::Limit::MaxFormFormatHintBytes);
+        QTest::newRow("empty") << QByteArray() << true;
+        QTest::newRow("date") << QByteArray("yyyy/mm/dd") << true;
+        QTest::newRow("at-limit") << QByteArray(limit, 'd') << true;
+        QTest::newRow("above-limit") << QByteArray(limit + 1, 'd') << false;
+        QTest::newRow("embedded-nul") << QByteArray("yy\0mm", 5) << false;
+        QTest::newRow("invalid-utf8") << QByteArray("\xff") << false;
+    }
+
+    void formFieldFormatHintLimits()
+    {
+        QFETCH(QByteArray, format);
+        QFETCH(bool, accepted);
+        ::Mu::Model::FormField field;
+        field.handle = "g1-f0-o1";
+        field.page = 0;
+        field.rectangle = { 0.0, 0.0, 1.0, 1.0 };
+        field.formatHint = format.toStdString();
         QCOMPARE(::Mu::Model::isValidFormField(field), accepted);
     }
 

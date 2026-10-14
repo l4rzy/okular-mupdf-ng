@@ -1200,3 +1200,8 @@ msgstr "Phông chữ"
 #: rc.cpp:126
 msgid "Page Size"
 msgstr "Khổ giấy"
+
+#: src/generator/proxy/form/text.cpp:44
+#, kde-format
+msgid "Expected format: %1"
+msgstr "Định dạng mong đợi: %1"

@@ -588,6 +588,8 @@ struct FormField {
     int maximumLength = 0;
     bool multiline = false;
     bool password = false;
+    /// Optional input-format hint extracted without executing field scripts.
+    std::string formatHint;
 
     /// Button (CheckBox / RadioButton) attributes.
     bool checked = false;
