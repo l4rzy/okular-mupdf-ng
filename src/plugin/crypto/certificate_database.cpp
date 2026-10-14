@@ -522,11 +522,18 @@ bool addSelfSignedExtensions(CERTCertificate* certificate, QString* error)
     return true;
 }
 
+SECStatus grantSignerTrust(CERTCertificate* certificate, CERTCertTrust trust)
+{
+    trust.emailFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
+    return CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate, &trust);
+}
+
 bool encodeSignAndImport(SlotHandle& slot,
                          CertificateHandle& unsignedHandle,
                          PrivateKeyHandle& privateKey,
                          PublicKeyHandle& publicKey,
                          const QString& nickname,
+                         bool trustForVerification,
                          QString* error)
 {
     // Encode, sign, and import as one operation; callers delete both token
@@ -570,6 +577,18 @@ bool encodeSignAndImport(SlotHandle& slot,
                                            : QStringLiteral("decode the generated self-signed certificate");
         setError(error, QStringLiteral("Could not %1: %2%3").arg(action, importError, keySuffix));
         return false;
+    }
+    if (trustForVerification) {
+        CERTCertTrust trust { };
+        if (CERT_GetCertTrust(certificate.get(), &trust) != SECSuccess
+            || grantSignerTrust(certificate.get(), trust) != SECSuccess) {
+            QString failure = QStringLiteral("Could not trust the generated certificate: ") + nssError();
+            if (SEC_DeletePermCertificate(certificate.get()) != SECSuccess)
+                failure += QStringLiteral("; certificate rollback failed: ") + nssError();
+            failure += keyRollbackSuffix(std::move(privateKey), std::move(publicKey));
+            setError(error, failure);
+            return false;
+        }
     }
     return true;
 }
@@ -685,9 +704,7 @@ bool importTrustedSigner(const QString& databasePath, const QByteArray& data, co
         setError(error, nssError());
         return false;
     }
-    CERTCertTrust trust = originalTrust;
-    trust.emailFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
-    if (CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate.get(), &trust) != SECSuccess) {
+    if (grantSignerTrust(certificate.get(), originalTrust) != SECSuccess) {
         QString failure = nssError();
         const auto rollback = imported
             ? SEC_DeletePermCertificate(certificate.get())
@@ -930,7 +947,8 @@ bool createSelfSignedCertificate(const QString& databasePath,
             error->append(keySuffix);
         return false;
     }
-    return encodeSignAndImport(slot, unsignedHandle, privateKeyHandle, publicKeyHandle, nickname, error);
+    return encodeSignAndImport(
+        slot, unsignedHandle, privateKeyHandle, publicKeyHandle, nickname, options.trustForVerification, error);
 }
 
 bool deleteCertificate(const QString& databasePath, const CertificateIdentity& identity, QString* error)

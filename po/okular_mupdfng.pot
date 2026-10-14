@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-11 01:33-0500\n"
+"POT-Creation-Date: 2026-10-13 22:46-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -77,7 +77,7 @@ msgstr ""
 msgid "256 MiB"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:79 src/generator/mupdfng.cpp:431
+#: src/generator/config/settingswidget.cpp:79 src/generator/mupdfng.cpp:432
 msgid "Off"
 msgstr ""
 
@@ -169,7 +169,7 @@ msgstr ""
 msgid "None"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:172 src/generator/mupdfng.cpp:417
+#: src/generator/config/settingswidget.cpp:172 src/generator/mupdfng.cpp:418
 msgid "MuPDF"
 msgstr ""
 
@@ -408,274 +408,345 @@ msgstr ""
 msgid "Manage Certificates - %1"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:39
-#: src/generator/config/certmanager/manager_dialog.cpp:123
-#: src/generator/mupdfng.cpp:793
+#: src/generator/config/certmanager/manager_dialog.cpp:41
+#: src/generator/config/certmanager/manager_dialog.cpp:154
+#: src/generator/mupdfng.cpp:818
 msgid "Unknown"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:55
+#: src/generator/config/certmanager/manager_dialog.cpp:58
 msgid "Add Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:56
+#: src/generator/config/certmanager/manager_dialog.cpp:59
+#: src/generator/config/certmanager/manager_dialog.cpp:116
 msgid "Delete Selected"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:57
+#: src/generator/config/certmanager/manager_dialog.cpp:60
 msgid "Close"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:61
+#: src/generator/config/certmanager/manager_dialog.cpp:64
 msgid "Manage NSS Certificates"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:65
-msgid "Nickname"
-msgstr ""
-
-#: src/generator/config/certmanager/manager_dialog.cpp:66
-msgid "Subject"
-msgstr ""
-
-#: src/generator/config/certmanager/manager_dialog.cpp:67
-msgid "Issuer"
-msgstr ""
-
-#: src/generator/config/certmanager/manager_dialog.cpp:68
-msgid "Algorithm"
+#: src/generator/config/certmanager/manager_dialog.cpp:69
+msgid "My Certificates"
 msgstr ""
 
 #: src/generator/config/certmanager/manager_dialog.cpp:69
-msgid "Valid From"
+msgid "People"
 msgstr ""
 
 #: src/generator/config/certmanager/manager_dialog.cpp:70
+msgid "Certificates with private keys used to sign documents."
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:71
+msgid ""
+"Individual certificates trusted for PDF signature verification. Trust also "
+"applies to S/MIME in this NSS database."
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:76
+msgid "Nickname"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:77
+msgid "Subject"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:78
+msgid "Issuer"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:79
+msgid "Algorithm"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:80
+msgid "Valid From"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:81
 msgid "Valid Until"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:84
-msgid "Signing certificates in this NSS database:"
+#: src/generator/config/certmanager/manager_dialog.cpp:82
+msgid "SHA-256 Fingerprint"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:113
+#: src/generator/config/certmanager/manager_dialog.cpp:116
+msgid "Remove Trust"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:143
 msgid "Certificate Database"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:144
+#: src/generator/config/certmanager/manager_dialog.cpp:176
 msgid "Import from File..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:145
+#: src/generator/config/certmanager/manager_dialog.cpp:177
 msgid "Paste PEM Certificate..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:146
+#: src/generator/config/certmanager/manager_dialog.cpp:178
 msgid "Create Self-Signed Certificate..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:171
+#: src/generator/config/certmanager/manager_dialog.cpp:203
 msgid "Creating certificate..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:172
-#: src/generator/config/certmanager/manager_dialog.cpp:189
+#: src/generator/config/certmanager/manager_dialog.cpp:204
+#: src/generator/config/certmanager/manager_dialog.cpp:221
 msgid "Create Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:201
-#: src/generator/config/certmanager/manager_dialog.cpp:208
-#: src/generator/config/certmanager/manager_dialog.cpp:213
-#: src/generator/config/certmanager/manager_dialog.cpp:230
-#: src/generator/config/certmanager/manager_dialog.cpp:271
-#: src/generator/config/certmanager/manager_dialog.cpp:290
+#: src/generator/config/certmanager/manager_dialog.cpp:233
+#: src/generator/config/certmanager/manager_dialog.cpp:241
+#: src/generator/config/certmanager/manager_dialog.cpp:245
+#: src/generator/config/certmanager/manager_dialog.cpp:251
+#: src/generator/config/certmanager/manager_dialog.cpp:272
+#: src/generator/config/certmanager/manager_dialog.cpp:313
+#: src/generator/config/certmanager/manager_dialog.cpp:322
+#: src/generator/config/certmanager/manager_dialog.cpp:366
 msgid "Import Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:203
+#: src/generator/config/certmanager/manager_dialog.cpp:235
+msgid "Certificates (*.pem *.der *.crt *.cer);;All Files (*)"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:236
 msgid "PKCS#12 Bundles (*.p12 *.pfx);;PEM Certificates (*.pem);;All Files (*)"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:221
+#: src/generator/config/certmanager/manager_dialog.cpp:245
+msgid "The certificate file exceeds the 1 MiB limit."
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:263
 msgid "PKCS#12 Password"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:222
+#: src/generator/config/certmanager/manager_dialog.cpp:264
 msgid "Bundle password:"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:251
+#: src/generator/config/certmanager/manager_dialog.cpp:293
 msgid "Paste PEM Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:254
+#: src/generator/config/certmanager/manager_dialog.cpp:296
 msgid "Paste a PEM certificate here..."
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:271
+#: src/generator/config/certmanager/manager_dialog.cpp:313
 msgid "The certificate data is empty"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:278
+#: src/generator/config/certmanager/manager_dialog.cpp:330
+msgid "Trust PDF Signer"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:331
+msgid "Trust this certificate for PDF signature verification?"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:337
+msgid ""
+"Subject: %1\n"
+"Issuer: %2\n"
+"Valid from: %3\n"
+"Valid until: %4\n"
+"SHA-256: %5\n"
+"\n"
+"This also grants S/MIME trust in this NSS database. Reopen documents to "
+"refresh signature results."
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:351
 msgid "Certificate Nickname"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:279
-#: src/generator/config/certmanager/self_signed_dialog.cpp:60
+#: src/generator/config/certmanager/manager_dialog.cpp:352
+#: src/generator/config/certmanager/self_signed_dialog.cpp:63
 msgid "Nickname:"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:310
-#: src/generator/config/certmanager/manager_dialog.cpp:317
+#: src/generator/config/certmanager/manager_dialog.cpp:387
+msgid "Remove Signer Trust"
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:387
+#: src/generator/config/certmanager/manager_dialog.cpp:399
 msgid "Delete Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/manager_dialog.cpp:311
+#: src/generator/config/certmanager/manager_dialog.cpp:389
+msgid "Remove trust for %1? The certificate and any private key will be kept."
+msgstr ""
+
+#: src/generator/config/certmanager/manager_dialog.cpp:390
 msgid "Delete certificate \"%1\" from the NSS database?"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:56
+#: src/generator/config/certmanager/self_signed_dialog.cpp:55
+msgid "Trust this certificate for verifying signatures in this database"
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:59
 msgid "Create Self-Signed Certificate"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:58
+#: src/generator/config/certmanager/self_signed_dialog.cpp:61
 msgid "Certificate identity"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:61
+#: src/generator/config/certmanager/self_signed_dialog.cpp:64
 msgid "Email:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:62
+#: src/generator/config/certmanager/self_signed_dialog.cpp:65
 msgid "Common Name:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:63
+#: src/generator/config/certmanager/self_signed_dialog.cpp:66
 msgid "Organization:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:64
+#: src/generator/config/certmanager/self_signed_dialog.cpp:67
 msgid "Organizational Unit:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:65
+#: src/generator/config/certmanager/self_signed_dialog.cpp:68
 msgid "Locality:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:66
+#: src/generator/config/certmanager/self_signed_dialog.cpp:69
 msgid "State or Province:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:67
+#: src/generator/config/certmanager/self_signed_dialog.cpp:70
 msgid "Country (2 letters):"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:77
+#: src/generator/config/certmanager/self_signed_dialog.cpp:83
 msgid "Validity and key"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:102
+#: src/generator/config/certmanager/self_signed_dialog.cpp:108
 msgid "Valid from:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:103
+#: src/generator/config/certmanager/self_signed_dialog.cpp:109
 msgid "Valid until:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:106
+#: src/generator/config/certmanager/self_signed_dialog.cpp:112
 msgid "RSA 2048"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:107
+#: src/generator/config/certmanager/self_signed_dialog.cpp:113
 msgid "RSA 3072"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:108
+#: src/generator/config/certmanager/self_signed_dialog.cpp:114
 msgid "RSA 4096"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:109
+#: src/generator/config/certmanager/self_signed_dialog.cpp:115
 msgid "ECDSA P-256"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:110
+#: src/generator/config/certmanager/self_signed_dialog.cpp:116
 msgid "Choose the signing key for the new certificate."
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:111
+#: src/generator/config/certmanager/self_signed_dialog.cpp:117
 msgid "Signing key:"
 msgstr ""
 
-#: src/generator/config/certmanager/self_signed_dialog.cpp:114
+#: src/generator/config/certmanager/self_signed_dialog.cpp:121
+msgid ""
+"Also grants S/MIME trust in this NSS database. Other users must trust your "
+"certificate separately."
+msgstr ""
+
+#: src/generator/config/certmanager/self_signed_dialog.cpp:127
 msgid "Create"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:163
+#: src/generator/mupdfng.cpp:164
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:167
+#: src/generator/mupdfng.cpp:168
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:168
+#: src/generator/mupdfng.cpp:169
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:203
+#: src/generator/mupdfng.cpp:204
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:214
+#: src/generator/mupdfng.cpp:215
 msgid "The document renderer stopped responding. Restart Okular to try again."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:248
+#: src/generator/mupdfng.cpp:249
 msgid "Export to PDF failed: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:251
+#: src/generator/mupdfng.cpp:252
 msgid "Export to PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:268
+#: src/generator/mupdfng.cpp:269
 msgid "OCR failed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:357
+#: src/generator/mupdfng.cpp:358
 msgid ""
 "PDF JavaScript will be enabled or disabled when this document is next opened."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:378
+#: src/generator/mupdfng.cpp:379
 msgid ""
 "The PDF could not be refreshed after changing its JavaScript setting. "
 "Restart Okular."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:397
+#: src/generator/mupdfng.cpp:398
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:418
+#: src/generator/mupdfng.cpp:419
 msgid "MuPDF OCR"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:432
+#: src/generator/mupdfng.cpp:433
 msgid "Automatic"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:433
+#: src/generator/mupdfng.cpp:434
 msgid "On"
 msgstr ""
 
@@ -683,85 +754,85 @@ msgstr ""
 msgid "No OCR models available. Please install a Tesseract language model."
 msgstr ""
 
+#: src/generator/mupdfng.cpp:444
+msgid "MuPDF OCR: %1"
+msgstr ""
+
 #: src/generator/mupdfng.cpp:450
 msgid "Toggle MuPDF OCR"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:445
-msgid "MuPDF OCR: %1"
-msgstr ""
-
-#: src/generator/mupdfng.cpp:452
+#: src/generator/mupdfng.cpp:470
 msgid "Manage Certificates…"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:482
+#: src/generator/mupdfng.cpp:503
 msgid "MuPDF-NG"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:484
+#: src/generator/mupdfng.cpp:505
 msgid "MuPDF-NG Configuration"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:490
+#: src/generator/mupdfng.cpp:511
 msgid "Restart needed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:490
+#: src/generator/mupdfng.cpp:511
 msgid "You need to restart Okular to apply this change."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:765
+#: src/generator/mupdfng.cpp:790
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:778
+#: src/generator/mupdfng.cpp:803
 msgid ""
 "[WARN] The MuPDF worker is partially hardened: Okular's protection is "
 "limited."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:780
+#: src/generator/mupdfng.cpp:805
 msgid ""
 "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
 "you from malicious documents."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:800
+#: src/generator/mupdfng.cpp:825
 msgid "MuPDF: %1 (system library)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:801
+#: src/generator/mupdfng.cpp:826
 msgid "MuPDF: %1 (bundled)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:805
+#: src/generator/mupdfng.cpp:830
 msgid "Sandbox: Fully hardened [OK]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:807
+#: src/generator/mupdfng.cpp:832
 msgid "Sandbox: Partially hardened [WARN]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:809
+#: src/generator/mupdfng.cpp:834
 msgid "Sandbox: Unconfined [CRIT]"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:815
+#: src/generator/mupdfng.cpp:840
 msgid "unknown"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:816
+#: src/generator/mupdfng.cpp:841
 msgid "Worker memory: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:819
+#: src/generator/mupdfng.cpp:844
 msgid "Worker restarts: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:844
+#: src/generator/mupdfng.cpp:869
 msgid ""
 "[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
@@ -770,104 +841,104 @@ msgid ""
 "Error: %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:934
+#: src/generator/mupdfng.cpp:959
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:964
+#: src/generator/mupdfng.cpp:989
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1248
+#: src/generator/mupdfng.cpp:1273
 msgid "Format"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1251 rc.cpp:42
+#: src/generator/mupdfng.cpp:1276 rc.cpp:42
 msgid "Security"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1253
+#: src/generator/mupdfng.cpp:1278
 msgid "Yes"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1253
+#: src/generator/mupdfng.cpp:1278
 msgid "No"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1254
+#: src/generator/mupdfng.cpp:1279
 msgid "Optimized"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1257
+#: src/generator/mupdfng.cpp:1282
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/generator/mupdfng.cpp:1257
+#: src/generator/mupdfng.cpp:1282
 msgid "Not Signed"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1258
+#: src/generator/mupdfng.cpp:1283
 msgid "Digital Signatures"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1293
+#: src/generator/mupdfng.cpp:1318
 msgid ""
 "This document has no embedded table of contents. A generated table of "
 "contents is being used."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1406 src/generator/mupdfng.cpp:1429
+#: src/generator/mupdfng.cpp:1431 src/generator/mupdfng.cpp:1454
 msgid "The PDF layers could not be loaded."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1417
+#: src/generator/mupdfng.cpp:1442
 msgid "The PDF layer visibility could not be changed."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1458
+#: src/generator/mupdfng.cpp:1483
 msgid "OCR completed for page %1"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1603
+#: src/generator/mupdfng.cpp:1628
 msgid "Strict sandbox enforcement blocks this document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1604 src/generator/mupdfng.cpp:1615
+#: src/generator/mupdfng.cpp:1629 src/generator/mupdfng.cpp:1640
 msgid "MuPDF worker is unavailable."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1611
+#: src/generator/mupdfng.cpp:1636
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1628
+#: src/generator/mupdfng.cpp:1653
 msgid "Flattened PDF"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1634
+#: src/generator/mupdfng.cpp:1659
 msgid "Annotation File (XFDF)"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1648
+#: src/generator/mupdfng.cpp:1673
 msgid "Export to flattened PDF finished."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1659
+#: src/generator/mupdfng.cpp:1684
 msgid "Starting to export to PDF."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1673
+#: src/generator/mupdfng.cpp:1698
 msgid "XFDF export does not support rotated PDF pages."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1674
+#: src/generator/mupdfng.cpp:1699
 msgid "Could not check PDF page rotation for XFDF export."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1685
+#: src/generator/mupdfng.cpp:1710
 msgid "Export to XFDF finished."
 msgstr ""
 

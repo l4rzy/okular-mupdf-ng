@@ -6,6 +6,7 @@
 #include "dialog_utils.hpp"
 #include "generator/config/tooltip.hpp"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTimeEdit>
 #include <QDialogButtonBox>
@@ -50,6 +51,8 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     , m_signingKey(new QComboBox(this))
     , m_validFrom(new QDateTimeEdit(QDateTime::currentDateTime(), this))
     , m_validUntil(new QDateTimeEdit(QDateTime::currentDateTime().addYears(1), this))
+    , m_trustForVerification(
+          new QCheckBox(i18n("Trust this certificate for verifying signatures in this database"), this))
     , m_databasePath(std::move(databasePath))
 {
     // Step 1: Collect the subject identity fields used to construct the cert.
@@ -65,11 +68,14 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     subjectForm->addRow(i18n("Locality:"), m_locality);
     subjectForm->addRow(i18n("State or Province:"), m_state);
     subjectForm->addRow(i18n("Country (2 letters):"), m_country);
-    for (auto* field : { m_nickname, m_commonName, m_organization, m_organizationalUnit, m_locality, m_state })
+    for (auto* field :
+         { m_nickname, m_email, m_commonName, m_organization, m_organizationalUnit, m_locality, m_state, m_country }) {
         field->setMaxLength(256);
+        // Prevent uneven row compression from shrinking native input borders.
+        field->setMinimumHeight(field->sizeHint().height());
+    }
     m_nickname->setMaxLength(128);
     m_country->setMaxLength(2);
-    m_email->setMaxLength(256);
     // NSS expects an ISO-style two-letter country code when one is supplied.
     m_country->setValidator(
         new QRegularExpressionValidator(QRegularExpression(QStringLiteral("[A-Za-z]{0,2}")), m_country));
@@ -109,6 +115,13 @@ SelfSignedCertificateDialog::SelfSignedCertificateDialog(QString databasePath, Q
     m_signingKey->addItem(i18n("ECDSA P-256"), static_cast<int>(SigningKey::EcdsaP256));
     m_signingKey->setToolTip(Config::wrapToolTip(i18n("Choose the signing key for the new certificate.")));
     addValueRow(i18n("Signing key:"), m_signingKey);
+    m_trustForVerification->setObjectName(QStringLiteral("trustForVerification"));
+    validityForm->addRow(m_trustForVerification);
+    auto* trustDescription = new QLabel(
+        i18n("Also grants S/MIME trust in this NSS database. Other users must trust your certificate separately."),
+        validityGroup);
+    trustDescription->setWordWrap(true);
+    validityForm->addRow(trustDescription);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(i18n("Create"));
@@ -139,7 +152,8 @@ SelfSignedCertificateDialog::certificateOptions() const
              m_validFrom->dateTime(),
              m_validUntil->dateTime(),
              m_email->text(),
-             static_cast<Plugin::Crypto::CertificateDatabase::SigningKey>(m_signingKey->currentData().toInt()) };
+             static_cast<Plugin::Crypto::CertificateDatabase::SigningKey>(m_signingKey->currentData().toInt()),
+             m_trustForVerification->isChecked() };
 }
 
 } // namespace Mu::Generator

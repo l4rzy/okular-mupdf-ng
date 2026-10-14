@@ -70,6 +70,8 @@ struct SelfSignedCertificateOptions {
     /// Optional email address placed in the certificate subject.
     QString email;
     SigningKey signingKey = SigningKey::Rsa2048;
+    /// Explicit local PDF/S/MIME signer trust; signing alone does not require it.
+    bool trustForVerification = false;
 };
 
 /// Lists internal-slot certificates with private keys from the selected persistent NSS database.

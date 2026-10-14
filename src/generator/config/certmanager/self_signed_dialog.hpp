@@ -9,6 +9,7 @@
 #include "plugin/crypto/certificate_database.hpp"
 
 class QComboBox;
+class QCheckBox;
 class QDateTimeEdit;
 class QLineEdit;
 
@@ -39,6 +40,7 @@ private:
     QComboBox* m_signingKey;
     QDateTimeEdit* m_validFrom;
     QDateTimeEdit* m_validUntil;
+    QCheckBox* m_trustForVerification;
     // Used in the title so operations identify which NSS database is edited.
     QString m_databasePath;
 };

@@ -4,6 +4,7 @@
 #include <KLocalizedString>
 #include <QTest>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
@@ -105,7 +106,37 @@ private slots:
         QCOMPARE(signing->rowCount(), 1);
         QCOMPARE(::Mu::Plugin::Crypto::createDetachedCmsFromDigest(options.nickname, { }, { }).result,
                  ::Mu::Model::SigningResult::Success);
-        QVERIFY2(Database::deleteCertificate(path, records.front().identity, &error), qPrintable(error));
+        QVERIFY2(Database::importTrustedSigner(path, der, options.nickname, &error), qPrintable(error));
+        signing->selectRow(0);
+        QTimer::singleShot(0, &dialog, [&dialog] {
+            for (auto* message : dialog.findChildren<QMessageBox*>())
+                message->button(QMessageBox::Yes)->click();
+        });
+        remove->click();
+        QCOMPARE(signing->rowCount(), 0);
+        tabs->setCurrentIndex(1);
+        QCOMPARE(people->rowCount(), 0);
+        QVERIFY(Database::listCertificates(path).isEmpty());
+        QVERIFY(Database::listTrustedSigners(path).isEmpty());
+    }
+
+    void selectsSelfSignedTrust_data()
+    {
+        QTest::addColumn<bool>("trusted");
+        QTest::newRow("signing-only") << false;
+        QTest::newRow("trusted") << true;
+    }
+
+    void selectsSelfSignedTrust()
+    {
+        QFETCH(bool, trusted);
+        Mu::Generator::SelfSignedCertificateDialog dialog(QStringLiteral("test-db"));
+        auto* checkbox = dialog.findChild<QCheckBox*>(QStringLiteral("trustForVerification"));
+        QVERIFY(checkbox);
+        QVERIFY(!checkbox->isChecked());
+        QVERIFY(!dialog.certificateOptions().trustForVerification);
+        checkbox->setChecked(trusted);
+        QCOMPARE(dialog.certificateOptions().trustForVerification, trusted);
     }
 
     void defaultsRenderCancellationToDisabled() { QVERIFY(!::Mu::Generator::Config::readRenderCancellationEnabled()); }

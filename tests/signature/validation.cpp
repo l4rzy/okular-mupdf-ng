@@ -910,6 +910,58 @@ private slots:
         QVERIFY(CERT_ClearOCSPCache() == SECSuccess);
     }
 
+    void createsSelfSignedSignerTrust_data()
+    {
+        QTest::addColumn<bool>("trusted");
+        QTest::newRow("signing-only") << false;
+        QTest::newRow("trusted") << true;
+    }
+
+    void createsSelfSignedSignerTrust()
+    {
+        using namespace Mu::Plugin::Crypto::CertificateDatabase;
+        QFETCH(bool, trusted);
+        SelfSignedCertificateOptions options;
+        options.nickname = QStringLiteral("self-signed-trust-%1").arg(trusted);
+        options.commonName = QStringLiteral("Synthetic Local Signer");
+        options.validFrom = QDateTime::currentDateTime().addSecs(-60);
+        options.validUntil = options.validFrom.addDays(1);
+        options.signingKey = SigningKey::EcdsaP256;
+        options.trustForVerification = trusted;
+        QString error;
+        const auto trustedCount = listTrustedSigners(m_nssDb.path()).size();
+        QVERIFY2(createSelfSignedCertificate(m_nssDb.path(), options, &error), qPrintable(error));
+        const auto certificates = listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto certificate = findManagedCertificate(certificates, options.nickname.toStdString());
+        QVERIFY(certificate != certificates.cend());
+        const auto signers = listTrustedSigners(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(signers.size(), trustedCount + (trusted ? 1 : 0));
+        QCOMPARE(findManagedCertificate(signers, options.nickname.toStdString()) != signers.cend(), trusted);
+        QBuffer source;
+        source.setData(QByteArrayLiteral("self-signed trust test"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const auto digestBytes = QCryptographicHash::hash(source.data(), QCryptographicHash::Sha256);
+        std::array<std::uint8_t, 32> digest { };
+        std::memcpy(digest.data(), digestBytes.constData(), digest.size());
+        const auto cms = createCms(digest, options.nickname.toStdString());
+        QCOMPARE(cms.result, ::Mu::Model::SigningResult::Success);
+        ::Mu::Model::SignatureField field;
+        field.signedField = true;
+        field.cmsSignature = cms.cmsSignature;
+        field.byteRange = { 0, source.size(), source.size(), 0 };
+        ::Mu::Plugin::Crypto::validateDetachedPdfSignature(field, source);
+        QCOMPARE(field.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
+        QCOMPARE(field.certificateStatus,
+                 trusted ? ::Mu::Model::CertificateStatus::Trusted : ::Mu::Model::CertificateStatus::UntrustedIssuer);
+        QVERIFY2(deleteCertificate(m_nssDb.path(), certificate->identity, &error), qPrintable(error));
+        const auto remainingCertificates = listCertificates(m_nssDb.path());
+        QVERIFY(findManagedCertificate(remainingCertificates, options.nickname.toStdString())
+                == remainingCertificates.cend());
+        QCOMPARE(listTrustedSigners(m_nssDb.path()).size(), trustedCount);
+    }
+
     void importsPublicTrustedSigner_data()
     {
         QTest::addColumn<bool>("pem");
