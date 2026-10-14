@@ -87,6 +87,8 @@ public:
     // Sends a user edit and applies all fields canonicalized by the worker.
     // Returns true only when at least one proxy view actually changed.
     [[nodiscard]] bool updateField(const std::string& handle, const Model::FormValue& value);
+    // Restores a widget after a locally rejected edit without sending IPC or dirtying it.
+    void refreshField(IField* field) const;
     // Requests a worker-side reset and applies its affected-field response.
     // Returns true only when at least one proxy view actually changed.
     [[nodiscard]] bool resetForm(const std::string& handle);

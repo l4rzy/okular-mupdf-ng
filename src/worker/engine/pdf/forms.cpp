@@ -440,6 +440,7 @@ std::vector<FormField> PdfDocument::extractPageFormFields(
                 }
                 formField.noToggleToOff =
                     (pdf_field_flags(m_context, fieldHead) & PDF_BTN_FIELD_IS_NO_TOGGLE_TO_OFF) != 0;
+                formField.radiosInUnison = (fieldFlags & PDF_BTN_FIELD_IS_RADIOS_IN_UNISON) != 0;
             } else if (widgetType == PDF_WIDGET_TYPE_COMBOBOX || widgetType == PDF_WIDGET_TYPE_LISTBOX) {
                 formField.type =
                     (widgetType == PDF_WIDGET_TYPE_COMBOBOX) ? FormFieldType::ComboBox : FormFieldType::ListBox;

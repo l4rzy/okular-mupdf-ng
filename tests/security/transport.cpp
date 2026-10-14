@@ -586,6 +586,7 @@ private slots:
         field.password = false;
         field.checked = false;
         field.onState = "Yes";
+        field.radiosInUnison = true;
         field.choices = { "United States", "Canada", "Mexico" };
         field.exportValues = { "US", "CA", "MX" };
         field.currentChoices = { 1 };
@@ -629,6 +630,7 @@ private slots:
         QCOMPARE(decField.printable, field.printable);
         QCOMPARE(decField.text, field.text);
         QCOMPARE(decField.maximumLength, field.maximumLength);
+        QCOMPARE(decField.radiosInUnison, field.radiosInUnison);
         QCOMPARE(decField.choices, field.choices);
         QCOMPARE(decField.exportValues, field.exportValues);
         QCOMPARE(decField.currentChoices, field.currentChoices);

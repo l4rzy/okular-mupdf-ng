@@ -82,6 +82,12 @@ bool Coordinator::updateField(const std::string& handle, const Model::FormValue&
     return applyResponse(*response);
 }
 
+void Coordinator::refreshField(IField* field) const
+{
+    if (field && m_refreshCallback)
+        m_refreshCallback({ field->formField() }, { }, false);
+}
+
 bool Coordinator::resetForm(const std::string& handle)
 {
     if (!m_available || handle.empty() || !m_backend)

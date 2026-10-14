@@ -47,11 +47,25 @@ the actual plugin, cold/warm caches, PDF export and reopen. Cache revision 2
 invalidates accelerators and outlines laid out before the `rem` correction.
 
 `mupdf-1.28.5-form-autosize.patch` fits auto-sized plain form values to the
-widget width and height, counting CR, LF and CRLF line breaks. Multiline values
-retain the existing 12-point ceiling and shrink when needed. Explicit PDF font
+widget width and height using the renderer's word wrapping and CR, LF and CRLF
+line breaks. Multiline values retain the existing 12-point ceiling and shrink
+only when the wrapped layout does not fit. Explicit PDF font
 sizes, single-line fields and rich text styles retain their existing behavior.
 Worker regression coverage uses synthetic Latin and Japanese text to check line
-endings, empty lines, long values, single-line fitting and explicit sizes.
+endings, empty lines, paragraphs with and without room to wrap, long values,
+single-line fitting and explicit sizes.
+
+`mupdf-1.28.5-radio-unison.patch` makes radio-button clicks honor
+`RadiosInUnison`: without it, only the clicked widget is selected; with it,
+all widgets sharing the selected on-state are selected. Checkboxes retain
+their existing behavior. Worker tests cover duplicate values on one or more
+pages, toggle-to-off rules, idempotent updates, and save/reopen. The generator
+separates repeated in-unison options by occurrence instead of page, so Qt's
+exclusive groups never contain two copies of the same selected option.
+IPC compatibility 0.4.2 carries the flag to the generator.
+Okular records undo per UI group, so uneven sets of mirrored options can still
+omit the previous selection in another group from undo history. Selection and
+persistence follow the PDF flag; fixing that undo limitation requires host support.
 
 CMake applies the patches with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
 verifies an already-applied patch using a reverse dry run. Unexpected source changes

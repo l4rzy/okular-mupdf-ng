@@ -16,13 +16,12 @@ struct RadioGroupMember {
     int id = 0;
     std::string groupName;
     std::int32_t fieldObjectNumber = -1;
-    int page = -1;
     std::string onState { };
+    bool radiosInUnison = false;
 };
 
 inline std::unordered_map<int, std::vector<int>> radioSiblingIds(const std::vector<RadioGroupMember>& members)
 {
-    // Preserve logical groups across pages unless they contain mirrored options:
     // Qt exclusivity cannot represent several copies of the selected option.
     std::unordered_map<std::string, std::vector<const RadioGroupMember*>> groups;
     for (const auto& member : members) {
@@ -34,20 +33,15 @@ inline std::unordered_map<int, std::vector<int>> radioSiblingIds(const std::vect
 
     std::unordered_map<int, std::vector<int>> siblings;
     for (const auto& [key, group] : groups) {
-        std::unordered_map<std::string, int> optionPages;
-        bool mirrored = false;
+        // Put each occurrence of an in-unison value in a separate UI group,
+        // independent of its page. The worker synchronizes the copies.
+        std::unordered_map<std::string, std::size_t> occurrences;
+        std::unordered_map<std::size_t, std::vector<int>> uiGroups;
         for (const auto* member : group) {
-            if (member->onState.empty())
-                continue;
-            const auto [it, inserted] = optionPages.emplace(member->onState, member->page);
-            if (!inserted && it->second != member->page)
-                mirrored = true;
+            const auto copy = member->radiosInUnison && !member->onState.empty() ? occurrences[member->onState]++ : 0;
+            uiGroups[copy].push_back(member->id);
         }
-        // The worker still synchronizes the logical field across every page.
-        std::unordered_map<int, std::vector<int>> uiGroups;
-        for (const auto* member : group)
-            uiGroups[mirrored ? member->page : -1].push_back(member->id);
-        for (const auto& [page, ids] : uiGroups) {
+        for (const auto& [copy, ids] : uiGroups) {
             if (ids.size() < 2)
                 continue;
             for (int id : ids) {

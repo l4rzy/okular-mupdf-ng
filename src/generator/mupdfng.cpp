@@ -619,8 +619,8 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
                 radioMembers.push_back({ radio->id(),
                                          radio->model().groupName,
                                          radio->model().fieldObjectNumber,
-                                         radio->model().page,
-                                         radio->model().onState });
+                                         radio->model().onState,
+                                         radio->model().radiosInUnison });
                 radioProxies.emplace(radio->id(), radio);
                 break;
             }
@@ -649,8 +649,8 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         pages.append(okularPage);
     }
 
-    // Split mirrored UI radio groups by page; canonical worker responses
-    // synchronize copies of the logical PDF field across pages.
+    // Separate repeated in-unison options into UI groups; canonical worker
+    // responses synchronize every copy of the logical PDF field.
     for (const auto& [id, siblings] : Proxy::Form::radioSiblingIds(radioMembers)) {
         auto proxy = radioProxies.find(id);
         if (proxy != radioProxies.end()) {

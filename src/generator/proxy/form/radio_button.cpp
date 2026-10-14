@@ -79,6 +79,8 @@ void RadioButton::setState(bool state)
         return;
 
     if (!state && m_data.noToggleToOff) {
+        if (m_coordinator)
+            m_coordinator->refreshField(this);
         return;
     }
 

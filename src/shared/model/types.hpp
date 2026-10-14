@@ -593,6 +593,7 @@ struct FormField {
     bool checked = false;
     std::string onState;
     bool noToggleToOff = false;
+    bool radiosInUnison = false;
 
     /// Push button attributes.
     std::string buttonCaption;

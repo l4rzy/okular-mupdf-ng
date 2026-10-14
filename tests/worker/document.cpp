@@ -2859,14 +2859,25 @@ private slots:
         QTest::addColumn<QByteArray>("value");
         QTest::addColumn<bool>("multiline");
         QTest::addColumn<int>("fontSize");
-        QTest::newRow("latin-lines") << QByteArray("SampleValueA\nSAMPLEVALUEB") << true << 0;
-        QTest::newRow("japanese-cr") << QString::fromUtf8("カタカナテスト\rSAMPLEVALUEB").toUtf8() << true << 0;
-        QTest::newRow("japanese-crlf") << QString::fromUtf8("カタカナテスト\r\nSAMPLEVALUEB").toUtf8() << true << 0;
-        QTest::newRow("empty-line") << QByteArray("SampleA\n\nSampleB") << true << 0;
-        QTest::newRow("long-line") << QByteArray(80, 'X') << true << 0;
-        QTest::newRow("fixed-multiline") << QByteArray("SampleData") << true << 14;
-        QTest::newRow("single-line") << QByteArray("SAMPLEVALUEASAMPLEVALUEB") << false << 0;
-        QTest::newRow("fixed-size") << QByteArray("SampleData") << false << 14;
+        QTest::addColumn<int>("fieldWidth");
+        QTest::addColumn<int>("fieldHeight");
+        QTest::addColumn<float>("minimumAutoSize");
+        QTest::newRow("latin-lines") << QByteArray("SampleValueA\nSAMPLEVALUEB") << true << 0 << 91 << 24 << 0.1f;
+        QTest::newRow("japanese-cr") << QString::fromUtf8("カタカナテスト\rSAMPLEVALUEB").toUtf8() << true << 0 << 91
+                                     << 24 << 0.1f;
+        QTest::newRow("japanese-crlf") << QString::fromUtf8("カタカナテスト\r\nSAMPLEVALUEB").toUtf8() << true << 0
+                                       << 91 << 24 << 0.1f;
+        QTest::newRow("empty-line") << QByteArray("SampleA\n\nSampleB") << true << 0 << 91 << 24 << 0.1f;
+        QTest::newRow("long-line") << QByteArray(80, 'X') << true << 0 << 91 << 24 << 0.1f;
+        QTest::newRow("fixed-multiline") << QByteArray("SampleData") << true << 14 << 91 << 24 << 0.1f;
+        QTest::newRow("single-line") << QByteArray("SAMPLEVALUEASAMPLEVALUEB") << false << 0 << 91 << 24 << 0.1f;
+        QTest::newRow("fixed-size") << QByteArray("SampleData") << false << 14 << 91 << 24 << 0.1f;
+        const QByteArray paragraph("This is a normal paragraph with several words. It should wrap across multiple "
+                                   "lines in a tall text field. This is a normal paragraph with several words. "
+                                   "It should wrap across multiple lines in a tall text field.");
+        QTest::newRow("paragraph-room-to-wrap") << paragraph << true << 0 << 200 << 150 << 12.0f;
+        QTest::newRow("paragraph-shrink-after-wrapping") << paragraph << true << 0 << 200 << 24 << 4.0f;
+        QTest::newRow("trailing-crlf") << QByteArray("SampleA\r\n") << true << 0 << 91 << 24 << 0.1f;
     }
 
     void autoSizedFormTextFits()
@@ -2874,6 +2885,9 @@ private slots:
         QFETCH(QByteArray, value);
         QFETCH(bool, multiline);
         QFETCH(int, fontSize);
+        QFETCH(int, fieldWidth);
+        QFETCH(int, fieldHeight);
+        QFETCH(float, minimumAutoSize);
         if (TEST_SYSTEM_MUPDF && multiline && fontSize == 0)
             QSKIP("Auto-sizing regression requires the bundled MuPDF patch");
         QTemporaryDir directory;
@@ -2883,10 +2897,12 @@ private slots:
             { "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DR << /Font << /Helv 6 0 R >> >> >> >>",
               "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
               "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [4 0 R] >>",
-              "<< /Type /Annot /Subtype /Widget /FT /Tx /T (TestField) /Rect [50 50 141 74] /F 4 /Ff "
+              "<< /Type /Annot /Subtype /Widget /FT /Tx /T (TestField) /Rect [50 50 "
+                  + QByteArray::number(50 + fieldWidth) + " " + QByteArray::number(50 + fieldHeight) + "] /F 4 /Ff "
                   + QByteArray::number(multiline ? PDF_TX_FIELD_IS_MULTILINE : 0) + " /DA (/Helv "
                   + QByteArray::number(fontSize) + " Tf 0 g) /AP << /N 5 0 R >> >>",
-              "<< /Type /XObject /Subtype /Form /BBox [0 0 91 24] /Resources << >> /Length 0 >>\nstream\nendstream",
+              "<< /Type /XObject /Subtype /Form /BBox [0 0 " + QByteArray::number(fieldWidth) + " "
+                  + QByteArray::number(fieldHeight) + "] /Resources << >> /Length 0 >>\nstream\nendstream",
               "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>" }));
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
@@ -2920,11 +2936,14 @@ private slots:
                     if (fontSize) {
                         QVERIFY(std::abs(character->size - static_cast<float>(fontSize)) < 0.01);
                     } else {
-                        QVERIFY(character->size < 11);
+                        QVERIFY(character->size >= minimumAutoSize - 0.01f);
+                        QVERIFY(character->size <= 12.01f);
                         const auto bounds = fz_rect_from_quad(character->quad);
-                        QVERIFY2(bounds.x0 >= 49.9f && bounds.x1 <= 141.1f, "text exceeds field width");
+                        QVERIFY2(bounds.x0 >= 49.9f && bounds.x1 <= 50.1f + static_cast<float>(fieldWidth),
+                                 "text exceeds field width");
                         // Font-wide quads include unused ascender/descender space.
-                        QVERIFY2(bounds.y0 >= 225.0f && bounds.y1 <= 251.0f, "text exceeds field height");
+                        QVERIFY2(bounds.y0 >= 249.0f - static_cast<float>(fieldHeight) && bounds.y1 <= 251.0f,
+                                 "text exceeds field height");
                     }
                 }
             }
@@ -2932,6 +2951,113 @@ private slots:
         QString expected = QString::fromUtf8(value);
         expected.remove('\r').remove('\n');
         QCOMPARE(characters, expected.size());
+    }
+
+    void repeatedRadioValuesRespectUnison_data()
+    {
+        QTest::addColumn<bool>("inUnison");
+        QTest::addColumn<bool>("crossPage");
+        QTest::addColumn<bool>("noToggleToOff");
+        for (bool inUnison : { false, true }) {
+            for (bool crossPage : { false, true }) {
+                for (bool noToggleToOff : { false, true }) {
+                    const QByteArray name = QByteArray(inUnison ? "unison" : "exclusive")
+                        + (crossPage ? "-cross-page" : "-same-page")
+                        + (noToggleToOff ? "-no-toggle-off" : "-toggle-off");
+                    QTest::newRow(name.constData()) << inUnison << crossPage << noToggleToOff;
+                }
+            }
+        }
+    }
+
+    void repeatedRadioValuesRespectUnison()
+    {
+        QFETCH(bool, inUnison);
+        QFETCH(bool, crossPage);
+        QFETCH(bool, noToggleToOff);
+        if (TEST_SYSTEM_MUPDF && !inUnison)
+            QSKIP("Exclusive duplicate values require the bundled MuPDF radio patch");
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("radio-values.pdf");
+        const int flags = PDF_BTN_FIELD_IS_RADIO | (inUnison ? PDF_BTN_FIELD_IS_RADIOS_IN_UNISON : 0)
+            | (noToggleToOff ? PDF_BTN_FIELD_IS_NO_TOGGLE_TO_OFF : 0);
+        const QByteArray appearance("<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] "
+                                    "/Resources << >> /Length 0 >>\nstream\nendstream");
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+              crossPage ? "<< /Type /Pages /Count 2 /Kids [3 0 R 9 0 R] >>"
+                        : "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots "
+                  + QByteArray(crossPage ? "[5 0 R 6 0 R]" : "[5 0 R 6 0 R 7 0 R 8 0 R]") + " >>",
+              "<< /FT /Btn /T (Options) /Ff " + QByteArray::number(flags)
+                  + " /V /Off /DV /Off /Kids [5 0 R 6 0 R 7 0 R 8 0 R] >>",
+              "<< /Type /Annot /Subtype /Widget /Parent 4 0 R /P 3 0 R /F 4 /Rect [10 10 30 30] "
+              "/AS /Off /AP << /N << /Off 10 0 R /A 11 0 R >> >> >>",
+              "<< /Type /Annot /Subtype /Widget /Parent 4 0 R /P 3 0 R /F 4 /Rect [40 10 60 30] "
+              "/AS /Off /AP << /N << /Off 10 0 R /B 12 0 R >> >> >>",
+              "<< /Type /Annot /Subtype /Widget /Parent 4 0 R /P " + QByteArray::number(crossPage ? 9 : 3)
+                  + " 0 R /F 4 /Rect [10 40 30 60] /AS /Off /AP << /N << /Off 10 0 R /A 11 0 R >> >> >>",
+              "<< /Type /Annot /Subtype /Widget /Parent 4 0 R /P " + QByteArray::number(crossPage ? 9 : 3)
+                  + " 0 R /F 4 /Rect [40 40 60 60] /AS /Off /AP << /N << /Off 10 0 R /B 12 0 R >> >> >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [7 0 R 8 0 R] >>",
+              appearance,
+              appearance,
+              appearance }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument doc;
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "radio-values.pdf", &error), error.c_str());
+        const auto verifySelection = [&](auto& document, int selected) {
+            error.clear();
+            std::vector<int> checked;
+            for (int page = 0; page < document.pageCount(); ++page) {
+                const auto fields = document.pageDetails(page, &error).formFields;
+                QVERIFY2(error.empty(), error.c_str());
+                QCOMPARE(fields.size(), std::size_t(crossPage ? 2 : 4));
+                for (const auto& field : fields) {
+                    QCOMPARE(field.radiosInUnison, inUnison);
+                    QCOMPARE(field.noToggleToOff, noToggleToOff);
+                    QCOMPARE(field.fieldObjectNumber, 4);
+                    if (field.checked)
+                        checked.push_back(field.pdfObjectNumber);
+                }
+            }
+            std::sort(checked.begin(), checked.end());
+            const std::vector<int> expected = selected < 0 ? std::vector<int> { }
+                : !inUnison                                ? std::vector<int> { selected }
+                : selected % 2                             ? std::vector<int> { 5, 7 }
+                                                           : std::vector<int> { 6, 8 };
+            QCOMPARE(checked, expected);
+        };
+        verifySelection(doc, -1);
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        for (int selected : { 5, 7, 6, 8, 8, 7 }) {
+            QVERIFY2(doc.updateFormField(crossPage && selected >= 7 ? 1 : 0,
+                                         selected,
+                                         ::Mu::Model::FormCheckValue { true },
+                                         &mutations,
+                                         &error),
+                     error.c_str());
+            QCOMPARE(mutations.size(), std::size_t(4));
+            verifySelection(doc, selected);
+        }
+        QCOMPARE(doc.updateFormField(crossPage ? 1 : 0, 7, ::Mu::Model::FormCheckValue { false }, &mutations, &error),
+                 !noToggleToOff);
+        verifySelection(doc, noToggleToOff ? 7 : -1);
+        QVERIFY2(doc.updateFormField(crossPage ? 1 : 0, 8, ::Mu::Model::FormCheckValue { true }, &mutations, &error),
+                 error.c_str());
+        const auto savedPath = directory.filePath("radio-values-saved.pdf");
+        const int outputFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(outputFd >= 0);
+        QVERIFY2(doc.saveFd(outputFd, &error), error.c_str());
+        QFile saved(savedPath);
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reopened;
+        QVERIFY2(reopened.openFd(::dup(saved.handle()), "radio-values-saved.pdf", &error), error.c_str());
+        verifySelection(reopened, 8);
     }
 
     void updateRadioGroupAtomicallySynchronizesSiblings()

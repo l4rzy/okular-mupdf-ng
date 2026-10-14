@@ -1161,10 +1161,8 @@ private slots:
 
     void documentWideRadioGroupingLinksAcrossPages()
     {
-        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds({ { 1, "GroupA", -1, 0, "A" },
-                                                                              { 2, "GroupA", -1, 1, "B" },
-                                                                              { 3, "GroupA", -1, 2, "C" },
-                                                                              { 4, "GroupB", -1, 0, "A" } });
+        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds(
+            { { 1, "GroupA", -1, "A" }, { 2, "GroupA", -1, "B" }, { 3, "GroupA", -1, "C" }, { 4, "GroupB", -1, "A" } });
         QCOMPARE(siblings.at(1), std::vector<int>({ 2, 3 }));
         QCOMPARE(siblings.at(2), std::vector<int>({ 1, 3 }));
         QCOMPARE(siblings.at(3), std::vector<int>({ 1, 2 }));
@@ -1176,23 +1174,45 @@ private slots:
         QCOMPARE(fallbackSiblings.at(7), std::vector<int>({ 8 }));
     }
 
-    void mirroredRadioGroupsStayIndependent_data()
+    void repeatedRadioOptionsRespectUnison_data()
     {
         QTest::addColumn<bool>("named");
-        QTest::newRow("named") << true;
-        QTest::newRow("object-fallback") << false;
+        QTest::addColumn<bool>("inUnison");
+        QTest::newRow("named-unison") << true << true;
+        QTest::newRow("object-unison") << false << true;
+        QTest::newRow("named-exclusive") << true << false;
+        QTest::newRow("object-exclusive") << false << false;
     }
 
-    void mirroredRadioGroupsStayIndependent()
+    void repeatedRadioOptionsRespectUnison()
     {
         QFETCH(bool, named);
+        QFETCH(bool, inUnison);
         const std::string name = named ? "TestOptions" : "";
-        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds(
-            { { 1, name, 42, 0, "A" }, { 2, name, 42, 0, "B" }, { 3, name, 42, 1, "A" }, { 4, name, 42, 1, "B" } });
+        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds({ { 1, name, 42, "A", inUnison },
+                                                                              { 2, name, 42, "B", inUnison },
+                                                                              { 3, name, 42, "A", inUnison },
+                                                                              { 4, name, 42, "B", inUnison } });
+        if (!inUnison) {
+            QCOMPARE(siblings.at(1), std::vector<int>({ 2, 3, 4 }));
+            QCOMPARE(siblings.at(2), std::vector<int>({ 1, 3, 4 }));
+            QCOMPARE(siblings.at(3), std::vector<int>({ 1, 2, 4 }));
+            QCOMPARE(siblings.at(4), std::vector<int>({ 1, 2, 3 }));
+            return;
+        }
         QCOMPARE(siblings.at(1), std::vector<int>({ 2 }));
         QCOMPARE(siblings.at(2), std::vector<int>({ 1 }));
         QCOMPARE(siblings.at(3), std::vector<int>({ 4 }));
         QCOMPARE(siblings.at(4), std::vector<int>({ 3 }));
+    }
+
+    void unevenInUnisonRadioCopies()
+    {
+        const auto siblings = ::Mu::Generator::Proxy::Form::radioSiblingIds(
+            { { 1, "Options", 42, "A", true }, { 2, "Options", 42, "B", true }, { 3, "Options", 42, "A", true } });
+        QCOMPARE(siblings.at(1), std::vector<int>({ 2 }));
+        QCOMPARE(siblings.at(2), std::vector<int>({ 1 }));
+        QVERIFY(!siblings.contains(3));
     }
 
     void anonymousRadiosAreIsolated()
@@ -1203,7 +1223,15 @@ private slots:
 
     void radioNoToggleToOffSuppressesDirectUncheckIpc()
     {
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
+        int rejectedRefreshes = 0;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(
+            &::Mu::Plugin::s_formBackend,
+            [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&, bool changed) {
+                if (!changed) {
+                    QCOMPARE(fields.size(), std::size_t(1));
+                    ++rejectedRefreshes;
+                }
+            });
 
         // Radio A (initially checked, has noToggleToOff = true)
         ::Mu::Model::FormField f1;
@@ -1239,6 +1267,7 @@ private slots:
         // 1. Deselecting active sibling directly must NOT trigger IPC
         r1.setState(false);
         QCOMPARE(requestCount, 0);
+        QCOMPARE(rejectedRefreshes, 1);
         QVERIFY(r1.state());
 
         // 2. Selecting new radio button triggers 1 atomic IPC request
