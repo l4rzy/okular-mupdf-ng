@@ -1007,6 +1007,8 @@ private slots:
         const QByteArray der(reinterpret_cast<const char*>(inspected->der.data()),
                              static_cast<qsizetype>(inspected->der.size()));
         QVERIFY(!inspectSignerCertificate(m_nssDb.path(), der + QByteArray("trailing"), &error));
+        QVERIFY(!inspectSignerCertificate(m_nssDb.path(), der + der, &error));
+        QVERIFY(!inspectSignerCertificate(m_nssDb.path(), der.left(der.size() - 1), &error));
         QVERIFY(!inspectSignerCertificate(m_nssDb.path(), pemData + pemData, &error));
         const QByteArray data = pem ? pemData : der;
         const QString nickname = pem ? QStringLiteral("public-trusted-pem") : QStringLiteral("public-trusted-der");

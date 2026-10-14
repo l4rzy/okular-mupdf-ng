@@ -302,11 +302,12 @@ CertificateHandle decodeSignerCertificate(const QByteArray& data, QString* error
         der = decoded.decoded;
     }
     SECItem item { siBuffer, reinterpret_cast<unsigned char*>(der.data()), static_cast<unsigned int>(der.size()) };
-    int headerLength = 0;
-    unsigned int contentLength = 0;
-    if (der.isEmpty() || static_cast<unsigned char>(der.front()) != 0x30
-        || DER_Lengths(&item, &headerLength, &contentLength) != SECSuccess || headerLength <= 0
-        || static_cast<quint64>(headerLength) + contentLength != static_cast<quint64>(der.size())) {
+    ArenaHandle arena(PORT_NewArena(DER_DEFAULT_CHUNKSIZE));
+    SECItem outer { };
+    // QuickDER's ANY template retains the complete encoded item. Require it to
+    // consume all input; deprecated DER_Lengths fails unconditionally in newer NSS.
+    if (!arena || der.isEmpty() || static_cast<unsigned char>(der.front()) != 0x30
+        || SEC_QuickDERDecodeItem(arena.get(), &outer, SEC_AnyTemplate, &item) != SECSuccess || outer.len != item.len) {
         setError(error, QStringLiteral("Exactly one PEM or DER certificate is required"));
         return nullptr;
     }
