@@ -1,3 +1,5 @@
+#include "engine/mupdf_helpers.hpp"
+#include "engine/signer.hpp"
 #include "runtime/command_service.hpp"
 #include "runtime/render_budget.hpp"
 #include "shared/compat.hpp"
@@ -11,11 +13,148 @@
 #include <QImage>
 #include <QTest>
 #include <cmath>
+#include <fcntl.h>
+#include <limits>
+#include <memory>
 #include <mupdf/fitz/version.h>
+#include <unistd.h>
+
+namespace {
+
+int failStreamRead(fz_context* context, fz_stream*, std::size_t)
+{
+    fz_throw(context, FZ_ERROR_SYSTEM, "injected stream read failure");
+}
+
+struct FailingFitzAllocator {
+    fz_alloc_context original;
+    unsigned failAt;
+    unsigned calls = 0;
+
+    bool reject() { return ++calls >= failAt && failAt != 0; }
+
+    static void* allocate(void* user, std::size_t size)
+    {
+        auto& state = *static_cast<FailingFitzAllocator*>(user);
+        return state.reject() ? nullptr : state.original.malloc(state.original.user, size);
+    }
+
+    static void* resize(void* user, void* pointer, std::size_t size)
+    {
+        auto& state = *static_cast<FailingFitzAllocator*>(user);
+        return state.reject() ? nullptr : state.original.realloc(state.original.user, pointer, size);
+    }
+
+    static void release(void* user, void* pointer)
+    {
+        auto& state = *static_cast<FailingFitzAllocator*>(user);
+        state.original.free(state.original.user, pointer);
+    }
+};
+
+} // namespace
 
 class TestNativeWorkerTypes : public QObject {
     Q_OBJECT
 private slots:
+
+    void nonFiniteValidation_data()
+    {
+        QTest::addColumn<double>("value");
+        QTest::newRow("nan") << std::numeric_limits<double>::quiet_NaN();
+        QTest::newRow("positive-infinity") << std::numeric_limits<double>::infinity();
+        QTest::newRow("negative-infinity") << -std::numeric_limits<double>::infinity();
+    }
+
+    void nonFiniteValidation()
+    {
+        QFETCH(double, value);
+        QVERIFY(!Mu::Model::isValidDpi(value, 72));
+        QVERIFY(!Mu::Model::isValidDpi(72, value));
+        QVERIFY(!Mu::Model::isValidOcrDpi(static_cast<float>(value)));
+        for (const Mu::Model::NormalizedRect& rect : { Mu::Model::NormalizedRect { value, 0, 1, 1 },
+                                                       { 0, value, 1, 1 },
+                                                       { 0, 0, value, 1 },
+                                                       { 0, 0, 1, value } })
+            QVERIFY(!Mu::Model::isValidNormalizedRect(rect));
+    }
+
+    void signingStreamErrors_data()
+    {
+        QTest::addColumn<bool>("readError");
+        QTest::newRow("complete") << false;
+        QTest::newRow("error-after-prefix") << true;
+    }
+
+    void signingStreamErrors()
+    {
+        QFETCH(bool, readError);
+        auto* context = fz_new_context(nullptr, nullptr, 0);
+        QVERIFY(context);
+        auto* stream = fz_open_memory(context, reinterpret_cast<const unsigned char*>("abc"), 3);
+        if (readError)
+            stream->next = failStreamRead;
+        unsigned callbackCount = 0;
+        std::array<std::uint8_t, 32> digest { };
+        auto* signer = ::Mu::Worker::Engine::createSigner("test", "Test", [&](const auto& hash, const auto&) {
+            ++callbackCount;
+            digest = hash;
+            return ::Mu::Worker::Engine::CmsResult { ::Mu::Model::SigningResult::Success, { }, { 1, 2, 3 } };
+        });
+        unsigned char output[3] { };
+        const int written = signer->create_digest(context, signer, stream, output, sizeof(output));
+        pdf_drop_signer(context, signer);
+        fz_drop_stream(context, stream);
+        fz_drop_context(context);
+        QCOMPARE(written, readError ? 0 : 3);
+        QCOMPARE(callbackCount, readError ? 0u : 1u);
+        if (!readError)
+            QCOMPARE(QByteArray(reinterpret_cast<const char*>(digest.data()), digest.size()).toHex(),
+                     QByteArray("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+    }
+
+    void outputFileOwnership_data()
+    {
+        QTest::addColumn<unsigned>("failAt");
+        QTest::newRow("success") << 0u;
+        QTest::newRow("output-allocation-fails") << 1u;
+        QTest::newRow("buffer-allocation-fails") << 2u;
+    }
+
+    void outputFileOwnership()
+    {
+        QFETCH(unsigned, failAt);
+        auto* context = fz_new_context(nullptr, nullptr, 0);
+        QVERIFY(context);
+        FILE* volatile file = ::tmpfile();
+        QVERIFY(file);
+        const int fd = ::fileno(file);
+        const auto state = std::make_unique<FailingFitzAllocator>(context->alloc, failAt);
+        context->alloc = {
+            state.get(), FailingFitzAllocator::allocate, FailingFitzAllocator::resize, FailingFitzAllocator::release
+        };
+        fz_output* volatile output = nullptr;
+        volatile bool failed = false;
+        fz_try(context)
+        {
+            output = ::Mu::Worker::Engine::takeOutputFile(context, file);
+            fz_close_output(context, output);
+        }
+        fz_always(context)
+        {
+            fz_drop_output(context, output);
+            context->alloc = state->original;
+        }
+        fz_catch(context)
+        {
+            failed = true;
+            fz_ignore_error(context);
+        }
+        fz_drop_context(context);
+        QVERIFY(file == nullptr);
+        QVERIFY(::fcntl(fd, F_GETFD) == -1);
+        QCOMPARE(static_cast<bool>(failed), failAt != 0);
+    }
 
     void pingCompatibilityRoundTrip_data()
     {

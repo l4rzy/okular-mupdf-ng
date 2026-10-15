@@ -6,7 +6,6 @@
 #include <algorithm>
 
 #include <QBuffer>
-#include <QFile>
 #include <QImageReader>
 
 namespace Mu::Plugin::Util::SignatureImage {
@@ -20,7 +19,7 @@ prepareBackgroundImage(const QString& path, double rectWidth, double rectHeight,
 {
     // Signature images are imported into generated documents, so keep input
     // reads bounded and return an empty result for any unreadable source.
-    if (path.isEmpty() || !QFile::exists(path))
+    if (path.isEmpty())
         return { };
 
     // Calculate target image pixel dimensions based on page point dimensions
@@ -36,7 +35,7 @@ prepareBackgroundImage(const QString& path, double rectWidth, double rectHeight,
 
     QImageReader reader(path);
     const QSize imageSize = reader.size();
-    if (!imageSize.isNull() && imageSize.width() > 0 && imageSize.height() > 0) {
+    if (imageSize.width() > 0 && imageSize.height() > 0) {
         reader.setScaledSize(imageSize.scaled(targetWidth, targetHeight, Qt::KeepAspectRatio));
     }
 

@@ -85,8 +85,7 @@ std::vector<Font> EpubDocument::fonts(const std::vector<int>&, std::string*) con
     {
         if (!m_archive)
             m_archive = fz_try_open_archive_with_stream(m_context, m_stream);
-        if (m_archive)
-            entryCount = fz_count_archive_entries(m_context, m_archive);
+        entryCount = fz_count_archive_entries(m_context, m_archive);
     }
     fz_catch(m_context)
     {

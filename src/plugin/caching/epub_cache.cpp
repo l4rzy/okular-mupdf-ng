@@ -64,36 +64,33 @@ bool writeBytes(QDataStream& stream, const QByteArray& bytes)
     return stream.writeRawData(bytes.constData(), bytes.size()) == bytes.size();
 }
 
-bool readBytes(QDataStream& stream, qint64 maxBytes, QByteArray* result)
+bool readBytes(QDataStream& stream, qint64 maxBytes, QByteArray& result)
 {
-    if (!result)
-        return false;
     quint32 size = 0;
     stream >> size;
     // Validate the length against both the section limit and remaining input
     // before allocating the destination buffer.
-    if (stream.status() != QDataStream::Ok || size > maxBytes || !stream.device()
+    if (stream.status() != QDataStream::Ok || size > maxBytes
         || stream.device()->bytesAvailable() < static_cast<qint64>(size))
         return false;
 
     QByteArray bytes(static_cast<qsizetype>(size), Qt::Uninitialized);
     if (stream.readRawData(bytes.data(), static_cast<int>(size)) != static_cast<int>(size))
         return false;
-    *result = std::move(bytes);
+    result = std::move(bytes);
     return true;
 }
 
 bool writeOutlineNodes(QDataStream& stream,
                        const std::vector<Model::OutlineNode>& nodes,
                        std::size_t depth,
-                       std::size_t* total)
+                       std::size_t& total)
 {
     // Apply depth and aggregate-node limits during serialization as well as
     // deserialization so a caller cannot create an oversized cache file.
-    if (!total || (!nodes.empty() && depth > MaxOutlineDepth) || nodes.size() > std::numeric_limits<quint32>::max()
-        || nodes.size() > MaxOutlineNodes - *total)
+    if ((!nodes.empty() && depth > MaxOutlineDepth) || nodes.size() > MaxOutlineNodes - total)
         return false;
-    *total += nodes.size();
+    total += nodes.size();
     stream << static_cast<quint32>(nodes.size());
     for (const auto& node : nodes) {
         if (!writeBytes(stream, QByteArray::fromStdString(node.title)))
@@ -117,7 +114,7 @@ std::optional<QByteArray> serializeOutline(const std::vector<Model::OutlineNode>
     QDataStream stream(&raw, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_6_0);
     std::size_t total = 0;
-    if (!writeOutlineNodes(stream, outline, 0, &total) || raw.size() > MaxOutlineRawBytes)
+    if (!writeOutlineNodes(stream, outline, 0, total) || raw.size() > MaxOutlineRawBytes)
         return std::nullopt;
 
     const QByteArray compressed = qCompress(raw, 1);
@@ -127,32 +124,29 @@ std::optional<QByteArray> serializeOutline(const std::vector<Model::OutlineNode>
 }
 
 bool readOutlineNodes(QDataStream& stream,
-                      std::vector<Model::OutlineNode>* nodes,
+                      std::vector<Model::OutlineNode>& nodes,
                       std::size_t depth,
-                      std::size_t* total)
+                      std::size_t& total)
 {
-    if (!nodes || !total)
-        return false;
     quint32 count = 0;
     stream >> count;
     // Validate each child count against the remaining global node budget before
     // reserving vector capacity or descending recursively.
-    if (stream.status() != QDataStream::Ok || (count > 0 && depth > MaxOutlineDepth) || count > MaxOutlineNodes
-        || count > MaxOutlineNodes - *total)
+    if (stream.status() != QDataStream::Ok || (count > 0 && depth > MaxOutlineDepth) || count > MaxOutlineNodes - total)
         return false;
-    *total += count;
-    nodes->reserve(count);
+    total += count;
+    nodes.reserve(count);
     for (quint32 i = 0; i < count; ++i) {
         Model::OutlineNode node;
         QByteArray bytes;
-        if (!readBytes(stream, Mu::Limit::MaxString, &bytes))
+        if (!readBytes(stream, Mu::Limit::MaxString, bytes))
             return false;
         node.title = std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
         quint8 open = 0, external = 0, valid = 0;
         stream >> open >> external;
         if (open > 1 || external > 1 || stream.status() != QDataStream::Ok)
             return false;
-        if (!readBytes(stream, Mu::Limit::MaxString, &bytes))
+        if (!readBytes(stream, Mu::Limit::MaxString, bytes))
             return false;
         node.link.uri = std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
         stream >> node.link.viewport.page >> node.link.viewport.normalizedX >> node.link.viewport.normalizedY
@@ -165,9 +159,9 @@ bool readOutlineNodes(QDataStream& stream,
         node.open = open != 0;
         node.link.external = external != 0;
         node.link.valid = valid != 0;
-        if (!readOutlineNodes(stream, &node.children, depth + 1, total))
+        if (!readOutlineNodes(stream, node.children, depth + 1, total))
             return false;
-        nodes->push_back(std::move(node));
+        nodes.push_back(std::move(node));
     }
     return true;
 }
@@ -193,15 +187,15 @@ std::optional<std::vector<Model::OutlineNode>> deserializeOutline(const QByteArr
     std::size_t total = 0;
     // Require the parser to consume exactly one outline tree, with no trailing
     // bytes that could hide an appended or version-confused payload.
-    if (!readOutlineNodes(stream, &result, 0, &total) || stream.status() != QDataStream::Ok || !stream.device()
+    if (!readOutlineNodes(stream, result, 0, total) || stream.status() != QDataStream::Ok
         || stream.device()->bytesAvailable() != 0)
         return std::nullopt;
     return result;
 }
 
-bool readV3(const QByteArray& data, CacheEntry* entry)
+bool readV3(const QByteArray& data, CacheEntry& entry)
 {
-    if (!entry || data.size() < V3HeaderBytes)
+    if (data.size() < V3HeaderBytes)
         return false;
     QDataStream stream(data);
     stream.setVersion(QDataStream::Qt_6_0);
@@ -219,7 +213,7 @@ bool readV3(const QByteArray& data, CacheEntry* entry)
     for (quint32 i = 0; i < sectionCount; ++i) {
         quint32 type = 0, size = 0;
         stream >> type >> size;
-        if (stream.status() != QDataStream::Ok || !stream.device() || size > stream.device()->bytesAvailable())
+        if (stream.status() != QDataStream::Ok || size > stream.device()->bytesAvailable())
             return false;
         QByteArray section(static_cast<qsizetype>(size), Qt::Uninitialized);
         if (stream.readRawData(section.data(), static_cast<int>(size)) != static_cast<int>(size))
@@ -229,7 +223,7 @@ bool readV3(const QByteArray& data, CacheEntry* entry)
             // its own content limit.
             if (sawAccelerator || size == 0 || size > MaxAcceleratorBytes)
                 return false;
-            entry->accelerator = std::move(section);
+            entry.accelerator = std::move(section);
             sawAccelerator = true;
         } else if (type == OutlineSection) {
             if (sawOutline)
@@ -237,7 +231,7 @@ bool readV3(const QByteArray& data, CacheEntry* entry)
             auto outline = deserializeOutline(section);
             if (!outline)
                 return false;
-            entry->outline = std::move(*outline);
+            entry.outline = std::move(*outline);
             sawOutline = true;
         } else {
             // Reject unknown sections instead of silently ignoring data that
@@ -245,14 +239,14 @@ bool readV3(const QByteArray& data, CacheEntry* entry)
             return false;
         }
     }
-    return (sawAccelerator || sawOutline) && stream.device() && stream.device()->bytesAvailable() == 0;
+    return stream.device()->bytesAvailable() == 0;
 }
 
-std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32* sectionCount)
+std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32& sectionCount)
 {
     // A V3 cache must contain at least one known section; optional fields let
     // accelerator and outline generation happen independently.
-    if (!sectionCount || (!entry.accelerator && !entry.outline))
+    if (!entry.accelerator && !entry.outline)
         return std::nullopt;
     if (entry.accelerator && (entry.accelerator->isEmpty() || entry.accelerator->size() > MaxAcceleratorBytes))
         return std::nullopt;
@@ -264,7 +258,7 @@ std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32* se
             return std::nullopt;
         outline = *serialized;
     }
-    *sectionCount =
+    sectionCount =
         static_cast<quint32>(entry.accelerator.has_value()) + static_cast<quint32>(entry.outline.has_value());
     const qint64 payloadBytes =
         (entry.accelerator ? 8 + entry.accelerator->size() : 0) + (entry.outline ? 8 + outline.size() : 0);
@@ -291,7 +285,7 @@ std::optional<QByteArray> serializeSections(const CacheEntry& entry, quint32* se
 bool saveEntry(const QString& cachePath, const CacheEntry& entry)
 {
     quint32 sectionCount = 0;
-    const auto sections = serializeSections(entry, &sectionCount);
+    const auto sections = serializeSections(entry, sectionCount);
     if (!sections)
         return false;
     QByteArray data;
@@ -314,7 +308,7 @@ std::optional<CacheEntry> loadEntry(const QString& cachePath)
         return std::nullopt;
 
     CacheEntry entry;
-    if (!readV3(*data, &entry)) {
+    if (!readV3(*data, entry)) {
         // A malformed entry is disposable; the next save can rebuild it from
         // the current document.
         QFile::remove(cachePath);

@@ -40,8 +40,6 @@ inline std::string takeNssString(char* value)
 [[nodiscard]]
 inline QString takeNssQString(char* value)
 {
-    if (!value)
-        return { };
     QString result = QString::fromUtf8(value);
     PORT_Free(value);
     return result;
@@ -140,11 +138,7 @@ struct ArenaDeleter {
 
 /// Cancels an unfinished NSS CMS encoder.
 struct CmsEncoderDeleter {
-    void operator()(NSSCMSEncoderContext* value) const
-    {
-        if (value)
-            NSS_CMSEncoder_Cancel(value);
-    }
+    void operator()(NSSCMSEncoderContext* value) const { NSS_CMSEncoder_Cancel(value); }
 };
 
 using NssCertificate = std::unique_ptr<CERTCertificate, CertificateDeleter>;

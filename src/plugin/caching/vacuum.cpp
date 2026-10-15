@@ -37,8 +37,6 @@ bool canScanDirectory(const QFileInfo& info)
 
 QDateTime parseLastVacuum(const QString& value)
 {
-    if (value.isEmpty())
-        return { };
     // ISO-8601 UTC as written by formatLastVacuum; fall back to a
     // timezone-less parse so older hand-edited values still decode.
     QDateTime parsed = QDateTime::fromString(value, Qt::ISODateWithMs);

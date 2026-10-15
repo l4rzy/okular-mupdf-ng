@@ -193,8 +193,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                     // Degraded sandbox under Strict after restart: withhold document,
                     // keep session failed until Relaxed triggers reopenWithheldDocument.
                     m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
-                    if (m_worker.isConnected())
-                        m_worker.close();
+                    m_worker.close();
                     clearPlaceholderDerivedState();
                     m_worker.commitSessionFailed();
                     Q_EMIT warning(sandboxGateMessage(), LongWarningMs);
@@ -1138,8 +1137,7 @@ void Main::failClosed(const QString& message)
     m_placeholder.activate(message, Placeholder::Reason::WorkerUnavailable);
     // A terminal placeholder must not leave a connected worker able to mutate
     // a document whose UI state is no longer recoverable.
-    if (m_worker.isConnected())
-        m_worker.close();
+    m_worker.close();
     clearPlaceholderDerivedState();
     Q_EMIT error(message, 0);
 
@@ -1200,8 +1198,7 @@ bool Main::doCloseDocument()
     m_document = { };
     syncOcrActions();
     // Closing is best effort: an unavailable worker has already lost its copy.
-    if (m_worker.isConnected())
-        m_worker.close();
+    m_worker.close();
 
     return true;
 }

@@ -158,6 +158,7 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
     const std::string producer = "Okular/okular-mupdf-ng " + std::string(::Mu::IPC::COMPAT);
 
     fz_output* volatile output = nullptr;
+    FILE* const outputFile = file; // Borrowed until the output is dropped.
     pdf_document* volatile destination = nullptr;
     fz_page* volatile page = nullptr;
     pdf_page* volatile destinationPage = nullptr;
@@ -173,7 +174,7 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
 
     fz_try(m_context)
     {
-        output = fz_new_output_with_file_ptr(m_context, file);
+        output = takeOutputFile(m_context, file);
         destination = pdf_create_document(m_context);
 
         // Metadata is best-effort: a failure keeps the visible export and only
@@ -222,10 +223,12 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
                 fz_concat(fz_translate(-bounds.x0, -bounds.y0),
                           fz_scale(layout.paperWidth / pageWidth, layout.paperHeight / pageHeight));
 
-            // pdf_page_write requires non-volatile out-params; publish the
-            // results into the volatile cleanup locals immediately after.
-            pdf_obj* resourcesOut = nullptr;
-            fz_buffer* contentsOut = nullptr;
+            // Preallocate the out-params: pdf_page_write can throw after
+            // filling one, before returning a device to the caller.
+            resources = pdf_new_dict(m_context, destination, 0);
+            contents = fz_new_buffer(m_context, 0);
+            pdf_obj* resourcesOut = resources;
+            fz_buffer* contentsOut = contents;
             device = pdf_page_write(m_context, destination, mediaBox, &resourcesOut, &contentsOut);
             resources = resourcesOut;
             contents = contentsOut;
@@ -409,42 +412,36 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
         pdf_update_open_pages(m_context, destination);
         pdf_write_document(m_context, destination, output, &options);
         fz_flush_output(m_context, output);
-        if (::fflush(file) != 0 || ::fsync(::fileno(file)) != 0)
+        if (::fflush(outputFile) != 0 || ::fsync(::fileno(outputFile)) != 0)
             fz_throw(m_context, FZ_ERROR_GENERIC, "failed to flush export output");
 
         fz_close_output(m_context, output);
         fz_drop_output(m_context, output);
         output = nullptr;
-        file = nullptr;
         saved = true;
     }
     fz_always(m_context)
     {
         fz_free(m_context, generatedUri);
-        if (destinationPage)
-            pdf_drop_page(m_context, destinationPage);
+        pdf_drop_page(m_context, destinationPage);
         fz_drop_page(m_context, page);
         fz_drop_device(m_context, device);
         pdf_drop_obj(m_context, pageObject);
         pdf_drop_obj(m_context, resources);
         fz_drop_buffer(m_context, contents);
-        if (destination)
-            pdf_drop_document(m_context, destination);
+        pdf_drop_document(m_context, destination);
     }
     fz_catch(m_context)
     {
-        if (output) {
-            fz_try(m_context)
-            {
-                fz_close_output(m_context, output);
-            }
-            fz_catch(m_context)
-            {
-            }
-            fz_drop_output(m_context, output);
-            output = nullptr;
-            file = nullptr;
+        fz_try(m_context)
+        {
+            fz_close_output(m_context, output);
         }
+        fz_catch(m_context)
+        {
+        }
+        fz_drop_output(m_context, output);
+        output = nullptr;
         if (file)
             ::fclose(file);
         fail(error, fz_caught_message(m_context));

@@ -234,7 +234,7 @@ std::string readFormatHint(fz_context* context, pdf_obj* field)
                 stream = pdf_open_stream(context, script);
                 const auto length =
                     fz_read(context, stream, reinterpret_cast<unsigned char*>(bytes.data()), bytes.size());
-                if (length < bytes.size())
+                if (!stream->error && length < bytes.size())
                     raw = { bytes.data(), length };
             }
             // Reject embedded NULs before conversion to a C string. UTF-16
@@ -746,15 +746,13 @@ bool PdfDocument::updateFormField(int page,
                 for (int idx : selectionVal.selectedIndices)
                     pdf_array_push_text_string(
                         m_context, newValue, choiceOption(m_context, logicalField, idx, useExportValues));
-                if (selectionVal.selectedIndices.size() == 1) {
-                    pdf_obj* item = pdf_array_get(m_context, newValue, 0);
-                    pdf_dict_put(m_context, logicalField, PDF_NAME(V), item);
-                    pdf_drop_obj(m_context, newValue);
-                    newValue = nullptr;
-                } else {
-                    pdf_dict_put_drop(m_context, logicalField, PDF_NAME(V), newValue);
-                    newValue = nullptr;
-                }
+                pdf_obj* selected =
+                    selectionVal.selectedIndices.size() == 1 ? pdf_array_get(m_context, newValue, 0) : newValue;
+                // Keep ownership until put succeeds; put_drop would also drop
+                // on failure, leaving fz_always with a dangling owner.
+                pdf_dict_put(m_context, logicalField, PDF_NAME(V), selected);
+                pdf_drop_obj(m_context, newValue);
+                newValue = nullptr;
             }
             pdf_dict_del(m_context, logicalField, PDF_NAME(I));
             pdf_dirty_obj(m_context, logicalField);

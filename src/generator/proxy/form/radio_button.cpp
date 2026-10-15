@@ -84,7 +84,7 @@ void RadioButton::setState(bool state)
         return;
     }
 
-    if (m_coordinator && !m_data.handle.empty())
+    if (m_coordinator)
         static_cast<void>(m_coordinator->updateField(m_data.handle, Model::FormCheckValue { state }));
 }
 

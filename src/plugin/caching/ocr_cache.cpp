@@ -9,7 +9,6 @@
 #include <QFile>
 
 #include <algorithm>
-#include <cmath>
 #include <optional>
 #include <zlib.h>
 
@@ -34,8 +33,7 @@ inline bool isValidCacheItem(const CacheItem& item)
 {
     // Cached coordinates are consumed as normalized rectangles by the text
     // conversion layer, so reject non-finite or inverted values on load.
-    return std::isfinite(item.l) && std::isfinite(item.t) && std::isfinite(item.r) && std::isfinite(item.b)
-        && item.l >= 0.0 && item.t >= 0.0 && item.r <= 1.0 && item.b <= 1.0 && item.l <= item.r && item.t <= item.b;
+    return item.l >= 0.0 && item.t >= 0.0 && item.r <= 1.0 && item.b <= 1.0 && item.l <= item.r && item.t <= item.b;
 }
 
 static QByteArray decompressBounded(const QByteArray& compressed)
@@ -271,12 +269,9 @@ CacheLoadResult Cache::load(const CacheKey& key, int pageNum)
     // Prefer the requested DPI, then allow only configured higher-quality
     // candidates. A valid empty result remains present=true.
     for (const QString& path : candidateFilePaths(key, pageNum)) {
-        if (QFile::exists(path)) {
-            const auto result = loadFromFile(path);
-            if (result.present) {
-                return result;
-            }
-        }
+        const auto result = loadFromFile(path);
+        if (result.present)
+            return result;
     }
     return { false, { } };
 }

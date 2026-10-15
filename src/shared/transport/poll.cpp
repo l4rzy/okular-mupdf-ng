@@ -151,7 +151,7 @@ int PollLoop::runOnce(MonotonicDeadline& deadline, std::string* error)
         if (!descriptor.revents)
             continue;
         for (const auto& item : m_watches) {
-            if (item.fd == descriptor.fd && item.callback) {
+            if (item.fd == descriptor.fd) {
                 // A callback may remove or replace its own watch. Retain its
                 // closure until it returns, independently of m_watches.
                 auto callback = item.callback;

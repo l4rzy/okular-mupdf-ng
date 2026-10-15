@@ -52,18 +52,15 @@ void closeAndDropOutput(fz_context* context, fz_output* volatile& output, FILE* 
 {
     // This helper is used only after a failed write. Closing output is best
     // effort; the original MuPDF/write error remains the caller's diagnostic.
-    if (output) {
-        fz_try(context)
-        {
-            fz_close_output(context, output);
-        }
-        fz_catch(context)
-        {
-        }
-        fz_drop_output(context, output);
-        output = nullptr;
-        file = nullptr;
+    fz_try(context)
+    {
+        fz_close_output(context, output);
     }
+    fz_catch(context)
+    {
+    }
+    fz_drop_output(context, output);
+    output = nullptr;
     if (file) {
         ::fclose(file);
         file = nullptr;
@@ -209,8 +206,8 @@ void preparePrintablePages(fz_context* context, pdf_document* document)
 // Full Document Saving
 // =============================================================================
 
-// Consumes fd on every path. fz_output owns the FILE* after construction,
-// so it is deliberately never fclose'd after fz_close_output().
+// Consumes fd on every path. fz_output consumes the FILE* even if construction fails,
+// so it is deliberately never fclose'd after ownership transfers to MuPDF.
 bool PdfDocument::saveFd(int fd, std::string* error)
 {
     if (fd < 0)
@@ -233,6 +230,7 @@ bool PdfDocument::saveFd(int fd, std::string* error)
     }
 
     fz_output* volatile output = nullptr;
+    FILE* const outputFile = file; // Borrowed until the output is dropped.
     volatile bool saved = false;
 
     fz_try(m_context)
@@ -251,20 +249,17 @@ bool PdfDocument::saveFd(int fd, std::string* error)
             }
         }
 
-        output = fz_new_output_with_file_ptr(m_context, file);
-        // MuPDF output owns FILE* from this point and closes it during output
-        // close. Null the local owner so failure cleanup cannot double-close it.
+        output = takeOutputFile(m_context, file);
         pdf_update_open_pages(m_context, pdf);
         pdf_write_document(m_context, pdf, output, &options);
 
         fz_flush_output(m_context, output);
-        if (::fflush(file) != 0 || ::fsync(::fileno(file)) != 0)
+        if (::fflush(outputFile) != 0 || ::fsync(::fileno(outputFile)) != 0)
             fz_throw(m_context, FZ_ERROR_GENERIC, "failed to flush save output");
 
         fz_close_output(m_context, output);
         fz_drop_output(m_context, output);
         output = nullptr;
-        file = nullptr;
         saved = true;
     }
     fz_catch(m_context)
@@ -309,6 +304,7 @@ bool PdfDocument::writeBakedPdf(int fd, const std::vector<int>& pages, bool forP
         return fail(error, "could not adopt output FD");
     }
     fz_output* volatile output = nullptr;
+    FILE* const outputFile = file; // Borrowed until the output is dropped.
     pdf_document* volatile copy = nullptr;
     pdf_graft_map* volatile map = nullptr;
     volatile bool saved = false;
@@ -376,15 +372,14 @@ bool PdfDocument::writeBakedPdf(int fd, const std::vector<int>& pages, bool forP
         pdf_write_options options = pdf_default_write_options;
         options.do_garbage = 1;
         options.do_encrypt = PDF_ENCRYPT_NONE;
-        output = fz_new_output_with_file_ptr(m_context, file);
+        output = takeOutputFile(m_context, file);
         pdf_write_document(m_context, copy, output, &options);
         fz_flush_output(m_context, output);
-        if (::fflush(file) != 0 || ::fsync(::fileno(file)) != 0)
+        if (::fflush(outputFile) != 0 || ::fsync(::fileno(outputFile)) != 0)
             fz_throw(m_context, FZ_ERROR_GENERIC, "failed to flush PDF output");
         fz_close_output(m_context, output);
         fz_drop_output(m_context, output);
         output = nullptr;
-        file = nullptr;
         saved = true;
     }
     fz_always(m_context)

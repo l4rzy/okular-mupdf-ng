@@ -305,7 +305,6 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
     if (!context) {
         return result;
     }
-    fz_register_document_handlers(context);
     FILE* input = ::fdopen(fd.get(), "rb");
     if (input)
         (void)fd.release();
@@ -325,6 +324,7 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
 
     fz_try(context)
     {
+        fz_register_document_handlers(context);
         if (!input)
             fz_throw(context, FZ_ERROR_GENERIC, "could not adopt OCR input FD");
 

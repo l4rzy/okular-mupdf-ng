@@ -91,10 +91,7 @@ std::optional<std::size_t> inspectFrameDescriptor(int fd, std::string* error)
 void cleanupMappedFrame(void* data)
 {
     auto* frame = static_cast<MappedFrame*>(data);
-    if (!frame)
-        return;
-    if (frame->mapping && frame->mapping != MAP_FAILED)
-        ::munmap(frame->mapping, frame->size);
+    ::munmap(frame->mapping, frame->size);
     delete frame;
 }
 

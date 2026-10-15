@@ -101,7 +101,7 @@ inline bool validateFrameHeader(const FrameBufferHeader* hdr,
     const std::uint64_t rowBytes = static_cast<std::uint64_t>(width) * 4;
     const std::uint64_t pixelBytes = static_cast<std::uint64_t>(height) * stride;
     const std::uint64_t pixelBudget = mappedSize - sizeof(FrameBufferHeader);
-    const bool hasValidLayout = width > 0 && height > 0 && stride > 0 && rowBytes <= stride;
+    const bool hasValidLayout = width > 0 && height > 0 && rowBytes <= stride;
     const bool matchesExpectedFrame = hdr->magic == FRAME_SHM_MAGIC && hdr->version == FRAME_SHM_VERSION
         && hdr->requestId == requestId && hdr->width == width && hdr->height == height && hdr->stride == stride
         && hdr->format == format;

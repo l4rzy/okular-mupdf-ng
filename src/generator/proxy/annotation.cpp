@@ -182,10 +182,10 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
     const auto model = Conversion::toModel(annotation);
     if (!model)
         return;
-    const QVariant id = annotation->nativeId();
-    if (!id.isValid() || id.toString().isEmpty())
+    const QString id = annotation->nativeId().toString();
+    if (id.isEmpty())
         return;
-    if (m_backend->modifyAnnotation(page, id.toString(), *model, appearanceChanged)) {
+    if (m_backend->modifyAnnotation(page, id, *model, appearanceChanged)) {
         if (m_mutationCallback)
             m_mutationCallback(page);
     }
@@ -201,10 +201,10 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
     }
     if (!m_backend || !m_backend->isConnected())
         return;
-    const QVariant id = annotation->nativeId();
-    if (!id.isValid() || id.toString().isEmpty())
+    const QString id = annotation->nativeId().toString();
+    if (id.isEmpty())
         return;
-    if (m_backend->removeAnnotation(page, id.toString())) {
+    if (m_backend->removeAnnotation(page, id)) {
         annotation->setNativeId(QVariant());
         if (m_mutationCallback)
             m_mutationCallback(page);

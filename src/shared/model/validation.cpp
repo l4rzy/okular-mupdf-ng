@@ -33,18 +33,16 @@ bool isValidRenderTile(int imageWidth, int imageHeight, int tileX, int tileY, in
 
 bool isValidDpi(double dpiX, double dpiY) noexcept
 {
-    // isfinite also excludes NaN and infinities, which would otherwise bypass
-    // ordinary range comparisons. Cap at MaxDpi (same as OCR) to prevent
-    // widthPoints*dpi/72 overflow and huge stride allocations.
-    return std::isfinite(dpiX) && std::isfinite(dpiY) && dpiX > 0.0 && dpiY > 0.0 && dpiX <= Limit::MaxDpi
-        && dpiY <= Limit::MaxDpi;
+    // Positive, bounded comparisons also reject NaN and infinities. Cap at
+    // MaxDpi (same as OCR) to prevent overflow and huge stride allocations.
+    return dpiX > 0.0 && dpiY > 0.0 && dpiX <= Limit::MaxDpi && dpiY <= Limit::MaxDpi;
 }
 
 bool isValidOcrDpi(float dpi) noexcept
 {
     // OCR is intentionally narrower than general rendering because the
     // recognition backend supports a bounded practical resolution range.
-    return std::isfinite(dpi) && dpi >= static_cast<float>(Limit::MinDpi) && dpi <= static_cast<float>(Limit::MaxDpi);
+    return dpi >= static_cast<float>(Limit::MinDpi) && dpi <= static_cast<float>(Limit::MaxDpi);
 }
 
 namespace {
@@ -277,9 +275,8 @@ bool isValidNormalizedRect(const NormalizedRect& rect) noexcept
 {
     // Require normalized coordinates at the model boundary so renderers can
     // use them without repeating finite, range, and ordering checks.
-    return std::isfinite(rect.left) && std::isfinite(rect.top) && std::isfinite(rect.right)
-        && std::isfinite(rect.bottom) && rect.left >= 0.0 && rect.top >= 0.0 && rect.right <= 1.0 && rect.bottom <= 1.0
-        && rect.left <= rect.right && rect.top <= rect.bottom;
+    return rect.left >= 0.0 && rect.top >= 0.0 && rect.right <= 1.0 && rect.bottom <= 1.0 && rect.left <= rect.right
+        && rect.top <= rect.bottom;
 }
 
 bool isValidAnnotation(const Annotation& annotation, std::string_view* reason)
@@ -307,7 +304,7 @@ bool isValidAnnotation(const Annotation& annotation, std::string_view* reason)
     // Check the remaining budget before adding each path to avoid size_t
     // overflow and to reject aggregate point counts above the protocol limit.
     for (const auto& path : annotation.extras.inkPaths) {
-        if (path.size() > Limit::MaxAnnotationInkPoints - std::min(inkPoints, Limit::MaxAnnotationInkPoints))
+        if (path.size() > Limit::MaxAnnotationInkPoints - inkPoints)
             return fail("annotation ink points count exceeds limit");
         inkPoints += path.size();
     }

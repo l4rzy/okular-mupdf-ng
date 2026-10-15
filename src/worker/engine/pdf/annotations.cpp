@@ -408,7 +408,7 @@ constexpr enum pdf_intent pdfAnnotationIntent(AnnotationIntent value) noexcept
 }
 
 /// Converts PDF float color components [0.0, 1.0] and opacity to 32-bit ARGB integer.
-std::uint32_t pdfColorToArgb(int components, const float values[4], float opacity)
+std::uint32_t pdfColorToArgb(fz_context* context, int components, const float values[4], float opacity)
 {
     const auto channel = [](float value) -> std::uint32_t {
         return static_cast<std::uint32_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
@@ -419,7 +419,12 @@ std::uint32_t pdfColorToArgb(int components, const float values[4], float opacit
         red = green = blue = values[0];
     else if (components == 3)
         red = values[0], green = values[1], blue = values[2];
-    else
+    else if (components == 4) {
+        float rgb[3];
+        fz_convert_color(
+            context, fz_device_cmyk(context), values, fz_device_rgb(context), rgb, nullptr, fz_default_color_params);
+        red = rgb[0], green = rgb[1], blue = rgb[2];
+    } else
         return 0xffffffffU;
 
     return (channel(opacity) << 24) | (channel(red) << 16) | (channel(green) << 8) | channel(blue);
@@ -519,8 +524,7 @@ bool PdfDocument::addAnnotation(int page, const Annotation& annotation, std::int
                 fz_try(m_context)
                 {
                     pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
-                    if (pdfPage)
-                        pdf_delete_annot(m_context, pdfPage, created);
+                    pdf_delete_annot(m_context, pdfPage, created);
                 }
                 fz_catch(m_context)
                 {
@@ -630,13 +634,13 @@ std::vector<Annotation> PdfDocument::extractPageAnnotations(fz_page* nativePage,
                 int components = 0;
                 float color[4] { 0, 0, 0, 1 };
                 pdf_annot_color(m_context, annotation, &components, color);
-                value.color = pdfColorToArgb(components, color, pdf_annot_opacity(m_context, annotation));
+                value.color = pdfColorToArgb(m_context, components, color, pdf_annot_opacity(m_context, annotation));
 
                 if (pdf_annot_has_interior_color(m_context, annotation)) {
                     int interiorComponents = 0;
                     float interior[4] { 0, 0, 0, 1 };
                     pdf_annot_interior_color(m_context, annotation, &interiorComponents, interior);
-                    value.extras.style.interiorColor = pdfColorToArgb(interiorComponents, interior, 1.0f);
+                    value.extras.style.interiorColor = pdfColorToArgb(m_context, interiorComponents, interior, 1.0f);
                 }
                 if (pdf_annot_has_border(m_context, annotation)) {
                     const float border = pdf_annot_border_width(m_context, annotation);
@@ -738,7 +742,7 @@ std::vector<Annotation> PdfDocument::extractPageAnnotations(fz_page* nativePage,
                         appearance.fontName = copyAnnotationText(m_context, font, budget);
                     appearance.fontSize = fontSize;
                     if (textComponents > 0)
-                        appearance.textColor = pdfColorToArgb(textComponents, textColor, 1.0f);
+                        appearance.textColor = pdfColorToArgb(m_context, textComponents, textColor, 1.0f);
                     if (pdf_annot_has_quadding(m_context, annotation))
                         appearance.alignment = pdf_annot_quadding(m_context, annotation);
                     if (pdf_annot_has_callout(m_context, annotation) && value.extras.style.intent
@@ -804,14 +808,13 @@ void PdfDocument::applyAnnotation(fz_context* context,
 
         const PageCoordinates coordinates { pageBounds, pageWidth, pageHeight };
 
-        // A line-style annotation with fewer than two points has no geometry;
-        // MuPDF would create an invisible, unrecoverable annotation. Reject it
-        // before any mutation so add rolls back cleanly and modify leaves the
-        // existing annotation untouched.
-        if ((annotation.subtype == AnnotationType::Line || annotation.subtype == AnnotationType::Polygon
-             || annotation.subtype == AnnotationType::PolyLine)
-            && annotation.extras.points.size() < 2)
-            fz_throw(context, FZ_ERROR_ARGUMENT, "line annotation requires at least two points");
+        // Validate before any mutation, and use each subtype's own setter:
+        // a two-vertex polyline is valid but is not a Line annotation.
+        const auto vertices = annotation.extras.points.size();
+        if ((annotation.subtype == AnnotationType::Line && vertices != 2)
+            || (annotation.subtype == AnnotationType::Polygon && vertices < 3)
+            || (annotation.subtype == AnnotationType::PolyLine && vertices < 2))
+            fz_throw(context, FZ_ERROR_ARGUMENT, "annotation has an invalid vertex count");
 
         if (!annotation.uuid.empty())
             pdf_set_annot_name(context, target, annotation.uuid.c_str());
@@ -893,10 +896,10 @@ void PdfDocument::applyAnnotation(fz_context* context,
         }
 
         if (type == PDF_ANNOT_LINE || type == PDF_ANNOT_POLYGON || type == PDF_ANNOT_POLY_LINE) {
-            if (annotation.extras.points.size() == 2)
+            if (type == PDF_ANNOT_LINE)
                 pdf_set_annot_line(
                     context, target, point(annotation.extras.points[0]), point(annotation.extras.points[1]));
-            else if (annotation.extras.points.size() > 2) {
+            else {
                 linePoints = fz_malloc_array(context, annotation.extras.points.size(), fz_point);
                 for (std::size_t index = 0; index < annotation.extras.points.size(); ++index)
                     linePoints[index] = point(annotation.extras.points[index]);

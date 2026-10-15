@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <string>
 
@@ -20,6 +21,15 @@ extern "C" {
 #endif
 
 namespace Mu::Worker::Engine {
+
+/// MuPDF consumes FILE* even if output allocation throws. Clear the caller's
+/// owner before entering that constructor so error cleanup cannot close it twice.
+inline fz_output* takeOutputFile(fz_context* context, FILE* volatile& file)
+{
+    FILE* owned = file;
+    file = nullptr;
+    return fz_new_output_with_file_ptr(context, owned);
+}
 
 /// Formats an epoch timestamp as a compact user-facing signature date,
 /// e.g. "Sep 7, 2026 13:14 CDT", using the process local timezone.

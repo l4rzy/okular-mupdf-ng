@@ -102,6 +102,9 @@ pdf_pkcs7_signer* createSigner(std::string nickname, std::string subjectCommonNa
         {
             return 0;
         }
+        // Fitz may turn a read error into EOF instead of throwing.
+        if (input->error)
+            return 0;
         fz_sha256_final(&hash, digest.data());
 
         // Step 2: Invoke IPC callback to obtain CMS signature bytes from parent

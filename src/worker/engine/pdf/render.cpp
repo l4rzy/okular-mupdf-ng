@@ -256,16 +256,14 @@ std::vector<TextBox> PdfDocument::textBoxes(
     }
     fz_always(m_context)
     {
-        if (device) {
-            fz_try(m_context)
-            {
-                fz_close_device(m_context, device);
-            }
-            fz_catch(m_context)
-            {
-            }
-            fz_drop_device(m_context, device);
+        fz_try(m_context)
+        {
+            fz_close_device(m_context, device);
         }
+        fz_catch(m_context)
+        {
+        }
+        fz_drop_device(m_context, device);
         fz_drop_stext_page(m_context, text);
         fz_drop_page(m_context, nativePage);
     }

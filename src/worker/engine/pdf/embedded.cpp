@@ -5,10 +5,7 @@
 
 #include <algorithm>
 #include <array>
-#include <charconv>
-#include <chrono>
 #include <string>
-#include <string_view>
 #include <vector>
 
 extern "C" {
@@ -129,46 +126,11 @@ PdfDocument::embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* res
 // PDF Date Parsing
 // =============================================================================
 
-// PDF dates are D:YYYYMMDDHHmmSS[tz]. Only the UTC prefix is parsed; a trailing
-// timezone offset or Z is intentionally ignored and missing fields fall back to
-// zero. The chrono year_month_day round-trip validates the calendar date.
+// Use MuPDF's PDF-date parser, including timezone offsets and optional fields.
 Timestamp PdfDocument::parsePdfDate(fz_context* context, pdf_obj* object)
 {
-    if (!object || !pdf_is_string(context, object))
-        return { };
-
-    const char* text = pdf_to_str_buf(context, object);
-    if (!text)
-        return { };
-
-    std::string_view value(text);
-    if (value.starts_with("D:"))
-        value.remove_prefix(2);
-
-    const auto read = [&value](std::size_t offset, std::size_t length, int fallback, int* target) {
-        if (value.size() < offset + length) {
-            *target = fallback;
-            return true;
-        }
-        const auto result = std::from_chars(value.data() + offset, value.data() + offset + length, *target);
-        return result.ec == std::errc();
-    };
-
-    int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
-    if (!read(0, 4, 0, &year) || !read(4, 2, 0, &month) || !read(6, 2, 0, &day) || !read(8, 2, 0, &hour)
-        || !read(10, 2, 0, &minute) || !read(12, 2, 0, &second))
-        return { };
-
-    const std::chrono::year_month_day date { std::chrono::year(year),
-                                             std::chrono::month(static_cast<unsigned>(month)),
-                                             std::chrono::day(static_cast<unsigned>(day)) };
-
-    if (!date.ok() || hour > 23 || minute > 59 || second > 59)
-        return { };
-
-    const auto instant = std::chrono::sys_days(date) + std::chrono::hours(hour) + std::chrono::minutes(minute)
-        + std::chrono::seconds(second);
-    return { true, std::chrono::duration_cast<std::chrono::milliseconds>(instant.time_since_epoch()).count() };
+    const auto seconds = pdf_to_date(context, object);
+    return seconds >= 0 ? Timestamp { true, seconds * Constant::MillisecondsPerSecond } : Timestamp { };
 }
 
 // =============================================================================
@@ -243,7 +205,7 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
     {
         input = pdf_open_stream(context, streamObject);
         std::array<unsigned char, 64 * 1024> buffer { };
-        while (input) {
+        while (true) {
             const std::size_t count = fz_read(context, input, buffer.data(), buffer.size());
             if (!count)
                 break;
@@ -255,6 +217,8 @@ EmbeddedFile PdfDocument::parseFilespec(fz_context* context, pdf_obj* object, st
             }
             result.data.insert(result.data.end(), buffer.begin(), buffer.begin() + count);
         }
+        if (input->error)
+            result.data.clear();
     }
     fz_always(context)
     {

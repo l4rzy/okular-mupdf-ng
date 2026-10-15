@@ -32,8 +32,18 @@ using namespace ::Mu::Model;
 PdfDocument::PdfDocument(std::size_t storeSize)
     : m_context(fz_new_context(nullptr, nullptr, storeSize))
 {
-    if (m_context)
-        fz_register_document_handlers(m_context);
+    if (m_context) {
+        fz_try(m_context)
+        {
+            fz_register_document_handlers(m_context);
+        }
+        fz_catch(m_context)
+        {
+            fz_ignore_error(m_context);
+            fz_drop_context(m_context);
+            m_context = nullptr;
+        }
+    }
 }
 
 PdfDocument::~PdfDocument()
@@ -53,8 +63,12 @@ PdfDocument::~PdfDocument()
 bool PdfDocument::openFd(int fd, std::string displayName, std::string* error)
 {
     close();
-    if (!m_context || fd < 0)
+    if (fd < 0)
         return fail(error, "input FD is invalid");
+    if (!m_context) {
+        ::close(fd);
+        return fail(error, "MuPDF context is unavailable");
+    }
 
     // Convert raw POSIX file descriptor to buffered FILE* stream
     m_input = ::fdopen(fd, "rb");
@@ -135,7 +149,7 @@ void PdfDocument::close() noexcept
 
     // fz_open_file_ptr_no_close leaves FILE* ownership here. Drop MuPDF objects
     // first, then close the stream and its underlying descriptor exactly once.
-    if (m_document && m_context) {
+    if (m_context) {
         fz_try(m_context)
         {
             fz_drop_document(m_context, m_document);
@@ -146,7 +160,7 @@ void PdfDocument::close() noexcept
     }
     m_document = nullptr;
 
-    if (m_stream && m_context) {
+    if (m_context) {
         fz_try(m_context)
         {
             fz_drop_stream(m_context, m_stream);

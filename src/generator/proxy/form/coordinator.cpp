@@ -127,10 +127,6 @@ bool Coordinator::resetFields(const std::vector<Model::FormField>& fields)
     std::unordered_map<std::string, IField*> rekeyed;
     rekeyed.reserve(m_fields.size());
     for (const auto& [oldHandle, proxy] : m_fields) {
-        if (!proxy) {
-            rekeyed.emplace(oldHandle, nullptr);
-            continue;
-        }
         const int widgetId = proxy->formField()->id();
         const auto match = std::find_if(fields.begin(), fields.end(), [widgetId](const Model::FormField& field) {
             return field.pdfObjectNumber == widgetId;
@@ -151,7 +147,7 @@ bool Coordinator::resetFields(const std::vector<Model::FormField>& fields)
     for (const auto& field : fields) {
         const auto value = formValue(field);
         const auto it = m_fields.find(field.handle);
-        if (!value || it == m_fields.end() || !it->second)
+        if (!value || it == m_fields.end())
             continue;
         const auto result = it->second->applyCanonicalValue(*value);
         if (result == ApplyResult::Rejected)
@@ -181,7 +177,7 @@ bool Coordinator::applyResponse(const Model::FormUpdateResponse& response)
     bool changed = false;
     for (const auto& fieldState : response.affectedFields) {
         auto it = m_fields.find(fieldState.handle);
-        if (it == m_fields.end() || !it->second)
+        if (it == m_fields.end())
             continue;
         const auto result = it->second->applyCanonicalValue(fieldState.value);
         if (result == ApplyResult::Rejected)

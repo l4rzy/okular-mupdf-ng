@@ -110,6 +110,9 @@ void freeRawSignatureField(fz_context* context, RawSignatureField& field) noexce
 
 void clearSignatureMutation(fz_context* context, pdf_page* page, pdf_annot* widget, bool created)
 {
+    // Unregister before changing the field: a mutation can move it into a new
+    // incremental xref section, hiding the pending signer from MuPDF's remover.
+    pdf_xref_remove_unsaved_signature(context, page->doc, pdf_annot_obj(context, widget));
     if (created) {
         pdf_delete_annot(context, page, widget);
         return;
@@ -703,10 +706,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         }
 
         pdf_update_open_pages(m_context, pdf);
-        output = fz_new_output_with_file_ptr(m_context, file);
-        // Output now owns FILE* and closes it when the output is closed. Do not
-        // fclose file again on success or in the catch cleanup below.
-        file = nullptr;
+        output = takeOutputFile(m_context, file);
 
         pdf_write_options options = pdf_default_write_options;
         options.do_incremental = 1;
@@ -725,17 +725,15 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     }
     fz_catch(m_context)
     {
-        if (output) {
-            fz_try(m_context)
-            {
-                fz_close_output(m_context, output);
-            }
-            fz_catch(m_context)
-            {
-            }
-            fz_drop_output(m_context, output);
-            output = nullptr;
+        fz_try(m_context)
+        {
+            fz_close_output(m_context, output);
         }
+        fz_catch(m_context)
+        {
+        }
+        fz_drop_output(m_context, output);
+        output = nullptr;
         if (file) {
             ::fclose(file);
             file = nullptr;
@@ -749,10 +747,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         if (widget && nativePage && !widgetMutationComplete) {
             fz_try(m_context)
             {
-                if (createdWidget)
-                    clearSignatureMutation(m_context, nativePage, widget, true);
-                else
-                    clearSignatureMutation(m_context, nativePage, widget, false);
+                clearSignatureMutation(m_context, nativePage, widget, createdWidget);
             }
             fz_catch(m_context)
             {
@@ -768,8 +763,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
     fz_drop_image(m_context, graphic);
     pdf_drop_annot(m_context, widget);
-    if (nativePage)
-        pdf_drop_page(m_context, nativePage);
+    pdf_drop_page(m_context, nativePage);
     pdf_drop_signer(m_context, signer);
 
     if (saved && signingResult)

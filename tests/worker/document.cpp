@@ -3,6 +3,7 @@
 #include "genpdf.hpp"
 #include "runtime/command_service.hpp"
 #include "shared/model/types.hpp"
+#include <QDateTime>
 #include <QFile>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -315,6 +316,86 @@ private slots:
         QVERIFY(nodes[0].link.valid);
         QCOMPARE(nodes[0].link.viewport.page, 0);
         QVERIFY(nodes[0].link.viewport.normalizedY >= 0 && nodes[0].link.viewport.normalizedY <= 1);
+    }
+
+    void attachmentStreamErrors_data()
+    {
+        QTest::addColumn<QByteArray>("encoded");
+        QTest::addColumn<QByteArray>("expected");
+        QTest::newRow("complete") << QByteArray("616263>") << QByteArray("abc");
+        QTest::newRow("error-after-prefix") << QByteArray("61").repeated(8192).append("G>") << QByteArray();
+    }
+
+    void attachmentStreamErrors()
+    {
+        QFETCH(QByteArray, encoded);
+        QFETCH(QByteArray, expected);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("attachment-stream.pdf");
+        QVERIFY(writePdfObjects(path,
+                                { "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 5 0 R >> >>",
+                                  "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                  "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] >>",
+                                  "<< /Type /Filespec /F (attachment) /EF << /F 6 0 R >> >>",
+                                  "<< /Names [(attachment) 4 0 R] >>",
+                                  "<< /Filter /ASCIIHexDecode /Length " + QByteArray::number(encoded.size())
+                                      + " >>\nstream\n" + encoded + "\nendstream" }));
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(source.handle()), "attachment-stream.pdf", &error), error.c_str());
+        const auto files = document.embeddedFiles(16384, 10, nullptr, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(files.size(), 1u);
+        QCOMPARE(QByteArray(reinterpret_cast<const char*>(files.front().data.data()),
+                            static_cast<qsizetype>(files.front().data.size())),
+                 expected);
+    }
+
+    void attachmentDates_data()
+    {
+        QTest::addColumn<QByteArray>("date");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("utc") << QByteArray("D:20240101120000Z") << QStringLiteral("2024-01-01T12:00:00Z");
+        QTest::newRow("positive-offset") << QByteArray("D:20240101120000+01'00'")
+                                         << QStringLiteral("2024-01-01T11:00:00Z");
+        QTest::newRow("negative-offset") << QByteArray("D:20240101120000-07'00'")
+                                         << QStringLiteral("2024-01-01T19:00:00Z");
+        QTest::newRow("year-only") << QByteArray("D:2024") << QStringLiteral("2024-01-01T00:00:00Z");
+        QTest::newRow("invalid") << QByteArray("not a date") << QString();
+    }
+
+    void attachmentDates()
+    {
+        QFETCH(QByteArray, date);
+        QFETCH(QString, expected);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("attachment-dates.pdf");
+        QVERIFY(writePdfObjects(path,
+                                { "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 5 0 R >> >>",
+                                  "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                  "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] >>",
+                                  "<< /Type /Filespec /F (attachment) /EF << /F 6 0 R >> >>",
+                                  "<< /Names [(attachment) 4 0 R] >>",
+                                  "<< /Length 0 /Params << /CreationDate (" + date + ") /ModDate (" + date
+                                      + ") >> >>\nstream\nendstream" }));
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(source.handle()), "attachment-dates.pdf", &error), error.c_str());
+        const auto files = document.embeddedFiles(1024, 10, nullptr, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(files.size(), 1u);
+        const auto timestamp = QDateTime::fromString(expected, Qt::ISODate);
+        QCOMPARE(files.front().creationDate.valid, timestamp.isValid());
+        QCOMPARE(files.front().modificationDate.valid, timestamp.isValid());
+        if (timestamp.isValid()) {
+            QCOMPARE(files.front().creationDate.unixMilliseconds, timestamp.toMSecsSinceEpoch());
+            QCOMPARE(files.front().modificationDate.unixMilliseconds, timestamp.toMSecsSinceEpoch());
+        }
     }
 
     void attachmentMetadataReadFailures_data()
@@ -958,6 +1039,42 @@ private slots:
             const auto details = document.pageDetails(0, nullptr, false, &budgets);
             QCOMPARE(details.geometry.widthPoints, 0.0);
         }
+    }
+
+    void choiceValueWriteFailure_data()
+    {
+        QTest::addColumn<std::vector<int>>("selection");
+        QTest::newRow("single") << std::vector<int> { 0 };
+        QTest::newRow("multiple") << std::vector<int> { 0, 1 };
+    }
+
+    void choiceValueWriteFailure()
+    {
+        QFETCH(std::vector<int>, selection);
+        QTemporaryDir directory;
+        const QString path = directory.filePath("choice-write-failure.pdf");
+        QVERIFY(writeFormBudgetPdf(path, "/FT /Ch /Ff 2097152 /Opt [(a) (b)]", 0, 1));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "choices.pdf", &error), error.c_str());
+        const auto initial = document.pageDetails(0, &error);
+        QCOMPARE(initial.formFields.size(), std::size_t(1));
+        auto* context = document.context();
+        // A journal without an active operation rejects the dictionary write
+        // after the selected-value array has been populated.
+        pdf_enable_journal(context, pdf_specifics(context, document.document()));
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(document.updateFormField(0,
+                                          initial.formFields.front().pdfObjectNumber,
+                                          ::Mu::Model::FormChoiceSelection { selection },
+                                          &mutations,
+                                          &error),
+                 error.c_str());
+        const auto actual = document.pageDetails(0, &error);
+        QCOMPARE(actual.formFields.size(), std::size_t(1));
+        QVERIFY(actual.formFields.front().currentChoices.empty());
     }
 
     void formTextBudgetStopsBeforeReadingLaterChoices()
@@ -1919,6 +2036,90 @@ private slots:
         QCOMPARE(annotations.front().extras.points.size(), size_t(2));
     }
 
+    void annotationColorSpaces_data()
+    {
+        QTest::addColumn<QByteArray>("color");
+        QTest::newRow("rgb-cyan") << QByteArray("0 1 1");
+        QTest::newRow("cmyk-cyan") << QByteArray("1 0 0 0");
+    }
+
+    void annotationColorSpaces()
+    {
+        QFETCH(QByteArray, color);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("annotation-colors.pdf");
+        QVERIFY(writePdfObjects(path,
+                                { "<< /Type /Catalog /Pages 2 0 R >>",
+                                  "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                  "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Annots [4 0 R] >>",
+                                  "<< /Type /Annot /Subtype /Square /Rect [10 10 100 100] /CA 0.5 /C [" + color
+                                      + "] /IC [" + color + "] >>" }));
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(source.handle()), "annotation-colors.pdf", &error), error.c_str());
+        const auto annotations = document.extractAnnotations(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(annotations.size(), 1u);
+        const auto cyan = [](std::uint32_t argb) {
+            return ((argb >> 16) & 0xff) < 128 && ((argb >> 8) & 0xff) > 128 && (argb & 0xff) > 128;
+        };
+        QVERIFY(cyan(annotations.front().color));
+        QCOMPARE(annotations.front().color >> 24, 128u);
+        QVERIFY(annotations.front().extras.style.interiorColor);
+        QVERIFY(cyan(*annotations.front().extras.style.interiorColor));
+    }
+
+    void annotationVertexSetters_data()
+    {
+        QTest::addColumn<int>("subtype");
+        QTest::addColumn<int>("vertices");
+        QTest::addColumn<bool>("accepted");
+        using Type = ::Mu::Model::AnnotationType;
+        QTest::newRow("line-two") << int(Type::Line) << 2 << true;
+        QTest::newRow("line-three") << int(Type::Line) << 3 << false;
+        QTest::newRow("polyline-two") << int(Type::PolyLine) << 2 << true;
+        QTest::newRow("polyline-three") << int(Type::PolyLine) << 3 << true;
+        QTest::newRow("polygon-two") << int(Type::Polygon) << 2 << false;
+        QTest::newRow("polygon-three") << int(Type::Polygon) << 3 << true;
+    }
+
+    void annotationVertexSetters()
+    {
+        QFETCH(int, subtype);
+        QFETCH(int, vertices);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("vertices.pdf");
+        auto* context = fz_new_context(nullptr, nullptr, 0);
+        QVERIFY(context);
+        createTextPDF(context, path);
+        fz_drop_context(context);
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(source.handle()), "vertices.pdf", &error), error.c_str());
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = static_cast<::Mu::Model::AnnotationType>(subtype);
+        annotation.x0 = annotation.y0 = .1;
+        annotation.x1 = annotation.y1 = .5;
+        annotation.extras.points = { { .1, .1 }, { .5, .5 }, { .1, .5 } };
+        annotation.extras.points.resize(static_cast<std::size_t>(vertices));
+        std::int32_t object = -1;
+        QCOMPARE(document.addAnnotation(0, annotation, &object, &error), accepted);
+        error.clear();
+        const auto result = document.extractAnnotations(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(result.size(), accepted ? 1u : 0u);
+        if (accepted) {
+            QCOMPARE(result.front().subtype, annotation.subtype);
+            QCOMPARE(result.front().extras.points.size(), static_cast<std::size_t>(vertices));
+        }
+    }
+
     void malformedOpenCanRecoverOnSameDocument()
     {
         QTemporaryDir directory;
@@ -1954,8 +2155,16 @@ private slots:
         QVERIFY(document.pageGeometry(0, &error).widthPoints > 0.0);
     }
 
+    void throwingSigningCallbackIsContainedAndFieldRemainsUsable_data()
+    {
+        QTest::addColumn<bool>("existingField");
+        QTest::newRow("existing-field") << true;
+        QTest::newRow("new-field") << false;
+    }
+
     void throwingSigningCallbackIsContainedAndFieldRemainsUsable()
     {
+        QFETCH(bool, existingField);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
@@ -1980,15 +2189,17 @@ private slots:
         const int outputFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outputFd >= 0);
         Mu::Model::SigningResult signingResult = Mu::Model::SigningResult::Success;
+        unsigned callbackCount = 0;
         QVERIFY(!document.signFd(
             { .file = { },
               .page = 0,
-              .rectangle = { },
+              .rectangle = { .1, .1, .5, .3 },
               .certificateNickname = "test-certificate",
               .certificateSubjectCommonName = "Test Signer",
-              .existingFieldObjectNumber = fields.front().objectNumber,
+              .existingFieldObjectNumber = existingField ? fields.front().objectNumber : -1,
               .appearance = { } },
-            [](const std::array<std::uint8_t, 32>&, const std::string&) -> ::Mu::Worker::Engine::CmsResult {
+            [&](const std::array<std::uint8_t, 32>&, const std::string&) -> ::Mu::Worker::Engine::CmsResult {
+                ++callbackCount;
                 throw std::runtime_error("test callback failure");
             },
             outputFd,
@@ -2003,6 +2214,14 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(afterFailure.size(), size_t(1));
         QVERIFY(!afterFailure.front().signedField);
+        QCOMPARE(callbackCount, 1u);
+        // Deleting a newly created widget must also unregister its pending
+        // signer; a later ordinary save must not invoke the failed callback.
+        const auto savedPath = directory.filePath("after-failure.pdf");
+        const int savedFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(savedFd >= 0);
+        QVERIFY2(document.saveFd(savedFd, &error), error.c_str());
+        QCOMPARE(callbackCount, 1u);
     }
 
     void deferredQueueBounds()

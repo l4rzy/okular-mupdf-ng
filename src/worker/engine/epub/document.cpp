@@ -144,8 +144,18 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
 EpubDocument::EpubDocument(std::size_t storeSize)
     : m_context(fz_new_context(nullptr, nullptr, storeSize))
 {
-    if (m_context)
-        fz_register_document_handlers(m_context);
+    if (m_context) {
+        fz_try(m_context)
+        {
+            fz_register_document_handlers(m_context);
+        }
+        fz_catch(m_context)
+        {
+            fz_ignore_error(m_context);
+            fz_drop_context(m_context);
+            m_context = nullptr;
+        }
+    }
 }
 
 EpubDocument::~EpubDocument()
@@ -275,7 +285,7 @@ void EpubDocument::close() noexcept
     // Release the cached pages before dropping the document they belong to.
     clearPageCache();
 
-    if (m_document && m_context) {
+    if (m_context) {
         fz_try(m_context)
         {
             fz_drop_document(m_context, m_document);
@@ -285,7 +295,7 @@ void EpubDocument::close() noexcept
         }
     }
     m_document = nullptr;
-    if (m_archive && m_context) {
+    if (m_context) {
         fz_try(m_context)
         {
             fz_drop_archive(m_context, m_archive);
@@ -296,7 +306,7 @@ void EpubDocument::close() noexcept
     }
     m_archive = nullptr;
     m_fonts.reset();
-    if (m_stream && m_context) {
+    if (m_context) {
         fz_try(m_context)
         {
             fz_drop_stream(m_context, m_stream);

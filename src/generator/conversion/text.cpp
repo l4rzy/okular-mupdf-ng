@@ -71,8 +71,7 @@ QString plainText(const std::vector<Model::TextBox>& boxes)
 {
     QString text;
     for (const auto& box : boxes) {
-        if (!box.text.empty())
-            text += QString::fromStdString(box.text);
+        text += QString::fromStdString(box.text);
         if (box.endOfLine)
             text += QLatin1Char('\n');
     }

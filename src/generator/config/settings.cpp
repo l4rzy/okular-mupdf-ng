@@ -199,7 +199,7 @@ OcrSettings readOcrSettings()
     // a settings visit first.
     if (language.isEmpty() || language == QStringLiteral("-"))
         language = autoSelectOcrModel(installedOcrModels());
-    if (language == QStringLiteral("-") || language.isEmpty() || !language.endsWith(QStringLiteral(".traineddata"))) {
+    if (!language.endsWith(QStringLiteral(".traineddata"))) {
         settings.language = QStringLiteral("-");
         settings.force = false;
         settings.autoTrigger = false;

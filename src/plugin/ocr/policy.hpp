@@ -81,7 +81,7 @@ public:
         if (adjacent >= 0 && adjacent < m_pageCount)
             pages.append(adjacent);
         const int opposite = m_focus * 2 - adjacent;
-        if (opposite >= 0 && opposite < m_pageCount && opposite != adjacent)
+        if (opposite >= 0 && opposite < m_pageCount)
             pages.append(opposite);
         return pages;
     }
