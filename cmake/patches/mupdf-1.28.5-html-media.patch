@@ -1,0 +1,48 @@
+--- a/source/html/html-parse.c
++++ b/source/html/html-parse.c
+@@ -1688,6 +1688,36 @@
+ 	}
+ }
+ 
++/* Match simple CSS media lists for screen display. Keep the existing behavior
++ * for complex media queries until a media query evaluator is available. */
++static int
++html_matches_media(const char *media)
++{
++	const char *end;
++	size_t len;
++
++	if (!media || !media[strspn(media, " \t\r\n\f")])
++		return 1;
++	while (*media)
++	{
++		media += strspn(media, " \t\r\n\f");
++		end = strchr(media, ',');
++		if (!end)
++			end = media + strlen(media);
++		len = end - media;
++		while (len && strchr(" \t\r\n\f", media[len-1]))
++			--len;
++		if ((len == 6 && !fz_strncasecmp(media, "screen", len)) ||
++			(len == 3 && !fz_strncasecmp(media, "all", len)))
++			return 1;
++		/* Whitespace within an entry or parentheses indicate a complex query. */
++		if (strcspn(media, " \t\r\n\f()") < len)
++			return 1;
++		media = *end ? end + 1 : end;
++	}
++	return 0;
++}
++
+ static void
+ html_load_css(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const char *base_uri, fz_css *css, fz_xml *root)
+ {
+@@ -1697,6 +1727,8 @@
+ 	head = fz_xml_find_down(html, "head");
+ 	for (node = fz_xml_down(head); node; node = fz_xml_next(node))
+ 	{
++		if (!html_matches_media(fz_xml_att(node, "media")))
++			continue;
+ 		if (fz_xml_is_tag(node, "link"))
+ 		{
+ 			char *rel = fz_xml_att(node, "rel");

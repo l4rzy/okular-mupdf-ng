@@ -26,6 +26,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -74,6 +75,85 @@ waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::
 class TestEpub : public QObject {
     Q_OBJECT
 private slots:
+
+    void testStylesheetMedia_data()
+    {
+        QTest::addColumn<QString>("media");
+        QTest::addColumn<bool>("linked");
+        QTest::addColumn<bool>("applies");
+        const std::array cases {
+            std::pair { "", true },
+            std::pair { "media=''", true },
+            std::pair { "media='screen'", true },
+            std::pair { "media='   '", true },
+            std::pair { "media=', print, '", false },
+            std::pair { "media='all'", true },
+            std::pair { "media='print'", false },
+            std::pair { "media='speech'", false },
+            std::pair { "media='print, speech'", false },
+            std::pair { "media='print, screen'", true },
+            std::pair { "media='print, all'", true },
+            std::pair { "media='  ScReEn  '", true },
+            std::pair { "media='  PRINT  '", false },
+            // Preserve existing handling of queries outside simple media lists.
+            std::pair { "media='screen and (min-width: 1px)'", true },
+        };
+        for (const bool linked : { false, true }) {
+            for (const auto& [media, applies] : cases) {
+                const auto name = QStringLiteral("%1:%2").arg(linked ? "link" : "style", media).toUtf8();
+                QTest::newRow(name.constData()) << QString::fromLatin1(media) << linked << applies;
+            }
+        }
+    }
+
+    void testStylesheetMedia()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF stylesheet media patch");
+#endif
+        QFETCH(QString, media);
+        QFETCH(bool, linked);
+        QFETCH(bool, applies);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray css = ".noprint { display: none }";
+        QFile stylesheet(directory.filePath(QStringLiteral("style.css")));
+        QVERIFY(stylesheet.open(QIODevice::WriteOnly));
+        QCOMPARE(stylesheet.write(css), css.size());
+        stylesheet.close();
+        const auto style = linked
+            ? QStringLiteral("<link rel='stylesheet' type='text/css' href='style.css' %1>").arg(media)
+            : QStringLiteral("<style type='text/css' %1>%2</style>").arg(media, QString::fromLatin1(css));
+        const auto content = QStringLiteral("<html><head>%1</head><body class='noprint'>"
+                                            "<p>Visible</p></body></html>")
+                                 .arg(style)
+                                 .toUtf8();
+        QFile html(directory.filePath(QStringLiteral("media.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 400, 600, 12);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto inspection = Mu::Test::inspectDocumentText(context, document);
+        QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+        QCOMPARE(inspection.lines.contains(QStringLiteral("Visible")), !applies);
+    }
 
     void testRootRelativeLengths_data()
     {
