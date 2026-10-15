@@ -36,6 +36,10 @@ inline constexpr std::string_view Magenta = "\033[35m";
 inline constexpr std::string_view DimMagenta = "\033[2;35m";
 inline constexpr std::string_view BrightWhite = "\033[1;97m";
 
+// =============================================================================
+// Message Tags & Field Formatting
+// =============================================================================
+
 inline std::string_view forType(std::string_view type) noexcept
 {
     if (type == "open")
@@ -121,6 +125,10 @@ inline void rect(std::ostringstream& out, std::string_view name, double left, do
 {
     out << ' ' << name << "=[" << left << ',' << top << ',' << right << ',' << bottom << ']';
 }
+
+// =============================================================================
+// Model Payload Formatting
+// =============================================================================
 
 inline void value(std::ostringstream& out, const Model::Value& input, std::size_t depth = 0)
 {
@@ -263,6 +271,10 @@ inline void outline(std::ostringstream& out, const Model::OutlineNode& value)
     }
     out << '}';
 }
+
+// =============================================================================
+// Request Payload Formatting
+// =============================================================================
 
 inline void requestPayload(std::ostringstream& out, const Model::RequestPayload& payload)
 {
@@ -433,6 +445,10 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
         },
         payload);
 }
+
+// =============================================================================
+// Response Names & Message Diagnostics
+// =============================================================================
 
 inline std::string_view responseName(const Model::ResponsePayload& payload)
 {

@@ -15,6 +15,10 @@ namespace Mu::Tools::Cli {
 
 namespace {
 
+// =============================================================================
+// Shared Options & Command Parser Setup
+// =============================================================================
+
 bool parseInt(const std::string& text, int& value)
 {
     if (text.empty())
@@ -93,6 +97,10 @@ QCommandLineParser& setupImportParser(QCommandLineParser& parser)
     parser.addPositionalArgument("output", "Output PDF file; alternative to -o.", "[output]");
     return parser;
 }
+
+// =============================================================================
+// Command Output Resolution & Parsing
+// =============================================================================
 
 /// Resolves the output from either the positional at outputIndex or -o.
 /// Exactly one of the two must be present.
@@ -229,6 +237,10 @@ Command parseImport(const QStringList& args)
 
 } // namespace
 
+// =============================================================================
+// Page Selection & Export Format Parsing
+// =============================================================================
+
 bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error)
 {
     pages.clear();
@@ -282,6 +294,10 @@ ExportFormat exportFormatForSuffix(const std::string& path)
         return ExportFormat::Xfdf;
     return ExportFormat::Unknown;
 }
+
+// =============================================================================
+// Command Dispatch, Help & Version Text
+// =============================================================================
 
 Command parseArgs(const QStringList& argv)
 {

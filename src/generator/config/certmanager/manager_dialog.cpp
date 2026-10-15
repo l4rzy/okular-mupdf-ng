@@ -34,6 +34,10 @@ namespace Mu::Generator {
 
 namespace {
 
+// =============================================================================
+// Certificate Display Formatting
+// =============================================================================
+
 QString formatDate(const Model::Timestamp& timestamp)
 {
     // NSS can omit validity metadata; avoid presenting an epoch date as real.
@@ -50,6 +54,10 @@ QString certificateName(const Model::Certificate& certificate)
 }
 
 } // namespace
+
+// =============================================================================
+// Dialog Construction & Certificate Listing
+// =============================================================================
 
 CertificateManagerDialog::CertificateManagerDialog(QString databasePath, QWidget* parent)
     : QDialog(parent)
@@ -167,6 +175,10 @@ void CertificateManagerDialog::showWarning(const QString& title, const QString& 
     // Include the database path because multiple NSS stores may be configured.
     QMessageBox::warning(this, CertificateManager::dialogTitle(title, m_databasePath), message);
 }
+
+// =============================================================================
+// Certificate Creation & Import
+// =============================================================================
 
 void CertificateManagerDialog::addCertificate()
 {
@@ -368,6 +380,10 @@ void CertificateManagerDialog::importCertificateData(const QByteArray& certifica
     }
     refreshCertificates();
 }
+
+// =============================================================================
+// Certificate Deletion & Trust Removal
+// =============================================================================
 
 void CertificateManagerDialog::deleteSelectedCertificate()
 {

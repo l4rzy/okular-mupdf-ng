@@ -10,6 +10,10 @@
 
 namespace Mu::Plugin::OCR {
 
+// =============================================================================
+// OCR Controller Setup & Page Observation
+// =============================================================================
+
 Controller::Controller(WorkerClient* backend, QObject* parent)
     : QObject(parent)
     , m_backend(backend)
@@ -79,6 +83,10 @@ void Controller::observe(int page, Config config, std::optional<NativeTextObserv
         Qt::QueuedConnection);
 }
 
+// =============================================================================
+// Ready Results & Invalidation
+// =============================================================================
+
 std::optional<QVector<Caching::OCR::CacheItem>> Controller::takeReady(int page)
 {
     QMutexLocker locker(&m_readyMutex);
@@ -118,6 +126,10 @@ void Controller::invalidate()
     QMutexLocker locker(&m_readyMutex);
     m_readyResults.clear();
 }
+
+// =============================================================================
+// Result Delivery & Scheduling
+// =============================================================================
 
 void Controller::deliver(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source)
 {
@@ -186,6 +198,10 @@ void Controller::startNext()
     m_cacheWatcher.setFuture(
         QtConcurrent::run([page = *page, key = *key] { return Caching::OCR::Cache::load(key, page); }));
 }
+
+// =============================================================================
+// Cache & Worker Completion Handling
+// =============================================================================
 
 void Controller::cacheLoadFinished()
 {

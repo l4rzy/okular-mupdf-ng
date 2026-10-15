@@ -370,6 +370,10 @@ ResponseMessage CommandService::openRequestResponse(std::uint64_t requestId, int
         requestId, fd, request.displayName, request.password, request.documentType, request.epubAccelerator);
 }
 
+// =============================================================================
+// Document Saving & Asynchronous Export
+// =============================================================================
+
 ResponseMessage CommandService::saveFdResponse(std::uint64_t id, int fd)
 {
     Sys::FileDescriptor ownedFd(fd);
@@ -435,6 +439,20 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
     return success(r.id, JobResponse { *job });
 }
+
+int CommandService::exportCompletionFd() const noexcept
+{
+    return m_exportJobs.eventFd();
+}
+
+std::vector<ExportJobs::Notification> CommandService::drainExportNotifications()
+{
+    return m_exportJobs.drainNotifications();
+}
+
+// =============================================================================
+// Document Cleanup & Memory Trimming
+// =============================================================================
 
 void CommandService::closeDocument() noexcept
 {
@@ -745,22 +763,6 @@ std::string CommandService::annotationHandle(int page, std::int32_t objectNumber
     return h;
 }
 
-std::string CommandService::formFieldHandle(int page, std::int32_t objectNumber)
-{
-    if (page < 0 || objectNumber <= 0)
-        return { };
-
-    const auto key = objectKey(page, objectNumber);
-    if (const auto it = m_formObjectHandles.find(key); it != m_formObjectHandles.end())
-        return it->second;
-
-    auto h = "g" + std::to_string(m_annotationGeneration) + "-f" + std::to_string(page) + "-o"
-        + std::to_string(objectNumber);
-    m_formFieldHandles.emplace(h, HandleLocation { page, objectNumber });
-    m_formObjectHandles.emplace(key, h);
-    return h;
-}
-
 ResponseMessage CommandService::annotationAdd(const RequestMessage& r, const AnnotationAddRequest& a)
 {
     if (!hasOpenDocument())
@@ -811,6 +813,26 @@ ResponseMessage CommandService::annotationRemove(const RequestMessage& r, const 
     m_annotationObjectHandles.erase(objectKey(x.page, it->second.objectNumber));
     m_annotationHandles.erase(it);
     return success(r.id);
+}
+
+// =============================================================================
+// Form Management & Handle Tracking
+// =============================================================================
+
+std::string CommandService::formFieldHandle(int page, std::int32_t objectNumber)
+{
+    if (page < 0 || objectNumber <= 0)
+        return { };
+
+    const auto key = objectKey(page, objectNumber);
+    if (const auto it = m_formObjectHandles.find(key); it != m_formObjectHandles.end())
+        return it->second;
+
+    auto h = "g" + std::to_string(m_annotationGeneration) + "-f" + std::to_string(page) + "-o"
+        + std::to_string(objectNumber);
+    m_formFieldHandles.emplace(h, HandleLocation { page, objectNumber });
+    m_formObjectHandles.emplace(key, h);
+    return h;
 }
 
 ResponseMessage CommandService::formUpdate(const RequestMessage& r, const FormUpdateRequest& u)
@@ -903,15 +925,52 @@ std::vector<OcrJobs::Notification> CommandService::drainOcrNotifications()
     return m_ocrJobs.drainNotifications();
 }
 
-int CommandService::exportCompletionFd() const noexcept
+std::optional<OcrResult> CommandService::takeOcrResult(std::uint64_t id)
 {
-    return m_exportJobs.eventFd();
+    return m_ocrJobs.take(id);
 }
 
-std::vector<ExportJobs::Notification> CommandService::drainExportNotifications()
+ResponseMessage CommandService::ocrPage(const RequestMessage& r, const OcrPageRequest& o, int inputFd)
 {
-    return m_exportJobs.drainNotifications();
+    Sys::FileDescriptor ownedFd(inputFd);
+    if (!hasOpenDocument()) {
+        return failure(r.id, ErrorCode::NotOpen, "ocr_page", "no document is open");
+    }
+    if (dynamic_cast<Engine::EpubDocument*>(m_document.get())) {
+        return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR is only supported for PDF documents");
+    }
+
+    if (o.page >= m_document->pageCount())
+        return failure(r.id, ErrorCode::InvalidRequest, "ocr_page", "invalid page");
+
+    auto language = o.language.empty() ? std::string("eng") : o.language;
+    const auto directory = Engine::findTessdataDirectory(language, m_session.tessDataDirectories);
+    if (!directory)
+        return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR model not found in configured data directories");
+    // Recognition always runs in the background pool; the host collects the
+    // result with a follow-up request once its completion notification arrives.
+    auto job = m_ocrJobs.submit(
+        ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi), *directory);
+    if (!job) {
+        return failure(r.id, ErrorCode::ResourceLimit, "ocr_page", "too many jobs");
+    }
+    return success(r.id, JobResponse { *job });
 }
+
+ResponseMessage CommandService::ocrResult(const RequestMessage& r, const OcrResultRequest& o)
+{
+    if (!hasOpenDocument())
+        return failure(r.id, ErrorCode::NotOpen, "ocr_result", "no document is open");
+    auto result = takeOcrResult(o.jobId);
+    if (!result)
+        return failure(r.id, ErrorCode::Unavailable, "ocr_result", "job is not complete");
+
+    return makeOcrResponse(r.id, *result);
+}
+
+// =============================================================================
+// Deferred Page Link Processing
+// =============================================================================
 
 std::optional<PageLinksNotification> CommandService::processPageLinks()
 {
@@ -959,49 +1018,6 @@ void CommandService::cancelPageLinks() noexcept
         m_document->setPageCacheSuspended(false);
         m_document->discardResolvedLinkCache();
     }
-}
-
-std::optional<OcrResult> CommandService::takeOcrResult(std::uint64_t id)
-{
-    return m_ocrJobs.take(id);
-}
-
-ResponseMessage CommandService::ocrPage(const RequestMessage& r, const OcrPageRequest& o, int inputFd)
-{
-    Sys::FileDescriptor ownedFd(inputFd);
-    if (!hasOpenDocument()) {
-        return failure(r.id, ErrorCode::NotOpen, "ocr_page", "no document is open");
-    }
-    if (dynamic_cast<Engine::EpubDocument*>(m_document.get())) {
-        return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR is only supported for PDF documents");
-    }
-
-    if (o.page >= m_document->pageCount())
-        return failure(r.id, ErrorCode::InvalidRequest, "ocr_page", "invalid page");
-
-    auto language = o.language.empty() ? std::string("eng") : o.language;
-    const auto directory = Engine::findTessdataDirectory(language, m_session.tessDataDirectories);
-    if (!directory)
-        return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR model not found in configured data directories");
-    // Recognition always runs in the background pool; the host collects the
-    // result with a follow-up request once its completion notification arrives.
-    auto job = m_ocrJobs.submit(
-        ownedFd.release(), m_documentPassword, o.page, language, static_cast<float>(o.dpi), *directory);
-    if (!job) {
-        return failure(r.id, ErrorCode::ResourceLimit, "ocr_page", "too many jobs");
-    }
-    return success(r.id, JobResponse { *job });
-}
-
-ResponseMessage CommandService::ocrResult(const RequestMessage& r, const OcrResultRequest& o)
-{
-    if (!hasOpenDocument())
-        return failure(r.id, ErrorCode::NotOpen, "ocr_result", "no document is open");
-    auto result = takeOcrResult(o.jobId);
-    if (!result)
-        return failure(r.id, ErrorCode::Unavailable, "ocr_result", "job is not complete");
-
-    return makeOcrResponse(r.id, *result);
 }
 
 // =============================================================================

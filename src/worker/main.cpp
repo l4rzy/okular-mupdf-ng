@@ -27,6 +27,10 @@ constexpr std::string_view DefaultTessDataDirectory = TESSDATA_DIR;
 constexpr std::string_view SignatureFontDirectory = SIGNATURE_FONT_DIR;
 constexpr unsigned char JsonControlCharLimit = 0x20;
 
+// =============================================================================
+// Worker Paths & Command-Line Options
+// =============================================================================
+
 std::string makeAbsolutePath(std::string_view path)
 {
     if (path.empty())
@@ -57,6 +61,10 @@ cxxopts::Options makeWorkerOptions()
     options.custom_help("[OPTION...]");
     return options;
 }
+
+// =============================================================================
+// Sandbox Status Formatting
+// =============================================================================
 
 std::string escapeJsonString(const std::string& value)
 {
@@ -120,6 +128,10 @@ void printSandboxStatusJson(const Mu::Model::SandboxStatus& status)
 }
 
 } // namespace
+
+// =============================================================================
+// Worker Startup & Server Execution
+// =============================================================================
 
 /// Entry point for the isolated MuPDF rendering worker subprocess.
 ///

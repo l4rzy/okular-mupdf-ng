@@ -18,6 +18,10 @@ namespace Mu::Plugin::Xfdf {
 
 namespace {
 
+// =============================================================================
+// XML Value & Coordinate Formatting
+// =============================================================================
+
 /// Maps one normalized top-left page point to PDF user-space (origin bottom-left)
 /// for a page of the given size. The axis flip is owned by the shared model
 /// geometry helpers so import and export stay exact inverses.
@@ -96,6 +100,10 @@ QString xfdfDate(const Model::Timestamp& timestamp)
     const QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(timestamp.unixMilliseconds, QTimeZone::UTC);
     return QStringLiteral("D:%1+00'00'").arg(dateTime.toString(QStringLiteral("yyyyMMddHHmmss")));
 }
+
+// =============================================================================
+// Annotation Style & Geometry Attributes
+// =============================================================================
 
 QString lineEndingName(Model::AnnotationLineEnding ending)
 {
@@ -226,6 +234,10 @@ QString rectAttribute(const Model::Quad& rect)
              formatNumber(rect.lowerRight.x),
              formatNumber(rect.upperRight.y));
 }
+
+// =============================================================================
+// Annotation Element Serialization
+// =============================================================================
 
 /// Serializes the common attributes shared by every XFDF annotation element.
 QString commonAttributes(const Model::Annotation& annotation, int pageIndex, const Model::Quad& rect)
@@ -425,6 +437,10 @@ struct NormalizedBounds {
     double x1 = 0;
     double y1 = 0;
 };
+
+// =============================================================================
+// Annotation Bounds & Document Export
+// =============================================================================
 
 void extendBounds(NormalizedBounds& bounds, bool& valid, const Model::Point& point)
 {

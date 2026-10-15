@@ -42,6 +42,10 @@ constexpr int MaxWarnings = 20;
 
 enum class GeometryParseStatus { Complete, Malformed, LimitExceeded };
 
+// =============================================================================
+// Numeric & Geometry Parsing
+// =============================================================================
+
 std::optional<double> parseNumber(QStringView text)
 {
     bool ok = false;
@@ -179,6 +183,10 @@ int parsePage(QStringView text)
     const int page = text.toInt(&ok);
     return ok && page >= 0 ? page : -1;
 }
+
+// =============================================================================
+// Annotation Style & Metadata Parsing
+// =============================================================================
 
 std::uint8_t alphaFromOpacity(QStringView text)
 {
@@ -328,6 +336,10 @@ QString decodePdfName(QStringView text)
     return QString::fromUtf8(bytes);
 }
 
+// =============================================================================
+// Annotation Appearance & Bounds
+// =============================================================================
+
 void applyDefaultAppearance(const QString& text, Annotation& annotation)
 {
     const QStringList tokens = text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
@@ -421,6 +433,10 @@ void tightenBounds(Annotation& annotation)
         annotation.y1 = y1;
     }
 }
+
+// =============================================================================
+// Bounded XML Import & Annotation Assembly
+// =============================================================================
 
 struct Entry {
     int page = -1;

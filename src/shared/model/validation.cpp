@@ -15,37 +15,11 @@
 
 namespace Mu::Model {
 
-bool isValidRenderDimensions(int width, int height, bool tiled) noexcept
-{
-    // Tiled renders may use a larger working size than a single-page render,
-    // but both paths still reject zero, negative, and oversized dimensions.
-    const int maximum = tiled ? Limit::MaxTiledRenderDimension : Limit::MaxRenderDimension;
-    return width > 0 && height > 0 && width <= maximum && height <= maximum;
-}
-
-bool isValidRenderTile(int imageWidth, int imageHeight, int tileX, int tileY, int tileWidth, int tileHeight) noexcept
-{
-    // Check the origin before subtracting so the extent comparisons remain
-    // meaningful and cannot accept a tile that crosses an image edge.
-    return tileX >= 0 && tileY >= 0 && tileWidth > 0 && tileHeight > 0 && tileX <= imageWidth && tileY <= imageHeight
-        && tileWidth <= imageWidth - tileX && tileHeight <= imageHeight - tileY;
-}
-
-bool isValidDpi(double dpiX, double dpiY) noexcept
-{
-    // Positive, bounded comparisons also reject NaN and infinities. Cap at
-    // MaxDpi (same as OCR) to prevent overflow and huge stride allocations.
-    return dpiX > 0.0 && dpiY > 0.0 && dpiX <= Limit::MaxDpi && dpiY <= Limit::MaxDpi;
-}
-
-bool isValidOcrDpi(float dpi) noexcept
-{
-    // OCR is intentionally narrower than general rendering because the
-    // recognition backend supports a bounded practical resolution range.
-    return dpi >= static_cast<float>(Limit::MinDpi) && dpi <= static_cast<float>(Limit::MaxDpi);
-}
-
 namespace {
+
+// =============================================================================
+// Request Validation Helpers
+// =============================================================================
 
 bool failWith(std::string_view value, std::string_view* reason) noexcept
 {
@@ -79,109 +53,9 @@ bool isValidHandle(std::string_view handle, std::string_view field, std::string_
 
 } // namespace
 
-bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason) noexcept
-{
-    return transfer.transferId != 0 || failWith("file transfer identifier is zero", reason);
-}
-
-bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason) noexcept
-{
-    if (request.page < 0)
-        return failWith("render page index is negative", reason);
-    if (!isValidRenderDimensions(request.width, request.height, request.tile.has_value()))
-        return failWith("render dimensions are invalid", reason);
-    if (request.tile) {
-        const auto& tile = *request.tile;
-        if (!isValidRenderTile(request.width, request.height, tile.x, tile.y, tile.width, tile.height))
-            return failWith("render tile is outside the image", reason);
-    }
-    return true;
-}
-
-bool isValidTextBoxesRequest(const TextBoxesRequest& request, std::string_view* reason) noexcept
-{
-    if (request.page < 0)
-        return failWith("text-box page index is negative", reason);
-    return isValidDpi(request.dpiX, request.dpiY) || failWith("text-box DPI is invalid", reason);
-}
-
-bool isValidOcrPageRequest(const OcrPageRequest& request, std::string_view* reason) noexcept
-{
-    if (!isValidFileTransfer(request.file, reason))
-        return false;
-    if (request.page < 0)
-        return failWith("OCR page index is negative", reason);
-    if (!isValidOcrDpi(static_cast<float>(request.dpi)))
-        return failWith("OCR DPI is invalid", reason);
-    return isValidText(request.language,
-                       "OCR language exceeds limit",
-                       "OCR language contains invalid UTF-8",
-                       "OCR language contains embedded NUL",
-                       reason);
-}
-
-bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view* reason) noexcept
-{
-    if (settings.graphicsAntialiasing < 0 || settings.graphicsAntialiasing > Limit::MaxDocumentAntialiasing
-        || settings.textAntialiasing < 0 || settings.textAntialiasing > Limit::MaxDocumentAntialiasing)
-        return failWith("antialiasing level is invalid", reason);
-    if (settings.imageQuality < 0 || settings.imageQuality > Limit::MaxDocumentImageQuality)
-        return failWith("image quality is invalid", reason);
-    if (settings.memoryCacheBytes < Limit::MinDocumentMemoryCacheBytes
-        || settings.memoryCacheBytes > Limit::MaxDocumentMemoryCacheBytes)
-        return failWith("memory cache size is invalid", reason);
-    if (settings.idleTrimAggressiveness < IdleTrimLevel::Off
-        || settings.idleTrimAggressiveness > IdleTrimLevel::Aggressive)
-        return failWith("idle trim level is invalid", reason);
-    if (settings.epub.fontSize < Limit::MinEpubFontSize || settings.epub.fontSize > Limit::MaxEpubFontSize)
-        return failWith("EPUB font size is invalid", reason);
-    if (static_cast<std::uint8_t>(settings.epub.pageSize) > static_cast<std::uint8_t>(EpubPageSize::Letter))
-        return failWith("EPUB page size is invalid", reason);
-    if (static_cast<std::uint8_t>(settings.epub.fontFamily) > static_cast<std::uint8_t>(EpubFontFamily::Monospace))
-        return failWith("EPUB font family is invalid", reason);
-    return isValidEpubCustomCssBase64(settings.epub.customCssBase64)
-        || failWith("EPUB custom CSS encoding is invalid", reason);
-}
-
-namespace Detail {
-
-bool isValidAnnotationExtensionValue(const Value& value, std::size_t depth, std::size_t& entries)
-{
-    // Extensions are recursive user data. Bound both nesting and aggregate
-    // values before descending so malformed input cannot cause unbounded work.
-    if (depth > Limit::MaxAnnotationExtensionDepth || ++entries > Limit::MaxAnnotationExtensionEntries)
-        return false;
-    if (const auto* number = std::get_if<double>(&value.data)) {
-        // JSON-like numeric values must not carry NaN or infinity into callers.
-        return std::isfinite(*number);
-    }
-    if (const auto* array = std::get_if<Value::Array>(&value.data)) {
-        for (const Value& item : *array)
-            if (!isValidAnnotationExtensionValue(item, depth + 1, entries))
-                return false;
-    }
-    if (const auto* object = std::get_if<Value::Object>(&value.data)) {
-        // Empty keys are rejected because extension objects use keys as their
-        // stable field names when they cross the protocol boundary.
-        for (const auto& [key, item] : *object)
-            if (key.empty() || !isValidAnnotationExtensionValue(item, depth + 1, entries))
-                return false;
-    }
-    return true;
-}
-
-bool isValidAnnotationExtension(const Value::Object& extension)
-{
-    // Count the root object as part of the extension budget, then account for
-    // every nested value while walking the object tree.
-    std::size_t entries = 1;
-    for (const auto& [key, value] : extension)
-        if (key.empty() || !isValidAnnotationExtensionValue(value, 1, entries))
-            return false;
-    return true;
-}
-
-} // namespace Detail
+// =============================================================================
+// Text Encoding & Content Validation
+// =============================================================================
 
 bool isValidUtf8(std::string_view str) noexcept
 {
@@ -271,6 +145,10 @@ bool hasNoEmbeddedNul(std::string_view str) noexcept
     return str.find('\0') == std::string_view::npos;
 }
 
+// =============================================================================
+// Normalized Geometry Validation
+// =============================================================================
+
 bool isValidNormalizedRect(const NormalizedRect& rect) noexcept
 {
     // Require normalized coordinates at the model boundary so renderers can
@@ -278,6 +156,152 @@ bool isValidNormalizedRect(const NormalizedRect& rect) noexcept
     return rect.left >= 0.0 && rect.top >= 0.0 && rect.right <= 1.0 && rect.bottom <= 1.0 && rect.left <= rect.right
         && rect.top <= rect.bottom;
 }
+
+// =============================================================================
+// File Transfers & Document Settings
+// =============================================================================
+
+bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason) noexcept
+{
+    return transfer.transferId != 0 || failWith("file transfer identifier is zero", reason);
+}
+
+bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view* reason) noexcept
+{
+    if (settings.graphicsAntialiasing < 0 || settings.graphicsAntialiasing > Limit::MaxDocumentAntialiasing
+        || settings.textAntialiasing < 0 || settings.textAntialiasing > Limit::MaxDocumentAntialiasing)
+        return failWith("antialiasing level is invalid", reason);
+    if (settings.imageQuality < 0 || settings.imageQuality > Limit::MaxDocumentImageQuality)
+        return failWith("image quality is invalid", reason);
+    if (settings.memoryCacheBytes < Limit::MinDocumentMemoryCacheBytes
+        || settings.memoryCacheBytes > Limit::MaxDocumentMemoryCacheBytes)
+        return failWith("memory cache size is invalid", reason);
+    if (settings.idleTrimAggressiveness < IdleTrimLevel::Off
+        || settings.idleTrimAggressiveness > IdleTrimLevel::Aggressive)
+        return failWith("idle trim level is invalid", reason);
+    if (settings.epub.fontSize < Limit::MinEpubFontSize || settings.epub.fontSize > Limit::MaxEpubFontSize)
+        return failWith("EPUB font size is invalid", reason);
+    if (static_cast<std::uint8_t>(settings.epub.pageSize) > static_cast<std::uint8_t>(EpubPageSize::Letter))
+        return failWith("EPUB page size is invalid", reason);
+    if (static_cast<std::uint8_t>(settings.epub.fontFamily) > static_cast<std::uint8_t>(EpubFontFamily::Monospace))
+        return failWith("EPUB font family is invalid", reason);
+    return isValidEpubCustomCssBase64(settings.epub.customCssBase64)
+        || failWith("EPUB custom CSS encoding is invalid", reason);
+}
+
+// =============================================================================
+// Rendering, Text Extraction & OCR Validation
+// =============================================================================
+
+bool isValidRenderDimensions(int width, int height, bool tiled) noexcept
+{
+    // Tiled renders may use a larger working size than a single-page render,
+    // but both paths still reject zero, negative, and oversized dimensions.
+    const int maximum = tiled ? Limit::MaxTiledRenderDimension : Limit::MaxRenderDimension;
+    return width > 0 && height > 0 && width <= maximum && height <= maximum;
+}
+
+bool isValidRenderTile(int imageWidth, int imageHeight, int tileX, int tileY, int tileWidth, int tileHeight) noexcept
+{
+    // Check the origin before subtracting so the extent comparisons remain
+    // meaningful and cannot accept a tile that crosses an image edge.
+    return tileX >= 0 && tileY >= 0 && tileWidth > 0 && tileHeight > 0 && tileX <= imageWidth && tileY <= imageHeight
+        && tileWidth <= imageWidth - tileX && tileHeight <= imageHeight - tileY;
+}
+
+bool isValidDpi(double dpiX, double dpiY) noexcept
+{
+    // Positive, bounded comparisons also reject NaN and infinities. Cap at
+    // MaxDpi (same as OCR) to prevent overflow and huge stride allocations.
+    return dpiX > 0.0 && dpiY > 0.0 && dpiX <= Limit::MaxDpi && dpiY <= Limit::MaxDpi;
+}
+
+bool isValidOcrDpi(float dpi) noexcept
+{
+    // OCR is intentionally narrower than general rendering because the
+    // recognition backend supports a bounded practical resolution range.
+    return dpi >= static_cast<float>(Limit::MinDpi) && dpi <= static_cast<float>(Limit::MaxDpi);
+}
+
+bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason) noexcept
+{
+    if (request.page < 0)
+        return failWith("render page index is negative", reason);
+    if (!isValidRenderDimensions(request.width, request.height, request.tile.has_value()))
+        return failWith("render dimensions are invalid", reason);
+    if (request.tile) {
+        const auto& tile = *request.tile;
+        if (!isValidRenderTile(request.width, request.height, tile.x, tile.y, tile.width, tile.height))
+            return failWith("render tile is outside the image", reason);
+    }
+    return true;
+}
+
+bool isValidTextBoxesRequest(const TextBoxesRequest& request, std::string_view* reason) noexcept
+{
+    if (request.page < 0)
+        return failWith("text-box page index is negative", reason);
+    return isValidDpi(request.dpiX, request.dpiY) || failWith("text-box DPI is invalid", reason);
+}
+
+bool isValidOcrPageRequest(const OcrPageRequest& request, std::string_view* reason) noexcept
+{
+    if (!isValidFileTransfer(request.file, reason))
+        return false;
+    if (request.page < 0)
+        return failWith("OCR page index is negative", reason);
+    if (!isValidOcrDpi(static_cast<float>(request.dpi)))
+        return failWith("OCR DPI is invalid", reason);
+    return isValidText(request.language,
+                       "OCR language exceeds limit",
+                       "OCR language contains invalid UTF-8",
+                       "OCR language contains embedded NUL",
+                       reason);
+}
+
+// =============================================================================
+// Annotation Content & Request Validation
+// =============================================================================
+
+namespace Detail {
+
+bool isValidAnnotationExtensionValue(const Value& value, std::size_t depth, std::size_t& entries)
+{
+    // Extensions are recursive user data. Bound both nesting and aggregate
+    // values before descending so malformed input cannot cause unbounded work.
+    if (depth > Limit::MaxAnnotationExtensionDepth || ++entries > Limit::MaxAnnotationExtensionEntries)
+        return false;
+    if (const auto* number = std::get_if<double>(&value.data)) {
+        // JSON-like numeric values must not carry NaN or infinity into callers.
+        return std::isfinite(*number);
+    }
+    if (const auto* array = std::get_if<Value::Array>(&value.data)) {
+        for (const Value& item : *array)
+            if (!isValidAnnotationExtensionValue(item, depth + 1, entries))
+                return false;
+    }
+    if (const auto* object = std::get_if<Value::Object>(&value.data)) {
+        // Empty keys are rejected because extension objects use keys as their
+        // stable field names when they cross the protocol boundary.
+        for (const auto& [key, item] : *object)
+            if (key.empty() || !isValidAnnotationExtensionValue(item, depth + 1, entries))
+                return false;
+    }
+    return true;
+}
+
+bool isValidAnnotationExtension(const Value::Object& extension)
+{
+    // Count the root object as part of the extension budget, then account for
+    // every nested value while walking the object tree.
+    std::size_t entries = 1;
+    for (const auto& [key, value] : extension)
+        if (key.empty() || !isValidAnnotationExtensionValue(value, 1, entries))
+            return false;
+    return true;
+}
+
+} // namespace Detail
 
 bool isValidAnnotation(const Annotation& annotation, std::string_view* reason)
 {
@@ -315,6 +339,33 @@ bool isValidAnnotation(const Annotation& annotation, std::string_view* reason)
 
     return true;
 }
+
+bool isValidAnnotationAddRequest(const AnnotationAddRequest& request, std::string_view* reason)
+{
+    if (request.page < 0)
+        return failWith("annotation page index is negative", reason);
+    return isValidAnnotation(request.annotation, reason);
+}
+
+bool isValidAnnotationModifyRequest(const AnnotationModifyRequest& request, std::string_view* reason)
+{
+    if (request.mutation.page < 0)
+        return failWith("annotation page index is negative", reason);
+    if (!isValidHandle(request.mutation.handle.value, "annotation handle is empty or too large", reason))
+        return false;
+    return isValidAnnotation(request.mutation.annotation, reason);
+}
+
+bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std::string_view* reason)
+{
+    if (request.page < 0)
+        return failWith("annotation page index is negative", reason);
+    return isValidHandle(request.handle.value, "annotation handle is empty or too large", reason);
+}
+
+// =============================================================================
+// Form Field & Mutation Validation
+// =============================================================================
 
 bool isValidFormField(const FormField& field, std::string_view* reason)
 {
@@ -475,28 +526,9 @@ bool isValidFormButtonClickRequest(const FormButtonClickRequest& request, std::s
     return true;
 }
 
-bool isValidAnnotationAddRequest(const AnnotationAddRequest& request, std::string_view* reason)
-{
-    if (request.page < 0)
-        return failWith("annotation page index is negative", reason);
-    return isValidAnnotation(request.annotation, reason);
-}
-
-bool isValidAnnotationModifyRequest(const AnnotationModifyRequest& request, std::string_view* reason)
-{
-    if (request.mutation.page < 0)
-        return failWith("annotation page index is negative", reason);
-    if (!isValidHandle(request.mutation.handle.value, "annotation handle is empty or too large", reason))
-        return false;
-    return isValidAnnotation(request.mutation.annotation, reason);
-}
-
-bool isValidAnnotationRemoveRequest(const AnnotationRemoveRequest& request, std::string_view* reason)
-{
-    if (request.page < 0)
-        return failWith("annotation page index is negative", reason);
-    return isValidHandle(request.handle.value, "annotation handle is empty or too large", reason);
-}
+// =============================================================================
+// Layer Response Validation
+// =============================================================================
 
 bool isValidLayersResponse(const LayersResponse& response) noexcept
 {
@@ -519,6 +551,10 @@ bool isValidLayersResponse(const LayersResponse& response) noexcept
     }
     return true;
 }
+
+// =============================================================================
+// Signature Appearance & Signing Validation
+// =============================================================================
 
 bool isValidSignatureEmblemImage(std::span<const std::uint8_t> png, std::string_view* reason)
 {

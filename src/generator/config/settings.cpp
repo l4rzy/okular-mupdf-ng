@@ -17,6 +17,10 @@ namespace Mu::Generator::Config {
 
 namespace {
 
+// =============================================================================
+// Configuration Value Normalization
+// =============================================================================
+
 int graphicsAntialiasingBitsForConfig(int value) noexcept
 {
     // KDE stores a named level; MuPDF consumes the corresponding bit count.
@@ -114,6 +118,10 @@ int epubPageSizeForConfig(int value) noexcept
 }
 
 } // namespace
+
+// =============================================================================
+// Runtime Settings Snapshots
+// =============================================================================
 
 void reloadSettings()
 {
@@ -227,6 +235,10 @@ OcrSettings readOcrSettings()
     return settings;
 }
 
+// =============================================================================
+// Signature Appearance Settings
+// =============================================================================
+
 static_assert(static_cast<int>(SignatureEmblem::None) == MuPDFNGSettings::EnumSignatureEmblem::None);
 static_assert(static_cast<int>(SignatureEmblem::MuPDF) == MuPDFNGSettings::EnumSignatureEmblem::MuPDF);
 static_assert(static_cast<int>(SignatureEmblem::Okular) == MuPDFNGSettings::EnumSignatureEmblem::Okular);
@@ -240,6 +252,10 @@ SignatureAppearanceOptions readSignatureAppearance()
     options.emblem = static_cast<SignatureEmblem>(MuPDFNGSettings::signatureEmblem());
     return options;
 }
+
+// =============================================================================
+// OCR Model Discovery & Selection
+// =============================================================================
 
 QStringList readTessDataDirectories()
 {
@@ -312,6 +328,10 @@ QStringList normalizeTessDataDirectories(const QStringList& directories)
     return normalized;
 }
 
+// =============================================================================
+// Certificate Database Settings
+// =============================================================================
+
 QString readCertificateDatabasePath(const QString& defaultPath)
 {
     // The default toggle selects the system path; otherwise preserve the
@@ -323,6 +343,10 @@ bool usesDefaultCertificateDatabase()
 {
     return MuPDFNGSettings::useDefaultCertDB();
 }
+
+// =============================================================================
+// Print Settings
+// =============================================================================
 
 std::uint32_t readPrintScaleMode()
 {
@@ -336,6 +360,10 @@ void writePrintScaleMode(std::uint32_t mode)
     MuPDFNGSettings::self()->setPrintScaleMode(std::clamp(mode, 0u, 2u));
     MuPDFNGSettings::self()->save();
 }
+
+// =============================================================================
+// Cache Vacuum Timestamp
+// =============================================================================
 
 QDateTime readCacheLastVacuum()
 {

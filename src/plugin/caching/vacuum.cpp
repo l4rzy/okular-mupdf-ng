@@ -35,6 +35,10 @@ bool canScanDirectory(const QFileInfo& info)
 
 } // namespace
 
+// =============================================================================
+// Vacuum Scheduling & Stale File Policy
+// =============================================================================
+
 QDateTime parseLastVacuum(const QString& value)
 {
     // ISO-8601 UTC as written by formatLastVacuum; fall back to a
@@ -66,6 +70,10 @@ bool isStale(const QDateTime& modified, const QDateTime& now)
         return false;
     return modified.addDays(StaleDays) <= now;
 }
+
+// =============================================================================
+// Cache Storage Measurement
+// =============================================================================
 
 CacheUsage measureCacheUsage(const QString& root)
 {
@@ -111,6 +119,10 @@ CacheUsage measureCacheUsage(const QString& root)
 }
 
 namespace {
+
+// =============================================================================
+// Cache File Removal & Directory Pruning
+// =============================================================================
 
 VacuumResult removeCacheFiles(const QString& root, const std::optional<QDateTime>& now, CacheKind kind)
 {

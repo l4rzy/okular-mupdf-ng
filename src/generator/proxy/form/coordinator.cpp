@@ -36,6 +36,10 @@ std::optional<Mu::Model::FormValue> formValue(const Mu::Model::FormField& field)
 
 namespace Mu::Generator::Proxy::Form {
 
+// =============================================================================
+// Form Proxy Registration & Lifetime
+// =============================================================================
+
 Coordinator::Coordinator(Model::FormBackend* backend, PageRefreshCallback refreshCallback)
     : m_backend(backend)
     , m_refreshCallback(std::move(refreshCallback))
@@ -64,6 +68,10 @@ void Coordinator::unregisterField(const std::string& handle, const IField* field
     if (it != m_fields.end() && it->second == field)
         m_fields.erase(it);
 }
+
+// =============================================================================
+// Field Edits & Button Actions
+// =============================================================================
 
 bool Coordinator::updateField(const std::string& handle, const Model::FormValue& value)
 {
@@ -118,6 +126,10 @@ bool Coordinator::activateButton(const ButtonActivation& activation)
     }
     return false;
 }
+
+// =============================================================================
+// Canonical Field Synchronization
+// =============================================================================
 
 bool Coordinator::resetFields(const std::vector<Model::FormField>& fields)
 {

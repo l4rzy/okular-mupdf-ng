@@ -33,6 +33,10 @@ namespace Mu::Worker::Sandbox {
 #ifdef __linux__
 namespace {
 
+// =============================================================================
+// Sandbox Diagnostics & Proc File Writes
+// =============================================================================
+
 void recordIssue(Status& status, std::string_view issue)
 {
     if (status.reason.empty())
@@ -69,6 +73,10 @@ bool writeProcFile(Status& status, const char* path, std::string_view name, std:
     ::close(fd);
     return true;
 }
+
+// =============================================================================
+// Landlock Filesystem Restrictions
+// =============================================================================
 
 int landlockCreate(const landlock_ruleset_attr* attributes, size_t size, __u32 flags)
 {
@@ -159,6 +167,10 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
     return success;
 }
 
+// =============================================================================
+// Namespaces, Memory Protection & Privileges
+// =============================================================================
+
 /// Activates Linux namespace isolation (User, Network, and IPC namespaces).
 ///
 /// Creating an unprivileged User namespace allows unsharing Network and IPC namespaces
@@ -226,6 +238,10 @@ void tryClearAmbientCapabilities()
 }
 
 } // namespace
+
+// =============================================================================
+// Resource Limits & Inherited Descriptors
+// =============================================================================
 
 /// Applies the configured Linux memory and release-only core-dump limits.
 bool applyResourceLimits(Status& status)
@@ -327,6 +343,10 @@ bool redirectStandardDescriptors(const std::vector<int>& preservedFds, Status& s
 #endif
 
 } // namespace
+
+// =============================================================================
+// Seccomp Syscall Filtering
+// =============================================================================
 
 #ifdef MUPDF_HAVE_LIBSECCOMP
 /// Configures and installs the Linux Seccomp (syscall filtering) BPF filter.
@@ -656,6 +676,10 @@ bool activateSeccomp(Status& status)
 #endif
 
 #endif // __linux__
+
+// =============================================================================
+// Sandbox Activation & Status Reporting
+// =============================================================================
 
 /// Main entry point for sandboxing the mupdfng-worker executable.
 ///

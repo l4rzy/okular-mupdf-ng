@@ -19,6 +19,10 @@
 
 namespace Mu::Generator::Proxy::Form {
 
+// =============================================================================
+// Signature Field Properties
+// =============================================================================
+
 Signature::Signature(int id, Model::SignatureField data, Plugin::WorkerClient* backend)
     : m_id(id)
     , m_data(std::move(data))
@@ -59,6 +63,10 @@ bool Signature::isVisible() const
 }
 
 namespace {
+
+// =============================================================================
+// Signature Status & Byte Range Conversion
+// =============================================================================
 
 Okular::SignatureInfo::SignatureStatus signatureStatus(Model::SignatureStatus status)
 {
@@ -144,6 +152,10 @@ bool appendRangeBounds(QList<qint64>& bounds, std::int64_t offset, std::int64_t 
 
 } // namespace
 
+// =============================================================================
+// Signature Inspection
+// =============================================================================
+
 Okular::FormFieldSignature::SignatureType Signature::signatureType() const
 {
     if (!m_data.signedField)
@@ -188,6 +200,10 @@ Okular::SignatureInfo Signature::signatureInfo() const
     info.setCertificateInfo(Conversion::toOkularCertificateInfo(m_data.certificate));
     return info;
 }
+
+// =============================================================================
+// Signature Creation & Update Subscriptions
+// =============================================================================
 
 std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::NewSignatureData& data,
                                                                 const QString& newPath) const

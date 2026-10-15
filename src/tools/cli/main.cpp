@@ -35,6 +35,10 @@ namespace {
 
 using namespace Mu::Tools::Cli;
 
+// =============================================================================
+// Console Output & Diagnostics
+// =============================================================================
+
 QTextStream& out()
 {
     static QTextStream stream(stdout);
@@ -91,6 +95,10 @@ QString plural(int count, const QString& singular, const QString& pluralForm)
     return count == 1 ? QStringLiteral("1 %1").arg(singular) : QStringLiteral("%1 %2").arg(count).arg(pluralForm);
 }
 
+// =============================================================================
+// Usage, Help & Version Reporting
+// =============================================================================
+
 int failUsage(const Command& command)
 {
     if (!command.error.empty())
@@ -136,6 +144,10 @@ int runVersion()
     out().flush();
     return ExitOk;
 }
+
+// =============================================================================
+// Document Opening & OCR
+// =============================================================================
 
 QString tessDataFor(const OcrOptions& options)
 {
@@ -246,6 +258,10 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
     out().flush();
     return ExitOk;
 }
+
+// =============================================================================
+// PDF & XFDF Export
+// =============================================================================
 
 int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
@@ -363,6 +379,10 @@ int runExportXfdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options
     return ExitOk;
 }
 
+// =============================================================================
+// XFDF Import
+// =============================================================================
+
 int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
@@ -460,6 +480,10 @@ int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
     out().flush();
     return ExitOk;
 }
+
+// =============================================================================
+// Command Dispatch & Application Entry
+// =============================================================================
 
 int run(const Command& command)
 {

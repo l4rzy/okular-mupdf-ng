@@ -18,6 +18,10 @@ namespace Mu::Plugin {
 
 using namespace ::Mu::Model;
 
+// =============================================================================
+// Worker Thread & Process Lifecycle
+// =============================================================================
+
 WorkerClient::WorkerClient(QObject* parent)
     : QObject(parent)
 {
@@ -114,6 +118,10 @@ std::optional<quint64> WorkerClient::workerMemoryBytes() const
     return sync([&](WorkerTransport* transport) { return transport->workerMemoryBytes(); });
 }
 
+// =============================================================================
+// Document Opening & Closing
+// =============================================================================
+
 OpenStatus WorkerClient::open(const QString& p, const QString& w, QList<PageInfo>& pages, DocumentType type)
 {
     return sync([&](WorkerTransport* transport) { return transport->open(p, w, &pages, type); }, OpenStatus::Failed);
@@ -129,6 +137,10 @@ bool WorkerClient::close()
 {
     return sync([&](WorkerTransport* transport) { return transport->close(); });
 }
+
+// =============================================================================
+// Page Rendering, Text Extraction & OCR
+// =============================================================================
 
 QImage WorkerClient::render(int p, int w, int h, const QRect& t, const std::function<bool()>& shouldAbort)
 {
@@ -235,6 +247,10 @@ bool WorkerClient::cancelOcrJobs() const
     return sync([&](WorkerTransport* transport) { return transport->cancelOcrJobs(); });
 }
 
+// =============================================================================
+// Document Inspection
+// =============================================================================
+
 std::vector<Font> WorkerClient::fonts(int p) const
 {
     return sync([&](WorkerTransport* transport) { return transport->fonts(p); });
@@ -254,6 +270,10 @@ DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& k) const
 {
     return sync([&](WorkerTransport* transport) { return transport->getDocumentInfo(k); });
 }
+
+// =============================================================================
+// Annotation & Form Mutations
+// =============================================================================
 
 std::optional<AnnotationHandle> WorkerClient::addAnnotation(int p, const Annotation& a) const
 {
@@ -286,6 +306,10 @@ WorkerClient::clickFormButton(const Model::FormButtonClickRequest& request) cons
     return sync([&](WorkerTransport* transport) { return transport->clickFormButton(request); });
 }
 
+// =============================================================================
+// Document Saving, Export & Signing
+// =============================================================================
+
 bool WorkerClient::saveToFile(const QString& t)
 {
     return sync([&](WorkerTransport* transport) { return transport->saveToFile(t); });
@@ -312,6 +336,10 @@ SignResponse WorkerClient::sign(const SignRequest& r, const QString& password, c
                 SignResponse { SigningResult::GenericError, "worker is unavailable" });
 }
 
+// =============================================================================
+// Layers, Settings & Worker Diagnostics
+// =============================================================================
+
 std::optional<Model::LayersResponse> WorkerClient::layers() const
 {
     return sync([&](WorkerTransport* transport) { return transport->layers(); });
@@ -336,6 +364,10 @@ std::string WorkerClient::engineVersion() const
 {
     return m_lifecycle.info.engineVersion;
 }
+
+// =============================================================================
+// Restart Budget & Session State
+// =============================================================================
 
 void WorkerClient::LifeCycle::prune() noexcept
 {

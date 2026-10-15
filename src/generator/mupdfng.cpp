@@ -87,6 +87,10 @@ constexpr int LongWarningMs = 10000;
 
 } // namespace
 
+// =============================================================================
+// Generator Lifecycle & Configuration
+// =============================================================================
+
 // Okular Generator Func: creates the generator and initializes worker services.
 Main::Main(QObject* parent, const QVariantList& args)
     : Generator(parent, args)
@@ -271,6 +275,21 @@ Main::Main(QObject* parent, const QVariantList& args)
     scheduleCacheVacuum();
 }
 
+// Okular Generator Func: stops worker activity and releases generator resources.
+Main::~Main()
+{
+    if (m_observingVisiblePages && document())
+        const_cast<Okular::Document*>(document())->removeObserver(this);
+    // Cancel callbacks before removing queued events or releasing UI-owned data.
+    m_ocrController->reset();
+    QCoreApplication::removePostedEvents(this);
+    {
+        QMutexLocker locker(userMutex());
+        clearEmbeddedFilesCache();
+    }
+    m_worker.stop();
+}
+
 // Removes cache files untouched for over three months on a background thread.
 // The hidden CacheLastVacuum setting throttles the scan; the timestamp is
 // refreshed on the generator thread so KConfig writes stay off the pool.
@@ -301,21 +320,6 @@ void Main::scheduleCacheVacuum()
                 guard, [] { Config::writeCacheLastVacuum(QDateTime::currentDateTimeUtc()); }, Qt::QueuedConnection);
         }));
     });
-}
-
-// Okular Generator Func: stops worker activity and releases generator resources.
-Main::~Main()
-{
-    if (m_observingVisiblePages && document())
-        const_cast<Okular::Document*>(document())->removeObserver(this);
-    // Cancel callbacks before removing queued events or releasing UI-owned data.
-    m_ocrController->reset();
-    QCoreApplication::removePostedEvents(this);
-    {
-        QMutexLocker locker(userMutex());
-        clearEmbeddedFilesCache();
-    }
-    m_worker.stop();
 }
 
 // Okular Generator Func: reads the paper color Okular's accessibility settings
@@ -411,6 +415,19 @@ bool Main::reparseConfig()
     observeOcrFocus();
     return changed;
 }
+
+void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
+{
+    // Worker process lifetime settings must not be applied to a running worker.
+    const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
+    // The defaulted identity is fixed at generator construction, so a first
+    // launch needs no restart.
+    m_restartState.required = freshEpub != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
+}
+
+// =============================================================================
+// Actions & Settings Pages
+// =============================================================================
 
 void Main::setupActions()
 {
@@ -511,14 +528,9 @@ void Main::addPages(KConfigDialog* dialog)
     });
 }
 
-void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
-{
-    // Worker process lifetime settings must not be applied to a running worker.
-    const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
-    // The defaulted identity is fixed at generator construction, so a first
-    // launch needs no restart.
-    m_restartState.required = freshEpub != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
-}
+// =============================================================================
+// Document Opening & Page Construction
+// =============================================================================
 
 // Converts worker page information into Okular pages and page metadata.
 Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
@@ -776,6 +788,10 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     return initPages(pages, workerPages);
 }
 
+// =============================================================================
+// Document Diagnostics & Sandbox Enforcement
+// =============================================================================
+
 // Reports xref-repair state to the user, mirroring the poppler generator's
 // xrefReconstructionHandler. MuPDF repairs broken documents silently, so the
 // worker exposes the state as metadata and the generator turns it into the
@@ -870,6 +886,10 @@ QString Main::sandboxGateMessage() const
                 "protections.\nError: %1",
                 reason.isEmpty() ? QString() : QStringLiteral("[%1]").arg(reason));
 }
+
+// =============================================================================
+// Withheld Documents & Placeholder State
+// =============================================================================
 
 Okular::Page* Main::makeWithheldPage() const
 {
@@ -969,6 +989,10 @@ void Main::reopenWithheldDocumentInternal()
     notifyDegradedSandbox();
 }
 
+// =============================================================================
+// Backing File Replacement
+// =============================================================================
+
 // Okular Generator Func: replaces the backing file while preserving page state.
 Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& newFileName,
                                                                QList<Okular::Page*>& newPages)
@@ -1007,6 +1031,10 @@ Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& ne
     return SwapBackingFileReloadInternalData;
 }
 
+// =============================================================================
+// OCR Focus, Scheduling & Results
+// =============================================================================
+
 // Updates OCR scheduling from the pages currently visible in Okular.
 void Main::notifyVisibleRectsChanged()
 {
@@ -1039,6 +1067,38 @@ void Main::observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nat
             target, static_cast<int>(m_okularPages.size()), dpi().width(), dpi().height(), ocrSettings),
         std::move(nativeText));
 }
+
+void Main::applyOcrResult(int page,
+                          QVector<Plugin::Caching::OCR::CacheItem> boxes,
+                          std::uint64_t revision,
+                          bool notifyCompletion)
+{
+    if (revision != m_layerRevision.load() || page < 0 || page >= m_okularPages.size())
+        return;
+    // Okular must install any pending native extraction before we replace it.
+    // canGenerateTextPage stays false until its queued completion is delivered.
+    if (!canGenerateTextPage()) {
+        QTimer::singleShot(10, this, [this, page, boxes = std::move(boxes), revision, notifyCompletion]() mutable {
+            applyOcrResult(page, std::move(boxes), revision, notifyCompletion);
+        });
+        return;
+    }
+    QMutexLocker locker(userMutex());
+    auto* target = m_okularPages.at(page);
+    bool success = false;
+    const auto native = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
+    if (!success)
+        return;
+    auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
+    target->setTextPage(textPage);
+    Q_EMIT signalTextGenerationDone(target, textPage);
+    if (!boxes.isEmpty() && notifyCompletion && Config::readOcrSettings().notify)
+        Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
+}
+
+// =============================================================================
+// Worker Recovery & Document Cleanup
+// =============================================================================
 
 bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 {
@@ -1151,31 +1211,6 @@ void Main::failClosed(const QString& message)
     }
 }
 
-void Main::clearPageDisplayState(int page)
-{
-    clearPageTextState(page);
-    if (document() && page >= 0 && page < m_okularPages.size()) {
-        if (Okular::Page* okularPage = m_okularPages.at(page))
-            okularPage->deletePixmaps();
-    }
-}
-
-void Main::clearPageTextState(int page)
-{
-    if (page < 0 || page >= m_okularPages.size())
-        return;
-    const Okular::Document* currentDocument = document();
-    if (!currentDocument)
-        return;
-
-    const_cast<Okular::Document*>(currentDocument)
-        ->setPageTextSelection(page, std::unique_ptr<Okular::RegularAreaRect> { }, QColor());
-    Okular::Page* okularPage = m_okularPages.at(page);
-    if (!okularPage)
-        return;
-    okularPage->setTextPage(nullptr);
-}
-
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
@@ -1203,14 +1238,9 @@ bool Main::doCloseDocument()
     return true;
 }
 
-// Releases the cached Okular embedded-file objects.
-void Main::clearEmbeddedFilesCache()
-{
-    if (!m_embeddedFilesCache)
-        return;
-    qDeleteAll(*m_embeddedFilesCache);
-    m_embeddedFilesCache.reset();
-}
+// =============================================================================
+// Document Metadata, Outline & Fonts
+// =============================================================================
 
 // Okular Generator Func: returns the requested document metadata.
 Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo::Key>& keys) const
@@ -1337,6 +1367,19 @@ Okular::FontInfo::List Main::fontsForPage(int page)
     return { };
 }
 
+// =============================================================================
+// Page Rendering
+// =============================================================================
+
+void Main::clearPageDisplayState(int page)
+{
+    clearPageTextState(page);
+    if (document() && page >= 0 && page < m_okularPages.size()) {
+        if (Okular::Page* okularPage = m_okularPages.at(page))
+            okularPage->deletePixmaps();
+    }
+}
+
 // Okular Generator Func: renders a page or tile for Okular.
 QImage Main::image(Okular::PixmapRequest* request)
 {
@@ -1415,6 +1458,10 @@ QImage Main::image(Okular::PixmapRequest* request)
     return { };
 }
 
+// =============================================================================
+// Layers & Text Extraction
+// =============================================================================
+
 void Main::loadLayers()
 {
     // A new model per document also drops Okular's previous model connections.
@@ -1452,34 +1499,6 @@ void Main::loadLayers()
     }
 }
 
-void Main::applyOcrResult(int page,
-                          QVector<Plugin::Caching::OCR::CacheItem> boxes,
-                          std::uint64_t revision,
-                          bool notifyCompletion)
-{
-    if (revision != m_layerRevision.load() || page < 0 || page >= m_okularPages.size())
-        return;
-    // Okular must install any pending native extraction before we replace it.
-    // canGenerateTextPage stays false until its queued completion is delivered.
-    if (!canGenerateTextPage()) {
-        QTimer::singleShot(10, this, [this, page, boxes = std::move(boxes), revision, notifyCompletion]() mutable {
-            applyOcrResult(page, std::move(boxes), revision, notifyCompletion);
-        });
-        return;
-    }
-    QMutexLocker locker(userMutex());
-    auto* target = m_okularPages.at(page);
-    bool success = false;
-    const auto native = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
-    if (!success)
-        return;
-    auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
-    target->setTextPage(textPage);
-    Q_EMIT signalTextGenerationDone(target, textPage);
-    if (!boxes.isEmpty() && notifyCompletion && Config::readOcrSettings().notify)
-        Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
-}
-
 void Main::refreshLayerText(std::uint64_t revision)
 {
     if (revision != m_layerRevision.load())
@@ -1505,6 +1524,22 @@ void Main::refreshLayerText(std::uint64_t revision)
 QAbstractItemModel* Main::layersModel() const
 {
     return m_layersModel && m_layersModel->rowCount() != 0 ? m_layersModel.get() : nullptr;
+}
+
+void Main::clearPageTextState(int page)
+{
+    if (page < 0 || page >= m_okularPages.size())
+        return;
+    const Okular::Document* currentDocument = document();
+    if (!currentDocument)
+        return;
+
+    const_cast<Okular::Document*>(currentDocument)
+        ->setPageTextSelection(page, std::unique_ptr<Okular::RegularAreaRect> { }, QColor());
+    Okular::Page* okularPage = m_okularPages.at(page);
+    if (!okularPage)
+        return;
+    okularPage->setTextPage(nullptr);
 }
 
 // Okular Generator Func: extracts native text or starts/reads OCR.
@@ -1558,6 +1593,10 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     return nullptr;
 }
 
+// =============================================================================
+// Generator Metadata & Embedded Files
+// =============================================================================
+
 // Okular Generator Func: returns generator-specific metadata.
 QVariant Main::metaData(const QString& key, const QVariant& option) const
 {
@@ -1583,6 +1622,15 @@ Okular::Generator::PageSizeMetric Main::pagesSizeMetric() const
     return Pixels;
 }
 
+// Releases the cached Okular embedded-file objects.
+void Main::clearEmbeddedFilesCache()
+{
+    if (!m_embeddedFilesCache)
+        return;
+    qDeleteAll(*m_embeddedFilesCache);
+    m_embeddedFilesCache.reset();
+}
+
 // Okular Generator Func: returns embedded files as Okular objects.
 const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 {
@@ -1604,6 +1652,10 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
     }
     return m_embeddedFilesCache.get();
 }
+
+// =============================================================================
+// Document Saving & Export
+// =============================================================================
 
 // Okular Generator Func: reports the supported save options.
 bool Main::supportsOption(SaveOption option) const
@@ -1735,6 +1787,10 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     return stream.status() == QTextStream::Ok && file.commit();
 }
 
+// =============================================================================
+// Annotation Actions & Printing
+// =============================================================================
+
 // Okular Generator Func: returns the annotation adapter used by Okular.
 Okular::AnnotationProxy* Main::annotationProxy() const
 {
@@ -1833,6 +1889,10 @@ QWidget* Main::printConfigurationWidget() const
     });
     return page;
 }
+
+// =============================================================================
+// Digital Signing & Certificate Store
+// =============================================================================
 
 std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSignatureData& data,
                                                            const QString& rFilename)

@@ -36,6 +36,10 @@ namespace Mu::IPC::ZppCodec {
 
 namespace {
 
+// =============================================================================
+// Wire Envelope & Decoded Message Validation
+// =============================================================================
+
 // Every protocol payload starts with a fixed envelope so peers can reject the
 // wrong protocol version or message family before allocating the message body.
 inline constexpr std::uint32_t WireMagic = 0x4d554343;
@@ -95,6 +99,10 @@ template <typename T> bool validateDecoded(const T& value, std::string* error)
     }
     return true;
 }
+
+// =============================================================================
+// Bounded Binary Encoding & Decoding
+// =============================================================================
 
 template <typename T>
 std::optional<std::vector<std::byte>> encodeImpl(const T& value, std::string* error, EncodeError* errorCode)
@@ -176,6 +184,10 @@ template <typename T> bool decodeImpl(std::span<const std::byte> bytes, T* value
     return true;
 }
 
+// =============================================================================
+// Framed Message Transport Helpers
+// =============================================================================
+
 template <typename T>
 bool writeMessageImpl(
     CtrlChannel& channel, const T& value, int timeoutMs, std::string* error, std::string_view debugSide)
@@ -208,6 +220,10 @@ bool readMessageImpl(CtrlChannel& channel, T* value, int timeoutMs, std::string*
 }
 
 } // namespace
+
+// =============================================================================
+// Public Message Codec & Transport Adapters
+// =============================================================================
 
 std::optional<std::vector<std::byte>> encode(const Model::RequestMessage& value, std::string* error, EncodeError* code)
 {

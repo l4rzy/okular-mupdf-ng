@@ -28,6 +28,10 @@
 namespace Mu::Generator::Proxy {
 namespace {
 
+// =============================================================================
+// Signature Result & Preview Helpers
+// =============================================================================
+
 std::pair<Okular::SigningResult, QString> signingResult(const Model::SignResponse& result)
 {
     const QString details = QString::fromStdString(result.details);
@@ -72,6 +76,10 @@ void drawSignaturePreview(QPainter& painter, const QRectF& rect)
 
 } // namespace
 
+// =============================================================================
+// Annotation Proxy Lifecycle & Capabilities
+// =============================================================================
+
 Annotation::Annotation(Plugin::WorkerClient* backend, MutationCallback mutationCallback)
     : m_backend(backend)
     , m_mutationCallback(std::move(mutationCallback))
@@ -92,6 +100,10 @@ bool Annotation::supports(Capability capability) const
     return m_available && m_backend && m_backend->isConnected()
         && (capability == Addition || capability == Modification || capability == Removal);
 }
+
+// =============================================================================
+// Annotation Mutations
+// =============================================================================
 
 void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
 {
@@ -210,6 +222,10 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
             m_mutationCallback(page);
     }
 }
+
+// =============================================================================
+// Pending Signature Preview State
+// =============================================================================
 
 bool Annotation::paintPendingSignature(QImage& image, int page, const Okular::NormalizedRect& pageRegion) const
 {

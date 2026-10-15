@@ -32,6 +32,10 @@
 
 namespace Mu::Generator {
 
+// =============================================================================
+// Settings Widget Lifecycle
+// =============================================================================
+
 MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     : QWidget(parent)
     , m_mupdfsw(new Ui_MuPDFNGSettingsWidgetBase)
@@ -211,6 +215,15 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     connect(m_mupdfsw->cacheStorageButton, &QToolButton::clicked, this, [this] { refreshCacheUsage(); });
 }
 
+MuPDFNGSettingsWidget::~MuPDFNGSettingsWidget()
+{
+    delete m_mupdfsw;
+}
+
+// =============================================================================
+// Cache Usage & Cleanup
+// =============================================================================
+
 void MuPDFNGSettingsWidget::updateCacheMenu(const Plugin::Caching::Vacuum::CacheUsage* usage)
 {
     const auto actions = m_mupdfsw->cacheStorageButton->menu()->actions();
@@ -267,6 +280,10 @@ void MuPDFNGSettingsWidget::refreshCacheUsage(std::optional<Plugin::Caching::Vac
         return Result { { }, Cache::Vacuum::measureCacheUsage(root) };
     }));
 }
+
+// =============================================================================
+// Settings Help & Button Labels
+// =============================================================================
 
 void MuPDFNGSettingsWidget::setupToolTips()
 {
@@ -362,6 +379,10 @@ void MuPDFNGSettingsWidget::updateManageCertificatesButton()
     m_mupdfsw->manageCertificatesButton->setText(i18n("Manage Certificates - %1", databaseLabel));
 }
 
+// =============================================================================
+// Signature Preview & Screen Changes
+// =============================================================================
+
 void MuPDFNGSettingsWidget::updateSignaturePreview()
 {
     const bool simple =
@@ -392,11 +413,6 @@ void MuPDFNGSettingsWidget::showEvent(QShowEvent* event)
                 this,
                 &MuPDFNGSettingsWidget::updateSignaturePreview,
                 Qt::UniqueConnection);
-}
-
-MuPDFNGSettingsWidget::~MuPDFNGSettingsWidget()
-{
-    delete m_mupdfsw;
 }
 
 } // namespace Mu::Generator

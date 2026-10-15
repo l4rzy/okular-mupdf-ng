@@ -20,6 +20,10 @@ namespace Mu::Plugin::Caching::OCR {
 
 namespace OcrConstant = ::Mu::Plugin::OCR::Constant;
 
+// =============================================================================
+// Cache Validation & Bounded Decompression
+// =============================================================================
+
 inline bool isCacheFileSizeValid(qint64 size)
 {
     // An empty result has only the fixed header; non-empty results must also
@@ -58,6 +62,10 @@ static QByteArray decompressBounded(const QByteArray& compressed)
     raw.resize(static_cast<qsizetype>(rawSize));
     return raw;
 }
+
+// =============================================================================
+// Cache Key Normalization & Paths
+// =============================================================================
 
 static QString sanitizeFilenamePart(const QString& str)
 {
@@ -142,6 +150,10 @@ QString Cache::getCacheFilePath(const QString& docHash, int pageNum, const QStri
         return QString();
     return getCacheFilePath(*key, pageNum);
 }
+
+// =============================================================================
+// Cache Loading & DPI Fallback
+// =============================================================================
 
 static std::optional<quint32> readCacheItemCount(const QByteArray& data)
 {
@@ -282,6 +294,10 @@ CacheLoadResult Cache::load(const QString& docHash, int pageNum, const QString& 
     return key ? load(*key, pageNum) : CacheLoadResult { false, { } };
 }
 
+// =============================================================================
+// Cache Serialization & Saving
+// =============================================================================
+
 static std::optional<QByteArray> serializeCacheFile(const QVector<CacheItem>& items)
 {
     // Serialize the payload separately so raw and compressed resource limits
@@ -356,6 +372,10 @@ bool Cache::save(const QString& docHash, int pageNum, const QString& lang, int d
     const auto key = normalizeKey(docHash, lang, dpi);
     return key ? save(*key, pageNum, items) : false;
 }
+
+// =============================================================================
+// Text Box Conversion
+// =============================================================================
 
 QVector<CacheItem> Cache::convertToCacheItems(const std::vector<Model::TextBox>& boxes)
 {

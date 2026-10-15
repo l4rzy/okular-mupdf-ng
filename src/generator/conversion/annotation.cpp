@@ -12,6 +12,10 @@
 
 namespace Mu::Generator::Conversion {
 
+// =============================================================================
+// Okular Annotation Conversion to Model
+// =============================================================================
+
 static constexpr int annotationFlag(Model::AnnotationFlag flag) noexcept
 {
     return Model::annotationFlagValue(flag);
@@ -201,6 +205,10 @@ std::optional<Model::Annotation> toModel(const Okular::Annotation* annotation)
     return data;
 }
 
+// =============================================================================
+// Model Annotation Conversion to Okular
+// =============================================================================
+
 static Okular::NormalizedPoint toNormalizedPoint(const Model::Point& value)
 {
     return Okular::NormalizedPoint(value.x, value.y);
@@ -377,6 +385,10 @@ std::unique_ptr<Okular::Annotation> fromModel(const Model::Annotation& ad)
     ann->setNativeId(QString::fromStdString(ad.handle));
     return std::unique_ptr<Okular::Annotation>(ann);
 }
+
+// =============================================================================
+// Page Annotation Replacement
+// =============================================================================
 
 void rebuildPageAnnotations(Okular::Page* page, const std::vector<Model::Annotation>& clean)
 {

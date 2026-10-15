@@ -59,6 +59,10 @@ struct MappedFrame {
     std::size_t size = 0;
 };
 
+// =============================================================================
+// Frame Descriptor Validation & Mapping
+// =============================================================================
+
 std::optional<std::size_t> inspectFrameDescriptor(int fd, std::string* error)
 {
     struct stat info { };
@@ -120,6 +124,10 @@ receiveRenderFrame(IPC::FdChannel& channel, quint64 transferId, const char* labe
     return MappedFrame { mapping, *size };
 }
 
+// =============================================================================
+// Request Timeout Policy
+// =============================================================================
+
 int timeoutFor(const RequestPayload& payload)
 {
     return std::visit(
@@ -143,6 +151,10 @@ int timeoutFor(const RequestPayload& payload)
 }
 
 } // namespace
+
+// =============================================================================
+// Shared Frame Slots & Lease Release
+// =============================================================================
 
 struct WorkerTransport::FrameSlotMapping {
     void* mapping = MAP_FAILED;
@@ -185,6 +197,28 @@ void WorkerTransport::releaseFrameSlot(quint64 session, quint64 slotId, quint64 
     const auto response = call(ReleaseFrameSlotRequest { slotId, leaseId });
     if (!response || response->error)
         MU_LOG(warning, "Mu::Plugin", "could not release render frame slot");
+}
+
+// =============================================================================
+// Worker Process & IPC Session Lifecycle
+// =============================================================================
+
+QString WorkerTransport::findBinary(const QString& hint)
+{
+    if (!hint.isEmpty() && QFileInfo::exists(hint))
+        return hint;
+#ifdef WORKER_BUILD_PATH
+    const QString build = QStringLiteral(WORKER_BUILD_PATH);
+    if (QFileInfo::exists(build)) {
+        return build;
+    }
+#endif
+#ifdef WORKER_INSTALL_PATH
+    const QString install = QStringLiteral(WORKER_INSTALL_PATH);
+    if (QFileInfo::exists(install))
+        return install;
+#endif
+    return QStandardPaths::findExecutable(QStringLiteral("mupdfng-worker"));
 }
 
 bool WorkerTransport::start(const QString& binaryPath,
@@ -344,6 +378,14 @@ void WorkerTransport::abort()
     cleanupSession();
 }
 
+void WorkerTransport::finished(int code, QProcess::ExitStatus /*status*/)
+{
+    // Intentional stop/abort already performed cleanup; only an unplanned
+    // process exit is surfaced to the client for recovery.
+    if (!m_intentionalStop)
+        Q_EMIT processExited(code);
+}
+
 bool WorkerTransport::isConnected() const
 {
     return m_ctrl.valid() && m_process.state() == QProcess::Running;
@@ -357,6 +399,10 @@ std::optional<quint64> WorkerTransport::workerMemoryBytes() const
         return std::nullopt;
     return Util::processResidentBytes(m_process.processId());
 }
+
+// =============================================================================
+// Document Opening, Caching & Closing
+// =============================================================================
 
 QString WorkerTransport::epubCachePath(const QString& sourcePath)
 {
@@ -512,6 +558,10 @@ bool WorkerTransport::close()
     return response && !response->error;
 }
 
+// =============================================================================
+// Page Rendering & Text Extraction
+// =============================================================================
+
 QImage WorkerTransport::render(int page, int width, int height, const QRect& rect, int cancellationFd)
 {
     // Phase 1: build the render request, folding the tile geometry into the
@@ -631,6 +681,10 @@ std::vector<TextBox> WorkerTransport::getTextBoxesForPage(int page, qreal x, qre
     return { };
 }
 
+// =============================================================================
+// OCR Input Transfer & Job Control
+// =============================================================================
+
 bool WorkerTransport::sendOcrInput(QFile& input, std::uint64_t& transfer)
 {
     // OCR uses the currently opened document as an FD transfer; no document
@@ -686,6 +740,10 @@ bool WorkerTransport::cancelOcrJobs()
     const auto response = call(CancelOcrJobsRequest { });
     return response && !response->error;
 }
+
+// =============================================================================
+// Document Inspection & Layers
+// =============================================================================
 
 std::vector<Font> WorkerTransport::fonts(int page)
 {
@@ -799,6 +857,10 @@ DocumentMetadata WorkerTransport::getDocumentInfo(const QStringList& keys)
     return { };
 }
 
+// =============================================================================
+// Annotation Mutations
+// =============================================================================
+
 std::optional<AnnotationHandle> WorkerTransport::addAnnotation(int page, const Annotation& annotation)
 {
     auto response = call(AnnotationAddRequest { page, annotation });
@@ -820,6 +882,38 @@ bool WorkerTransport::removeAnnotation(int page, const QString& handle)
     auto response = call(AnnotationRemoveRequest { page, { handle.toStdString() } });
     return response && !response->error;
 }
+
+// =============================================================================
+// Form Mutations
+// =============================================================================
+
+std::optional<FormUpdateResponse> WorkerTransport::updateForm(const FormUpdateRequest& request)
+{
+    auto response = call(request);
+    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
+        return std::get<FormUpdateResponse>(std::move(response->payload));
+    return std::nullopt;
+}
+
+std::optional<FormUpdateResponse> WorkerTransport::resetForm(const FormResetRequest& request)
+{
+    auto response = call(request);
+    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
+        return std::get<FormUpdateResponse>(std::move(response->payload));
+    return std::nullopt;
+}
+
+std::optional<FormUpdateResponse> WorkerTransport::clickFormButton(const FormButtonClickRequest& request)
+{
+    auto response = call(request);
+    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
+        return std::get<FormUpdateResponse>(std::move(response->payload));
+    return std::nullopt;
+}
+
+// =============================================================================
+// Document Saving & Asynchronous Export
+// =============================================================================
 
 bool WorkerTransport::saveToFile(const QString& target)
 {
@@ -963,6 +1057,10 @@ void WorkerTransport::completePdfExport(bool success, QString error)
     Q_EMIT pdfExportFinished(jobId, delivered, error);
 }
 
+// =============================================================================
+// Digital Signing
+// =============================================================================
+
 SignResponse WorkerTransport::signToFile(SignRequest request, const QString& password, const QString& target)
 {
     QFileInfo info(target);
@@ -993,29 +1091,9 @@ SignResponse WorkerTransport::signToFile(SignRequest request, const QString& pas
     return *result;
 }
 
-std::optional<FormUpdateResponse> WorkerTransport::updateForm(const FormUpdateRequest& request)
-{
-    auto response = call(request);
-    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
-        return std::get<FormUpdateResponse>(std::move(response->payload));
-    return std::nullopt;
-}
-
-std::optional<FormUpdateResponse> WorkerTransport::resetForm(const FormResetRequest& request)
-{
-    auto response = call(request);
-    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
-        return std::get<FormUpdateResponse>(std::move(response->payload));
-    return std::nullopt;
-}
-
-std::optional<FormUpdateResponse> WorkerTransport::clickFormButton(const FormButtonClickRequest& request)
-{
-    auto response = call(request);
-    if (response && std::holds_alternative<FormUpdateResponse>(response->payload))
-        return std::get<FormUpdateResponse>(std::move(response->payload));
-    return std::nullopt;
-}
+// =============================================================================
+// Document Settings
+// =============================================================================
 
 bool WorkerTransport::settings(const DocumentSettings& settings)
 {
@@ -1027,6 +1105,10 @@ bool WorkerTransport::settings(const DocumentSettings& settings)
     m_settings = settings;
     return true;
 }
+
+// =============================================================================
+// Request Dispatch & Notification Processing
+// =============================================================================
 
 std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
 {
@@ -1243,32 +1325,6 @@ void WorkerTransport::processIncomingNotifications()
             break;
         }
     }
-}
-
-QString WorkerTransport::findBinary(const QString& hint)
-{
-    if (!hint.isEmpty() && QFileInfo::exists(hint))
-        return hint;
-#ifdef WORKER_BUILD_PATH
-    const QString build = QStringLiteral(WORKER_BUILD_PATH);
-    if (QFileInfo::exists(build)) {
-        return build;
-    }
-#endif
-#ifdef WORKER_INSTALL_PATH
-    const QString install = QStringLiteral(WORKER_INSTALL_PATH);
-    if (QFileInfo::exists(install))
-        return install;
-#endif
-    return QStandardPaths::findExecutable(QStringLiteral("mupdfng-worker"));
-}
-
-void WorkerTransport::finished(int code, QProcess::ExitStatus /*status*/)
-{
-    // Intentional stop/abort already performed cleanup; only an unplanned
-    // process exit is surfaced to the client for recovery.
-    if (!m_intentionalStop)
-        Q_EMIT processExited(code);
 }
 
 } // namespace Mu::Plugin

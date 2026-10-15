@@ -68,6 +68,10 @@ private:
 
 using SensitiveBytes = Plugin::Crypto::SensitiveBytes;
 
+// =============================================================================
+// Database Access & Error Reporting
+// =============================================================================
+
 void setError(QString* error, const QString& message)
 {
     if (error)
@@ -116,6 +120,10 @@ QString nssError(PRErrorCode error)
     return Plugin::Crypto::Internal::nssErrorMessage(error);
 }
 
+// =============================================================================
+// Certificate Time & Subject Encoding
+// =============================================================================
+
 bool convertToNssTime(const QDateTime& dateTime, PRTime* result)
 {
     // NSS stores time in microseconds, so validate the millisecond conversion
@@ -146,6 +154,10 @@ std::optional<QString> escapeDnValue(const QString& value)
         return std::nullopt;
     return QString::fromUtf8(escaped.constData());
 }
+
+// =============================================================================
+// PKCS#12 Password & Nickname Conversion
+// =============================================================================
 
 QByteArray encodePkcs12Password(const QString& password)
 {
@@ -236,6 +248,10 @@ using PublicKeyHandle = Plugin::Crypto::NssPublicKey;
 using DecoderHandle = Plugin::Crypto::NssPkcs12Decoder;
 
 using ArenaHandle = Plugin::Crypto::NssArena;
+
+// =============================================================================
+// Certificate Identity, Lookup & Decoding
+// =============================================================================
 
 QByteArray certificateFingerprint(const CERTCertificate* certificate)
 {
@@ -340,6 +356,10 @@ QSet<QByteArray> certificateFingerprintsInSlot(PK11SlotInfo* slot)
     return fingerprints;
 }
 
+// =============================================================================
+// Certificate & Key Rollback
+// =============================================================================
+
 SECStatus deleteCertificateInSlot(PK11SlotInfo* slot, CERTCertificate* certificate)
 {
     if (!slot || !certificate)
@@ -361,6 +381,20 @@ QString keyRollbackSuffix(PrivateKeyHandle priv, PublicKeyHandle pub)
         warning, "Mu::Plugin", std::string("Could not remove generated NSS key material: ") + nssError().toStdString());
     return QStringLiteral(" The generated key material could not be removed: %1").arg(nssError());
 }
+
+// =============================================================================
+// Signer Trust Helpers
+// =============================================================================
+
+SECStatus grantSignerTrust(CERTCertificate* certificate, CERTCertTrust trust)
+{
+    trust.emailFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
+    return CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate, &trust);
+}
+
+// =============================================================================
+// Self-Signed Certificate Construction
+// =============================================================================
 
 bool checkSelfSignedOptions(const SelfSignedCertificateOptions& options,
                             QString* nickname,
@@ -523,12 +557,6 @@ bool addSelfSignedExtensions(CERTCertificate* certificate, QString* error)
     return true;
 }
 
-SECStatus grantSignerTrust(CERTCertificate* certificate, CERTCertTrust trust)
-{
-    trust.emailFlags |= CERTDB_TRUSTED | CERTDB_TERMINAL_RECORD;
-    return CERT_ChangeCertTrust(CERT_GetDefaultCertDB(), certificate, &trust);
-}
-
 bool encodeSignAndImport(SlotHandle& slot,
                          CertificateHandle& unsignedHandle,
                          PrivateKeyHandle& privateKey,
@@ -594,6 +622,10 @@ bool encodeSignAndImport(SlotHandle& slot,
     return true;
 }
 
+// =============================================================================
+// Certificate Listing
+// =============================================================================
+
 QList<CertificateRecord> listManagedCertificates(const QString& databasePath, bool trustedSigners, QString* error)
 {
     clearError(error);
@@ -641,6 +673,10 @@ QList<CertificateRecord> listTrustedSigners(const QString& databasePath, QString
 {
     return listManagedCertificates(databasePath, true, error);
 }
+
+// =============================================================================
+// Signer Trust Management
+// =============================================================================
 
 std::optional<Model::Certificate>
 inspectSignerCertificate(const QString& databasePath, const QByteArray& data, QString* error)
@@ -747,6 +783,10 @@ bool removeSignerTrust(const QString& databasePath, const CertificateIdentity& i
     }
     return true;
 }
+
+// =============================================================================
+// Certificate & PKCS#12 Import
+// =============================================================================
 
 bool importCertificate(const QString& databasePath, const QByteArray& data, const QString& nickname, QString* error)
 {
@@ -890,6 +930,10 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
     return true;
 }
 
+// =============================================================================
+// Self-Signed Certificate Creation
+// =============================================================================
+
 bool createSelfSignedCertificate(const QString& databasePath,
                                  const SelfSignedCertificateOptions& options,
                                  QString* error)
@@ -951,6 +995,10 @@ bool createSelfSignedCertificate(const QString& databasePath,
     return encodeSignAndImport(
         slot, unsignedHandle, privateKeyHandle, publicKeyHandle, nickname, options.trustForVerification, error);
 }
+
+// =============================================================================
+// Certificate Deletion
+// =============================================================================
 
 bool deleteCertificate(const QString& databasePath, const CertificateIdentity& identity, QString* error)
 {

@@ -15,6 +15,10 @@
 
 namespace Mu::IPC {
 
+// =============================================================================
+// Descriptor Channel Lifecycle & Connections
+// =============================================================================
+
 FdChannel::~FdChannel()
 {
     close();
@@ -109,6 +113,10 @@ bool FdChannel::connect(const std::string& path, std::string* error, std::int64_
     return true;
 }
 
+// =============================================================================
+// Descriptor Transfer & Peer Validation
+// =============================================================================
+
 bool FdChannel::send(std::uint64_t transferId, int descriptor, std::string* error, int timeoutMs) const
 {
     if (m_fd < 0 || descriptor < 0)
@@ -197,6 +205,10 @@ int FdChannel::receive(std::uint64_t expectedTransferId, std::string* error, int
     setError(error, "operation timed out");
     return -1;
 }
+
+// =============================================================================
+// Channel State & Descriptor Cleanup
+// =============================================================================
 
 void FdChannel::close()
 {

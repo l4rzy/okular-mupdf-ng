@@ -27,6 +27,10 @@ using namespace ::Mu::Model;
 
 namespace {
 
+// =============================================================================
+// Field Identity & Canonical Values
+// =============================================================================
+
 // Resolve the logical field dictionary for a widget. Widget dictionaries and
 // unnamed intermediate nodes inherit the nearest named field's value; do not
 // climb past that boundary into an unrelated container field.
@@ -78,6 +82,10 @@ FormValue formValue(const FormField& field)
     }
     return FormTextValue { };
 }
+
+// =============================================================================
+// Reset & JavaScript Action Discovery
+// =============================================================================
 
 pdf_obj* resetAction(fz_context* context, pdf_obj* field)
 {
@@ -145,6 +153,10 @@ bool hasJavaScriptClickAction(fz_context* context, pdf_obj* field)
         action = pdf_dict_get(context, additionalActions, PDF_NAME(U));
     return actionContainsJavaScript(context, action, visited, count, 0);
 }
+
+// =============================================================================
+// Bounded Field Text & Choice Extraction
+// =============================================================================
 
 // Charge each owning copy, even when several widgets reference the same PDF string.
 std::string copyFormText(fz_context* context, const char* text, std::size_t maxLength, ByteBudget& budget)
@@ -214,6 +226,10 @@ const char* choiceOption(fz_context* context, pdf_obj* field, int index, bool us
     return pdf_choice_field_option(context, field, useExportValues ? 1 : 0, index);
 }
 
+// =============================================================================
+// Field Format Hints
+// =============================================================================
+
 std::string readFormatHint(fz_context* context, pdf_obj* field)
 {
     // Optional tooltip metadata must not load an unbounded script stream or
@@ -263,6 +279,10 @@ std::string readFormatHint(fz_context* context, pdf_obj* field)
     const std::unique_ptr<char, decltype(freeScript)> script(decoded, freeScript);
     return script ? std::string(parseFormatHint(script.get())) : std::string { };
 }
+
+// =============================================================================
+// Widget Appearance Refresh & Mutation Collection
+// =============================================================================
 
 void updateAllPages(fz_context* context, fz_document* document, int pageCount, pdf_obj* changedChoiceField = nullptr)
 {
@@ -348,6 +368,10 @@ bool PdfDocument::collectFormMutations(std::vector<FieldMutation>* mutations, st
     }
     return true;
 }
+
+// =============================================================================
+// Form Field Discovery & Inspection
+// =============================================================================
 
 std::vector<FormField> PdfDocument::extractPageFormFields(
     fz_page* nativePage, const fz_rect& bounds, int page, ByteBudget& budget, std::string* error) const
@@ -588,6 +612,10 @@ std::vector<FormField> PdfDocument::extractPageFormFields(
 
     return result;
 }
+
+// =============================================================================
+// Field Updates, Reset & Button Activation
+// =============================================================================
 
 bool PdfDocument::updateFormField(int page,
                                   std::int32_t objectNumber,

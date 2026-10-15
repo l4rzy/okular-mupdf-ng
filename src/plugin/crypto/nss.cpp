@@ -28,6 +28,10 @@ using namespace ::Mu::Model;
 
 namespace {
 
+// =============================================================================
+// CMS Parsing & Signer Certificate Lookup
+// =============================================================================
+
 struct ParsedCmsContext {
     NssCmsMessage cmsg;
     NSSCMSSignedData* signedData = nullptr;
@@ -96,6 +100,10 @@ loadCmsSignerCertificate(NSSCMSSignedData* signedData, NSSCMSSignerInfo* signerI
                    + std::to_string(PR_GetError()));
     return result;
 }
+
+// =============================================================================
+// Certificate Trust & Validation Time
+// =============================================================================
 
 bool isTrustedForEmailSigning(const CERTCertificate* certificate)
 {
@@ -188,6 +196,10 @@ certificateStatusAt(CERTCertDBHandle* certdb, CERTCertificate* certificate, PRTi
     return CertificateStatus::UnknownIssuer;
 }
 
+// =============================================================================
+// Signature State & Byte Range Validation
+// =============================================================================
+
 void resetValidationState(SignatureField& field)
 {
     // Signature validation is repeatable; clear all derived state before
@@ -247,6 +259,10 @@ bool parseAndValidateByteRange(const SignatureField& field,
 }
 
 } // namespace
+
+// =============================================================================
+// Digest Algorithm Mapping & Signature Verification
+// =============================================================================
 
 HashAlgorithm Internal::hashAlgorithmForDigest(SECOidTag digestAlgorithm)
 {

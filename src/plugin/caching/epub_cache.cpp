@@ -39,6 +39,10 @@ constexpr quint32 OutlineSection = 2;
 constexpr std::size_t MaxOutlineDepth = 64;
 constexpr std::size_t MaxOutlineNodes = 50'000;
 
+// =============================================================================
+// Layout Fingerprint & Bounded Byte Encoding
+// =============================================================================
+
 // Only settings that affect EPUB pagination or styling belong in the cache
 // key. The fingerprint is exposed as Cache::layoutKey so callers that memoize
 // the derived cache path can detect layout changes without re-hashing.
@@ -80,6 +84,10 @@ bool readBytes(QDataStream& stream, qint64 maxBytes, QByteArray& result)
     result = std::move(bytes);
     return true;
 }
+
+// =============================================================================
+// Outline Serialization & Validation
+// =============================================================================
 
 bool writeOutlineNodes(QDataStream& stream,
                        const std::vector<Model::OutlineNode>& nodes,
@@ -192,6 +200,10 @@ std::optional<std::vector<Model::OutlineNode>> deserializeOutline(const QByteArr
         return std::nullopt;
     return result;
 }
+
+// =============================================================================
+// Cache Sections & File Persistence
+// =============================================================================
 
 bool readV3(const QByteArray& data, CacheEntry& entry)
 {
@@ -330,6 +342,10 @@ template <typename Update> bool updateEntry(const QString& cachePath, Update&& u
 }
 
 } // namespace
+
+// =============================================================================
+// Cache Identity & Public Accessors
+// =============================================================================
 
 QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings& settings)
 {

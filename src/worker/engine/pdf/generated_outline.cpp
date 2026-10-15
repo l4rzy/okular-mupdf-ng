@@ -22,6 +22,10 @@ namespace Mu::Worker::Engine {
 
 namespace {
 
+// =============================================================================
+// Heading Text & Number Recognition
+// =============================================================================
+
 bool hasTitleLetters(std::string_view text)
 {
     while (!text.empty()) {
@@ -173,6 +177,10 @@ bool isCaption(std::string_view text)
     return word == "figure" || word == "fig" || word == "table" || word == "note" || word == "tip" || word == "warning";
 }
 
+// =============================================================================
+// Line Geometry & Joining
+// =============================================================================
+
 bool isMarginLine(const OutlineLine& line)
 {
     return line.top < line.pageHeight * 0.09 || line.bottom > line.pageHeight * 0.93;
@@ -207,6 +215,10 @@ struct ContentsEntry {
     std::optional<int> printedPage;
     int level = 0;
 };
+
+// =============================================================================
+// Table of Contents Extraction
+// =============================================================================
 
 std::optional<int> takeTrailingPage(std::string& title)
 {
@@ -299,6 +311,10 @@ std::vector<ContentsEntry> readContents(const std::vector<OutlineLine>& lines, c
     }
     return result;
 }
+
+// =============================================================================
+// Heading Candidate Detection
+// =============================================================================
 
 std::vector<double> collectSizes(std::vector<double> sizes)
 {
@@ -412,6 +428,10 @@ std::vector<Candidate> findCandidates(const std::vector<OutlineLine>& lines, con
     return result;
 }
 
+// =============================================================================
+// Contents Matching & Outline Levels
+// =============================================================================
+
 bool applyContents(std::vector<Candidate>& candidates, std::vector<ContentsEntry>& entries)
 {
     std::unordered_map<std::string, std::vector<const ContentsEntry*>> byTitle;
@@ -511,6 +531,10 @@ void assignLevels(std::vector<Candidate>& candidates)
 }
 
 } // namespace
+
+// =============================================================================
+// Generated Outline Assembly
+// =============================================================================
 
 std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> lines)
 {

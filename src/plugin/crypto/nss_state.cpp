@@ -24,6 +24,10 @@
 
 namespace Mu::Plugin::Crypto::Internal {
 
+// =============================================================================
+// NSS Synchronization & Error Reporting
+// =============================================================================
+
 std::mutex& nssMutex()
 {
     static std::mutex mutex;
@@ -40,6 +44,10 @@ QString nssErrorMessage(PRErrorCode error)
 }
 
 namespace {
+
+// =============================================================================
+// Database Path Normalization & Selection
+// =============================================================================
 
 inline std::pair<QString, QString> splitNssScheme(const QString& value)
 {
@@ -145,6 +153,10 @@ using Mu::Plugin::Crypto::NssRuntimeMode;
 QString g_nssDatabaseIdentity;
 NssRuntimeMode g_nssMode = NssRuntimeMode::Unavailable;
 
+// =============================================================================
+// Persistent Runtime Initialization Helpers
+// =============================================================================
+
 bool isPersistentMode(NssRuntimeMode mode)
 {
     return mode == NssRuntimeMode::ReadOnly || mode == NssRuntimeMode::ReadWrite;
@@ -210,6 +222,10 @@ void ensureDefaultDatabaseDirectory(const QString& databaseIdentity)
 } // namespace
 
 namespace Mu::Plugin::Crypto {
+
+// =============================================================================
+// Runtime Initialization & Active Database State
+// =============================================================================
 
 NssRuntimeMode initializeNss(const QString& databasePath)
 {

@@ -22,6 +22,10 @@ namespace Mu::IPC {
 
 namespace {
 
+// =============================================================================
+// Socket Address & Peer Validation
+// =============================================================================
+
 bool makeAddress(const std::string& path, sockaddr_un& address, std::string* error)
 {
     // sockaddr_un has a fixed-size pathname field; reject invalid paths before
@@ -55,6 +59,10 @@ bool verifyPeer(int fd, std::int64_t expectedPeerPid, std::string* error)
     }
     return true;
 }
+
+// =============================================================================
+// Frame Length Encoding & Exact Transfers
+// =============================================================================
 
 std::array<std::byte, 4> encodeFrameLength(std::size_t length)
 {
@@ -137,6 +145,10 @@ IoResult writeAll(const CtrlChannel& socket,
 }
 
 } // namespace
+
+// =============================================================================
+// Control Socket Ownership & Connections
+// =============================================================================
 
 CtrlChannel::CtrlChannel(int fd)
     : m_fd(fd)
@@ -332,6 +344,10 @@ void CtrlChannel::close()
     m_rxFrameLength.reset();
     m_rxPeerClosed = false;
 }
+
+// =============================================================================
+// Blocking & Incremental Frame Transport
+// =============================================================================
 
 bool writeFrame(CtrlChannel& socket, std::span<const std::byte> payload, int timeoutMs, std::string* error)
 {
