@@ -30,6 +30,7 @@
 #include <okular/core/observer.h>
 #include <okular/core/page.h>
 #include <okular/core/settings_core.h>
+#include <okular/interfaces/configinterface.h>
 
 #include <algorithm>
 
@@ -202,11 +203,17 @@ private slots:
             QVERIFY(document.isHistoryClean());
         }
         const QStringList themes { QStringLiteral("Default"), QStringLiteral("Dusk"), QStringLiteral("Dark") };
+        // The theme menu is owned by the generator implementing ConfigInterface.
+        auto* configInterface =
+            qobject_cast<Okular::ConfigInterface*>(actions->action(QStringLiteral("mupdf_theme"))->parent());
+        QVERIFY(configInterface);
         int previousMode = 0;
         for (const int mode : { 1, 2, 0 }) {
             KConfigSkeleton hostSettings;
             KConfigDialog dialog(nullptr, QStringLiteral("document-theme-test"), &hostSettings);
-            document.fillConfigDialog(&dialog);
+            // Older Okular fillConfigDialog() requires its private BackendConfigDialog.
+            // Exercise the plugin's public interface with our ordinary test dialog.
+            configInterface->addPages(&dialog);
             auto* theme = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_ReadingTheme"));
             QVERIFY(theme);
             QCOMPARE(theme->count(), 3);
