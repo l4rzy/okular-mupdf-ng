@@ -322,12 +322,10 @@ void Main::scheduleCacheVacuum()
     });
 }
 
-// Okular Generator Func: reads the paper color Okular's accessibility settings
-// request through documentMetaData (white when the Paper render mode is off)
-// and records it for the next settings push.
+// Keep Okular's original paper color separate from the loading-placeholder override.
 void Main::refreshPaperColor()
 {
-    const QColor color = documentMetaData(Okular::Generator::PaperColorMetaData, true).value<QColor>();
+    const QColor color = PageColorOverride::originalPaperColor();
     m_paperColorRgb = color.isValid() ? static_cast<std::uint32_t>(qRgb(color.red(), color.green(), color.blue()))
                                       : DefaultPaperColorRgb;
 }
@@ -340,6 +338,8 @@ bool Main::reparseConfig()
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
+    m_pageColorOverride.setTheme(m_okularPages.isEmpty() || m_placeholder.isActive() ? Model::ReadingTheme::Default
+                                                                                     : settings.rendering.readingTheme);
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
@@ -749,6 +749,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
+    m_pageColorOverride.setTheme(m_settings.rendering.readingTheme);
     syncOcrActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
@@ -1008,6 +1009,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPlaceholderDerivedState()
 {
+    m_pageColorOverride.reset();
     syncOcrActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
@@ -1287,6 +1289,7 @@ void Main::failClosed(const QString& message)
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
+    m_pageColorOverride.reset();
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
     m_observingVisiblePages = false;

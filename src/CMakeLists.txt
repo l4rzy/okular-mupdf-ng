@@ -239,6 +239,7 @@ endif()
 
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
+  generator/page_color_override.cpp
   generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp
   generator/config/csseditor/highlighter.cpp
@@ -291,11 +292,14 @@ if(MU_DEBUG_BUILD)
     target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_DEBUG_ENABLED)
 endif()
 
+# SettingsCore uses an unqualified include for its generated export header.
+find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
 target_include_directories(okularGenerator_mupdfng PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${MU_GENERATED_INCLUDE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${NSS_INCLUDE_DIRS}
+    ${OKULAR_CORE_INCLUDE_DIR}
 )
 
 target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")

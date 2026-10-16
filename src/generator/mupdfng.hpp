@@ -25,6 +25,7 @@
 
 #include "generator/config/settings.hpp"
 #include "generator/layers_model.hpp"
+#include "generator/page_color_override.hpp"
 #include "generator/placeholder.hpp"
 #include "generator/printing.hpp"
 #include "generator/proxy/annotation.hpp"
@@ -282,6 +283,7 @@ private:
     // Opaque page background requested by Okular (paper-color setting).
     static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
     std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;
+    PageColorOverride m_pageColorOverride;
 
     // Restart decision state: whether pending settings need an Okular restart.
     struct RestartState {

@@ -245,8 +245,6 @@ endforeach()
 
 add_layer_test(test_generator_layers generator/test_layers_model.cpp generator)
 target_link_libraries(test_generator_layers PRIVATE mupdf_generator_adapters KF6::ConfigCore)
-# SettingsCore uses an unqualified include for its generated export header.
-find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
 target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
 target_compile_definitions(test_generator_layers PRIVATE
     TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf"
@@ -313,6 +311,11 @@ add_layer_test(test_generator_config generator/test_config.cpp generator
     ../src/generator/config/certmanager/manager_dialog.cpp)
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(test_generator_config PRIVATE Qt6::Gui Qt6::Concurrent KF6::I18n mupdf_generator_settings mupdf_plugin_crypto)
+
+add_layer_test(test_generator_pagecolor generator/test_page_color_override.cpp generator
+    ../src/generator/page_color_override.cpp)
+target_include_directories(test_generator_pagecolor PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_link_libraries(test_generator_pagecolor PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
 
 add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
 target_include_directories(test_generator_signaturepreview PRIVATE ../src)

@@ -123,6 +123,9 @@ private slots:
     void readingThemeMenu()
     {
         QFETCH(QString, path);
+        const bool originalChangeColors = Okular::SettingsCore::changeColors();
+        const int originalRenderMode = Okular::SettingsCore::renderMode();
+        const QColor originalPaper = Okular::SettingsCore::paperColor();
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
         KConfigGroup general(config, QStringLiteral("General"));
         general.writeEntry("SandboxEnforcement", "Relaxed");
@@ -160,6 +163,15 @@ private slots:
             QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), action->text());
             QCOMPARE(document.pages(), pageCount);
             QVERIFY(document.isHistoryClean());
+            if (action->text() != QStringLiteral("Dark")) {
+                QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
+                QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
+                QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
+            } else {
+                QVERIFY(Okular::SettingsCore::changeColors());
+                QCOMPARE(Okular::SettingsCore::renderMode(), int(Okular::SettingsCore::EnumRenderMode::Paper));
+                QCOMPARE(Okular::SettingsCore::paperColor(), QColor(32, 33, 36));
+            }
         }
         const QStringList toggles { "dusk", "dusk", "dark", "dusk", "dark", "dark" };
         const QStringList expected { "Dusk", "Default", "Dark", "Dusk", "Dark", "Default" };
@@ -199,10 +211,30 @@ private slots:
             QVERIFY(document.isHistoryClean());
             previousMode = mode;
         }
+        const int previousRefreshes = observer.refreshes;
+        actions->action(QStringLiteral("mupdf_theme_dark"))->trigger();
+        QTRY_VERIFY(observer.refreshes > previousRefreshes);
         document.closeDocument();
+        QCOMPARE(Okular::SettingsCore::paperColor(), QColor(32, 33, 36));
+        other.closeDocument();
+        QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
+        QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
+        QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_dusk"))->isEnabled());
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_dark"))->isEnabled());
+        QFile invalid(m_root.filePath(QStringLiteral("invalid.pdf")));
+        QVERIFY(invalid.open(QIODevice::WriteOnly));
+        invalid.write("invalid PDF");
+        invalid.close();
+        Okular::Document failed(nullptr);
+        QCOMPARE(failed.openDocument(invalid.fileName(),
+                                     QUrl::fromLocalFile(invalid.fileName()),
+                                     QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"))),
+                 Okular::Document::OpenError);
+        QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
+        QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
+        QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
     }
 
     void ocrMenuModels_data()
