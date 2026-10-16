@@ -1,7 +1,10 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/epub/document.hpp"
+#include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
+#include "engine/reading_theme.hpp"
 #include "genpdf.hpp"
 
 #include <QFile>
@@ -11,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <unistd.h>
 
 extern "C" {
@@ -42,6 +46,122 @@ private:
     QString m_textPath;
 
 private slots:
+
+    void readingThemePalette_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<QByteArray>("expected");
+        QTest::newRow("default") << 0 << QByteArray::fromHex("ffffffff000000ffff0000ff");
+        QTest::newRow("dusk") << 1 << QByteArray::fromHex("d6d6d6ff242424ffd62424ff");
+        QTest::newRow("dark") << 2 << QByteArray::fromHex("202124ffdadce0ffda2124ff");
+    }
+
+    void readingThemePalette()
+    {
+        QFETCH(int, theme);
+        QFETCH(QByteArray, expected);
+        Mu::Worker::Engine::PdfDocument owner;
+        auto pixels = QByteArray::fromHex("ffffffff000000ffff0000ffabababab");
+        auto* pixmap = fz_new_pixmap_with_data(owner.context(),
+                                               fz_device_rgb(owner.context()),
+                                               3,
+                                               1,
+                                               nullptr,
+                                               1,
+                                               16,
+                                               reinterpret_cast<unsigned char*>(pixels.data()));
+        Mu::Worker::Engine::applyReadingTheme(
+            owner.context(), pixmap, static_cast<Mu::Model::ReadingTheme>(theme), nullptr);
+        int cancellation = 0;
+        if (theme != 0) {
+            fz_cookie cookie { };
+            cookie.abort = 1;
+            fz_try(owner.context())
+            {
+                Mu::Worker::Engine::applyReadingTheme(
+                    owner.context(), pixmap, static_cast<Mu::Model::ReadingTheme>(theme), &cookie);
+            }
+            fz_catch(owner.context())
+            {
+                cancellation = fz_caught(owner.context());
+            }
+        }
+        fz_drop_pixmap(owner.context(), pixmap);
+        QCOMPARE(cancellation, theme == 0 ? 0 : FZ_ERROR_ABORT);
+        QCOMPARE(pixels.first(12), expected);
+        QCOMPARE(pixels.last(4), QByteArray::fromHex("abababab"));
+    }
+
+    void readingThemesAcrossFormats_data()
+    {
+        QTest::addColumn<int>("format");
+        QTest::newRow("pdf") << 0;
+        QTest::newRow("epub") << 1;
+        QTest::newRow("mobi") << 2;
+    }
+
+    void readingThemesAcrossFormats()
+    {
+        QFETCH(int, format);
+        using namespace Mu::Worker::Engine;
+        std::unique_ptr<DocumentBase> document;
+        QString path;
+        if (format == 0) {
+            document = std::make_unique<PdfDocument>();
+            path = m_textPath;
+        } else if (format == 1) {
+            document = std::make_unique<EpubDocument>();
+            path = QStringLiteral(TEST_EPUB_DIR "/sample.epub");
+        } else {
+            document = std::make_unique<MobiDocument>();
+            path = QStringLiteral(TEST_MOBI_DIR "/legacy-uncompressed.mobi");
+        }
+        QFile source(path);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY2(document->openFd(::dup(source.handle()), path.toStdString(), &error), error.c_str());
+        constexpr int width = 160, height = 200, stride = width * 4;
+        std::vector<std::uint8_t> original(height * stride);
+        QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride, &error),
+                 error.c_str());
+        const int count = document->pageCount();
+        for (const auto theme : { Mu::Model::ReadingTheme::Dusk, Mu::Model::ReadingTheme::Dark }) {
+            auto settings = document->settings();
+            settings.readingTheme = theme;
+            document->setSettings(settings);
+            QCOMPARE(document->pageCount(), count);
+            std::vector<std::uint8_t> themed(height * stride);
+            QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride, &error),
+                     error.c_str());
+            QVERIFY(themed != original);
+            constexpr int paddedStride = stride + 8;
+            std::vector<std::uint8_t> padded(height * paddedStride, 0xAB);
+            QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, padded.data(), paddedStride, &error),
+                     error.c_str());
+            for (int y = 0; y < height; ++y) {
+                QVERIFY(std::equal(
+                    themed.begin() + y * stride, themed.begin() + (y + 1) * stride, padded.begin() + y * paddedStride));
+                for (int x = stride; x < paddedStride; ++x)
+                    QCOMPARE(padded[static_cast<std::size_t>(y * paddedStride + x)], std::uint8_t(0xAB));
+            }
+            const DocumentBase::RenderTile tile { 31, 37, 65, 89 };
+            std::vector<std::uint8_t> tiled(static_cast<std::size_t>(tile.width * tile.height * 4));
+            QVERIFY2(document->renderToBuffer({ 0, width, height, tile }, tiled.data(), tile.width * 4, &error),
+                     error.c_str());
+            for (int y = 0; y < tile.height; ++y)
+                for (int x = 0; x < tile.width * 4; ++x)
+                    QVERIFY(std::abs(int(tiled[static_cast<std::size_t>(y * tile.width * 4 + x)])
+                                     - int(themed[static_cast<std::size_t>((y + tile.y) * stride + tile.x * 4 + x)]))
+                            <= 2);
+        }
+        auto settings = document->settings();
+        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        document->setSettings(settings);
+        std::vector<std::uint8_t> restored(height * stride);
+        QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, restored.data(), stride, &error),
+                 error.c_str());
+        QCOMPARE(restored, original);
+    }
 
     void testDehyphenatedCharacterFiltering_data()
     {

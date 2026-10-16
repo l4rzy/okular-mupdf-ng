@@ -490,11 +490,84 @@ void Main::setupActions()
         CertificateManagerDialog dialog(Plugin::Crypto::activeNssDatabasePath(), QApplication::activeWindow());
         dialog.exec();
     });
+    setupThemeActions();
     setXMLFile(QStringLiteral("mupdfngui.rc"));
+}
+
+void Main::setupThemeActions()
+{
+    auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("color-management")), i18n("Document Theme"), this);
+    actionCollection()->addAction(QStringLiteral("mupdf_theme"), menu);
+    KActionCollection::setShortcutsConfigurable(menu, false);
+    m_themeActions = new QActionGroup(this);
+    const auto addTheme = [&](const QString& name, const QString& label, Model::ReadingTheme theme) {
+        auto* action = new QAction(label, m_themeActions);
+        action->setCheckable(true);
+        action->setData(static_cast<int>(theme));
+        KActionCollection::setShortcutsConfigurable(action, false);
+        actionCollection()->addAction(name, action);
+        menu->addAction(action);
+    };
+    addTheme(QStringLiteral("mupdf_theme_default"), i18n("Default"), Model::ReadingTheme::Default);
+    addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::ReadingTheme::Dusk);
+    addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::ReadingTheme::Dark);
+    const auto setTheme = [](int theme) {
+        MuPDFNGSettings::setReadingTheme(theme);
+        MuPDFNGSettings::self()->save();
+    };
+    connect(m_themeActions, &QActionGroup::triggered, this, [setTheme](QAction* action) {
+        setTheme(action->data().toInt());
+    });
+    const auto addToggle =
+        [this, setTheme](const QString& name, const QString& label, const QString& icon, Model::ReadingTheme theme) {
+            auto* action = new QAction(QIcon::fromTheme(icon), label, this);
+            actionCollection()->addAction(name, action);
+            connect(action, &QAction::triggered, this, [setTheme, theme] {
+                const int mode = static_cast<int>(theme);
+                setTheme(MuPDFNGSettings::readingTheme() == mode ? static_cast<int>(Model::ReadingTheme::Default)
+                                                                 : mode);
+            });
+        };
+    addToggle(QStringLiteral("mupdf_theme_toggle_dusk"),
+              i18n("Toggle Dusk Mode"),
+              QStringLiteral("weather-few-clouds-night"),
+              Model::ReadingTheme::Dusk);
+    addToggle(QStringLiteral("mupdf_theme_toggle_dark"),
+              i18n("Toggle Dark Mode"),
+              QStringLiteral("weather-clear-night"),
+              Model::ReadingTheme::Dark);
+    // Settings are shared by every open document. Refresh each worker after
+    // the save completes, without re-entering the settings notification.
+    connect(
+        MuPDFNGSettings::self(),
+        &KCoreConfigSkeleton::configChanged,
+        this,
+        [this] {
+            if (const auto* currentDocument = document(); currentDocument
+                && static_cast<int>(m_settings.rendering.readingTheme) != MuPDFNGSettings::readingTheme())
+                const_cast<Okular::Document*>(currentDocument)->reparseConfig();
+        },
+        Qt::QueuedConnection);
+    connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncThemeActions);
+    syncThemeActions();
+}
+
+void Main::syncThemeActions()
+{
+    if (!m_themeActions)
+        return;
+    const bool enabled = !m_okularPages.isEmpty() && !m_placeholder.isActive();
+    actionCollection()->action(QStringLiteral("mupdf_theme"))->setEnabled(enabled);
+    actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dusk"))->setEnabled(enabled);
+    actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
+    m_themeActions->setEnabled(enabled);
+    for (QAction* action : m_themeActions->actions())
+        action->setChecked(action->data().toInt() == MuPDFNGSettings::readingTheme());
 }
 
 void Main::syncOcrActions()
 {
+    syncThemeActions();
     const bool enabled =
         m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_placeholder.isActive();
     const bool hasModels = !Config::installedOcrModels().isEmpty();

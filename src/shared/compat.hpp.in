@@ -13,8 +13,8 @@ inline constexpr std::string_view MUPDF_VERSION = "@MUPDF_REQUIRED_VERSION@";
 
 namespace Mu::IPC {
 
-// Compatibility version
-inline constexpr std::string_view COMPAT = "@MU_COMPAT_VERSION@";
+// Compatibility version and wire revision (DocumentSettings includes readingTheme).
+inline constexpr std::string_view COMPAT = "@MU_COMPAT_VERSION@-2";
 
 } // namespace Mu::IPC
 

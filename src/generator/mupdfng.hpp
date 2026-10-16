@@ -140,6 +140,8 @@ private:
     // Updates OCR scheduling from the pages currently visible in Okular.
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     void setupActions();
+    void setupThemeActions();
+    void syncThemeActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
     // still represents the active Okular document. Sandbox enforcement is rechecked
@@ -222,6 +224,7 @@ private:
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
     QActionGroup* m_ocrActions = nullptr;
+    QActionGroup* m_themeActions = nullptr;
     QAction* m_ocrUnavailableAction = nullptr;
     bool m_observingVisiblePages = false;
 

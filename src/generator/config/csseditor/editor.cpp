@@ -40,7 +40,7 @@ CssEditor::CssEditor(QWidget* parent)
         Q_EMIT encodedTextChanged();
     });
     setPlaceholderText(QStringLiteral("Enter your custom CSS...\n\n"
-                                      "body {\n"
+                                      "body, p, li {\n"
                                       "\tline-height: 2;\n"
                                       "\ttext-align: justify;\n"
                                       "}"));

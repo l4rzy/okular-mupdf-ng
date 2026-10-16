@@ -98,12 +98,82 @@ private slots:
             for (QAction* registered : client->actionCollection()->actions())
                 QCOMPARE(registered->isEnabled(),
                          registered->objectName() == QStringLiteral("mupdf_manage_certificates")
+                             || registered->objectName().startsWith(QStringLiteral("mupdf_theme"))
                              || (expected && (registered == action || hasModels)));
             document.reparseConfig();
             QCOMPARE(action->isEnabled(), expected);
             document.closeDocument();
             QVERIFY(!action->isEnabled());
         }
+    }
+
+    void readingThemeMenu_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::newRow("pdf") << QStringLiteral(TEST_PDF_PATH);
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_PATH);
+        QTest::newRow("mobi") << QStringLiteral(TEST_MOBI_PATH);
+    }
+
+    void readingThemeMenu()
+    {
+        QFETCH(QString, path);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("ReadingTheme", "Default");
+        config->sync();
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+
+        struct Observer final : Okular::DocumentObserver {
+            int refreshes = 0;
+
+            void notifyContentsCleared(int flags) override
+            {
+                if (flags & Pixmap)
+                    ++refreshes;
+            }
+        } observer;
+
+        Okular::Document other(nullptr);
+        QCOMPARE(other.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        other.addObserver(&observer);
+        const auto cleanup = qScopeGuard([&] { other.removeObserver(&observer); });
+        auto* actions = document.guiClient()->actionCollection();
+        QVERIFY(actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
+        const auto pageCount = document.pages();
+        for (const auto* name : { "mupdf_theme_dusk", "mupdf_theme_dark", "mupdf_theme_default" }) {
+            auto* action = actions->action(QString::fromLatin1(name));
+            QVERIFY(action && action->isEnabled() && action->isCheckable());
+            const int previousRefreshes = observer.refreshes;
+            action->trigger();
+            QTRY_VERIFY(observer.refreshes > previousRefreshes);
+            QVERIFY(action->isChecked());
+            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), action->text());
+            QCOMPARE(document.pages(), pageCount);
+            QVERIFY(document.isHistoryClean());
+        }
+        const QStringList toggles { "dusk", "dusk", "dark", "dusk", "dark", "dark" };
+        const QStringList expected { "Dusk", "Default", "Dark", "Dusk", "Dark", "Default" };
+        for (int i = 0; i < toggles.size(); ++i) {
+            auto* toggle = actions->action(QStringLiteral("mupdf_theme_toggle_") + toggles.at(i));
+            QVERIFY(toggle && toggle->isEnabled());
+            QVERIFY(KActionCollection::isShortcutsConfigurable(toggle));
+            QVERIFY(toggle->shortcut().isEmpty());
+            const int previousRefreshes = observer.refreshes;
+            toggle->trigger();
+            QTRY_VERIFY(observer.refreshes > previousRefreshes);
+            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), expected.at(i));
+            QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + expected.at(i).toLower())->isChecked());
+            QVERIFY(document.isHistoryClean());
+        }
+        document.closeDocument();
+        QVERIFY(!actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
+        QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_dusk"))->isEnabled());
+        QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_dark"))->isEnabled());
     }
 
     void ocrMenuModels_data()
@@ -219,21 +289,23 @@ private slots:
         });
         auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
         QVERIFY(tools);
-        QCOMPARE(tools->actions().size(), 4);
+        QCOMPARE(tools->actions().size(), 5);
         QVERIFY(tools->actions().at(1)->isSeparator());
         auto* certificates = client->actionCollection()->action(QStringLiteral("mupdf_manage_certificates"));
         QVERIFY(certificates);
         QCOMPARE(tools->actions().back(), certificates);
         QCOMPARE(certificates->text(), QStringLiteral("Manage Certificates…"));
+        QCOMPARE(tools->actions().at(3), client->actionCollection()->action(QStringLiteral("mupdf_theme")));
         auto* menu = tools->actions().at(2)->menu();
         QVERIFY(menu);
         QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
         QCOMPARE(menu->actions().size(), 4);
         QVERIFY(!menu->actions().back()->isVisible());
-        QCOMPARE(client->actionCollection()->actions().count(), 6);
+        QCOMPARE(client->actionCollection()->actions().count(), 12);
         for (QAction* registered : client->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
-                     registered->objectName() == QStringLiteral("mupdf_ocr_toggle"));
+                     registered->objectName() == QStringLiteral("mupdf_ocr_toggle")
+                         || registered->objectName().startsWith(QStringLiteral("mupdf_theme_toggle_")));
         QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Automatic"));
         const QStringList modes { "Never", "Five", "Always" };
         const QStringList labels { "Off", "Automatic", "On" };

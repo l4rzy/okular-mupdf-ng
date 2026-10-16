@@ -171,6 +171,8 @@ bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view*
     if (settings.graphicsAntialiasing < 0 || settings.graphicsAntialiasing > Limit::MaxDocumentAntialiasing
         || settings.textAntialiasing < 0 || settings.textAntialiasing > Limit::MaxDocumentAntialiasing)
         return failWith("antialiasing level is invalid", reason);
+    if (static_cast<std::uint8_t>(settings.readingTheme) > static_cast<std::uint8_t>(ReadingTheme::Dark))
+        return failWith("reading theme is invalid", reason);
     if (settings.imageQuality < 0 || settings.imageQuality > Limit::MaxDocumentImageQuality)
         return failWith("image quality is invalid", reason);
     if (settings.memoryCacheBytes < Limit::MinDocumentMemoryCacheBytes

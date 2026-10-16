@@ -269,6 +269,7 @@ private slots:
             settings.interpolateImages = false;
             settings.memoryCacheBytes = 128ULL * 1024ULL * 1024ULL;
             settings.idleTrimAggressiveness = Model::IdleTrimLevel::Aggressive;
+            settings.readingTheme = Model::ReadingTheme::Dark;
             settings.epub.fontSize = 17;
             settings.epub.pageSize = pageSize;
             settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(static_cast<std::uint8_t>(pageSize));
@@ -281,6 +282,7 @@ private slots:
             QVERIFY(::Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error));
             const auto& output = std::get<Model::SettingsRequest>(decoded.payload).settings;
             QCOMPARE(output.graphicsAntialiasing, 4);
+            QCOMPARE(output.readingTheme, Model::ReadingTheme::Dark);
             QCOMPARE(output.memoryCacheBytes, 128ULL * 1024ULL * 1024ULL);
             QCOMPARE(output.idleTrimAggressiveness, Model::IdleTrimLevel::Aggressive);
             QCOMPARE(output.epub.fontSize, 17);
@@ -642,6 +644,9 @@ private slots:
         QVERIFY(isValidOcrPageRequest({ { 1 }, 0, 225, "eng" }, &reason));
         QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng" }, &reason));
 
+        DocumentSettings invalidTheme;
+        invalidTheme.readingTheme = static_cast<ReadingTheme>(255);
+        QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
         DocumentSettings validSettings;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
         validSettings.memoryCacheBytes = ::Mu::Limit::MaxDocumentMemoryCacheBytes + 1;

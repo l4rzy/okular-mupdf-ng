@@ -383,6 +383,9 @@ struct IdleTrimLevel {
     static constexpr std::int32_t Aggressive = 3;
 };
 
+/// Viewing palettes shared by all document formats.
+enum class ReadingTheme : std::uint8_t { Default, Dusk, Dark };
+
 /// Rendering and layout settings shared by document engines.
 struct DocumentSettings {
     /// MuPDF graphics antialiasing level.
@@ -404,6 +407,8 @@ struct DocumentSettings {
     bool formJavaScriptEnabled = false;
     /// Simulate PDF overprinting when rasterizing pages for viewing.
     bool overprintSimulation = false;
+    /// Viewing-only palette; exports, printing, and OCR retain original colors.
+    ReadingTheme readingTheme = ReadingTheme::Default;
 };
 
 /// Document metadata values and basic document identity.

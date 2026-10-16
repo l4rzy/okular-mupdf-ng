@@ -9,6 +9,7 @@
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
+#include "engine/reading_theme.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
@@ -104,10 +105,11 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
             pix = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
         }
 
-        // Initialize background with the opaque Okular paper color.
-        float paper[3] = { static_cast<float>((m_settings.paperColorRgb >> 16) & 0xFF) / 255.0f,
-                           static_cast<float>((m_settings.paperColorRgb >> 8) & 0xFF) / 255.0f,
-                           static_cast<float>(m_settings.paperColorRgb & 0xFF) / 255.0f };
+        // Composite on white for themes; Default retains Okular’s paper color.
+        const auto paperColor = readingPaperColor(m_settings);
+        float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
+                           static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
+                           static_cast<float>(paperColor & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
         dev = fz_new_draw_device(m_context, ctm, pix);
         if (request.cookie) {
@@ -127,6 +129,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (request.cookie && request.cookie->abort)
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
+        applyReadingTheme(m_context, pix, m_settings.readingTheme, request.cookie);
         fz_drop_device(m_context, dev);
         dev = nullptr;
 

@@ -181,7 +181,8 @@ WorkerSettings readWorkerSettings()
           MuPDFNGSettings::imageInterpolation(),
           memoryCacheBytesForConfig(MuPDFNGSettings::memoryLimit()),
           idleTrimAggressivenessForConfig(MuPDFNGSettings::idleTrimLevel()),
-          MuPDFNGSettings::overprintSimulation() },
+          MuPDFNGSettings::overprintSimulation(),
+          static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme()) },
         readEpubSettings(),
     };
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
