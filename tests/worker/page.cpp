@@ -9,6 +9,7 @@
 
 #include <QFile>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 
 #include <algorithm>
@@ -46,6 +47,86 @@ private:
     QString m_textPath;
 
 private slots:
+
+    void detectsDarkPages_data()
+    {
+        QTest::addColumn<QByteArray>("rgba");
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("white") << QByteArray::fromHex("ffffffffffffffffffffffffffffffff") << false;
+        QTest::newRow("black") << QByteArray::fromHex("000000ff000000ff000000ff000000ff") << true;
+        QTest::newRow("half") << QByteArray::fromHex("000000ff000000ffffffffffffffffff") << false;
+        QTest::newRow("dark-majority") << QByteArray::fromHex("000000ff000000ff000000ffffffffff") << true;
+        QTest::newRow("light-majority") << QByteArray::fromHex("000000ffffffffffffffffffffffffff") << false;
+        QTest::newRow("below-mid-grey") << QByteArray::fromHex("7f7f7fff7f7f7fff7f7f7fff7f7f7fff") << true;
+        QTest::newRow("mid-grey") << QByteArray::fromHex("808080ff808080ff808080ff808080ff") << false;
+        QTest::newRow("red") << QByteArray::fromHex("ff0000ffff0000ffff0000ffff0000ff") << true;
+        QTest::newRow("green") << QByteArray::fromHex("00ff00ff00ff00ff00ff00ff00ff00ff") << false;
+    }
+
+    void detectsDarkPages()
+    {
+        QFETCH(QByteArray, rgba);
+        QFETCH(bool, dark);
+        Mu::Worker::Engine::PdfDocument owner;
+        // Cover short rows, vectorized rows with a scalar tail, and padding.
+        for (const int width : { 2, 68 }) {
+            const int stride = width * 4 + 8;
+            QByteArray pixels(2 * stride, '\xab');
+            for (int y = 0; y < 2; ++y)
+                for (int x = 0; x < width; ++x)
+                    std::copy_n(rgba.constData() + ((y * width + x) % 4) * 4, 4, pixels.data() + y * stride + x * 4);
+            const auto original = pixels;
+            auto* pixmap = fz_new_pixmap_with_data(owner.context(),
+                                                   fz_device_rgb(owner.context()),
+                                                   width,
+                                                   2,
+                                                   nullptr,
+                                                   1,
+                                                   stride,
+                                                   reinterpret_cast<unsigned char*>(pixels.data()));
+            const bool result = Mu::Worker::Engine::isMostlyDarkPixmap(owner.context(), pixmap);
+            fz_drop_pixmap(owner.context(), pixmap);
+            QCOMPARE(result, dark);
+            QCOMPARE(pixels, original);
+        }
+    }
+
+    void preservesDarkPages_data()
+    {
+        QTest::addColumn<QByteArray>("contents");
+        QTest::addColumn<bool>("preserved");
+        QTest::newRow("black") << QByteArray("0 g 0 0 612 792 re f") << true;
+        QTest::newRow("mostly-black") << QByteArray("0 g 0 0 612 500 re f") << true;
+        QTest::newRow("mostly-white") << QByteArray("0 g 0 0 612 200 re f") << false;
+        QTest::newRow("white") << QByteArray("1 g 0 0 612 792 re f") << false;
+    }
+
+    void preservesDarkPages()
+    {
+        QFETCH(QByteArray, contents);
+        QFETCH(bool, preserved);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const QString path = m_tempDir.filePath("dark-page.pdf");
+        createTextPDF(document.context(), path, contents.constData());
+        QVERIFY(openDocument(document, path));
+        constexpr int width = 153, height = 198, stride = width * 4;
+        std::vector<std::uint8_t> original(height * stride), themed(height * stride);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
+        auto settings = document.settings();
+        settings.readingTheme = Mu::Model::ReadingTheme::Dark;
+        document.setSettings(settings);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
+        QCOMPARE(themed == original, preserved);
+        // The top tile can be white even when the page is predominantly black.
+        const DocumentBase::RenderTile tile { 10, 10, 50, 30 };
+        std::vector<std::uint8_t> tiled(tile.width * tile.height * 4);
+        QVERIFY(document.renderToBuffer({ 0, width, height, tile }, tiled.data(), tile.width * 4));
+        for (int y = 0; y < tile.height; ++y)
+            QVERIFY(std::equal(tiled.begin() + y * tile.width * 4,
+                               tiled.begin() + (y + 1) * tile.width * 4,
+                               themed.begin() + ((y + tile.y) * width + tile.x) * 4));
+    }
 
     void readingThemePalette_data()
     {
@@ -124,6 +205,19 @@ private slots:
         std::vector<std::uint8_t> original(height * stride);
         QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride, &error),
                  error.c_str());
+        // Printing uses savePdfFd rather than the themed viewing renderer.
+        const auto renderPrintOutput = [&](std::vector<std::uint8_t>& pixels) {
+            QTemporaryFile output;
+            if (!output.open() || !document->savePdfFd(::dup(output.handle()), { 0 }, &error) || !output.seek(0))
+                return false;
+            PdfDocument printed;
+            if (!printed.openFd(::dup(output.handle()), "print.pdf", &error))
+                return false;
+            pixels.resize(height * stride);
+            return printed.renderToBuffer({ 0, width, height, std::nullopt }, pixels.data(), stride, &error);
+        };
+        std::vector<std::uint8_t> originalPrint;
+        QVERIFY2(renderPrintOutput(originalPrint), error.c_str());
         const int count = document->pageCount();
         for (const auto theme : { Mu::Model::ReadingTheme::Dusk, Mu::Model::ReadingTheme::Dark }) {
             auto settings = document->settings();
@@ -134,6 +228,9 @@ private slots:
             QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride, &error),
                      error.c_str());
             QVERIFY(themed != original);
+            std::vector<std::uint8_t> themedPrint;
+            QVERIFY2(renderPrintOutput(themedPrint), error.c_str());
+            QCOMPARE(themedPrint, originalPrint);
             constexpr int paddedStride = stride + 8;
             std::vector<std::uint8_t> padded(height * paddedStride, 0xAB);
             QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, padded.data(), paddedStride, &error),

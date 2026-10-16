@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <KActionCollection>
+#include <KConfigDialog>
 #include <KConfigGroup>
+#include <KConfigSkeleton>
 #include <KSharedConfig>
 #include <KXMLGUIBuilder>
 #include <KXMLGUIClient>
 #include <KXMLGUIFactory>
 #include <QAction>
+#include <QComboBox>
 #include <QDateTime>
+#include <QDialogButtonBox>
 #include <QFile>
 #include <QImage>
 #include <QMainWindow>
@@ -16,6 +20,7 @@
 #include <QMimeDatabase>
 #include <QPainter>
 #include <QPdfWriter>
+#include <QPushButton>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -169,6 +174,30 @@ private slots:
             QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), expected.at(i));
             QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + expected.at(i).toLower())->isChecked());
             QVERIFY(document.isHistoryClean());
+        }
+        const QStringList themes { QStringLiteral("Default"), QStringLiteral("Dusk"), QStringLiteral("Dark") };
+        int previousMode = 0;
+        for (const int mode : { 1, 2, 0 }) {
+            KConfigSkeleton hostSettings;
+            KConfigDialog dialog(nullptr, QStringLiteral("document-theme-test"), &hostSettings);
+            document.fillConfigDialog(&dialog);
+            auto* theme = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_ReadingTheme"));
+            QVERIFY(theme);
+            QCOMPARE(theme->count(), 3);
+            auto* buttons = dialog.findChild<QDialogButtonBox*>();
+            QVERIFY(buttons);
+            auto* ok = buttons->button(QDialogButtonBox::Ok);
+            QVERIFY(ok);
+            dialog.show();
+            QCOMPARE(theme->currentIndex(), previousMode);
+            const int previousRefreshes = observer.refreshes;
+            theme->setCurrentIndex(mode);
+            ok->click();
+            QTRY_VERIFY(observer.refreshes > previousRefreshes);
+            QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + themes.at(mode).toLower())->isChecked());
+            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), themes.at(mode));
+            QVERIFY(document.isHistoryClean());
+            previousMode = mode;
         }
         document.closeDocument();
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme"))->isEnabled());

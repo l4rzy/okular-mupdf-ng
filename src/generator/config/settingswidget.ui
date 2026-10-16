@@ -58,7 +58,7 @@
        <item>
         <widget class="QGroupBox" name="renderingQualityBox">
          <property name="title">
-          <string>Rendering Quality</string>
+          <string>Rendering</string>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_rendering">
           <item>
@@ -166,6 +166,58 @@
             </item>
             <item>
              <widget class="QComboBox" name="kcfg_ImageRenderingQuality"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_theme">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="labelDocumentTheme">
+              <property name="text">
+               <string>Document Theme</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="line_theme">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                <horstretch>1</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">border: none; border-bottom: 1px solid palette(midlight);</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::Shape::HLine</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Shadow::Plain</enum>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="kcfg_ReadingTheme">
+              <item>
+               <property name="text">
+                <string>Default</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Dusk</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Dark</string>
+               </property>
+              </item>
+             </widget>
             </item>
            </layout>
           </item>

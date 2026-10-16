@@ -127,7 +127,9 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
 
         fz_close_device(m_context, device);
-        applyReadingTheme(m_context, pixmap, m_settings.readingTheme, request.cookie);
+        if (m_settings.readingTheme != ReadingTheme::Dark
+            || !isMostlyDarkPage(m_context, nativePage, bounds, request.cookie))
+            applyReadingTheme(m_context, pixmap, m_settings.readingTheme, request.cookie);
 
         // Blit sub-tile region into the destination frame buffer with specified row stride
         if (tiled || dstStride != minRowBytes) {

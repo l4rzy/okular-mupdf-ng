@@ -129,7 +129,9 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (request.cookie && request.cookie->abort)
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
-        applyReadingTheme(m_context, pix, m_settings.readingTheme, request.cookie);
+        if (m_settings.readingTheme != ReadingTheme::Dark
+            || !isMostlyDarkPage(m_context, page, bounds, request.cookie, list))
+            applyReadingTheme(m_context, pix, m_settings.readingTheme, request.cookie);
         fz_drop_device(m_context, dev);
         dev = nullptr;
 
