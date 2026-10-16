@@ -69,9 +69,9 @@ and the source-tree layout.
 - The NSS cryptographic code has not been fully audited.
 - Sandbox is Linux only and its availability depends on Linux kernel and system support. Default to Strict Enforcement.
 - Worker restart can not recover unsaved forms.
-- Dark temporarily uses Okular's accessibility **Change Paper Color**
-  mode to prevent white loading placeholders. Okular does not expose a
-  per-document placeholder-color API.
+- Dusk and Dark use Okular's per-page placeholder color API when available.
+  On older Okular versions, Dark temporarily uses accessibility **Change Paper Color**
+  to prevent white loading placeholders.
 
 See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and
 automated test coverage.

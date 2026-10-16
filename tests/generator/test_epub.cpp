@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plugin/caching/epub_cache.hpp"
+#include "support/synopsis.hpp"
 #include "support/text_inspection.hpp"
 
 #include <KConfigGroup>
@@ -224,7 +225,7 @@ private slots:
                      Okular::Document::OpenSuccess);
             QCOMPARE(document.pages(), 2U);
             QVERIFY(document.documentSynopsis());
-            QCOMPARE(document.documentSynopsis()->childNodes().size(), 2);
+            QCOMPARE(Mu::Test::synopsisCount(*document.documentSynopsis()), 2);
             for (int page = 0; page < 2; ++page) {
                 document.requestTextPage(static_cast<unsigned int>(page));
                 QTRY_VERIFY(document.page(page)->hasTextPage());
@@ -322,8 +323,8 @@ private slots:
             QCOMPARE(document.pages(), 2U);
             const auto* synopsis = document.documentSynopsis();
             QVERIFY(synopsis);
-            QCOMPARE(synopsis->childNodes().size(), 2);
-            QCOMPARE(synopsis->documentElement().tagName(),
+            QCOMPARE(Mu::Test::synopsisCount(*synopsis), 2);
+            QCOMPARE(Mu::Test::firstSynopsisTitle(*synopsis),
                      warm ? QStringLiteral("Cached diagram chapter") : QStringLiteral("Diagram chapter"));
             for (int page = 0; page < 2; ++page) {
                 checkPage(document, observer, page);
@@ -368,8 +369,8 @@ private slots:
                      Okular::Document::OpenSuccess);
             QCOMPARE(document.pages(), 2U);
             QVERIFY(document.documentSynopsis());
-            QCOMPARE(document.documentSynopsis()->childNodes().size(), 2);
-            QCOMPARE(document.documentSynopsis()->documentElement().tagName(), QStringLiteral("Diagram chapter"));
+            QCOMPARE(Mu::Test::synopsisCount(*document.documentSynopsis()), 2);
+            QCOMPARE(Mu::Test::firstSynopsisTitle(*document.documentSynopsis()), QStringLiteral("Diagram chapter"));
             for (int page = 0; page < 2; ++page) {
                 checkPage(document, observer, page);
                 QVERIFY(!QTest::currentTestFailed());

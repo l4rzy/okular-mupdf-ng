@@ -325,7 +325,11 @@ void Main::scheduleCacheVacuum()
 // Keep Okular's original paper color separate from the loading-placeholder override.
 void Main::refreshPaperColor()
 {
+#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    const QColor color = documentMetaData(Okular::Generator::PaperColorMetaData, true).value<QColor>();
+#else
     const QColor color = PageColorOverride::originalPaperColor();
+#endif
     m_paperColorRgb = color.isValid() ? static_cast<std::uint32_t>(qRgb(color.red(), color.green(), color.blue()))
                                       : DefaultPaperColorRgb;
 }
@@ -338,8 +342,8 @@ bool Main::reparseConfig()
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
-    m_pageColorOverride.setTheme(m_okularPages.isEmpty() || m_placeholder.isActive() ? Model::ReadingTheme::Default
-                                                                                     : settings.rendering.readingTheme);
+    updatePagePlaceholderColor(m_placeholder.isActive() ? Model::ReadingTheme::Default
+                                                        : settings.rendering.readingTheme);
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
@@ -492,6 +496,19 @@ void Main::setupActions()
     });
     setupThemeActions();
     setXMLFile(QStringLiteral("mupdfngui.rc"));
+}
+
+void Main::updatePagePlaceholderColor(Model::ReadingTheme theme)
+{
+#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    const QColor color = theme == Model::ReadingTheme::Dark ? QColor(32, 33, 36)
+        : theme == Model::ReadingTheme::Dusk                ? QColor(214, 214, 214)
+                                                            : QColor(Qt::white);
+    for (auto* page : m_okularPages)
+        page->setPlaceholderColor(color);
+#else
+    m_pageColorOverride.setTheme(m_okularPages.isEmpty() ? Model::ReadingTheme::Default : theme);
+#endif
 }
 
 void Main::setupThemeActions()
@@ -749,7 +766,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
-    m_pageColorOverride.setTheme(m_settings.rendering.readingTheme);
+    updatePagePlaceholderColor(m_settings.rendering.readingTheme);
     syncOcrActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
@@ -1009,7 +1026,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPlaceholderDerivedState()
 {
-    m_pageColorOverride.reset();
+    updatePagePlaceholderColor(Model::ReadingTheme::Default);
     syncOcrActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
@@ -1289,7 +1306,7 @@ void Main::failClosed(const QString& message)
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
-    m_pageColorOverride.reset();
+    updatePagePlaceholderColor(Model::ReadingTheme::Default);
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
     m_observingVisiblePages = false;
@@ -1957,7 +1974,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
 
 // Okular Generator Func: builds the extra print options widget. Scale mode
 // changes are persisted immediately so print() can read the current value.
-QWidget* Main::printConfigurationWidget() const
+PrintOptionsPage* Main::printConfigurationWidget() const
 {
     auto* page = new PrintOptionsPage(static_cast<PrintScaleMode>(Config::readPrintScaleMode()));
     connect(page, &PrintOptionsPage::scaleModeChanged, this, [](PrintScaleMode mode) {

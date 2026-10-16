@@ -1,0 +1,8 @@
+// SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#cmakedefine01 MU_OKULAR_STRUCTURED_SYNOPSIS
+#cmakedefine01 MU_OKULAR_PRINT_OPTIONS_INTERFACE
+#cmakedefine01 MU_OKULAR_PAGE_PLACEHOLDER_COLOR

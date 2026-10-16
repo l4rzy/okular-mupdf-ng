@@ -25,7 +25,10 @@
 
 #include "generator/config/settings.hpp"
 #include "generator/layers_model.hpp"
+#include "generator/okular_compat.hpp"
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page_color_override.hpp"
+#endif
 #include "generator/placeholder.hpp"
 #include "generator/printing.hpp"
 #include "generator/proxy/annotation.hpp"
@@ -126,7 +129,7 @@ protected:
     // Okular Generator Func: prints through a temporary worker output file.
     Okular::Document::PrintError print(QPrinter& printer) override;
     // Okular Generator Func: builds the extra print options widget.
-    QWidget* printConfigurationWidget() const override;
+    PrintOptionsPage* printConfigurationWidget() const override;
 
     // Okular Generator Func: reloads settings and reports rendering changes.
     bool reparseConfig() override;
@@ -142,6 +145,7 @@ private:
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     void setupActions();
     void setupThemeActions();
+    void updatePagePlaceholderColor(Model::ReadingTheme theme);
     void syncThemeActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
@@ -283,7 +287,9 @@ private:
     // Opaque page background requested by Okular (paper-color setting).
     static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
     std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     PageColorOverride m_pageColorOverride;
+#endif
 
     // Restart decision state: whether pending settings need an Okular restart.
     struct RestartState {

@@ -160,6 +160,31 @@ target_link_libraries(mupdf_plugin_ocr PUBLIC Qt6::Concurrent mupdf_plugin_cache
 
 add_subdirectory(generator/config)
 
+# Probe APIs independently: development builds can share a version number.
+find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
+find_path(OKULAR_INCLUDE_DIR interfaces/printinterface.h PATH_SUFFIXES okular REQUIRED)
+include(CheckCXXSourceCompiles)
+include(CMakePushCheckState)
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_LIBRARIES Okular::Core Qt6::Xml)
+set(CMAKE_REQUIRED_INCLUDES ${OKULAR_INCLUDE_DIR} ${OKULAR_CORE_INCLUDE_DIR})
+check_cxx_source_compiles("#include <okular/core/document.h>
+int main() { return sizeof(Okular::DocumentSynopsis::ElementBuilder) == 0; }"
+    MU_OKULAR_STRUCTURED_SYNOPSIS)
+check_cxx_source_compiles("#include <okular/interfaces/printinterface.h>
+int main() { return sizeof(Okular::PrintOptionsWidgetInterface) == 0; }"
+    MU_OKULAR_PRINT_OPTIONS_INTERFACE)
+check_cxx_source_compiles("#include <okular/core/page.h>
+#include <QColor>
+int main() {
+    Okular::Page page(0, 10, 10, Okular::Rotation0);
+    page.setPlaceholderColor(QColor(Qt::black));
+    return page.placeholderColor().isValid() ? 0 : 1;
+}"
+    MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
+cmake_pop_check_state()
+configure_file(generator/okular_compat.hpp.in ${MU_GENERATED_INCLUDE_DIR}/generator/okular_compat.hpp)
+
 add_library(mupdf_generator_placeholder STATIC generator/placeholder.cpp)
 target_include_directories(mupdf_generator_placeholder PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(mupdf_generator_placeholder PUBLIC Okular::Core Qt6::Core)
@@ -185,6 +210,8 @@ add_library(mupdf_generator_adapters STATIC
 target_include_directories(mupdf_generator_adapters PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${MU_GENERATED_INCLUDE_DIR}
+    ${OKULAR_INCLUDE_DIR}
+    ${OKULAR_CORE_INCLUDE_DIR}
 )
 target_link_libraries(mupdf_generator_adapters PUBLIC
     Okular::Core
@@ -239,13 +266,15 @@ endif()
 
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
-  generator/page_color_override.cpp
   generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp
   generator/config/csseditor/highlighter.cpp
   generator/config/certmanager/manager_dialog.cpp
   generator/config/certmanager/self_signed_dialog.cpp
 )
+if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
+    list(APPEND okularGenerator_mupdfng_SRCS generator/page_color_override.cpp)
+endif()
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
    generator/config/settingswidget.ui
@@ -292,8 +321,6 @@ if(MU_DEBUG_BUILD)
     target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_DEBUG_ENABLED)
 endif()
 
-# SettingsCore uses an unqualified include for its generated export header.
-find_path(OKULAR_CORE_INCLUDE_DIR okularcore_export.h PATH_SUFFIXES okular/core REQUIRED)
 target_include_directories(okularGenerator_mupdfng PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${MU_GENERATED_INCLUDE_DIR}

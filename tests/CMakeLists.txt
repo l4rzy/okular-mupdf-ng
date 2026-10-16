@@ -266,7 +266,7 @@ target_compile_definitions(test_generator_forms PRIVATE
 add_dependencies(test_generator_forms okularGenerator_mupdfng mupdfng-worker)
 
 add_layer_test(test_generator_epub generator/test_epub.cpp "generator;integration")
-target_include_directories(test_generator_epub PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_include_directories(test_generator_epub PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR} ${MU_GENERATED_INCLUDE_DIR})
 target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore mupdf_plugin_cache MuPDF::Engine)
 target_compile_definitions(test_generator_epub PRIVATE
     TEST_BUNDLED_MUPDF=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
@@ -278,7 +278,7 @@ add_dependencies(test_generator_epub okularGenerator_mupdfng mupdfng-worker)
 set_tests_properties(test_generator_epub PROPERTIES TIMEOUT 150)
 
 add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
-target_include_directories(test_generator_ocr PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_include_directories(test_generator_ocr PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR} ${MU_GENERATED_INCLUDE_DIR})
 target_link_libraries(test_generator_ocr PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore KF6::XmlGui mupdf_generator_settings)
 target_compile_definitions(test_generator_ocr PRIVATE
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
@@ -312,10 +312,12 @@ add_layer_test(test_generator_config generator/test_config.cpp generator
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(test_generator_config PRIVATE Qt6::Gui Qt6::Concurrent KF6::I18n mupdf_generator_settings mupdf_plugin_crypto)
 
-add_layer_test(test_generator_pagecolor generator/test_page_color_override.cpp generator
-    ../src/generator/page_color_override.cpp)
-target_include_directories(test_generator_pagecolor PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
-target_link_libraries(test_generator_pagecolor PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
+if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
+    add_layer_test(test_generator_pagecolor generator/test_page_color_override.cpp generator
+        ../src/generator/page_color_override.cpp)
+    target_include_directories(test_generator_pagecolor PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+    target_link_libraries(test_generator_pagecolor PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
+endif()
 
 add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
 target_include_directories(test_generator_signaturepreview PRIVATE ../src)

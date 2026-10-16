@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/layers_model.hpp"
+#include "support/synopsis.hpp"
 
 #include <KConfigGroup>
 #include <KSharedConfig>
@@ -84,7 +85,7 @@ private slots:
                  QStringLiteral("application/x-mobipocket-ebook"));
         const auto* synopsis = document.documentSynopsis();
         QVERIFY(synopsis);
-        QCOMPARE(synopsis->documentElement().tagName(), QStringLiteral("Legacy MOBI"));
+        QCOMPARE(Mu::Test::firstSynopsisTitle(*synopsis), QStringLiteral("Legacy MOBI"));
         QVERIFY(!document.layersModel());
         QVERIFY(!document.embeddedFiles());
         QSignalSpy finished(&document, &Okular::Document::searchFinished);
@@ -110,12 +111,24 @@ private slots:
                  Okular::Document::OpenSuccess);
         const auto* synopsis = document.documentSynopsis();
         QVERIFY(synopsis);
+#if MU_OKULAR_STRUCTURED_SYNOPSIS
+        const auto entries = synopsis->children();
+        QCOMPARE(entries.size(), 2);
+        const auto first = entries.front();
+        QCOMPARE(first.title(), QStringLiteral("First café"));
+        QCOMPARE(first.children().size(), 1);
+        QCOMPARE(first.children().front().title(), QStringLiteral("Detail"));
+        QCOMPARE(entries.at(1).title(), QStringLiteral("Second"));
+        QVERIFY(first.viewPort().has_value());
+        QVERIFY(first.children().front().viewPort().has_value());
+#else
         const auto first = synopsis->documentElement();
         QCOMPARE(first.tagName(), QStringLiteral("First café"));
         QCOMPARE(first.firstChildElement().tagName(), QStringLiteral("Detail"));
         QCOMPARE(first.nextSiblingElement().tagName(), QStringLiteral("Second"));
         QVERIFY(!first.attribute(QStringLiteral("Viewport")).isEmpty());
         QVERIFY(!first.firstChildElement().attribute(QStringLiteral("Viewport")).isEmpty());
+#endif
     }
 
     void clearsLayerSearchHighlights_data()

@@ -34,6 +34,7 @@
 #include <algorithm>
 
 #include "generator/config/settings.hpp"
+#include "generator/okular_compat.hpp"
 
 class TestGuiClient : public KXMLGUIClient {
 public:
@@ -163,6 +164,18 @@ private slots:
             QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), action->text());
             QCOMPARE(document.pages(), pageCount);
             QVERIFY(document.isHistoryClean());
+#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+            const QColor expectedColor = action->text() == QStringLiteral("Dark") ? QColor(32, 33, 36)
+                : action->text() == QStringLiteral("Dusk")                        ? QColor(214, 214, 214)
+                                                                                  : QColor(Qt::white);
+            for (int page = 0; page < static_cast<int>(document.pages()); ++page) {
+                QCOMPARE(document.page(page)->placeholderColor(), expectedColor);
+                QCOMPARE(other.page(page)->placeholderColor(), expectedColor);
+            }
+            QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
+            QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
+            QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
+#else
             if (action->text() != QStringLiteral("Dark")) {
                 QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
                 QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
@@ -172,6 +185,7 @@ private slots:
                 QCOMPARE(Okular::SettingsCore::renderMode(), int(Okular::SettingsCore::EnumRenderMode::Paper));
                 QCOMPARE(Okular::SettingsCore::paperColor(), QColor(32, 33, 36));
             }
+#endif
         }
         const QStringList toggles { "dusk", "dusk", "dark", "dusk", "dark", "dark" };
         const QStringList expected { "Dusk", "Default", "Dark", "Dusk", "Dark", "Default" };
@@ -215,7 +229,12 @@ private slots:
         actions->action(QStringLiteral("mupdf_theme_dark"))->trigger();
         QTRY_VERIFY(observer.refreshes > previousRefreshes);
         document.closeDocument();
+#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+        QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
+        QCOMPARE(other.page(0)->placeholderColor(), QColor(32, 33, 36));
+#else
         QCOMPARE(Okular::SettingsCore::paperColor(), QColor(32, 33, 36));
+#endif
         other.closeDocument();
         QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
         QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);

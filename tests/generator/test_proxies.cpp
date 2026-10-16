@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QDateTime>
+#include <QDomDocument>
 #include <QImage>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -263,6 +264,21 @@ private slots:
         const auto synopsis = ::Mu::Generator::Conversion::documentSynopsis(nodes);
         QVERIFY(synopsis != nullptr);
 
+#if MU_OKULAR_STRUCTURED_SYNOPSIS
+        QCOMPARE(synopsis->children().size(), 1);
+        const auto rootElement = synopsis->children().front();
+        QCOMPARE(rootElement.title(), QStringLiteral("Chapter 1"));
+        QVERIFY(rootElement.isOpen());
+        QVERIFY(rootElement.viewPort().has_value());
+        QCOMPARE(rootElement.viewPort()->toString(), QStringLiteral("0;C2:0:0:2"));
+        QVERIFY(!rootElement.viewPortName().has_value());
+        QCOMPARE(rootElement.children().size(), 1);
+        const auto childElement = rootElement.children().front();
+        QCOMPARE(childElement.title(), QStringLiteral("Item"));
+        QVERIFY(!childElement.isOpen());
+        QCOMPARE(childElement.url(), QStringLiteral("https://example.com/sec1"));
+        QVERIFY(!childElement.viewPort().has_value());
+#else
         const QDomElement rootElement = synopsis->documentElement();
         QCOMPARE(rootElement.tagName(), QStringLiteral("Chapter 1"));
         QCOMPARE(rootElement.attribute(QStringLiteral("Open")), QStringLiteral("true"));
@@ -276,6 +292,7 @@ private slots:
         QVERIFY(!childElement.hasAttribute(QStringLiteral("Open")));
         QCOMPARE(childElement.attribute(QStringLiteral("URL")), QStringLiteral("https://example.com/sec1"));
         QVERIFY(!childElement.hasAttribute(QStringLiteral("DestinationURI")));
+#endif
     }
 
     void textPageConversionConstructsNormalizedBoxes()
@@ -1320,6 +1337,11 @@ private slots:
 
         // The initial mode is applied; ignorePrintMargins tracks FitToPage.
         PrintOptionsPage page(PrintScaleMode::FitToPrintableArea);
+#if MU_OKULAR_PRINT_OPTIONS_INTERFACE
+        Okular::PrintOptionsWidgetInterface* interface = &page;
+        QCOMPARE(interface->widget(), static_cast<QWidget*>(&page));
+        QCOMPARE(interface->ignorePrintMargins(), false);
+#endif
         QCOMPARE(page.scaleMode(), PrintScaleMode::FitToPrintableArea);
         QVERIFY(!page.ignorePrintMargins());
 

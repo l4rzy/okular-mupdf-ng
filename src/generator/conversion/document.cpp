@@ -3,6 +3,7 @@
 
 #include "generator/conversion/document.hpp"
 
+#include "generator/okular_compat.hpp"
 #include "generator/proxy/embedded_file.hpp"
 
 #include <QByteArray>
@@ -123,6 +124,28 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
         return nullptr;
 
     auto result = std::make_unique<Okular::DocumentSynopsis>();
+#if MU_OKULAR_STRUCTURED_SYNOPSIS
+    using Element = Okular::DocumentSynopsis::Element;
+    using Builder = Okular::DocumentSynopsis::ElementBuilder;
+    const auto convert = [&](auto&& self, const Model::OutlineNode& node) -> Element {
+        Builder builder(node.title.empty() ? QStringLiteral("Item") : QString::fromStdString(node.title));
+        builder.setOpen(node.open);
+        if (node.link.valid) {
+            if (node.link.external) {
+                const QString uri = QString::fromStdString(node.link.uri);
+                if (isAllowedExternalUri(uri))
+                    builder.setUrl(uri);
+            } else {
+                builder.setViewPort(viewportFromModel(node.link.viewport));
+            }
+        }
+        for (const auto& child : node.children)
+            builder.addChild(self(self, child));
+        return Element(builder);
+    };
+    for (const auto& node : nodes)
+        result->addChild(convert(convert, node));
+#else
     std::function<void(const std::vector<Model::OutlineNode>&, QDomNode&)> addNodes;
     addNodes = [&](const std::vector<Model::OutlineNode>& children, QDomNode& parent) {
         for (const auto& node : children) {
@@ -147,6 +170,7 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
     };
 
     addNodes(nodes, *result);
+#endif
     return result;
 }
 

@@ -9,9 +9,8 @@ class QColor;
 
 namespace Mu::Generator {
 
-// Temporary bridge until Okular exposes a per-document loading background.
+// Legacy fallback for SDKs without Page::setPlaceholderColor().
 // Instances share ownership of Okular's process-wide accessibility settings.
-// TODO: remove this when Okular has an API for setting placeholder's color
 class PageColorOverride {
 public:
     PageColorOverride() = default;
