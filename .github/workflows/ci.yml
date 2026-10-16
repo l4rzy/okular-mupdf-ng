@@ -45,10 +45,10 @@ jobs:
     if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/sanitize.yml
 
-  package-arch:
+  package-pacman:
     needs: check-build
     if: needs.check-build.outputs.build == 'true'
-    uses: ./.github/workflows/build-arch.yml
+    uses: ./.github/workflows/build-pacman.yml
 
   package-deb-ubuntu:
     needs: check-build
@@ -78,7 +78,7 @@ jobs:
   release:
     name: Publish Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [sanitizer, package-arch, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
+    needs: [sanitizer, package-pacman, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
     runs-on: ubuntu-26.04
     permissions:
       contents: write

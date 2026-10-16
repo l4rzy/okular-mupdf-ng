@@ -1,24 +1,38 @@
-name: Build Arch Linux Package (GCC)
+name: Build Pacman Packages (GCC)
 
 on:
   workflow_call:
 
 jobs:
-  package-arch:
-    name: Build Arch Linux Package (GCC)
+  package-pacman:
+    name: Build ${{ matrix.name }} Package (GCC)
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: archlinux
+            name: Arch Linux
+            image: archlinux:latest
+          - distro: manjaro
+            name: Manjaro Linux
+            image: manjarolinux/base:latest
     container:
-      image: archlinux:latest
+      image: ${{ matrix.image }}
       options: --privileged
 
     env:
       CC: gcc
       CXX: g++
+      DISTRO: ${{ matrix.distro }}
 
     steps:
       - name: Update System & Install Dependencies
         run: |
           pacman -Sy --noconfirm archlinux-keyring
+          if [ "$DISTRO" = manjaro ]; then
+            pacman -S --noconfirm manjaro-keyring
+          fi
           pacman -Syu --noconfirm --needed \
             base-devel \
             git \
@@ -47,9 +61,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build Arch Linux Package
+      - name: Build Package
         run: |
-          useradd -m builder
+          if ! id -u builder > /dev/null 2>&1; then
+            useradd -m builder
+          fi
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
           # Disable GCC LTO for both makepkg build variants: it breaks MuPDF exception cleanup.
@@ -57,10 +73,17 @@ jobs:
           cd dist
           sudo -u builder CC=gcc CXX=g++ makepkg -sf --noconfirm
 
+      - name: Label package for distribution
+        run: |
+          for package in dist/okular-mupdf-ng-[0-9]*.pkg.tar.zst; do
+            test -f "$package"
+            mv "$package" "${package%.pkg.tar.zst}.${DISTRO}.pkg.tar.zst"
+          done
+
       # Build and test both variants; publish only the patched bundled-MuPDF package.
-      - name: Upload bundled-MuPDF Arch Linux package
+      - name: Upload bundled-MuPDF package
         uses: actions/upload-artifact@v7
         with:
-          name: arch-package
-          path: dist/okular-mupdf-ng-[0-9]*.pkg.tar.zst
+          name: ${{ matrix.distro }}-package
+          path: dist/okular-mupdf-ng-[0-9]*.${{ matrix.distro }}.pkg.tar.zst
           if-no-files-found: error
