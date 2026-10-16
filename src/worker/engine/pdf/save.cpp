@@ -47,6 +47,31 @@ bool copyFileContents(FILE* src, FILE* dst)
     return ::fflush(dst) == 0;
 }
 
+// Snapshot writes keep startxref tied to the original input, so every save can
+// include all edits even if publishing an earlier output failed. MuPDF 1.28.5
+// nevertheless clears the pending-section count; preserve it for snapshots.
+void writePdfSnapshot(fz_context* context, pdf_document* document, fz_output* output)
+{
+    const int pendingSections = document->num_incremental_sections;
+    const int xrefBase = document->xref_base;
+    const int disallowNewIncrements = document->disallow_new_increments;
+    fz_try(context)
+    {
+        pdf_write_snapshot(context, document, output);
+    }
+    fz_always(context)
+    {
+        document->num_incremental_sections = pendingSections;
+        // A write exception can bypass the incremental writer's normal reset.
+        document->xref_base = xrefBase;
+        document->disallow_new_increments = disallowNewIncrements;
+    }
+    fz_catch(context)
+    {
+        fz_rethrow(context);
+    }
+}
+
 /// Helper to safely close and release Fitz output stream without leaking file descriptors.
 void closeAndDropOutput(fz_context* context, fz_output* volatile& output, FILE* volatile& file) noexcept
 {
@@ -235,23 +260,24 @@ bool PdfDocument::saveFd(int fd, std::string* error)
 
     fz_try(m_context)
     {
-        pdf_write_options options = pdf_default_write_options;
-
-        // If possible, attempt incremental save to preserve digital signatures and structure
-        if (m_input && pdf_can_be_saved_incrementally(m_context, pdf)) {
-            if (copyFileContents(m_input, file)) {
-                options.do_incremental = 1;
-            } else {
-                // Fail closed: the staged prefix may be partial, so a full
-                // rewrite over it could publish a corrupt file. The plugin
-                // discards its temp file and the destination stays untouched.
-                fz_throw(m_context, FZ_ERROR_GENERIC, "could not stage source for incremental save");
-            }
+        // Preserve the original bytes and signatures when incremental saving is supported.
+        const bool incremental = m_input && pdf_can_be_saved_incrementally(m_context, pdf);
+        if (incremental && !copyFileContents(m_input, file)) {
+            // Fail closed: the staged prefix may be partial, so a full
+            // rewrite over it could publish a corrupt file. The plugin
+            // discards its temp file and the destination stays untouched.
+            fz_throw(m_context, FZ_ERROR_GENERIC, "could not stage source for incremental save");
         }
 
         output = takeOutputFile(m_context, file);
         pdf_update_open_pages(m_context, pdf);
-        pdf_write_document(m_context, pdf, output, &options);
+        if (incremental) {
+            if (pdf_has_unsaved_sigs(m_context, pdf))
+                fz_throw(m_context, FZ_ERROR_ARGUMENT, "pending signatures require signing output");
+            writePdfSnapshot(m_context, pdf, output);
+        } else {
+            pdf_write_document(m_context, pdf, output, &pdf_default_write_options);
+        }
 
         fz_flush_output(m_context, output);
         if (::fflush(outputFile) != 0 || ::fsync(::fileno(outputFile)) != 0)

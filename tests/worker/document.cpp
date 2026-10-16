@@ -1761,6 +1761,79 @@ private slots:
         }
     }
 
+    void repeatedSavesPreserveEdits_data()
+    {
+        QTest::addColumn<bool>("failFlush");
+        QTest::newRow("repeated-save") << false;
+        QTest::newRow("failed-save-retry") << true;
+    }
+
+    void repeatedSavesPreserveEdits()
+    {
+        QFETCH(bool, failFlush);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto source = directory.filePath("source.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        createEditableTextFieldPDF(document.context(), source);
+        QFile input(source);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        const auto original = input.readAll();
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "source.pdf", &error), error.c_str());
+        input.close();
+        const auto fields = document.pageDetails(0, &error).formFields;
+        QCOMPARE(fields.size(), size_t(1));
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        QVERIFY2(
+            document.updateFormField(
+                0, fields.front().pdfObjectNumber, ::Mu::Model::FormTextValue { "First edit" }, &mutations, &error),
+            error.c_str());
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = ::Mu::Model::AnnotationType::Text;
+        annotation.uuid = "repeated-save";
+        annotation.x0 = .1;
+        annotation.y0 = .1;
+        annotation.x1 = .2;
+        annotation.y1 = .2;
+        std::int32_t object = 0;
+        QVERIFY2(document.addAnnotation(0, annotation, &object, &error), error.c_str());
+        if (failFlush) {
+            // Serialization succeeds, but /dev/null cannot be fsynced.
+            const int fd = ::open("/dev/null", O_RDWR);
+            QVERIFY(fd >= 0);
+            QVERIFY(!document.saveFd(fd, &error));
+            QCOMPARE(error, std::string("failed to flush save output"));
+            QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+            error.clear();
+        }
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            const std::string expected = attempt == 2 ? "Later edit" : "First edit";
+            if (attempt == 2)
+                QVERIFY2(
+                    document.updateFormField(
+                        0, fields.front().pdfObjectNumber, ::Mu::Model::FormTextValue { expected }, &mutations, &error),
+                    error.c_str());
+            const auto target = directory.filePath(QStringLiteral("save-%1.pdf").arg(attempt));
+            const int fd = ::open(QFile::encodeName(target).constData(), O_CREAT | O_TRUNC | O_RDWR, 0600);
+            QVERIFY(fd >= 0);
+            QVERIFY2(document.saveFd(fd, &error), error.c_str());
+            QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+            QFile output(target);
+            QVERIFY(output.open(QIODevice::ReadOnly));
+            QVERIFY(output.readAll().startsWith(original));
+            QVERIFY(output.seek(0));
+            ::Mu::Worker::Engine::PdfDocument reloaded;
+            QVERIFY2(reloaded.openFd(::dup(output.handle()), "saved.pdf", &error), error.c_str());
+            const auto savedAnnotations = reloaded.extractAnnotations(0, &error);
+            QCOMPARE(savedAnnotations.size(), size_t(1));
+            QCOMPARE(savedAnnotations.front().uuid, annotation.uuid);
+            const auto savedFields = reloaded.pageDetails(0, &error).formFields;
+            QCOMPARE(savedFields.size(), size_t(1));
+            QCOMPARE(savedFields.front().text, expected);
+        }
+    }
+
     void highlightAddRendersAndRoundTrips()
     {
         QTemporaryDir directory;

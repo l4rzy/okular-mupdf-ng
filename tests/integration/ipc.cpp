@@ -293,6 +293,38 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void savePublicationFailurePreservesEdits()
+    {
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), ::Mu::Model::OpenStatus::Success);
+        ::Mu::Model::Annotation annotation;
+        annotation.subtype = ::Mu::Model::AnnotationType::Text;
+        annotation.uuid = "publication-retry";
+        annotation.x0 = .1;
+        annotation.y0 = .1;
+        annotation.x1 = .2;
+        annotation.y1 = .2;
+        QVERIFY(m_client.addAnnotation(0, annotation));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto failedTarget = directory.filePath("existing-directory");
+        QVERIFY(QDir().mkdir(failedTarget));
+        // Staging and worker serialization succeed; renaming onto a directory fails.
+        QVERIFY(!m_client.saveToFile(failedTarget));
+        QVERIFY(QFileInfo(failedTarget).isDir());
+        const auto target = directory.filePath("retry.pdf");
+        QVERIFY(m_client.saveToFile(target));
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reloaded;
+        std::string error;
+        QVERIFY2(reloaded.openFd(::dup(output.handle()), "retry.pdf", &error), error.c_str());
+        const auto annotations = reloaded.extractAnnotations(0, &error);
+        QVERIFY(std::any_of(
+            annotations.begin(), annotations.end(), [&](const auto& saved) { return saved.uuid == annotation.uuid; }));
+        QVERIFY(m_client.close());
+    }
+
     void renderFittedFrameStaysWithinBudget()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
