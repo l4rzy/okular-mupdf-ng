@@ -65,20 +65,15 @@ jobs:
     if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-rpm-tumbleweed.yml
 
-  package-rpm-fedora-arm:
-    needs: check-build
-    if: needs.check-build.outputs.build == 'true'
-    uses: ./.github/workflows/build-rpm-fedora-arm.yml
-
   package-rpm-fedora:
     needs: check-build
     if: needs.check-build.outputs.build == 'true'
-    uses: ./.github/workflows/build-rpm-fedora-44.yml
+    uses: ./.github/workflows/build-rpm-fedora.yml
 
   release:
     name: Publish Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [sanitizer, package-pacman, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora-arm, package-rpm-fedora]
+    needs: [sanitizer, package-pacman, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora]
     runs-on: ubuntu-26.04
     permissions:
       contents: write

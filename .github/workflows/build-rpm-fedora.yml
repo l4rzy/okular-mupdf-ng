@@ -1,24 +1,39 @@
-name: Build Fedora 44 x86_64 RPM (Clang)
+name: Build Fedora RPM Packages (Clang)
 
 on:
   workflow_call:
 
 jobs:
-  package-rpm-fedora-x64:
-    name: Build Fedora 44 x86_64 RPM (Clang)
-    runs-on: ubuntu-26.04
+  package-rpm-fedora:
+    name: Build Fedora ${{ matrix.version }} ${{ matrix.arch }} RPM (Clang)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: '44'
+            arch: x86_64
+            runner: ubuntu-26.04
+            elf-arch: x86-64
+          - version: '43'
+            arch: aarch64
+            runner: ubuntu-26.04-arm
+            elf-arch: ARM aarch64
     container:
-      image: fedora:44
+      image: fedora:${{ matrix.version }}
 
     env:
       CC: clang
       CXX: clang++
+      FEDORA_VERSION: ${{ matrix.version }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      ELF_ARCH: ${{ matrix.elf-arch }}
 
     steps:
       - name: Verify native architecture
         run: |
-          test "$(uname -m)" = x86_64
-          test "$(rpm --eval '%{_arch}')" = x86_64
+          test "$(uname -m)" = "$PACKAGE_ARCH"
+          test "$(rpm --eval '%{_arch}')" = "$PACKAGE_ARCH"
 
       - name: Install build dependencies
         run: |
@@ -101,11 +116,11 @@ jobs:
         run: |
           set -x
           expected_version=$(python3 -c 'import json; print(json.load(open("src/generator/manifest.json"))["KPlugin"]["Version"])')
-          package="build/packages/okular-mupdf-ng-${expected_version}-1.fc44.x86_64.rpm"
+          package="build/packages/okular-mupdf-ng-${expected_version}-1.fc${FEDORA_VERSION}.${PACKAGE_ARCH}.rpm"
           test -f "$package"
           test "$(rpm --queryformat '%{NAME}' -qp "$package")" = okular-mupdf-ng
-          test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1.fc44"
-          test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = x86_64
+          test "$(rpm --queryformat '%{VERSION}-%{RELEASE}' -qp "$package")" = "${expected_version}-1.fc${FEDORA_VERSION}"
+          test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = "$PACKAGE_ARCH"
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
@@ -121,14 +136,14 @@ jobs:
           worker=$(find "$validation_root" -type f -name mupdfng-worker -print -quit)
           test -n "$plugin"
           test -n "$worker"
-          file "$plugin" | grep -q 'x86-64'
-          file "$worker" | grep -q 'x86-64'
+          file "$plugin" | grep -q "$ELF_ARCH"
+          file "$worker" | grep -q "$ELF_ARCH"
           rpm --checksig "$package"
           rpm --info -qp "$package"
 
-      - name: Upload Fedora 44 x86_64 RPM package
+      - name: Upload Fedora RPM package
         uses: actions/upload-artifact@v7
         with:
-          name: fedora-44-x86_64-rpm-package
+          name: fedora-${{ matrix.version }}-${{ matrix.arch }}-rpm-package
           path: build/packages/*.rpm
           if-no-files-found: error
