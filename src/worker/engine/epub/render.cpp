@@ -9,7 +9,8 @@
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
-#include "engine/reading_theme.hpp"
+#include "engine/theming/dusk_device.hpp"
+#include "engine/theming/palette.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
@@ -105,17 +106,27 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
             pix = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
         }
 
-        // Composite on white for themes; Default retains Okular’s paper color.
-        const auto paperColor = readingPaperColor(m_settings);
+        // Dusk composites on its dark background; bitmap themes start on white.
+        if (m_settings.readingTheme == ReadingTheme::Dusk && request.cookie)
+            list = fz_new_display_list_from_page(m_context, page);
+        const bool dusk = m_settings.readingTheme == ReadingTheme::Dusk
+            && !isMostlyDarkPage(m_context, page, bounds, request.cookie, list);
+        const auto paperColor = dusk ? 0x303134U : readingPaperColor(m_settings);
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
         dev = fz_new_draw_device(m_context, ctm, pix);
+        if (m_settings.readingTheme == ReadingTheme::Dusk) {
+            auto* themed = newDuskDevice(m_context, dev, ctm, bbox, request.cookie, dusk);
+            fz_drop_device(m_context, dev);
+            dev = themed;
+        }
         if (request.cookie) {
             // MuPDF's EPUB page runner ignores cookies. Replay its drawing
             // commands through the display-list API, which checks abort.
-            list = fz_new_display_list_from_page(m_context, page);
+            if (!list)
+                list = fz_new_display_list_from_page(m_context, page);
             if (request.cookie->abort)
                 fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
             // Replay uses page coordinates; include a pixel of antialiasing
@@ -129,9 +140,10 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (request.cookie && request.cookie->abort)
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
-        if (m_settings.readingTheme != ReadingTheme::Dark
-            || !isMostlyDarkPage(m_context, page, bounds, request.cookie, list))
-            applyReadingTheme(m_context, pix, m_settings.readingTheme, request.cookie);
+        if (m_settings.readingTheme != ReadingTheme::Dusk
+            && (m_settings.readingTheme != ReadingTheme::Dark
+                || !isMostlyDarkPage(m_context, page, bounds, request.cookie, list)))
+            applyDocumentTheme(m_context, pix, m_settings.readingTheme, request.cookie);
         fz_drop_device(m_context, dev);
         dev = nullptr;
 

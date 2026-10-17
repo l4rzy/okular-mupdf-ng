@@ -9,6 +9,7 @@
       <default>Default</default>
       <choices>
         <choice name="Default" />
+        <choice name="Twilight" />
         <choice name="Dusk" />
         <choice name="Dark" />
       </choices>

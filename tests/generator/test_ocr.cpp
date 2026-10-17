@@ -154,8 +154,14 @@ private slots:
         const auto cleanup = qScopeGuard([&] { other.removeObserver(&observer); });
         auto* actions = document.guiClient()->actionCollection();
         QVERIFY(actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
+        const auto menuItems = actions->action(QStringLiteral("mupdf_theme"))->menu()->actions();
+        const QStringList menuOrder { "Default", "Twilight", "Dusk", "Dark" };
+        QCOMPARE(menuItems.size(), menuOrder.size());
+        for (int i = 0; i < menuOrder.size(); ++i)
+            QCOMPARE(menuItems.at(i), actions->action(QStringLiteral("mupdf_theme_") + menuOrder.at(i).toLower()));
         const auto pageCount = document.pages();
-        for (const auto* name : { "mupdf_theme_dusk", "mupdf_theme_dark", "mupdf_theme_default" }) {
+        for (const auto* name :
+             { "mupdf_theme_dusk", "mupdf_theme_dark", "mupdf_theme_twilight", "mupdf_theme_default" }) {
             auto* action = actions->action(QString::fromLatin1(name));
             QVERIFY(action && action->isEnabled() && action->isCheckable());
             const int previousRefreshes = observer.refreshes;
@@ -167,7 +173,8 @@ private slots:
             QVERIFY(document.isHistoryClean());
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
             const QColor expectedColor = action->text() == QStringLiteral("Dark") ? QColor(32, 33, 36)
-                : action->text() == QStringLiteral("Dusk")                        ? QColor(214, 214, 214)
+                : action->text() == QStringLiteral("Dusk")                        ? QColor(48, 49, 52)
+                : action->text() == QStringLiteral("Twilight")                    ? QColor(214, 214, 214)
                                                                                   : QColor(Qt::white);
             for (int page = 0; page < static_cast<int>(document.pages()); ++page) {
                 QCOMPARE(document.page(page)->placeholderColor(), expectedColor);
@@ -177,19 +184,20 @@ private slots:
             QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
             QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
 #else
-            if (action->text() != QStringLiteral("Dark")) {
+            if (action->text() != QStringLiteral("Dark") && action->text() != QStringLiteral("Dusk")) {
                 QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
                 QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
                 QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
             } else {
                 QVERIFY(Okular::SettingsCore::changeColors());
                 QCOMPARE(Okular::SettingsCore::renderMode(), int(Okular::SettingsCore::EnumRenderMode::Paper));
-                QCOMPARE(Okular::SettingsCore::paperColor(), QColor(32, 33, 36));
+                QCOMPARE(Okular::SettingsCore::paperColor(),
+                         action->text() == QStringLiteral("Dusk") ? QColor(48, 49, 52) : QColor(32, 33, 36));
             }
 #endif
         }
-        const QStringList toggles { "dusk", "dusk", "dark", "dusk", "dark", "dark" };
-        const QStringList expected { "Dusk", "Default", "Dark", "Dusk", "Dark", "Default" };
+        const QStringList toggles { "dusk", "dusk", "dark", "dusk", "dark", "dark", "twilight", "twilight" };
+        const QStringList expected { "Dusk", "Default", "Dark", "Dusk", "Dark", "Default", "Twilight", "Default" };
         for (int i = 0; i < toggles.size(); ++i) {
             auto* toggle = actions->action(QStringLiteral("mupdf_theme_toggle_") + toggles.at(i));
             QVERIFY(toggle && toggle->isEnabled());
@@ -202,13 +210,15 @@ private slots:
             QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + expected.at(i).toLower())->isChecked());
             QVERIFY(document.isHistoryClean());
         }
-        const QStringList themes { QStringLiteral("Default"), QStringLiteral("Dusk"), QStringLiteral("Dark") };
+        const QStringList themes {
+            QStringLiteral("Default"), QStringLiteral("Twilight"), QStringLiteral("Dusk"), QStringLiteral("Dark")
+        };
         // The theme menu is owned by the generator implementing ConfigInterface.
         auto* configInterface =
             qobject_cast<Okular::ConfigInterface*>(actions->action(QStringLiteral("mupdf_theme"))->parent());
         QVERIFY(configInterface);
         int previousMode = 0;
-        for (const int mode : { 1, 2, 0 }) {
+        for (const int mode : { 1, 2, 3, 0 }) {
             KConfigSkeleton hostSettings;
             KConfigDialog dialog(nullptr, QStringLiteral("document-theme-test"), &hostSettings);
             // Older Okular fillConfigDialog() requires its private BackendConfigDialog.
@@ -216,7 +226,9 @@ private slots:
             configInterface->addPages(&dialog);
             auto* theme = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_ReadingTheme"));
             QVERIFY(theme);
-            QCOMPARE(theme->count(), 3);
+            QCOMPARE(theme->count(), 4);
+            for (int i = 0; i < themes.size(); ++i)
+                QCOMPARE(theme->itemText(i), themes.at(i));
             auto* buttons = dialog.findChild<QDialogButtonBox*>();
             QVERIFY(buttons);
             auto* ok = buttons->button(QDialogButtonBox::Ok);
@@ -249,6 +261,7 @@ private slots:
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_dusk"))->isEnabled());
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_dark"))->isEnabled());
+        QVERIFY(!actions->action(QStringLiteral("mupdf_theme_toggle_twilight"))->isEnabled());
         QFile invalid(m_root.filePath(QStringLiteral("invalid.pdf")));
         QVERIFY(invalid.open(QIODevice::WriteOnly));
         invalid.write("invalid PDF");
@@ -388,7 +401,7 @@ private slots:
         QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
         QCOMPARE(menu->actions().size(), 4);
         QVERIFY(!menu->actions().back()->isVisible());
-        QCOMPARE(client->actionCollection()->actions().count(), 12);
+        QCOMPARE(client->actionCollection()->actions().count(), 14);
         for (QAction* registered : client->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle")

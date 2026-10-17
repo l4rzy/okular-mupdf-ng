@@ -775,6 +775,14 @@ msgstr ""
 msgid "Dusk"
 msgstr ""
 
+#: src/generator/mupdfng.cpp:530 src/generator/config/settingswidget.ui:212
+msgid "Twilight"
+msgstr ""
+
+#: src/generator/mupdfng.cpp:559
+msgid "Toggle Twilight Mode"
+msgstr ""
+
 #: src/generator/mupdfng.cpp:513 rc.cpp:11
 msgid "Dark"
 msgstr ""

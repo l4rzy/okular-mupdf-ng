@@ -15,7 +15,8 @@ extern "C" {
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
-#include "engine/reading_theme.hpp"
+#include "engine/theming/dusk_device.hpp"
+#include "engine/theming/palette.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 
@@ -109,8 +110,10 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             pixmap = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, separations, 1);
         }
 
-        // Composite on white for themes; Default retains Okular’s paper color.
-        const auto paperColor = readingPaperColor(m_settings);
+        // Dusk composites on its dark background; bitmap themes start on white.
+        const bool dusk = m_settings.readingTheme == ReadingTheme::Dusk
+            && !isMostlyDarkPage(m_context, nativePage, bounds, request.cookie);
+        const auto paperColor = dusk ? 0x303134U : readingPaperColor(m_settings);
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
@@ -120,6 +123,13 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         if (!m_settings.interpolateImages)
             fz_enable_device_hints(m_context, device, FZ_DONT_INTERPOLATE_IMAGES);
 
+        if (m_settings.readingTheme == ReadingTheme::Dusk) {
+            auto* themed =
+                newDuskDevice(m_context, device, tiled ? transform : fz_identity, bbox, request.cookie, dusk);
+            fz_drop_device(m_context, device);
+            device = themed;
+        }
+
         fz_cookie cookie { };
         fz_run_page(
             m_context, nativePage, device, tiled ? fz_identity : transform, request.cookie ? request.cookie : &cookie);
@@ -127,9 +137,10 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
 
         fz_close_device(m_context, device);
-        if (m_settings.readingTheme != ReadingTheme::Dark
-            || !isMostlyDarkPage(m_context, nativePage, bounds, request.cookie))
-            applyReadingTheme(m_context, pixmap, m_settings.readingTheme, request.cookie);
+        if (m_settings.readingTheme != ReadingTheme::Dusk
+            && (m_settings.readingTheme != ReadingTheme::Dark
+                || !isMostlyDarkPage(m_context, nativePage, bounds, request.cookie)))
+            applyDocumentTheme(m_context, pixmap, m_settings.readingTheme, request.cookie);
 
         // Blit sub-tile region into the destination frame buffer with specified row stride
         if (tiled || dstStride != minRowBytes) {

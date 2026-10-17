@@ -1,25 +1,39 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#pragma once
+#include "engine/theming/palette.hpp"
 
-#include "shared/model/types.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
-#include <mupdf/fitz.h>
 
 namespace Mu::Worker::Engine {
+namespace {
 
-inline std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcept
+using ThemePalette = std::array<std::array<std::uint8_t, 256>, 3>;
+
+ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::array<int, 3>& foreground) noexcept
+{
+    ThemePalette palette { };
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        const int start = foreground[channel];
+        const int range = background[channel] - start;
+        for (std::size_t value = 0; value < 256; ++value)
+            palette[channel][value] = static_cast<std::uint8_t>(start + range * static_cast<int>(value) / 255);
+    }
+    return palette;
+}
+
+} // namespace
+
+std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcept
 {
     return settings.readingTheme == Model::ReadingTheme::Default ? settings.paperColorRgb : 0xFFFFFF;
 }
 
-inline bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
+bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
 {
     if (fz_pixmap_components(context, pixmap) != 4)
         fz_throw(context, FZ_ERROR_ARGUMENT, "reading theme requires an RGBA viewing pixmap");
@@ -49,8 +63,7 @@ inline bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
 
 // Always sample the whole page, independently of the requested tile or zoom.
 // Keep the thumbnail temporary so edits and layer changes cannot leave stale decisions.
-inline bool
-isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* cookie, fz_display_list* list = nullptr)
+bool isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* cookie, fz_display_list* list)
 {
     fz_pixmap* volatile thumbnail = nullptr;
     fz_device* volatile device = nullptr;
@@ -83,25 +96,50 @@ isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* 
     return dark;
 }
 
-// Transform the fully composited viewing pixmap, leaving PDF objects and all
-// non-viewing paths untouched. Dark mode inverts brightness while retaining
-// color distinctions: a 180-degree HSV hue rotation after inversion reduces
-// to max+min-rgb before mapping into the theme palette.
-inline void
-applyReadingTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTheme theme, const fz_cookie* cookie)
+// Dim premultiplied RGBA to 80%, retaining alpha. Packed, alignment-safe
+// loads/stores allow baseline x86-64 compilers to vectorize across pixels.
+void dimImageRow(unsigned char* pixel, int width) noexcept
 {
-    if (theme == Model::ReadingTheme::Default)
+    for (int x = 0; x < width; ++x, pixel += 4) {
+        std::uint32_t rgba;
+        std::memcpy(&rgba, pixel, sizeof(rgba));
+        if constexpr (std::endian::native == std::endian::big)
+            rgba = std::byteswap(rgba);
+        const auto red = ((rgba & 255) * 4 + 2) / 5;
+        const auto green = (((rgba >> 8) & 255) * 4 + 2) / 5;
+        const auto blue = (((rgba >> 16) & 255) * 4 + 2) / 5;
+        rgba = (rgba & 0xFF000000U) | red | (green << 8) | (blue << 16);
+        if constexpr (std::endian::native == std::endian::big)
+            rgba = std::byteswap(rgba);
+        std::memcpy(pixel, &rgba, sizeof(rgba));
+    }
+}
+
+// Transform only the fully composited viewing pixmap, leaving alpha unchanged.
+void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTheme theme, const fz_cookie* cookie)
+{
+    // Dusk is applied by its image-preserving rendering device.
+    if (theme == Model::ReadingTheme::Default || theme == Model::ReadingTheme::Dusk)
         return;
     if (fz_pixmap_components(context, pixmap) != 4)
         fz_throw(context, FZ_ERROR_ARGUMENT, "reading theme requires an RGBA viewing pixmap");
-    const bool dark = theme == Model::ReadingTheme::Dark;
-    const std::array<int, 3> background = dark ? std::array { 32, 33, 36 } : std::array { 214, 214, 214 };
-    const std::array<int, 3> foreground = dark ? std::array { 218, 220, 224 } : std::array { 36, 36, 36 };
-    std::array<std::array<std::uint8_t, 256>, 3> palette { };
-    for (std::size_t channel = 0; channel < 3; ++channel)
-        for (std::size_t value = 0; value < 256; ++value)
-            palette[channel][value] = static_cast<std::uint8_t>(
-                foreground[channel] + (background[channel] - foreground[channel]) * static_cast<int>(value) / 255);
+    std::array<int, 3> background;
+    std::array<int, 3> foreground;
+    bool invertBrightness = false;
+    switch (theme) {
+    case Model::ReadingTheme::Twilight:
+        background = { 214, 214, 214 };
+        foreground = { 36, 36, 36 };
+        break;
+    case Model::ReadingTheme::Dark:
+        background = { 32, 33, 36 };
+        foreground = { 218, 220, 224 };
+        invertBrightness = true;
+        break;
+    default:
+        return;
+    }
+    const auto palette = makeThemePalette(background, foreground);
     const int width = fz_pixmap_width(context, pixmap);
     const int height = fz_pixmap_height(context, pixmap);
     const int stride = fz_pixmap_stride(context, pixmap);
@@ -111,13 +149,20 @@ applyReadingTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTheme th
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
         auto* pixel = samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
         for (int x = 0; x < width; ++x, pixel += 4) {
-            // View renderers composite onto an opaque background before this pass.
-            const int sum = dark
-                ? int(std::min({ pixel[0], pixel[1], pixel[2] })) + int(std::max({ pixel[0], pixel[1], pixel[2] }))
-                : 0;
-            for (std::size_t channel = 0; channel < 3; ++channel)
-                pixel[channel] =
-                    palette[channel][static_cast<std::size_t>(dark ? sum - pixel[channel] : pixel[channel])];
+            int red = pixel[0];
+            int green = pixel[1];
+            int blue = pixel[2];
+            if (invertBrightness) {
+                // Invert brightness while retaining hue: inversion followed
+                // by a 180-degree HSV hue rotation reduces to max + min - RGB.
+                const int sum = std::min({ red, green, blue }) + std::max({ red, green, blue });
+                red = sum - red;
+                green = sum - green;
+                blue = sum - blue;
+            }
+            pixel[0] = palette[0][static_cast<std::size_t>(red)];
+            pixel[1] = palette[1][static_cast<std::size_t>(green)];
+            pixel[2] = palette[2][static_cast<std::size_t>(blue)];
         }
     }
 }

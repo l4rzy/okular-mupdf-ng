@@ -647,7 +647,13 @@ private slots:
         DocumentSettings invalidTheme;
         invalidTheme.readingTheme = static_cast<ReadingTheme>(255);
         QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
+        invalidTheme.readingTheme = static_cast<ReadingTheme>(4);
+        QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
         DocumentSettings validSettings;
+        QVERIFY(isValidDocumentSettings(validSettings, &reason));
+        validSettings.readingTheme = ReadingTheme::Twilight;
+        QVERIFY(isValidDocumentSettings(validSettings, &reason));
+        validSettings.readingTheme = ReadingTheme::Dusk;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
         validSettings.memoryCacheBytes = ::Mu::Limit::MaxDocumentMemoryCacheBytes + 1;
         QVERIFY(!isValidDocumentSettings(validSettings, &reason));

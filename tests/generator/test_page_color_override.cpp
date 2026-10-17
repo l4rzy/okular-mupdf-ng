@@ -79,7 +79,7 @@ private slots:
             flags[i] = readFlags(Settings::self()->findItem(names[i]));
         {
             PageColorOverride override;
-            override.setTheme(ReadingTheme::Dusk);
+            override.setTheme(ReadingTheme::Twilight);
             QCOMPARE(Settings::changeColors(), enabled);
             QCOMPARE(Settings::renderMode(), mode);
             QCOMPARE(Settings::paperColor(), paper);
@@ -91,6 +91,11 @@ private slots:
             QCOMPARE(Settings::paperColor(), QColor(32, 33, 36));
             QCOMPARE(PageColorOverride::originalPaperColor(),
                      enabled && mode == Settings::EnumRenderMode::Paper ? paper : QColor(Qt::white));
+            override.setTheme(ReadingTheme::Dusk);
+            QCOMPARE(Settings::paperColor(), QColor(48, 49, 52));
+            override.setTheme(ReadingTheme::Dark);
+            QCOMPARE(Settings::paperColor(), QColor(32, 33, 36));
+            override.setTheme(ReadingTheme::Dusk);
             // A host save must preserve disk preferences even while another
             // persistent setting forces the configuration file to be written.
             Settings::setEnableThreading(!Settings::enableThreading());
@@ -101,7 +106,7 @@ private slots:
             QCOMPARE(Settings::renderMode(), mode);
             QCOMPARE(Settings::paperColor(), paper);
             override.setTheme(ReadingTheme::Dark);
-            override.setTheme(ReadingTheme::Dusk);
+            override.setTheme(ReadingTheme::Twilight);
             QCOMPARE(Settings::changeColors(), enabled);
             QCOMPARE(Settings::renderMode(), mode);
             QCOMPARE(Settings::paperColor(), paper);
@@ -159,11 +164,11 @@ private slots:
         PageColorOverride second;
         first.setTheme(ReadingTheme::Dark);
         first.setTheme(ReadingTheme::Dark);
-        second.setTheme(ReadingTheme::Dark);
+        second.setTheme(ReadingTheme::Dusk);
         first.reset();
         first.reset();
         QVERIFY(Settings::changeColors());
-        QCOMPARE(Settings::paperColor(), QColor(32, 33, 36));
+        QCOMPARE(Settings::paperColor(), QColor(48, 49, 52));
         second.reset();
         QVERIFY(!Settings::changeColors());
         QCOMPARE(Settings::renderMode(), int(Settings::EnumRenderMode::Inverted));

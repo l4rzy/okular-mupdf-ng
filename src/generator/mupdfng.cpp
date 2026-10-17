@@ -502,7 +502,8 @@ void Main::updatePagePlaceholderColor(Model::ReadingTheme theme)
 {
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     const QColor color = theme == Model::ReadingTheme::Dark ? QColor(32, 33, 36)
-        : theme == Model::ReadingTheme::Dusk                ? QColor(214, 214, 214)
+        : theme == Model::ReadingTheme::Dusk                ? QColor(48, 49, 52)
+        : theme == Model::ReadingTheme::Twilight            ? QColor(214, 214, 214)
                                                             : QColor(Qt::white);
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
@@ -526,23 +527,24 @@ void Main::setupThemeActions()
         menu->addAction(action);
     };
     addTheme(QStringLiteral("mupdf_theme_default"), i18n("Default"), Model::ReadingTheme::Default);
+    addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::ReadingTheme::Twilight);
     addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::ReadingTheme::Dusk);
     addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::ReadingTheme::Dark);
-    const auto setTheme = [](int theme) {
-        MuPDFNGSettings::setReadingTheme(theme);
+    const auto setTheme = [](Model::ReadingTheme theme) {
+        MuPDFNGSettings::setReadingTheme(static_cast<int>(theme));
         MuPDFNGSettings::self()->save();
     };
     connect(m_themeActions, &QActionGroup::triggered, this, [setTheme](QAction* action) {
-        setTheme(action->data().toInt());
+        setTheme(static_cast<Model::ReadingTheme>(action->data().toInt()));
     });
     const auto addToggle =
         [this, setTheme](const QString& name, const QString& label, const QString& icon, Model::ReadingTheme theme) {
             auto* action = new QAction(QIcon::fromTheme(icon), label, this);
             actionCollection()->addAction(name, action);
             connect(action, &QAction::triggered, this, [setTheme, theme] {
-                const int mode = static_cast<int>(theme);
-                setTheme(MuPDFNGSettings::readingTheme() == mode ? static_cast<int>(Model::ReadingTheme::Default)
-                                                                 : mode);
+                setTheme(static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme()) == theme
+                             ? Model::ReadingTheme::Default
+                             : theme);
             });
         };
     addToggle(QStringLiteral("mupdf_theme_toggle_dusk"),
@@ -553,6 +555,10 @@ void Main::setupThemeActions()
               i18n("Toggle Dark Mode"),
               QStringLiteral("weather-clear-night"),
               Model::ReadingTheme::Dark);
+    addToggle(QStringLiteral("mupdf_theme_toggle_twilight"),
+              i18n("Toggle Twilight Mode"),
+              QStringLiteral("weather-few-clouds-night"),
+              Model::ReadingTheme::Twilight);
     // Settings are shared by every open document. Refresh each worker after
     // the save completes, without re-entering the settings notification.
     connect(
@@ -561,7 +567,8 @@ void Main::setupThemeActions()
         this,
         [this] {
             if (const auto* currentDocument = document(); currentDocument
-                && static_cast<int>(m_settings.rendering.readingTheme) != MuPDFNGSettings::readingTheme())
+                && m_settings.rendering.readingTheme
+                    != static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme()))
                 const_cast<Okular::Document*>(currentDocument)->reparseConfig();
         },
         Qt::QueuedConnection);
@@ -577,9 +584,11 @@ void Main::syncThemeActions()
     actionCollection()->action(QStringLiteral("mupdf_theme"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dusk"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
+    actionCollection()->action(QStringLiteral("mupdf_theme_toggle_twilight"))->setEnabled(enabled);
     m_themeActions->setEnabled(enabled);
+    const auto theme = static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme());
     for (QAction* action : m_themeActions->actions())
-        action->setChecked(action->data().toInt() == MuPDFNGSettings::readingTheme());
+        action->setChecked(action->data().toInt() == static_cast<int>(theme));
 }
 
 void Main::syncOcrActions()

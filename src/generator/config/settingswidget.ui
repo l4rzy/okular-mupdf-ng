@@ -209,6 +209,11 @@
               </item>
               <item>
                <property name="text">
+                <string>Twilight</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
                 <string>Dusk</string>
                </property>
               </item>

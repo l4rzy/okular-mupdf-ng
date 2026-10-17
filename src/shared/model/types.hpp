@@ -384,7 +384,8 @@ struct IdleTrimLevel {
 };
 
 /// Viewing palettes shared by all document formats.
-enum class ReadingTheme : std::uint8_t { Default, Dusk, Dark };
+// Keep aligned with the ReadingTheme choices in mupdfngsettings.kcfg.
+enum class ReadingTheme : std::uint8_t { Default, Twilight, Dusk, Dark };
 
 /// Rendering and layout settings shared by document engines.
 struct DocumentSettings {

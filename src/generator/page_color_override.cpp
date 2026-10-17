@@ -25,6 +25,7 @@ struct SharedOverride {
     QPointer<KCoreConfigSkeleton> settings;
     std::size_t owners = 0;
     std::array<SavedSetting, 3> saved;
+    std::array<QVariant, 3> values { true, int(Okular::SettingsCore::EnumRenderMode::Paper), QColor(32, 33, 36) };
 };
 
 SharedOverride& sharedOverride()
@@ -32,12 +33,6 @@ SharedOverride& sharedOverride()
     static SharedOverride state;
     return state;
 }
-
-const std::array<QVariant, 3> overrideValues {
-    true,
-    int(Okular::SettingsCore::EnumRenderMode::Paper),
-    QColor(32, 33, 36),
-};
 
 // KF6's signalling wrapper shadows these non-virtual accessors. Use the
 // wrapper accessors so flags reach the item that actually writes the value.
@@ -64,7 +59,7 @@ void preserveChangedPreferences(SharedOverride& state)
     for (std::size_t i = 0; i < state.saved.size(); ++i) {
         auto& saved = state.saved[i];
         const QVariant value = saved.item->property();
-        if (value == overrideValues[i])
+        if (value == state.values[i])
             continue;
         saved.value = value;
         // A host save may already have marked this non-persistent value as
@@ -119,7 +114,7 @@ QColor PageColorOverride::originalPaperColor()
 
 void PageColorOverride::setTheme(Model::ReadingTheme theme)
 {
-    if (theme != Model::ReadingTheme::Dark) {
+    if (theme != Model::ReadingTheme::Dark && theme != Model::ReadingTheme::Dusk) {
         reset();
         return;
     }
@@ -136,6 +131,7 @@ void PageColorOverride::setTheme(Model::ReadingTheme theme)
             return;
 
     preserveChangedPreferences(state);
+    state.values[2] = theme == Model::ReadingTheme::Dusk ? QColor(48, 49, 52) : QColor(32, 33, 36);
     if (!state.owners) {
         state.settings = settings;
         for (std::size_t i = 0; i < items.size(); ++i)
@@ -154,8 +150,8 @@ void PageColorOverride::setTheme(Model::ReadingTheme theme)
         // Notify includes Persistent; clearing both prevents a later host save
         // from persisting the temporary values or broadcasting them over D-Bus.
         setWriteFlags(items[i], state.saved[i].flags & ~KConfigBase::WriteConfigFlags(KConfigBase::Notify));
-        changed |= items[i]->property() != overrideValues[i];
-        items[i]->setProperty(overrideValues[i]);
+        changed |= items[i]->property() != state.values[i];
+        items[i]->setProperty(state.values[i]);
     }
     if (changed)
         notifySettingsChanged(settings);
