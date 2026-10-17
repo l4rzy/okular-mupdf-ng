@@ -116,6 +116,40 @@ private slots:
         QCOMPARE(readSavedColors(), saved);
     }
 
+    void preservesChangedPreferences_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QVariant>("value");
+        QTest::newRow("enabled") << QStringLiteral("ChangeColors") << QVariant(false);
+        QTest::newRow("mode") << QStringLiteral("RenderMode") << QVariant(int(Settings::EnumRenderMode::Recolor));
+        QTest::newRow("paper") << QStringLiteral("PaperColor") << QVariant(QColor(Qt::red));
+    }
+
+    void preservesChangedPreferences()
+    {
+        QFETCH(QString, name);
+        QFETCH(QVariant, value);
+        for (const bool reapplied : { false, true }) {
+            Settings::setChangeColors(true);
+            Settings::setRenderMode(Settings::EnumRenderMode::Inverted);
+            Settings::setPaperColor(Qt::yellow);
+            QVERIFY(Settings::self()->save());
+            PageColorOverride override;
+            override.setTheme(ReadingTheme::Dark);
+            auto* item = Settings::self()->findItem(name);
+            item->setProperty(value);
+            QVERIFY(Settings::self()->save());
+            if (reapplied)
+                override.setTheme(ReadingTheme::Dark);
+            override.reset();
+            QCOMPARE(item->property(), value);
+            // Reload through a separate config to avoid the host's volatile entries.
+            KConfig disk(Settings::self()->config()->name(), KConfig::SimpleConfig);
+            item->readConfig(&disk);
+            QCOMPARE(item->property(), value);
+        }
+    }
+
     void sharesOwnership()
     {
         Settings::setChangeColors(false);

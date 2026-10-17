@@ -3,6 +3,7 @@
 
 #include "generator/page_color_override.hpp"
 
+#include <KConfig>
 #include <KCoreConfigSkeleton>
 #include <QColor>
 #include <QPointer>
@@ -32,6 +33,12 @@ SharedOverride& sharedOverride()
     return state;
 }
 
+const std::array<QVariant, 3> overrideValues {
+    true,
+    int(Okular::SettingsCore::EnumRenderMode::Paper),
+    QColor(32, 33, 36),
+};
+
 // KF6's signalling wrapper shadows these non-virtual accessors. Use the
 // wrapper accessors so flags reach the item that actually writes the value.
 KConfigBase::WriteConfigFlags readWriteFlags(KConfigSkeletonItem* item)
@@ -47,6 +54,30 @@ void setWriteFlags(KConfigSkeletonItem* item, KConfigBase::WriteConfigFlags flag
         signalling->setWriteFlags(flags);
     else
         item->setWriteFlags(flags);
+}
+
+void preserveChangedPreferences(SharedOverride& state)
+{
+    if (!state.owners || !state.settings)
+        return;
+    const QSignalBlocker blocker(state.settings);
+    for (std::size_t i = 0; i < state.saved.size(); ++i) {
+        auto& saved = state.saved[i];
+        const QVariant value = saved.item->property();
+        if (value == overrideValues[i])
+            continue;
+        saved.value = value;
+        // A host save may already have marked this non-persistent value as
+        // saved. Reload the disk baseline before writing the user's change.
+        KConfig disk(state.settings->config()->name());
+        saved.item->readConfig(&disk);
+        saved.item->setProperty(value);
+        const auto flags = readWriteFlags(saved.item);
+        setWriteFlags(saved.item, saved.flags);
+        saved.item->writeConfig(&disk);
+        setWriteFlags(saved.item, flags);
+        disk.sync();
+    }
 }
 
 void notifySettingsChanged(KCoreConfigSkeleton* settings)
@@ -104,6 +135,7 @@ void PageColorOverride::setTheme(Model::ReadingTheme theme)
         if (!item || item->isImmutable())
             return;
 
+    preserveChangedPreferences(state);
     if (!state.owners) {
         state.settings = settings;
         for (std::size_t i = 0; i < items.size(); ++i)
@@ -114,12 +146,6 @@ void PageColorOverride::setTheme(Model::ReadingTheme theme)
         m_active = true;
     }
 
-    // Match the worker's Dark viewing palette.
-    const std::array<QVariant, 3> values {
-        true,
-        int(Okular::SettingsCore::EnumRenderMode::Paper),
-        QColor(32, 33, 36),
-    };
     bool changed = false;
     // Okular's color-menu signals can save settings synchronously. Publish
     // only a complete override, after every setting has non-persistent flags.
@@ -128,8 +154,8 @@ void PageColorOverride::setTheme(Model::ReadingTheme theme)
         // Notify includes Persistent; clearing both prevents a later host save
         // from persisting the temporary values or broadcasting them over D-Bus.
         setWriteFlags(items[i], state.saved[i].flags & ~KConfigBase::WriteConfigFlags(KConfigBase::Notify));
-        changed |= items[i]->property() != values[i];
-        items[i]->setProperty(values[i]);
+        changed |= items[i]->property() != overrideValues[i];
+        items[i]->setProperty(overrideValues[i]);
     }
     if (changed)
         notifySettingsChanged(settings);
@@ -141,6 +167,7 @@ void PageColorOverride::reset()
         return;
     m_active = false;
     auto& state = sharedOverride();
+    preserveChangedPreferences(state);
     if (--state.owners)
         return;
     if (state.settings) {
