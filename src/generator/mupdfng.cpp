@@ -549,15 +549,15 @@ void Main::setupThemeActions()
         };
     addToggle(QStringLiteral("mupdf_theme_toggle_dusk"),
               i18n("Toggle Dusk Mode"),
-              QStringLiteral("weather-few-clouds-night"),
+              QStringLiteral("draw-halfcircle1"),
               Model::ReadingTheme::Dusk);
     addToggle(QStringLiteral("mupdf_theme_toggle_dark"),
               i18n("Toggle Dark Mode"),
-              QStringLiteral("weather-clear-night"),
+              QStringLiteral("lighttable"),
               Model::ReadingTheme::Dark);
     addToggle(QStringLiteral("mupdf_theme_toggle_twilight"),
               i18n("Toggle Twilight Mode"),
-              QStringLiteral("weather-few-clouds-night"),
+              QStringLiteral("draw-halfcircle2"),
               Model::ReadingTheme::Twilight);
     // Settings are shared by every open document. Refresh each worker after
     // the save completes, without re-entering the settings notification.
