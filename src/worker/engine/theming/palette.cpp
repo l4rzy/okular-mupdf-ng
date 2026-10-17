@@ -153,12 +153,13 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTh
             int green = pixel[1];
             int blue = pixel[2];
             if (invertBrightness) {
-                // Invert brightness while retaining hue: inversion followed
-                // by a 180-degree HSV hue rotation reduces to max + min - RGB.
-                const int sum = std::min({ red, green, blue }) + std::max({ red, green, blue });
-                red = sum - red;
-                green = sum - green;
-                blue = sum - blue;
+                // Invert brightness and soften saturation to keep colors readable.
+                // A fixed blend preserves antialiased coverage against neutral paper.
+                const int low = std::min({ red, green, blue });
+                const int high = std::max({ red, green, blue });
+                red = low + (high - red) * 2 / 5;
+                green = low + (high - green) * 2 / 5;
+                blue = low + (high - blue) * 2 / 5;
             }
             pixel[0] = palette[0][static_cast<std::size_t>(red)];
             pixel[1] = palette[1][static_cast<std::size_t>(green)];

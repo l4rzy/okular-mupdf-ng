@@ -453,13 +453,77 @@ private slots:
                                themed.begin() + ((y + tile.y) * width + tile.x) * 4));
     }
 
+    void brightensThemeColors_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<QByteArray>("color");
+        for (const auto theme : { Mu::Model::ReadingTheme::Dusk, Mu::Model::ReadingTheme::Dark }) {
+            const auto name = theme == Mu::Model::ReadingTheme::Dusk ? QByteArray("dusk-") : QByteArray("dark-");
+            QTest::newRow((name + "blue").constData()) << int(theme) << QByteArray("0 0 1");
+            QTest::newRow((name + "purple").constData()) << int(theme) << QByteArray("0.5 0 0.5");
+        }
+    }
+
+    void brightensThemeColors()
+    {
+        QFETCH(int, theme);
+        QFETCH(QByteArray, color);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("theme-colors.pdf");
+        const auto contents = "1 g 0 0 612 792 re f " + color + " rg 100 400 100 100 re f";
+        createTextPDF(document.context(), path, contents.constData());
+        QVERIFY(openDocument(document, path));
+        auto settings = document.settings();
+        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        document.setSettings(settings);
+        constexpr int width = 153, height = 198, stride = width * 4;
+        std::vector<std::uint8_t> pixels(height * stride);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, pixels.data(), stride));
+        const auto* pixel = pixels.data() + 85 * stride + 35 * 4;
+        QVERIFY((54 * pixel[0] + 183 * pixel[1] + 19 * pixel[2]) / 256 >= 139);
+        QVERIFY(pixel[2] > pixel[1]);
+        QCOMPARE(pixel[3], std::uint8_t(255));
+    }
+
+    void preservesDarkThemeEdges()
+    {
+        using namespace Mu::Worker::Engine;
+        PdfDocument owner;
+        QByteArray pixels(256 * 4, '\0');
+        for (int level = 0; level < 256; ++level) {
+            pixels[level * 4] = pixels[level * 4 + 1] = static_cast<char>(level);
+            pixels[level * 4 + 2] = pixels[level * 4 + 3] = char(255);
+        }
+        auto* pixmap = fz_new_pixmap_with_data(owner.context(),
+                                               fz_device_rgb(owner.context()),
+                                               256,
+                                               1,
+                                               nullptr,
+                                               1,
+                                               256 * 4,
+                                               reinterpret_cast<unsigned char*>(pixels.data()));
+        applyDocumentTheme(owner.context(), pixmap, Mu::Model::ReadingTheme::Dark, nullptr);
+        fz_drop_pixmap(owner.context(), pixmap);
+        // Blue text coverage must blend smoothly into the paper, without a threshold jump.
+        for (int level = 0; level < 256; ++level) {
+            for (int channel = 0; channel < 3; ++channel) {
+                const int ink = static_cast<unsigned char>(pixels[channel]);
+                const int paper = static_cast<unsigned char>(pixels[255 * 4 + channel]);
+                const int expected = (ink * (255 - level) + paper * level) / 255;
+                QVERIFY(std::abs(int(static_cast<unsigned char>(pixels[level * 4 + channel])) - expected) <= 2);
+            }
+            QCOMPARE(pixels[level * 4 + 3], char(255));
+        }
+    }
+
     void readingThemePalette_data()
     {
         QTest::addColumn<int>("theme");
         QTest::addColumn<QByteArray>("expected");
         QTest::newRow("default") << 0 << QByteArray::fromHex("ffffffff000000ffff0000ff");
         QTest::newRow("twilight") << 1 << QByteArray::fromHex("d6d6d6ff242424ffd62424ff");
-        QTest::newRow("dark") << 3 << QByteArray::fromHex("202124ffdadce0ffda2124ff");
+        QTest::newRow("dark") << 3 << QByteArray::fromHex("202124ffdadce0ffda9295ff");
     }
 
     void readingThemePalette()

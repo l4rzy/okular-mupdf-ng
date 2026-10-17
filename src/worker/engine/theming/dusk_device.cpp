@@ -37,9 +37,11 @@ void mapColor(float* rgb)
     constexpr std::array<float, 3> foreground { 218, 220, 224 };
     for (int i = 0; i < 3; ++i)
         rgb[i] = std::isfinite(rgb[i]) ? std::clamp(rgb[i], 0.0f, 1.0f) : 0.0f;
-    const float sum = std::min({ rgb[0], rgb[1], rgb[2] }) + std::max({ rgb[0], rgb[1], rgb[2] });
+    const float low = std::min({ rgb[0], rgb[1], rgb[2] });
+    const float high = std::max({ rgb[0], rgb[1], rgb[2] });
+    // Match Dark's fixed saturation blend without changing neutral colors or edge coverage.
     for (std::size_t i = 0; i < 3; ++i)
-        rgb[i] = (foreground[i] + (background[i] - foreground[i]) * (sum - rgb[i])) / 255.0f;
+        rgb[i] = (foreground[i] + (background[i] - foreground[i]) * (low + (high - rgb[i]) * 0.4f)) / 255.0f;
 }
 
 void mapVectorColor(fz_context* context,
