@@ -2,18 +2,22 @@
 pkgbase=okular-mupdf-ng-git
 pkgname=okular-mupdf-ng-git
 _pkgname=okular-mupdf-ng
+# Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
+_mupdfver=1.28.5
 pkgver=0.2.12.r1.gea10c5c
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation) - git"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('GPL-3.0-or-later')
-depends=('kcoreaddons' 'ki18n' 'okular' 'nss' 'libseccomp' 'openjpeg2' 'libjpeg-turbo' 'jbig2dec' 'brotli' 'freetype2' 'libmupdf' 'zlib')
-makedepends=('cmake' 'extra-cmake-modules' 'git' 'openssl' 'ninja' 'qt6-tools')
+depends=('kcoreaddons' 'ki18n' 'okular' 'nss' 'libseccomp' 'openjpeg2' 'libjpeg-turbo' 'jbig2dec' 'brotli' 'freetype2' 'zlib')
+makedepends=('cmake' 'extra-cmake-modules' 'git' 'openssl' 'ninja' 'patch' 'qt6-tools')
 provides=('okular-mupdf-ng')
 conflicts=('okular-mupdf-ng')
-source=("$_pkgname::git+$url.git")
-sha256sums=('SKIP')
+source=("$_pkgname::git+$url.git"
+        "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
+sha256sums=('SKIP'
+            '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934')
 
 pkgver() {
   cd "$srcdir/$_pkgname"
@@ -28,7 +32,8 @@ build() {
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
-    -DUSE_SYSTEM_MUPDF=ON \
+    -DUSE_SYSTEM_MUPDF=OFF \
+    -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
     -DBUILD_TESTING=ON
   cmake --build "build"
 }

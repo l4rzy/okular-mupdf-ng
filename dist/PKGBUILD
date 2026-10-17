@@ -2,6 +2,8 @@
 pkgbase=okular-mupdf-ng
 pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
+# Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
+_mupdfver=1.28.5
 pkgver=0.4.4
 pkgrel=1
 pkgdesc="A MuPDF-based secure and fast backend for Okular"
@@ -15,7 +17,7 @@ license=('GPL-3.0-or-later')
 makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
              'gcc' 'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq'
              'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'openjpeg2' 'pkgconf'
-             'patch' 'python' 'qt6-tools')
+             'patch' 'qt6-tools')
 # The bundled-MuPDF build links MuPDF's third-party libraries from the system
 # (USE_SYSTEM_LIBS=yes), so they remain direct runtime dependencies of the
 # static package; Leptonica is the exception, bundled alongside Tesseract to
@@ -27,9 +29,11 @@ depends=("${_common_depends[@]}"
          'brotli' 'freetype2' 'jbig2dec'
          'libjpeg-turbo' 'openjpeg2' 'zlib')
 conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
-# Replace with source=("git+$url.git") when the PKGBUILD is standalone.
-source=("$_pkgname::git+file://$startdir/..")
-sha256sums=('SKIP')
+# Replace the local Git URL with git+$url.git when the PKGBUILD is standalone.
+source=("$_pkgname::git+file://$startdir/.."
+        "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
+sha256sums=('SKIP'
+            '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934')
 _PREFIX="${PREFIX:-/usr}"
 
 pkgver() {
@@ -39,11 +43,6 @@ pkgver() {
     base_ver=$(jq -r '.KPlugin.Version' "$json_file" 2>/dev/null)
   fi
   printf "%s" "$base_ver"
-}
-
-prepare() {
-  cd "$srcdir/$_pkgname"
-  python3 ./scripts/download-mupdf.py
 }
 
 build() {
@@ -56,20 +55,17 @@ build() {
   rm -rf "$srcdir/stage-static" "$srcdir/stage-dynamic"
   cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DCMAKE_LINKER_TYPE=MOLD \
     -DUSE_SYSTEM_MUPDF=OFF \
+    -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
     -DBUILD_TESTING=ON
   cmake --build "$_builddir"
   ctest --test-dir "$_builddir" --output-on-failure
   DESTDIR="$srcdir/stage-static" cmake --install "$_builddir"
   cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DCMAKE_LINKER_TYPE=MOLD \
