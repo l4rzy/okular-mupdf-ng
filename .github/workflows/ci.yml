@@ -169,10 +169,6 @@ jobs:
           packages = re.sub(
               rf"(?<![\d.]){re.escape(current[1])}(?!\d|\.\d)", version[1], packages
           )
-          packages = re.sub(
-              r"(okular-mupdf-ng-\d+\.\d+\.\d+-\d+-x86_64)(\.pkg\.tar\.zst)",
-              r"\1.archlinux\2", packages
-          )
           path.write_text(packages + separator + rest)
           PY
 
