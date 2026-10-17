@@ -18,6 +18,8 @@ jobs:
       - name: Install build dependencies
         run: |
           zypper --non-interactive refresh
+          # Sync the rolling container with the repositories, including downgrades.
+          zypper --non-interactive dup --no-recommends
           zypper --non-interactive install --no-recommends \
             ca-certificates \
             clang \
