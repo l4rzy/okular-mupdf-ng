@@ -166,6 +166,11 @@ else()
         set(${_mupdf_flags_variable} "${_mupdf_filtered_flags}")
     endforeach()
 
+    # LTO can remove fz_var calls that protect MuPDF's setjmp/longjmp cleanup.
+    # Disable it only for the external build; project targets retain their LTO policy.
+    string(APPEND _mupdf_c_flags " -fno-lto")
+    string(APPEND _mupdf_cxx_flags " -fno-lto")
+
     # Makefile:25 places XCFLAGS at the front of CFLAGS, so this bundled
     # HarfBuzz include wins over the system HarfBuzz include that FreeType's
     # freetype2.pc (Requires.private: harfbuzz) injects via SYS_FREETYPE_CFLAGS

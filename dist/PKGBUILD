@@ -2,7 +2,7 @@
 pkgbase=okular-mupdf-ng
 pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
-pkgver=0.3.6
+pkgver=0.4.4
 pkgrel=1
 pkgdesc="A MuPDF-based secure and fast backend for Okular"
 arch=('x86_64')
@@ -56,8 +56,8 @@ build() {
   rm -rf "$srcdir/stage-static" "$srcdir/stage-dynamic"
   cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
-    -DCMAKE_C_COMPILER=gcc \
-    -DCMAKE_CXX_COMPILER=g++ \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DCMAKE_LINKER_TYPE=MOLD \
@@ -68,8 +68,8 @@ build() {
   DESTDIR="$srcdir/stage-static" cmake --install "$_builddir"
   cmake -B "$_builddir" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
-    -DCMAKE_C_COMPILER=gcc \
-    -DCMAKE_CXX_COMPILER=g++ \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_INSTALL_PREFIX="${_PREFIX}" \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DCMAKE_LINKER_TYPE=MOLD \

@@ -68,8 +68,6 @@ jobs:
           fi
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
-          # Disable GCC LTO for both makepkg build variants: it breaks MuPDF exception cleanup.
-          printf '\nOPTIONS=("${OPTIONS[@]/#lto/!lto}" "!lto")\n' >> /etc/makepkg.conf
           cd dist
           sudo -u builder CC=gcc CXX=g++ makepkg -sf --noconfirm
 
