@@ -16,6 +16,17 @@ the "Show backend selection dialog" option in Okular.
 yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.3/okular-mupdf-ng-0.4.3-1-x86_64.pkg.tar.zst
 ```
 
+Arch Linux updates to Okular, KDE Frameworks 6 (KF6), Qt, or other dependencies
+may change the ABI and make prebuilt packages incompatible with your system.
+If a prebuilt package does not work after an update, build the package locally
+using [dist/PKGBUILD](dist/PKGBUILD) so it matches your installed libraries.
+
+### Manjaro Linux
+
+```bash
+sudo pacman -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.3/okular-mupdf-ng-0.4.3-1-x86_64.manjaro.pkg.tar.zst
+```
+
 ### Fedora
 
 ```bash
