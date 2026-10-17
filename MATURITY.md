@@ -34,6 +34,7 @@ promise that every input or workflow has been tested.
 | Printing and document export | 🟡 Partial | Export integration; print-output appearance, visibility, geometry and source-isolation tests; printer submission untested |
 | Flattened PDF export | 🟡 Partial | Worker appearance/source-isolation tests; IPC and CLI export integration |
 | Basic PDF AcroForm filling | 🟡 Partial | Worker and proxy tests; loaded-generator edit, undo/redo, save/reopen, reset, print-to-PDF, and repeated worker recovery (unsaved edit loss, history clearing, proxy reuse, and post-recovery save/reopen) tests with synthetic and LibreOffice fixtures |
+| Document themes (PDF, ePUB, MOBI) | 🟡 Partial | Worker palette, image dimming/alpha/mask, dark-page detection, tile/stride, print isolation, and theme-switching tests; generator menu/settings/shortcuts and native/legacy placeholder tests |
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
@@ -41,7 +42,19 @@ promise that every input or workflow has been tested.
 | PDF JS support | 🟣 Experimental | Worker calculation and control-event tests; loaded-generator validation, cross-page dependent updates, undo/redo, and save/reopen tests |
 | Generated PDF TOC (printed contents and typography; persistent cache) | 🟣 Experimental | Heading/hierarchy, wrapped titles, contents columns/page mapping, and cache tests; rotated worker fixtures and IPC reopen/precedence tests |
 
-## Known limitations
+## Technical notes
+
+Document themes are viewing-only and have mainly synthetic rendering coverage;
+complex documents may need further tuning. Dusk dims raster images to 80%
+brightness, including text in scanned pages. Vector illustrations follow the
+text palette. Dark leaves mostly dark pages unchanged. Dusk leaves their vector
+colors unchanged but still dims their images.
+
+On Okular versions without the per-page placeholder color API, Dusk and Dark
+use temporary accessibility **Change Paper Color** settings. The workaround
+restores user preferences when no document needs it; Twilight placeholders may
+remain white. See [Document Theming](README.md#document-theming) for theme choices
+and controls.
 
 XFDF import and export reject PDFs containing rotated pages, including rotation
 inherited from the page tree. Correct conversion to unrotated PDF coordinates

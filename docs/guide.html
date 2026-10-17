@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to use — okular-mupdf-ng</title>
+  <meta name="description" content="How to use okular-mupdf-ng: document themes, OCR, forms, annotations, signatures, and document export.">
+  <link rel="canonical" href="https://l4rzy.github.io/okular-mupdf-ng/guide.html">
+  <link rel="icon" type="image/svg+xml" href="assets/mupdfng.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/mupdfng.svg" alt="okular-mupdf-ng logo" width="32" height="32">
+        <span>okular-mupdf-ng</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="index.html#features">Features</a>
+        <a href="guide.html" aria-current="page">How to use</a>
+        <a href="index.html#install">Install</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section>
+      <h1>How to use</h1>
+      <p>Choose a feature below to find its usage guide. These guides cover the
+        MuPDF backend for Okular. In Okular&rsquo;s backend configuration, select
+        <strong>MuPDF-NG</strong>; settings paths below refer to its
+        <strong>General</strong>, <strong>PDF</strong>, and <strong>ePUB</strong> tabs.</p>
+      <nav aria-label="Guide contents">
+        <ul class="guide-contents">
+          <li><a href="#safety-isolation">Safety &amp; Isolation</a></li>
+          <li><a href="#ocr">OCR</a></li>
+          <li><a href="#epub-customisation">ePUB customisation</a></li>
+          <li><a href="#document-themes">Document Theming</a></li>
+          <li><a href="#keyboard-shortcuts">Keyboard shortcuts</a></li>
+          <li><a href="#pdf-heuristic-outline">PDF Heuristic Outline</a></li>
+          <li><a href="#annotations-forms">Annotations &amp; Forms</a></li>
+          <li><a href="#pdf-export">PDF Export</a></li>
+          <li><a href="#epub-mobi-export">ePUB/MOBI export</a></li>
+          <li><a href="#signatures">Signatures</a></li>
+          <li><a href="#certificate-manager">Cert Manager</a></li>
+          <li><a href="#pdf-javascript">PDF JavaScript</a></li>
+          <li><a href="#caching">Caching</a></li>
+        </ul>
+      </nav>
+    </section>
+
+    <section id="safety-isolation">
+      <h2>Safety &amp; Isolation</h2>
+      <p>Documents are parsed and rendered in a separate worker process. In
+        <strong>General → Security → Sandbox Enforcement</strong>, choose:</p>
+      <ul>
+        <li><strong>Strict</strong> (default): open documents only when the worker
+          reports a fully hardened sandbox.</li>
+        <li><strong>Relaxed</strong>: allow documents to open even when some sandbox
+          protections are unavailable. Available protections still remain active.</li>
+      </ul>
+      <p>Apply the setting and reopen a document if it was blocked by Strict
+        enforcement. Enable <strong>Show notification when sandbox is degraded</strong>
+        to display warnings about incomplete protection.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/security.png" alt="General Security settings with Strict sandbox enforcement, degraded-sandbox notifications enabled, and JavaScript disabled" width="604" height="138" loading="lazy">
+        <figcaption>Configure sandbox enforcement and notifications in General → Security.</figcaption>
+      </figure>
+      <h3>Probe the worker</h3>
+      <p>Run the installed worker as your normal user to check the protections
+        available on your system. For a typical <code>/usr/lib</code> installation:</p>
+      <pre><code>/usr/lib/okular-mupdf-ng/mupdfng-worker --sandbox-check
+/usr/lib/okular-mupdf-ng/mupdfng-worker --sandbox-check=json</code></pre>
+      <p>Example output from an x86_64 Debian-style installation:</p>
+      <pre><code>/usr/lib/x86_64-linux-gnu/okular-mupdf-ng/mupdfng-worker --sandbox-check
+Sandbox check on host:
+  landlock: yes abi=9
+  seccomp: yes
+  linuxNamespace: yes
+  resourceLimits: yes
+  memoryProtection: yes
+  fullyHardened: yes
+  partiallyActive: no</code></pre>
+      <p>The worker location depends on the package&rsquo;s library directory;
+        it may use <code>lib64</code> or a multiarch directory. For a source build,
+        use <code>./build/bin/mupdfng-worker --sandbox-check</code>.</p>
+      <p>The probe activates the sandbox in a short-lived process and reports
+        Landlock, seccomp, namespaces, resource limits, memory protection, and any
+        reason for degraded protection. Exit code <code>0</code> means fully hardened,
+        <code>1</code> means partially active, and <code>2</code> means unconfined.</p>
+      <p>Strict/Relaxed is the plugin&rsquo;s enforcement policy; the probe reports
+        whether runtime protections can satisfy Strict on this host. It does not
+        change the policy or inspect an already running Okular worker.</p>
+    </section>
+
+    <section id="ocr">
+      <h2>OCR</h2>
+      <h3 id="ocr-language-models">Install a language model</h3>
+      <p>Install a Tesseract language model for the document&rsquo;s language.
+        The examples below install English (<code>eng</code>); use the search
+        command for your distribution to find other language models.</p>
+      <h4>Ubuntu / Debian</h4>
+      <pre><code>sudo apt update
+sudo apt install tesseract-ocr-eng</code></pre>
+      <p>Find other models: <code>apt search tesseract-ocr-</code>.
+        Package references: <a href="https://packages.ubuntu.com/tesseract-ocr-eng" rel="noopener">Ubuntu</a>,
+        <a href="https://packages.debian.org/trixie/tesseract-ocr-eng" rel="noopener">Debian</a>.</p>
+      <h4>Fedora</h4>
+      <pre><code>sudo dnf install tesseract-langpack-eng</code></pre>
+      <p>Find other models: <code>dnf search tesseract-langpack</code>.
+        <a href="https://packages.fedoraproject.org/pkgs/tesseract-tessdata/tesseract-langpack-eng/" rel="noopener">Package reference</a>.</p>
+      <h4>openSUSE</h4>
+      <pre><code>sudo zypper install tesseract-ocr-traineddata-eng</code></pre>
+      <p>Find other models: <code>zypper search tesseract-ocr-traineddata</code>.
+        <a href="https://software.opensuse.org/package/tesseract-ocr-traineddata-eng" rel="noopener">Package reference</a>.</p>
+      <h4>Arch Linux / Manjaro</h4>
+      <pre><code>sudo pacman -S tesseract-data-eng</code></pre>
+      <p>Find other models: <code>pacman -Ss tesseract-data</code>.
+        <a href="https://archlinux.org/packages/extra/any/tesseract-data-eng/" rel="noopener">Arch package reference</a>.</p>
+      <p>After installing a model, restart Okular and reopen the backend settings
+        so it can discover the new language data. Model names use
+        <a href="https://tesseract-ocr.github.io/tessdoc/Data-Files.html" rel="noopener">Tesseract language codes</a>,
+        which may differ from your desktop&rsquo;s language code.</p>
+      <h3>Configure OCR</h3>
+      <p>In <strong>PDF → Optical Character Recognition</strong>, select the
+        <strong>Tesseract Model</strong> and <strong>Tesseract Quality</strong>.
+        Adjust the character-count threshold to control when automatic OCR runs.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/ocr_configs.png" alt="PDF Optical Character Recognition settings with a Tesseract model, quality, and automatic OCR threshold" width="620" height="266" loading="lazy">
+        <figcaption>Choose the Tesseract model and recognition settings in the PDF tab.</figcaption>
+      </figure>
+      <h3>Enable OCR</h3>
+      <p>Choose <strong>Tools → MuPDF OCR → Automatic</strong> for scanned pages,
+        or <strong>On</strong> to run OCR even when a page already contains text.
+        Choose <strong>Off</strong> to stop automatic recognition.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/ocr_toggle.png" alt="Tools menu open to MuPDF OCR options Off, Automatic, and On" width="730" height="543" loading="lazy">
+        <figcaption>Choose Off, Automatic, or On from Tools → MuPDF OCR.</figcaption>
+      </figure>
+      <p>View the pages to recognize them, then select or search the recognized text.
+        Recognition results are cached; OCR does not add a text layer to the saved PDF.
+        You can also assign a <a href="#keyboard-shortcuts">keyboard shortcut</a>
+        to toggle OCR.</p>
+    </section>
+
+    <section id="epub-customisation">
+      <h2>ePUB customisation</h2>
+      <p>MOBI uses the ePUB rendering and layout engine, so the font, page size,
+        and custom CSS settings below apply to both formats.</p>
+      <ol>
+        <li>Open the <strong>ePUB → Page Layout</strong> settings.</li>
+        <li>Set <strong>Font Size</strong>, <strong>Font Family</strong>, and
+          <strong>Page Size</strong>.</li>
+        <li>Expand <strong>Custom CSS</strong> to add your own document styles.</li>
+        <li>Apply the settings and restart Okular when prompted.</li>
+      </ol>
+      <p>For example, this rule increases inherited line spacing:</p>
+      <pre><code>body { line-height: 1.8; }</code></pre>
+      <p>A document&rsquo;s own rules on individual elements can override inherited
+        styles. Changing the layout can change page counts and text positions.</p>
+      <!-- Screenshot: ePUB settings, CSS editor, and resulting layout. -->
+    </section>
+
+    <section id="document-themes">
+      <h2>Document Theming</h2>
+      <p>Choose <strong>Tools → Document Theme</strong>, below MuPDF OCR, or use
+        <strong>General → Rendering → Document Theme</strong> in the backend settings.
+        The choice is saved and shared across open PDF, ePUB, and MOBI documents.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/doc_theming.png" alt="Okular's Document Theme menu open over a PDF, with Dusk selected" width="822" height="618" loading="lazy">
+        <figcaption>Select a document theme from the Tools menu.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Theme</th>
+              <th scope="col">Background</th>
+              <th scope="col">Appearance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Default</th>
+              <td>Original paper color</td>
+              <td>Original document colors</td>
+            </tr>
+            <tr>
+              <th scope="row">Twilight</th>
+              <td>Light grey (<code>#D6D6D6</code>)</td>
+              <td>Dark text; reduces brightness across the page, including images</td>
+            </tr>
+            <tr>
+              <th scope="row">Dusk</th>
+              <td>Dark grey (<code>#303134</code>)</td>
+              <td>Light text; images stay uninverted at 80% brightness</td>
+            </tr>
+            <tr>
+              <th scope="row">Dark</th>
+              <td>Nearly black (<code>#202124</code>)</td>
+              <td>Inverts brightness across the page, including images, while retaining color distinctions</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Dark leaves mostly dark pages unchanged. Dusk leaves their vector colors
+        unchanged but still dims their images. Dusk distinguishes images from vectors,
+        not their content: scanned text dims with its image, and vector illustrations
+        follow the text palette.</p>
+      <p>Themes affect viewing only. OCR, printing, exports, and the document&rsquo;s
+        saved content retain their original colors. You can assign
+        <a href="#keyboard-shortcuts">keyboard shortcuts</a> to toggle themes.</p>
+      <p>Loading placeholders match Twilight, Dusk, and Dark when Okular&rsquo;s per-page
+        placeholder color API is available. On older versions, Dusk and Dark temporarily
+        use accessibility <strong>Change Paper Color</strong>. These settings are not saved,
+        and user preferences are restored when no document needs the workaround.
+        Twilight placeholders may remain white on older versions.</p>
+      <p>See the <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/MATURITY.md" rel="noopener">feature maturity matrix</a>
+        for testing coverage and limitations.</p>
+    </section>
+
+    <section id="keyboard-shortcuts">
+      <h2>Keyboard shortcuts</h2>
+      <ol>
+        <li>Open a document with the MuPDF backend, then choose
+          <strong>Settings → Configure Shortcuts…</strong>.</li>
+        <li>Expand <strong>okular_mupdfng</strong> or search for the action name.</li>
+        <li>Select an action, assign a shortcut, and apply the change.</li>
+      </ol>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/shortcuts.png" alt="Okular keyboard shortcut settings listing the MuPDF OCR and document theme toggle actions" width="503" height="327" loading="lazy">
+        <figcaption>MuPDF actions in Configure Shortcuts. The OCR shortcut shown is a custom assignment.</figcaption>
+      </figure>
+      <p>These actions have no default shortcuts. <strong>Toggle MuPDF OCR</strong>
+        switches between On and the previous OCR mode. <strong>Toggle Twilight Mode</strong>,
+        <strong>Toggle Dusk Mode</strong>, and <strong>Toggle Dark Mode</strong> switch
+        between the selected theme and Default.</p>
+    </section>
+
+    <section id="pdf-heuristic-outline">
+      <h2>PDF Heuristic Outline</h2>
+      <ol>
+        <li>In <strong>General → Behavior</strong>, enable
+          <strong>Generate a table of contents when none is embedded</strong>.</li>
+        <li>Open a PDF without an embedded outline and show Okular&rsquo;s
+          <strong>Contents</strong> sidebar.</li>
+        <li>Select a generated entry to jump to its page.</li>
+      </ol>
+      <p>The generated TOC uses document headings and layout cues. It is a
+        navigation aid and may miss or misclassify headings. An embedded outline
+        takes precedence, and generated results are cached without modifying the PDF.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/generated_toc.png" alt="Okular notice that it generated a table of contents because the PDF has no embedded one" width="639" height="49" loading="lazy">
+        <figcaption>Okular indicates when it is using a generated table of contents.</figcaption>
+      </figure>
+    </section>
+
+    <section id="annotations-forms">
+      <h2>Annotations &amp; Forms</h2>
+      <h3 id="annotations">Annotations</h3>
+      <ol>
+        <li>Open a PDF, then use Okular&rsquo;s annotation tools to select a text, highlight,
+          line, shape, ink, stamp, or caret tool.</li>
+        <li>Add the annotation to the page and adjust its properties as needed.</li>
+        <li>Save the PDF, or use <strong>Save As</strong> to keep a separate copy.</li>
+      </ol>
+      <p>Use undo and redo to revise edits. To share PDF annotations separately,
+        use <a href="#pdf-export">XFDF export</a>; to bake them into page
+        content, use <a href="#pdf-export">flattened PDF export</a>.</p>
+      <!-- Screenshot: Annotation tools and annotation properties. -->
+      <h3 id="pdf-forms">PDF Forms</h3>
+      <ol>
+        <li>Open the PDF and choose <strong>View → Show Forms</strong>, or use
+          the <strong>Show Forms</strong> button when Okular offers it.</li>
+        <li>Edit text fields, checkboxes, radio buttons, or choice fields.</li>
+        <li>Save the PDF or use <strong>Save As</strong> to keep a copy with your edits.</li>
+      </ol>
+      <p>For date and time fields, hover over the form field to check its tooltip
+        for the expected input format, such as <code>yyyy/mm/dd</code> for a date,
+        when format guidance is available.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/form_tooltip.png" alt="Date form field tooltip showing Expected format: yyyy/mm/dd" width="425" height="137" loading="lazy">
+        <figcaption>Hover over a date or time field to see its expected format.</figcaption>
+      </figure>
+      <p>AcroForm controls are supported; XFA forms are detected but not implemented.
+        Some calculations and buttons need the optional
+        <a href="#pdf-javascript">PDF JavaScript</a> setting.</p>
+    </section>
+
+    <section id="pdf-export">
+      <h2>PDF Export</h2>
+      <p>For PDF documents, use <strong>File → Export As</strong> to create a flattened
+        PDF or an XFDF annotation file. PDF, ePUB, and MOBI documents can also export
+        plain text; ePUB and MOBI can <a href="#epub-mobi-export">export to PDF</a>.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/pdf_export.png" alt="Okular's PDF Export As menu with Flattened PDF and Annotation File (XFDF) options" width="515" height="173" loading="lazy">
+        <figcaption>PDF export options are available from File → Export As.</figcaption>
+      </figure>
+      <h3>Flattened PDF</h3>
+      <p>Choose <strong>File → Export As → Flattened PDF</strong> and save a new
+        output file. Annotations and form fields are baked into page content, so
+        they no longer remain editable controls in that copy. Keep the original PDF
+        if you need to edit them later. The export leaves the open source document
+        unchanged and ignores document themes.</p>
+      <h3>XFDF annotation file</h3>
+      <p>Choose <strong>File → Export As → Annotation File (XFDF)</strong>, then
+        save the output and share it with the corresponding PDF. The file picker may
+        use an <code>.xml</code> extension; its contents are XFDF. This keeps
+        annotations separate from the PDF. XFDF export does not support PDFs
+        containing rotated pages.</p>
+      <p>Document themes affect viewing only, so printing and exports use the
+        document&rsquo;s original colors.</p>
+    </section>
+
+    <section id="epub-mobi-export">
+      <h2>ePUB/MOBI export</h2>
+      <ol>
+        <li>Open the ePUB or MOBI document and configure its
+          <a href="#epub-customisation">page layout</a>.</li>
+        <li>Choose <strong>File → Export As → PDF</strong> and an output filename.</li>
+        <li>Wait for the export-complete notification, then open the resulting PDF.</li>
+      </ol>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/epub_mobi_export.png" alt="Okular's ePUB and MOBI Export As menu showing the PDF option" width="432" height="145" loading="lazy">
+        <figcaption>Export an ePUB or MOBI document to PDF from File → Export As.</figcaption>
+      </figure>
+      <p>The export uses the current reflow layout. Document themes do not change
+        its colors. The resulting PDF has fixed pages rather than reflowable text.</p>
+    </section>
+
+    <section id="signatures">
+      <h2>Signatures</h2>
+      <p>Open a signed PDF and use Okular&rsquo;s <strong>Signatures</strong> panel
+        to inspect the signature and certificate details. Certificate trust and
+        signature validity are separate checks.</p>
+      <p>To sign a PDF, configure an NSS certificate database in
+        <strong>PDF → Crypto Engine</strong>, then use Okular&rsquo;s signing action.
+        Select a certificate with its private key, place the signature, and save
+        the signed output.</p>
+      <p>Adjust the signature appearance in the PDF settings.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/signature_configs.png" alt="MuPDF signature settings with an appearance preview, profile, emblem, UTC time, and border options" width="738" height="485" loading="lazy">
+        <figcaption>Preview and configure the signature appearance in the PDF tab.</figcaption>
+      </figure>
+      <p>If no signing certificate is available, use the <a href="#certificate-manager">certificate manager</a>
+        to import one or create a self-signed certificate.</p>
+    </section>
+
+    <section id="certificate-manager">
+      <h2>Cert Manager</h2>
+      <p>In <strong>PDF → Crypto Engine</strong>, choose the default certificate
+        database or a custom NSS database directory, and apply the setting.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/nss_configs.png" alt="Crypto Engine settings showing default and custom NSS certificate databases and the Manage Certificates button" width="603" height="182" loading="lazy">
+        <figcaption>Select the NSS database used for certificate management and PDF signatures.</figcaption>
+      </figure>
+      <ol>
+        <li>Open <strong>Tools → Manage Certificates…</strong>, or the
+          <strong>Manage Certificates</strong> button in the PDF settings.</li>
+        <li>Use <strong>My Certificates</strong> for signing identities and
+          <strong>People</strong> for certificates trusted for verification.</li>
+        <li>Use <strong>Add Certificate</strong> to import a file, paste a PEM
+          certificate, or create a self-signed certificate where available.</li>
+      </ol>
+      <p>A signing identity needs its private key; a public certificate alone
+        cannot sign. Self-signed certificates need separately configured trust
+        before other readers will treat them as trusted.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/self_signed.png" alt="Create Self-Signed Certificate dialog with identity fields, validity dates, signing key, and a local trust option" width="974" height="657" loading="lazy">
+        <figcaption>Create a self-signed signing identity from the certificate manager. Other users must trust the certificate separately.</figcaption>
+      </figure>
+    </section>
+
+    <section id="pdf-javascript">
+      <h2>PDF JavaScript</h2>
+      <p>In <strong>General → Security</strong>, enable
+        <strong>Enable JavaScript support</strong>, apply the setting, and reopen
+        the PDF. The same reopen step applies when disabling it.</p>
+      <p>This optional, experimental feature supports MuPDF&rsquo;s form calculations
+        and field/button actions; it does not implement every Acrobat JavaScript API.
+        The setting is unavailable when JavaScript support was disabled at build time.</p>
+      <!-- Screenshot: JavaScript setting and an interactive form. -->
+    </section>
+
+    <section id="caching">
+      <h2>Caching</h2>
+      <p>OCR results, generated PDF TOCs, and ePUB/MOBI layout accelerators are
+        cached automatically. Reopening a document can reuse compatible results;
+        changing relevant OCR or layout settings uses the corresponding cache.</p>
+      <p>In <strong>General → Cache Management</strong>, click
+        <strong>Click to calculate cache storage size</strong> to measure usage.
+        Open the button&rsquo;s menu and choose <strong>Vacuum PDF TOCs</strong>,
+        <strong>Vacuum ePUB Accels</strong>, <strong>Vacuum OCR</strong>, or
+        <strong>Vacuum All</strong> to clean cached data.</p>
+      <p>The retention note shows when old cache files are removed automatically.
+        Cache cleanup does not delete source documents or saved edits.</p>
+      <!-- Screenshot: Cache usage and cleanup menu. -->
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <p><a href="index.html">Home</a> &middot;
+        <a href="#top">Back to top</a> &middot;
+        <a href="https://github.com/l4rzy/okular-mupdf-ng" rel="noopener">Source</a> &middot;
+        <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING" rel="noopener">GPL-3.0-or-later</a></p>
+    </div>
+  </footer>
+</body>
+</html>

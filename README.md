@@ -47,7 +47,8 @@ and the source-tree layout.
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
 | **Formats** | PDF, ePUB, MOBI | ✓ | ✓ |
-| **ePUB customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
+| **Document Theming** | Default, Twilight, Dusk, and Dark viewing themes for all supported formats | ✓ | Accessibility color modes |
+| **ePUB/MOBI customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
 | **ePUB/MOBI export** | Export ePUB/MOBI to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
 | **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
 | **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
@@ -69,8 +70,6 @@ and the source-tree layout.
 - The NSS cryptographic code has not been fully audited.
 - Sandbox is Linux only and its availability depends on Linux kernel and system support. Default to Strict Enforcement.
 - Worker restart can not recover unsaved forms.
-- Dusk dims raster images to 80% brightness without inverting their colors.
-  Scanned pages are dimmed as images; vector illustrations follow the theme.
 - Twilight, Dusk, and Dark use Okular's per-page placeholder color API when available.
   On older Okular versions, Dusk and Dark temporarily use accessibility **Change Paper Color**
   to prevent white loading placeholders.

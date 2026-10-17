@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>okular-mupdf-ng — Sandboxed MuPDF Backend for Okular</title>
-  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures.">
+  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.">
   <meta name="author" content="l4rzy">
   <meta name="robots" content="index, follow, max-image-preview:large">
   <meta name="theme-color" content="#232629">
@@ -15,14 +15,14 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:url" content="https://l4rzy.github.io/okular-mupdf-ng/">
   <meta property="og:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
-  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures.">
+  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.">
   <meta property="og:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <meta property="og:image:alt" content="okular-mupdf-ng screenshot">
   <meta property="og:image:width" content="1665">
   <meta property="og:image:height" content="963">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
-  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures.">
+  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.">
   <meta name="twitter:image:alt" content="okular-mupdf-ng document viewer screenshot">
   <meta name="twitter:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <script type="application/ld+json">
@@ -30,7 +30,7 @@
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "okular-mupdf-ng",
-      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, built-in OCR, and digital signatures.",
+      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.",
       "url": "https://l4rzy.github.io/okular-mupdf-ng/",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Linux",
@@ -66,6 +66,7 @@
         <a href="#screenshots">Screenshots</a>
         <a href="#security">Security</a>
         <a href="#features">Features</a>
+        <a href="guide.html">How to use</a>
         <a href="#install">Install</a>
         <a class="btn btn-small" href="https://github.com/l4rzy/okular-mupdf-ng" rel="noopener"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub</a>
       </nav>
@@ -87,7 +88,7 @@
         </p>
         <p class="cta">
           <a class="btn btn-primary" href="https://github.com/l4rzy/okular-mupdf-ng/releases" rel="noopener">Get Releases</a>
-          <a class="btn" href="https://github.com/l4rzy/okular-mupdf-ng" rel="noopener">View on GitHub</a>
+          <a class="btn" href="guide.html">How to use</a>
         </p>
       </div>
     </section>
@@ -172,14 +173,14 @@
           </thead>
           <tbody>
             <tr>
-              <td>Safety &amp; Isolation</td>
+              <td><a href="guide.html#safety-isolation">Safety &amp; Isolation</a></td>
               <td>Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits)</td>
               <td class="yes">Yes</td>
               <td class="no">No (in-process execution)</td>
             </tr>
             <tr>
-              <td>Caching</td>
-              <td>ePUB &amp; OCR &amp; PDF cachings</td>
+              <td><a href="guide.html#ocr">OCR</a></td>
+              <td>Built-in Tesseract page OCR engine</td>
               <td class="yes">Yes</td>
               <td class="no">No</td>
             </tr>
@@ -190,56 +191,20 @@
               <td class="yes">Yes</td>
             </tr>
             <tr>
-              <td>ePUB customisation</td>
+              <td><a href="guide.html#epub-customisation">ePUB customisation</a></td>
               <td>Custom CSS, Pagesizes</td>
               <td class="yes">Yes</td>
               <td class="no">No</td>
             </tr>
             <tr>
-              <td>ePUB/MOBI export</td>
-              <td>Export ePUB/MOBI to PDF</td>
-              <td class="yes">Yes (via MuPDF rendering)</td>
-              <td class="yes">Yes (basic, via document print)</td>
-            </tr>
-            <tr>
-              <td>PDF Forms</td>
-              <td>AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons</td>
-              <td class="yes">Yes (AcroForm; XFA detected only)</td>
-              <td class="yes">Yes (AcroForm; XFA detected only)</td>
-            </tr>
-            <tr>
-              <td>PDF JavaScript</td>
-              <td>Calculations and button/field-event actions</td>
-              <td class="yes">Yes (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in)</td>
-              <td class="yes">Yes (Poppler passes scripts to Okular, which executes them in QJSEngine)</td>
-            </tr>
-            <tr>
-              <td>Signatures</td>
-              <td>Verification and creation (NSS crypto)</td>
+              <td><a href="guide.html#document-themes">Document Theming</a></td>
+              <td>Default, Twilight, Dusk, and Dark viewing themes for all supported formats</td>
               <td class="yes">Yes</td>
-              <td class="yes">Yes (plus GPG)</td>
+              <td>Accessibility color modes</td>
             </tr>
             <tr>
-              <td>Cert Manager</td>
-              <td>NSS certificate manager; generate RSA and ECDSA P-256 signing certificates</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
-            </tr>
-            <tr>
-              <td>Annotations</td>
-              <td>Text, highlight, line, shape, ink, stamp, caret</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes (plus sound, movie &amp; file-attachment annotations)</td>
-            </tr>
-            <tr>
-              <td>Annotations export</td>
-              <td>Export PDF annotations to XFDF</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
-            </tr>
-            <tr>
-              <td>Flattened PDF export</td>
-              <td>Bake annotations and form fields into PDF page content</td>
+              <td><a href="guide.html#pdf-heuristic-outline">PDF Heuristic Outline</a></td>
+              <td>Generation for PDFs that don&#x27;t have embedded outline</td>
               <td class="yes">Yes</td>
               <td class="no">No</td>
             </tr>
@@ -250,26 +215,68 @@
               <td class="yes">Yes</td>
             </tr>
             <tr>
-              <td>PDF Heuristic Outline</td>
-              <td>Generation for PDFs that don&#x27;t have embedded outline</td>
+              <td><a href="guide.html#annotations">Annotations</a></td>
+              <td>Text, highlight, line, shape, ink, stamp, caret</td>
               <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td class="yes">Yes (plus sound, movie &amp; file-attachment annotations)</td>
             </tr>
             <tr>
-              <td>Printing &amp; Exporting</td>
-              <td>Print &amp; Export</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes</td>
+              <td><a href="guide.html#pdf-forms">PDF Forms</a></td>
+              <td>AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons</td>
+              <td class="yes">Yes (AcroForm; XFA detected only)</td>
+              <td class="yes">Yes (AcroForm; XFA detected only)</td>
             </tr>
             <tr>
               <td>PDF layers</td>
               <td>Toggle optional content in the Layers sidebar</td>
               <td class="yes">Yes</td>
-              <td class="yes">Yes (PDF)</td>
+              <td class="yes">Yes</td>
             </tr>
             <tr>
-              <td>OCR</td>
-              <td>Built-in Tesseract page OCR engine</td>
+              <td><a href="guide.html#pdf-export">PDF Export</a></td>
+              <td>Print &amp; Export</td>
+              <td class="yes">Yes</td>
+              <td class="yes">Yes</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#epub-mobi-export">ePUB/MOBI export</a></td>
+              <td>Export ePUB/MOBI to PDF</td>
+              <td class="yes">Yes (via MuPDF rendering)</td>
+              <td class="yes">Yes (basic, via document print)</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#pdf-export">Flattened PDF export</a></td>
+              <td>Bake annotations and form fields into PDF page content</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#pdf-export">Annotations export</a></td>
+              <td>Export PDF annotations to XFDF</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#signatures">Signatures</a></td>
+              <td>Verification and creation (NSS crypto)</td>
+              <td class="yes">Yes</td>
+              <td class="yes">Yes (plus GPG)</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#certificate-manager">Cert Manager</a></td>
+              <td>NSS certificate manager; generate RSA and ECDSA P-256 signing certificates</td>
+              <td class="yes">Yes</td>
+              <td class="no">No</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#pdf-javascript">PDF JavaScript</a></td>
+              <td>Calculations and button/field-event actions</td>
+              <td class="yes">Yes (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in)</td>
+              <td class="yes">Yes (Poppler passes scripts to Okular, which executes them in QJSEngine)</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#caching">Caching</a></td>
+              <td>ePUB &amp; OCR &amp; PDF cachings</td>
               <td class="yes">Yes</td>
               <td class="no">No</td>
             </tr>
