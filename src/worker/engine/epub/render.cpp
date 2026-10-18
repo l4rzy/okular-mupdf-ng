@@ -9,8 +9,8 @@
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
-#include "engine/theming/dusk_device.hpp"
 #include "engine/theming/palette.hpp"
+#include "engine/theming/theme_device.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
@@ -106,19 +106,23 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
             pix = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
         }
 
-        // Dusk composites on its dark background; bitmap themes start on white.
-        if (m_settings.readingTheme == ReadingTheme::Dusk && request.cookie)
+        const auto theme = m_settings.readingTheme;
+        const bool deviceTheme = theme == ReadingTheme::Dusk || theme == ReadingTheme::Dark;
+        if (deviceTheme && request.cookie)
             list = fz_new_display_list_from_page(m_context, page);
-        const bool dusk = m_settings.readingTheme == ReadingTheme::Dusk
-            && !isMostlyDarkPage(m_context, page, bounds, request.cookie, list);
-        const auto paperColor = dusk ? 0x303134U : readingPaperColor(m_settings);
+        const auto pageTheme =
+            deviceTheme ? inspectThemePage(m_context, page, bounds, request.cookie, list) : ThemePageInfo { };
+        const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
+        const bool bitmapDark = theme == ReadingTheme::Dark && recolorVectors && pageTheme.needsCompositing;
+        const auto paperColor = recolorVectors && !bitmapDark ? (theme == ReadingTheme::Dusk ? 0x303134U : 0x202124U)
+                                                              : readingPaperColor(m_settings);
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
         dev = fz_new_draw_device(m_context, ctm, pix);
-        if (m_settings.readingTheme == ReadingTheme::Dusk) {
-            auto* themed = newDuskDevice(m_context, dev, ctm, bbox, request.cookie, dusk);
+        if (deviceTheme && !bitmapDark) {
+            auto* themed = newThemeDevice(m_context, dev, ctm, bbox, request.cookie, theme, recolorVectors);
             fz_drop_device(m_context, dev);
             dev = themed;
         }
@@ -140,10 +144,8 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (request.cookie && request.cookie->abort)
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
-        if (m_settings.readingTheme != ReadingTheme::Dusk
-            && (m_settings.readingTheme != ReadingTheme::Dark
-                || !isMostlyDarkPage(m_context, page, bounds, request.cookie, list)))
-            applyDocumentTheme(m_context, pix, m_settings.readingTheme, request.cookie);
+        if (!deviceTheme || bitmapDark)
+            applyDocumentTheme(m_context, pix, theme, request.cookie);
         fz_drop_device(m_context, dev);
         dev = nullptr;
 

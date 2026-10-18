@@ -34,7 +34,7 @@ promise that every input or workflow has been tested.
 | Printing and document export | 🟡 Partial | Export integration; print-output appearance, visibility, geometry and source-isolation tests; printer submission untested |
 | Flattened PDF export | 🟡 Partial | Worker appearance/source-isolation tests; IPC and CLI export integration |
 | Basic PDF AcroForm filling | 🟡 Partial | Worker and proxy tests; loaded-generator edit, undo/redo, save/reopen, reset, print-to-PDF, and repeated worker recovery (unsaved edit loss, history clearing, proxy reuse, and post-recovery save/reopen) tests with synthetic and LibreOffice fixtures |
-| Document themes (PDF, ePUB, MOBI) | 🟡 Partial | Worker palette, image dimming/alpha/mask, dark-page detection, tile/stride, print isolation, and theme-switching tests; generator menu/settings/shortcuts and native/legacy placeholder tests |
+| Document themes (PDF, ePUB, MOBI) | 🟡 Partial | Worker palette, image dimming/alpha/mask, dark-page/image detection, blend-mode fallback, tile/stride, print isolation, and theme-switching tests; generator menu/settings/shortcuts and native/legacy placeholder tests |
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
@@ -47,8 +47,16 @@ promise that every input or workflow has been tested.
 Document themes are viewing-only and have mainly synthetic rendering coverage;
 complex documents may need further tuning. Dusk dims raster images to 80%
 brightness, including text in scanned pages. Vector illustrations follow the
-text palette. Dark leaves mostly dark pages unchanged. Dusk leaves their vector
-colors unchanged but still dims their images.
+text palette. Dark leaves mostly dark pages' vector colors unchanged and dims
+their images to 80% brightness. On other pages, it inverts lighter images and dims
+mostly dark images to 80% without inversion. Image decisions use the whole image independently
+of zoom or tiles, with transparency taken into account. Dusk leaves mostly dark
+pages' vector colors unchanged but still dims their images.
+
+Dark falls back to transforming the completed page when recoloring is needed
+and non-normal blend modes or knockout groups are present. This preserves native
+compositing, but selective image inversion and image dimming are unavailable on
+those pages.
 
 On Okular versions without the per-page placeholder color API, Dusk and Dark
 use temporary accessibility **Change Paper Color** settings. The workaround

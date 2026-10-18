@@ -4,8 +4,8 @@
 #include "engine/epub/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
-#include "engine/theming/dusk_device.hpp"
 #include "engine/theming/palette.hpp"
+#include "engine/theming/theme_device.hpp"
 #include "genpdf.hpp"
 
 #include <QFile>
@@ -109,6 +109,59 @@ bool createShadingPdf(fz_context* ctx, const QString& path, int kind)
     return success;
 }
 
+bool createBlendPdf(fz_context* ctx, const QString& path, const QByteArray& blend, float alpha, bool knockout)
+{
+    pdf_document* volatile document = nullptr;
+    pdf_obj* volatile resources = nullptr;
+    pdf_obj* volatile page = nullptr;
+    pdf_obj* volatile form = nullptr;
+    fz_buffer* volatile contents = nullptr;
+    bool success = false;
+    fz_var(success);
+    fz_try(ctx)
+    {
+        document = pdf_create_document(ctx);
+        resources = pdf_new_dict(ctx, document, 1);
+        pdf_dict_putp_drop(ctx, resources, "ExtGState/B/BM", pdf_new_name(ctx, blend.constData()));
+        pdf_dict_putp_drop(ctx, resources, "ExtGState/B/ca", pdf_new_real(ctx, alpha));
+        constexpr char commands[] = "1 g 0 0 64 64 re f q /B gs 16 16 16 16 re f Q";
+        contents =
+            fz_new_buffer_from_copied_data(ctx, reinterpret_cast<const unsigned char*>(commands), sizeof(commands) - 1);
+        if (knockout) {
+            form = pdf_new_dict(ctx, document, 5);
+            pdf_dict_put(ctx, form, PDF_NAME(Type), PDF_NAME(XObject));
+            pdf_dict_put(ctx, form, PDF_NAME(Subtype), PDF_NAME(Form));
+            pdf_dict_put_rect(ctx, form, PDF_NAME(BBox), { 0, 0, 64, 64 });
+            pdf_dict_putp_drop(ctx, form, "Group/S", pdf_new_name(ctx, "Transparency"));
+            pdf_dict_putp_drop(ctx, form, "Group/CS", pdf_new_name(ctx, "DeviceRGB"));
+            pdf_dict_putp(ctx, form, "Group/K", PDF_TRUE);
+            pdf_dict_putp(ctx, form, "Group/I", PDF_TRUE);
+            auto* formResources = pdf_dict_put_dict(ctx, form, PDF_NAME(Resources), 1);
+            pdf_dict_put(ctx, formResources, PDF_NAME(ExtGState), pdf_dict_get(ctx, resources, PDF_NAME(ExtGState)));
+            pdf_dict_putp_drop(ctx, resources, "XObject/F", pdf_add_stream(ctx, document, contents, form, 0));
+            fz_drop_buffer(ctx, contents);
+            contents = nullptr;
+            contents = fz_new_buffer_from_copied_data(ctx, reinterpret_cast<const unsigned char*>("/F Do"), 5);
+        }
+        page = pdf_add_page(ctx, document, { 0, 0, 64, 64 }, 0, resources, contents);
+        pdf_insert_page(ctx, document, -1, page);
+        pdf_save_document(ctx, document, QFile::encodeName(path).constData(), &pdf_default_write_options);
+        success = true;
+    }
+    fz_always(ctx)
+    {
+        fz_drop_buffer(ctx, contents);
+        pdf_drop_obj(ctx, form);
+        pdf_drop_obj(ctx, page);
+        pdf_drop_obj(ctx, resources);
+        pdf_drop_document(ctx, document);
+    }
+    fz_catch(ctx)
+    {
+    }
+    return success;
+}
+
 } // namespace
 
 class TestPage : public QObject {
@@ -150,27 +203,38 @@ private slots:
         }
     }
 
-    void duskDimsImages_data()
+    void themesImages_data()
     {
-        QTest::addColumn<int>("alpha");
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<QByteArray>("rgba");
         QTest::addColumn<bool>("softMask");
-        QTest::newRow("opaque") << 255 << false;
-        QTest::newRow("transparent") << 128 << false;
-        QTest::newRow("luminosity-mask") << 255 << true;
+        QTest::addColumn<bool>("preserved");
+        QTest::newRow("dusk-opaque") << 2 << QByteArray::fromHex("ff0000ff") << false << false;
+        QTest::newRow("dusk-transparent") << 2 << QByteArray::fromHex("80000080") << false << false;
+        QTest::newRow("dusk-luminosity-mask") << 2 << QByteArray::fromHex("ff0000ff") << true << false;
+        QTest::newRow("dark-dark-image") << 3 << QByteArray::fromHex("101010ff") << false << true;
+        QTest::newRow("dark-transparent-dark-image") << 3 << QByteArray::fromHex("08080880") << false << true;
+        QTest::newRow("dark-light-image") << 3 << QByteArray::fromHex("ffffffff") << false << false;
+        QTest::newRow("dark-transparent-light-image") << 3 << QByteArray::fromHex("80808080") << false << false;
+        QTest::newRow("dark-transparent-padding")
+            << 3 << QByteArray::fromHex("000000000000000000000000ffffffff") << false << false;
+        QTest::newRow("dark-fully-transparent") << 3 << QByteArray::fromHex("00000000") << false << false;
+        QTest::newRow("dark-below-threshold") << 3 << QByteArray::fromHex("7f7f7fff") << false << true;
+        QTest::newRow("dark-at-threshold") << 3 << QByteArray::fromHex("808080ff") << false << false;
+        QTest::newRow("dark-luminosity-mask") << 3 << QByteArray::fromHex("ffffffff") << true << false;
     }
 
-    void duskDimsImages()
+    void themesImages()
     {
-        QFETCH(int, alpha);
+        QFETCH(int, theme);
+        QFETCH(QByteArray, rgba);
         QFETCH(bool, softMask);
+        QFETCH(bool, preserved);
         using namespace Mu::Worker::Engine;
         PdfDocument owner;
         auto* ctx = owner.context();
-        auto* source = fz_new_pixmap(ctx, fz_device_rgb(ctx), 1, 1, nullptr, 1);
-        const std::array<unsigned char, 4> red {
-            static_cast<unsigned char>(alpha), 0, 0, static_cast<unsigned char>(alpha)
-        };
-        std::copy(red.begin(), red.end(), fz_pixmap_samples(ctx, source));
+        auto* source = fz_new_pixmap(ctx, fz_device_rgb(ctx), int(rgba.size() / 4), 1, nullptr, 1);
+        std::copy(rgba.begin(), rgba.end(), fz_pixmap_samples(ctx, source));
         auto* image = fz_new_image_from_pixmap(ctx, source, nullptr);
         auto* path = fz_new_path(ctx);
         fz_rectto(ctx, path, 0, 0, 4, 4);
@@ -179,8 +243,10 @@ private slots:
             auto* output = fz_new_pixmap(ctx, fz_device_rgb(ctx), 4, 4, nullptr, 1);
             fz_clear_pixmap(ctx, output);
             auto* target = fz_new_draw_device(ctx, fz_identity, output);
-            auto* device =
-                themed ? newDuskDevice(ctx, target, fz_identity, { 0, 0, 4, 4 }, nullptr) : fz_keep_device(ctx, target);
+            auto* device = themed
+                ? newThemeDevice(
+                      ctx, target, fz_identity, { 0, 0, 4, 4 }, nullptr, static_cast<Mu::Model::ReadingTheme>(theme))
+                : fz_keep_device(ctx, target);
             if (softMask) {
                 const float black = 0, grey = 0.5f;
                 fz_begin_mask(ctx, device, { 0, 0, 4, 4 }, 1, fz_device_gray(ctx), &black, fz_default_color_params);
@@ -191,27 +257,43 @@ private slots:
             if (softMask)
                 fz_pop_clip(ctx, device);
             fz_close_device(ctx, device);
-            pixels[themed] = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, output)), 4);
+            pixels[themed] = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, output)) + 3 * 4, 4);
             fz_drop_device(ctx, device);
             fz_drop_device(ctx, target);
             fz_drop_pixmap(ctx, output);
         }
-        const auto sourcePixel = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, source)), 4);
+        const auto sourcePixel = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, source)), rgba.size());
         fz_drop_path(ctx, path);
         fz_drop_image(ctx, image);
         fz_drop_pixmap(ctx, source);
 
-        for (int channel = 0; channel < 3; ++channel) {
-            const int original = static_cast<unsigned char>(pixels[0][channel]);
-            const int dimmed = static_cast<unsigned char>(pixels[1][channel]);
-            QVERIFY(std::abs(dimmed - (original * 4 + 2) / 5) <= 1);
+        auto expected = pixels[0];
+        if (theme == int(Mu::Model::ReadingTheme::Dusk) || preserved) {
+            dimImageRow(reinterpret_cast<unsigned char*>(expected.data()), 1);
+        } else {
+            auto* pixmap = fz_new_pixmap_with_data(
+                ctx, fz_device_rgb(ctx), 1, 1, nullptr, 1, 4, reinterpret_cast<unsigned char*>(expected.data()));
+            applyDocumentTheme(ctx, pixmap, Mu::Model::ReadingTheme::Dark, nullptr);
+            fz_drop_pixmap(ctx, pixmap);
         }
+        for (int channel = 0; channel < 3; ++channel)
+            QVERIFY(std::abs(int(static_cast<unsigned char>(pixels[1][channel]))
+                             - int(static_cast<unsigned char>(expected[channel])))
+                    <= 1);
         QCOMPARE(pixels[1][3], pixels[0][3]);
-        QCOMPARE(sourcePixel, QByteArray(reinterpret_cast<const char*>(red.data()), 4));
+        QCOMPARE(sourcePixel, rgba);
     }
 
-    void duskStencilAndCancellation()
+    void themeStencilAndCancellation_data()
     {
+        QTest::addColumn<int>("theme");
+        QTest::newRow("dusk") << 2;
+        QTest::newRow("dark") << 3;
+    }
+
+    void themeStencilAndCancellation()
+    {
+        QFETCH(int, theme);
         using namespace Mu::Worker::Engine;
         PdfDocument owner;
         auto* ctx = owner.context();
@@ -222,7 +304,8 @@ private slots:
         auto* image = fz_new_image_from_pixmap(ctx, stencil, nullptr);
         auto* target = fz_new_draw_device(ctx, fz_identity, pixmap);
         fz_cookie cookie { };
-        auto* device = newDuskDevice(ctx, target, fz_identity, { 0, 0, 8, 8 }, &cookie);
+        auto* device = newThemeDevice(
+            ctx, target, fz_identity, { 0, 0, 8, 8 }, &cookie, static_cast<Mu::Model::ReadingTheme>(theme));
         const float black = 0;
         fz_fill_image_mask(ctx, device, image, fz_scale(8, 8), fz_device_gray(ctx), &black, 1, fz_default_color_params);
         const auto pixel = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, pixmap)), 4);
@@ -245,6 +328,69 @@ private slots:
         fz_drop_pixmap(ctx, pixmap);
         QCOMPARE(pixel, QByteArray::fromHex("dadce0ff"));
         QCOMPARE(error, FZ_ERROR_ABORT);
+    }
+
+    void darkDocumentImages_data()
+    {
+        QTest::addColumn<bool>("preserved");
+        QTest::addColumn<bool>("darkPage");
+        QTest::newRow("mostly-dark-image") << true << false;
+        QTest::newRow("mostly-light-image") << false << false;
+        QTest::newRow("mostly-dark-page") << false << true;
+    }
+
+    void darkDocumentImages()
+    {
+        QFETCH(bool, preserved);
+        QFETCH(bool, darkPage);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("dark-images.pdf");
+        QByteArray contents = darkPage ? "0 g " : "1 g ";
+        contents += "0 0 612 792 re f q 200 0 0 100 100 400 cm "
+                    "BI /W 4 /H 1 /CS /RGB /BPC 8 /F /AHx ID ";
+        contents += preserved ? "101010101010101010ffffff" : "ffffffffffffffffff101010";
+        contents += "> EI Q 0 g BT /F1 80 Tf 110 470 Td (TEXT) Tj ET";
+        createTextPDF(document.context(), path, contents.constData());
+        QVERIFY(openDocument(document, path));
+        constexpr int width = 153, height = 198, stride = width * 4;
+        std::vector<std::uint8_t> original(height * stride), dark(height * stride);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
+        auto settings = document.settings();
+        settings.readingTheme = Mu::Model::ReadingTheme::Dark;
+        document.setSettings(settings);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, dark.data(), stride));
+        QCOMPARE(dark[0], std::uint8_t(darkPage ? 0 : 32));
+        for (const int x : { 30, 70 }) {
+            const auto offset = std::size_t(85 * stride + x * 4);
+            if (preserved || darkPage) {
+                for (std::size_t channel = 0; channel < 3; ++channel)
+                    QVERIFY(std::abs(int(dark[offset + channel]) - (int(original[offset + channel]) * 4 + 2) / 5) <= 1);
+                QCOMPARE(dark[offset + 3], original[offset + 3]);
+            } else
+                QVERIFY(std::abs(int(dark[offset]) - int(original[offset])) > 100);
+        }
+        const std::array<std::uint8_t, 4> foreground { 218, 220, 224, 255 };
+        if (!darkPage)
+            QVERIFY(std::search(dark.begin(),
+                                dark.end(),
+                                foreground.begin(),
+                                foreground.end(),
+                                [](int actual, int expected) { return std::abs(actual - expected) <= 1; })
+                    != dark.end());
+        // This tile sees only the minority-colored part of the image.
+        constexpr DocumentBase::RenderTile tile { 64, 80, 8, 8 };
+        std::vector<std::uint8_t> tiled(tile.width * tile.height * 4);
+        QVERIFY(document.renderToBuffer({ 0, width, height, tile }, tiled.data(), tile.width * 4));
+        for (int y = 0; y < tile.height; ++y)
+            for (int x = 0; x < tile.width * 4; ++x)
+                QVERIFY(std::abs(int(tiled[std::size_t(y * tile.width * 4 + x)])
+                                 - int(dark[std::size_t((y + tile.y) * stride + tile.x * 4 + x)]))
+                        <= 2);
+        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        document.setSettings(settings);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, dark.data(), stride));
+        QCOMPARE(dark, original);
     }
 
     void duskDocumentImages_data()
@@ -315,44 +461,48 @@ private slots:
         QCOMPARE(tiled, nativeTile);
     }
 
-    void duskShading_data()
+    void themeShading_data()
     {
+        QTest::addColumn<int>("theme");
         QTest::addColumn<int>("kind");
-        QTest::newRow("axial-gradient") << 0;
-        QTest::newRow("tiling-pattern") << 1;
-        QTest::newRow("gradient-in-pattern") << 2;
-        QTest::newRow("image-in-pattern") << 3;
+        const std::array names { "axial-gradient", "tiling-pattern", "gradient-in-pattern", "image-in-pattern" };
+        for (const int theme : { 2, 3 })
+            for (int kind = 0; kind < int(names.size()); ++kind) {
+                const auto name = QByteArray(theme == 2 ? "dusk-" : "dark-") + names[std::size_t(kind)];
+                QTest::newRow(name.constData()) << theme << kind;
+            }
     }
 
-    void duskShading()
+    void themeShading()
     {
+        QFETCH(int, theme);
         QFETCH(int, kind);
         using namespace Mu::Worker::Engine;
         PdfDocument document;
-        const auto path = m_tempDir.filePath("dusk-shading.pdf");
+        const auto path = m_tempDir.filePath("theme-shading.pdf");
         QVERIFY(createShadingPdf(document.context(), path, kind));
         QVERIFY(openDocument(document, path));
         constexpr int width = 128, stride = width * 4;
-        std::vector<std::uint8_t> original(width * stride), dusk(width * stride);
+        std::vector<std::uint8_t> original(width * stride), themed(width * stride);
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, original.data(), stride));
         auto settings = document.settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Dusk;
+        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
         document.setSettings(settings);
         std::string error;
-        QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, dusk.data(), stride, &error),
+        QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, themed.data(), stride, &error),
                  error.c_str());
-        QVERIFY(dusk != original);
+        QVERIFY(themed != original);
         if (kind == 3) {
-            QCOMPARE(dusk[0], std::uint8_t(204));
-            QCOMPARE(dusk[1], std::uint8_t(0));
-            QCOMPARE(dusk[2], std::uint8_t(0));
+            QCOMPARE(themed[0], std::uint8_t(204));
+            QCOMPARE(themed[1], std::uint8_t(0));
+            QCOMPARE(themed[2], std::uint8_t(0));
         }
         if (kind == 1) {
-            QCOMPARE(dusk[(100 * width + 10) * 4], std::uint8_t(218));
-            QCOMPARE(dusk[(100 * width + 70) * 4], std::uint8_t(48));
+            QCOMPARE(themed[(100 * width + 10) * 4], std::uint8_t(218));
+            QCOMPARE(themed[(100 * width + 70) * 4], std::uint8_t(theme == 2 ? 48 : 32));
         } else if (kind != 3) {
             // Both the direct and patterned gradient must retain contrast.
-            QVERIFY(int(dusk[(100 * width + 70) * 4]) - int(dusk[(100 * width + 10) * 4]) > 60);
+            QVERIFY(int(themed[(100 * width + 70) * 4]) - int(themed[(100 * width + 10) * 4]) > 60);
         }
         constexpr DocumentBase::RenderTile tile { 13, 87, 31, 25 };
         constexpr int tileStride = tile.width * 4 + 8;
@@ -361,7 +511,7 @@ private slots:
         for (int y = 0; y < tile.height; ++y) {
             for (int x = 0; x < tile.width * 4; ++x)
                 QVERIFY(std::abs(int(tiled[std::size_t(y * tileStride + x)])
-                                 - int(dusk[std::size_t((y + tile.y) * stride + tile.x * 4 + x)]))
+                                 - int(themed[std::size_t((y + tile.y) * stride + tile.x * 4 + x)]))
                         <= 2);
             for (int x = tile.width * 4; x < tileStride; ++x)
                 QCOMPARE(tiled[std::size_t(y * tileStride + x)], std::uint8_t(0xAB));
@@ -451,6 +601,54 @@ private slots:
             QVERIFY(std::equal(tiled.begin() + y * tile.width * 4,
                                tiled.begin() + (y + 1) * tile.width * 4,
                                themed.begin() + ((y + tile.y) * width + tile.x) * 4));
+    }
+
+    void preservesDarkBlendModes_data()
+    {
+        QTest::addColumn<QByteArray>("blend");
+        QTest::addColumn<float>("alpha");
+        QTest::addColumn<bool>("knockout");
+        QTest::newRow("difference") << QByteArray("Difference") << 1.0f << false;
+        QTest::newRow("multiply") << QByteArray("Multiply") << 1.0f << false;
+        QTest::newRow("translucent-difference") << QByteArray("Difference") << 0.5f << false;
+        QTest::newRow("translucent-multiply") << QByteArray("Multiply") << 0.5f << false;
+        QTest::newRow("knockout") << QByteArray("Normal") << 1.0f << true;
+    }
+
+    void preservesDarkBlendModes()
+    {
+        QFETCH(QByteArray, blend);
+        QFETCH(float, alpha);
+        QFETCH(bool, knockout);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("theme-blends.pdf");
+        QVERIFY(createBlendPdf(document.context(), path, blend, alpha, knockout));
+        QVERIFY(openDocument(document, path));
+        auto* page = fz_load_page(document.context(), document.document(), 0);
+        const auto info = inspectThemePage(document.context(), page, fz_bound_page(document.context(), page), nullptr);
+        fz_drop_page(document.context(), page);
+        QVERIFY(info.needsCompositing);
+        QVERIFY(!info.mostlyDark);
+        constexpr int width = 64, stride = width * 4;
+        std::vector<std::uint8_t> expected(width * stride), actual(width * stride);
+        QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, expected.data(), stride));
+        auto* pixmap = fz_new_pixmap_with_data(
+            document.context(), fz_device_rgb(document.context()), width, width, nullptr, 1, stride, expected.data());
+        applyDocumentTheme(document.context(), pixmap, Mu::Model::ReadingTheme::Dark, nullptr);
+        fz_drop_pixmap(document.context(), pixmap);
+        auto settings = document.settings();
+        settings.readingTheme = Mu::Model::ReadingTheme::Dark;
+        document.setSettings(settings);
+        QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, actual.data(), stride));
+        QCOMPARE(actual, expected);
+        constexpr DocumentBase::RenderTile tile { 13, 29, 25, 25 };
+        std::vector<std::uint8_t> tiled(tile.width * tile.height * 4);
+        QVERIFY(document.renderToBuffer({ 0, width, width, tile }, tiled.data(), tile.width * 4));
+        for (int y = 0; y < tile.height; ++y)
+            QVERIFY(std::equal(tiled.data() + y * tile.width * 4,
+                               tiled.data() + (y + 1) * tile.width * 4,
+                               expected.data() + (y + tile.y) * stride + tile.x * 4));
     }
 
     void brightensThemeColors_data()

@@ -15,8 +15,8 @@ extern "C" {
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
-#include "engine/theming/dusk_device.hpp"
 #include "engine/theming/palette.hpp"
+#include "engine/theming/theme_device.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
 
@@ -110,10 +110,14 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             pixmap = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, separations, 1);
         }
 
-        // Dusk composites on its dark background; bitmap themes start on white.
-        const bool dusk = m_settings.readingTheme == ReadingTheme::Dusk
-            && !isMostlyDarkPage(m_context, nativePage, bounds, request.cookie);
-        const auto paperColor = dusk ? 0x303134U : readingPaperColor(m_settings);
+        const auto theme = m_settings.readingTheme;
+        const bool deviceTheme = theme == ReadingTheme::Dusk || theme == ReadingTheme::Dark;
+        const auto pageTheme =
+            deviceTheme ? inspectThemePage(m_context, nativePage, bounds, request.cookie) : ThemePageInfo { };
+        const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
+        const bool bitmapDark = theme == ReadingTheme::Dark && recolorVectors && pageTheme.needsCompositing;
+        const auto paperColor = recolorVectors && !bitmapDark ? (theme == ReadingTheme::Dusk ? 0x303134U : 0x202124U)
+                                                              : readingPaperColor(m_settings);
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
@@ -123,9 +127,9 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         if (!m_settings.interpolateImages)
             fz_enable_device_hints(m_context, device, FZ_DONT_INTERPOLATE_IMAGES);
 
-        if (m_settings.readingTheme == ReadingTheme::Dusk) {
-            auto* themed =
-                newDuskDevice(m_context, device, tiled ? transform : fz_identity, bbox, request.cookie, dusk);
+        if (deviceTheme && !bitmapDark) {
+            auto* themed = newThemeDevice(
+                m_context, device, tiled ? transform : fz_identity, bbox, request.cookie, theme, recolorVectors);
             fz_drop_device(m_context, device);
             device = themed;
         }
@@ -137,10 +141,8 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
 
         fz_close_device(m_context, device);
-        if (m_settings.readingTheme != ReadingTheme::Dusk
-            && (m_settings.readingTheme != ReadingTheme::Dark
-                || !isMostlyDarkPage(m_context, nativePage, bounds, request.cookie)))
-            applyDocumentTheme(m_context, pixmap, m_settings.readingTheme, request.cookie);
+        if (!deviceTheme || bitmapDark)
+            applyDocumentTheme(m_context, pixmap, theme, request.cookie);
 
         // Blit sub-tile region into the destination frame buffer with specified row stride
         if (tiled || dstStride != minRowBytes) {

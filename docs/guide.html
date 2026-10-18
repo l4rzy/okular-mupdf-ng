@@ -200,15 +200,21 @@ sudo apt install tesseract-ocr-eng</code></pre>
             <tr>
               <th scope="row">Dark</th>
               <td>Nearly black (<code>#202124</code>)</td>
-              <td>Inverts brightness across the page, including images, while retaining color distinctions</td>
+              <td>Light text; inverts lighter images and dims uninverted images to 80% brightness</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p>Dark leaves mostly dark pages unchanged. Dusk leaves their vector colors
-        unchanged but still dims their images. Dusk distinguishes images from vectors,
+      <p>Dark leaves mostly dark pages&rsquo; vector colors unchanged and dims their
+        images to 80% brightness. On other pages, it checks each raster image
+        separately: mostly dark images stay uninverted at 80% brightness, while
+        lighter images are inverted. Dusk also leaves mostly dark pages&rsquo; vector
+        colors unchanged but still dims their images. Dusk distinguishes images from vectors,
         not their content: scanned text dims with its image, and vector illustrations
         follow the text palette.</p>
+      <p>For pages that need recoloring and use non-normal blend modes or knockout
+        groups, Dark transforms the completed page to preserve correct compositing.
+        Selective image inversion and 80% image dimming are unavailable on those pages.</p>
       <p>Themes affect viewing only. OCR, printing, exports, and the document&rsquo;s
         saved content retain their original colors. You can assign
         <a href="#keyboard-shortcuts">keyboard shortcuts</a> to toggle themes.</p>

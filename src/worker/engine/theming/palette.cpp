@@ -14,6 +14,11 @@ namespace {
 
 using ThemePalette = std::array<std::array<std::uint8_t, 256>, 3>;
 
+struct PageProbe {
+    fz_device super;
+    ThemePageInfo* info;
+};
+
 ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::array<int, 3>& foreground) noexcept
 {
     ThemePalette palette { };
@@ -63,12 +68,13 @@ bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
 
 // Always sample the whole page, independently of the requested tile or zoom.
 // Keep the thumbnail temporary so edits and layer changes cannot leave stale decisions.
-bool isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* cookie, fz_display_list* list)
+ThemePageInfo
+inspectThemePage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* cookie, fz_display_list* list)
 {
     fz_pixmap* volatile thumbnail = nullptr;
     fz_device* volatile device = nullptr;
-    bool dark = false;
-    fz_var(dark);
+    ThemePageInfo info;
+    fz_var(info);
     fz_try(context)
     {
         if (cookie && cookie->abort)
@@ -78,6 +84,25 @@ bool isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_coo
         const fz_matrix transform = fz_concat(fz_translate(-bounds.x0, -bounds.y0),
                                               fz_scale(64 / (bounds.x1 - bounds.x0), 64 / (bounds.y1 - bounds.y0)));
         device = fz_new_draw_device(context, transform, thumbnail);
+        auto* probe =
+            reinterpret_cast<PageProbe*>(fz_new_passthrough_device_of_size(context, device, sizeof(PageProbe)));
+        probe->info = &info;
+        probe->super.begin_group = [](fz_context* ctx,
+                                      fz_device* dev,
+                                      fz_rect area,
+                                      fz_colorspace* cs,
+                                      int isolated,
+                                      int knockout,
+                                      int blendmode,
+                                      float alpha) {
+            // Non-isolated groups can depend on everything painted before them.
+            // Their original paints must be composited before recoloring.
+            auto* state = reinterpret_cast<PageProbe*>(dev);
+            state->info->needsCompositing |= (blendmode & FZ_BLEND_MODEMASK) != FZ_BLEND_NORMAL || knockout != 0;
+            fz_begin_group(ctx, dev->passthrough, area, cs, isolated, knockout, blendmode, alpha);
+        };
+        fz_drop_device(context, device);
+        device = &probe->super;
         if (list)
             fz_run_display_list(context, list, device, fz_identity, fz_infinite_rect, cookie);
         else
@@ -85,7 +110,7 @@ bool isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_coo
         fz_close_device(context, device);
         if (cookie && cookie->abort)
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
-        dark = isMostlyDarkPixmap(context, thumbnail);
+        info.mostlyDark = isMostlyDarkPixmap(context, thumbnail);
     }
     fz_always(context)
     {
@@ -93,7 +118,7 @@ bool isMostlyDarkPage(fz_context* context, fz_page* page, fz_rect bounds, fz_coo
         fz_drop_pixmap(context, thumbnail);
     }
     fz_catch(context) fz_rethrow(context);
-    return dark;
+    return info;
 }
 
 // Dim premultiplied RGBA to 80%, retaining alpha. Packed, alignment-safe
@@ -115,7 +140,7 @@ void dimImageRow(unsigned char* pixel, int width) noexcept
     }
 }
 
-// Transform only the fully composited viewing pixmap, leaving alpha unchanged.
+// Transform an RGBA viewing pixmap, preserving premultiplied alpha.
 void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTheme theme, const fz_cookie* cookie)
 {
     // Dusk is applied by its image-preserving rendering device.
@@ -149,9 +174,15 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTh
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
         auto* pixel = samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
         for (int x = 0; x < width; ++x, pixel += 4) {
-            int red = pixel[0];
-            int green = pixel[1];
-            int blue = pixel[2];
+            const int alpha = pixel[3];
+            if (!alpha)
+                continue;
+            int red = pixel[0], green = pixel[1], blue = pixel[2];
+            if (alpha != 255) {
+                red = std::min(255, red * 255 / alpha);
+                green = std::min(255, green * 255 / alpha);
+                blue = std::min(255, blue * 255 / alpha);
+            }
             if (invertBrightness) {
                 // Invert brightness and soften saturation to keep colors readable.
                 // A fixed blend preserves antialiased coverage against neutral paper.
@@ -161,9 +192,9 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTh
                 green = low + (high - green) * 2 / 5;
                 blue = low + (high - blue) * 2 / 5;
             }
-            pixel[0] = palette[0][static_cast<std::size_t>(red)];
-            pixel[1] = palette[1][static_cast<std::size_t>(green)];
-            pixel[2] = palette[2][static_cast<std::size_t>(blue)];
+            pixel[0] = static_cast<unsigned char>((palette[0][static_cast<std::size_t>(red)] * alpha + 127) / 255);
+            pixel[1] = static_cast<unsigned char>((palette[1][static_cast<std::size_t>(green)] * alpha + 127) / 255);
+            pixel[2] = static_cast<unsigned char>((palette[2][static_cast<std::size_t>(blue)] * alpha + 127) / 255);
         }
     }
 }
