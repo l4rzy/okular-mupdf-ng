@@ -48,7 +48,6 @@ jobs:
             mozilla-nss-devel \
             mozilla-nss-tools \
             okular-devel \
-            openjpeg2-devel \
             openssl \
             pkgconf-pkg-config \
             python314-base \

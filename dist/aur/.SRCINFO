@@ -17,7 +17,6 @@ pkgbase = okular-mupdf-ng-git
 	depends = okular
 	depends = nss
 	depends = libseccomp
-	depends = openjpeg2
 	depends = libjpeg-turbo
 	depends = jbig2dec
 	depends = brotli

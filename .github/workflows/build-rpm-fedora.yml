@@ -65,7 +65,6 @@ jobs:
             nss-devel \
             nss-tools \
             okular-devel \
-            openjpeg2-devel \
             openssl \
             pkgconf-pkg-config \
             python3 \

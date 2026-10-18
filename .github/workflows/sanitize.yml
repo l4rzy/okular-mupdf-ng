@@ -44,7 +44,6 @@ jobs:
             libjpeg-dev \
             libnss3-dev \
             libnss3-tools \
-            libopenjp2-7-dev \
             libseccomp-dev \
             llvm \
             mold \

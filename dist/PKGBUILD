@@ -16,18 +16,16 @@ license=('GPL-3.0-or-later')
 # so packaging stays deterministic.
 makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
              'gcc' 'git' 'gumbo-parser' 'harfbuzz' 'jbig2dec' 'jq'
-             'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'openjpeg2' 'pkgconf'
+             'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'pkgconf'
              'patch' 'qt6-tools')
-# The bundled-MuPDF build links MuPDF's third-party libraries from the system
-# (USE_SYSTEM_LIBS=yes), so they remain direct runtime dependencies of the
-# static package; Leptonica is the exception, bundled alongside Tesseract to
-# keep the OCR pair on matching versions. Global depends serves the pre-build
-# dependency check; each package function overrides depends for its own link
-# variant.
+# The static package still links system FreeType, JPEG, JBIG2, Brotli, and zlib;
+# OpenJPEG and the other bundled libraries add no runtime dependencies.
+# Global depends serves the pre-build dependency check; each package function
+# overrides depends for its own link variant.
 _common_depends=('okular' 'qt6-base' 'nss' 'libseccomp')
 depends=("${_common_depends[@]}"
          'brotli' 'freetype2' 'jbig2dec'
-         'libjpeg-turbo' 'openjpeg2' 'zlib')
+         'libjpeg-turbo' 'zlib')
 conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 # Replace the local Git URL with git+$url.git when the PKGBUILD is standalone.
 source=("$_pkgname::git+file://$startdir/.."

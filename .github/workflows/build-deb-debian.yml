@@ -41,7 +41,6 @@ jobs:
             libkf6xmlgui-dev \
             libnss3-dev \
             libnss3-tools \
-            libopenjp2-7-dev \
             libseccomp-dev \
             ninja-build \
             okular-dev \
