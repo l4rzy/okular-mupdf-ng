@@ -26,7 +26,7 @@ instructions for building from source.
 
 ## Motivation
 Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's backends, with the hope of making it more complete:
- - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined.
+ - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined. See Chromium's [Rule of Two.](https://chromium.googlesource.com/chromium/src/+/master/docs/security/rule-of-2.md)
  - PDF backend with Poppler is rich in features, but sluggish on big PDFs. This is a known weakness of Poppler.
  - Rendering quality of the default ePUB & MOBI backends are terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
 
@@ -70,7 +70,7 @@ and the source-tree layout.
 - The NSS cryptographic code has not been fully audited.
 - Sandbox is Linux only and its availability depends on Linux kernel and system support. Default to Strict Enforcement.
 - Worker restart can not recover unsaved forms.
-- Twilight, Dusk, and Dark use Okular's per-page placeholder color API when available.
+- Twilight, Dusk, and Dark use Okular's per-page [placeholder color API](https://invent.kde.org/graphics/okular/-/merge_requests/1527) when available.
   On older Okular versions, Dusk and Dark temporarily use accessibility **Change Paper Color**
   to prevent white loading placeholders.
 
@@ -92,7 +92,7 @@ This project learned from amazing projects below
 
 - [Okular Poppler Backend](https://invent.kde.org/graphics/okular/-/tree/master/generators/poppler) - Okular integration
 - [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf) - MuPDF API usage
-- [Zathura MuPDF Backend](https://github.com/pwmt/zathura-pdf-mupdf) - Seccomp rules
+- [Zathura](https://github.com/pwmt/zathura) - Seccomp rules
 - [Sioyek](https://github.com/ahrm/sioyek) - MuPDF API usage
 
 ## License

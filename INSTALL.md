@@ -114,6 +114,33 @@ ctest --test-dir build --output-on-failure
 
 ### Test the built plugin in Okular
 
+Build the debug preset, then launch Okular with the plugin and worker from
+`build/`:
+
+```bash
+make dev
+./scripts/run-okular.sh /path/to/document.pdf
+# Okular options are forwarded unchanged:
+./scripts/run-okular.sh --page 9 /path/to/document.pdf
+```
+
+The launcher sets `QT_PLUGIN_PATH` for this process and starts a private D-Bus
+session so documents are not forwarded to an already-running Okular. It requires
+`okular` and `dbus-run-session` on `PATH`; no installation, root privileges, or
+symlinks are needed. Enable Okular's backend selection dialog if you need to
+choose the MuPDF backend. Restart the launched Okular after rebuilding.
+
+The launcher uses `build/`, not `build-release/`, and checks that
+`ENABLE_BUILD_TREE_WORKER=ON` so the matching worker is used. This is enabled by
+the debug preset on a fresh build. For an existing build with it disabled:
+
+```bash
+cmake -B build -DENABLE_BUILD_TREE_WORKER=ON
+cmake --build build
+```
+
+#### Alternative: symlink the built plugin
+
 After `make release`, run these commands from the repository root to link the
 built plugin into Qt 6's Okular generator directory:
 
@@ -123,10 +150,10 @@ sudo ln -s "$(pwd)/build-release/bin/okular_generators/okularGenerator_mupdfng.s
   "$okular_generator_dir/okularGenerator_mupdfng.so"
 ```
 
-For `make dev`, replace `build-release` with `build`. Both presets use the worker
-from their build tree, so keep that directory available. Close all Okular
-instances and reopen Okular after linking or rebuilding the plugin. Enable
-Okular's backend selection dialog to choose the MuPDF backend.
+For `make dev`, replace `build-release` with `build`. Both presets enable
+build-tree worker lookup on a fresh build, so keep the build directory available.
+Close all Okular instances and reopen Okular after linking or rebuilding the
+plugin. Enable Okular's backend selection dialog to choose the MuPDF backend.
 
 The command refuses to overwrite an existing plugin. If a packaged version is
 installed, uninstall it before creating the link. To remove the test symlink:
