@@ -3,6 +3,7 @@
 
 #include "engine/theming/theme_device.hpp"
 #include "engine/theming/palette.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <algorithm>
 #include <array>
@@ -20,7 +21,7 @@ struct ThemeDevice {
     const fz_cookie* cookie;
     fz_default_colorspaces* defaultColorspaces;
     Model::ReadingTheme theme;
-    std::array<float, 3> background;
+    std::array<int, 3> background;
     bool recolorVectors;
     int maskDepth;
     std::size_t tileDepth;
@@ -33,16 +34,18 @@ void checkCancellation(fz_context* context, const ThemeDevice* device)
         fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
 }
 
-void mapColor(float* rgb, const std::array<float, 3>& background)
+void mapColor(float* rgb, const std::array<int, 3>& background)
 {
-    constexpr std::array<float, 3> foreground { 218, 220, 224 };
+    constexpr auto foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
     for (int i = 0; i < 3; ++i)
         rgb[i] = std::isfinite(rgb[i]) ? std::clamp(rgb[i], 0.0f, 1.0f) : 0.0f;
     const float low = std::min({ rgb[0], rgb[1], rgb[2] });
     const float high = std::max({ rgb[0], rgb[1], rgb[2] });
     // Match Dark's fixed saturation blend without changing neutral colors or edge coverage.
     for (std::size_t i = 0; i < 3; ++i)
-        rgb[i] = (foreground[i] + (background[i] - foreground[i]) * (low + (high - rgb[i]) * 0.4f)) / 255.0f;
+        rgb[i] = (static_cast<float>(foreground[i])
+                  + static_cast<float>(background[i] - foreground[i]) * (low + (high - rgb[i]) * 0.4f))
+            / 255.0f;
 }
 
 void mapVectorColor(fz_context* context,
@@ -256,8 +259,7 @@ fz_device* newThemeDevice(fz_context* context,
     state->transform = transform;
     state->cookie = cookie;
     state->theme = theme;
-    state->background =
-        theme == Model::ReadingTheme::Dark ? std::array<float, 3> { 32, 33, 36 } : std::array<float, 3> { 48, 49, 52 };
+    state->background = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme));
     state->recolorVectors = recolorVectors;
     state->bounds[0] = bounds;
     auto* device = &state->super;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/pdf/document.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -116,8 +117,8 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             deviceTheme ? inspectThemePage(m_context, nativePage, bounds, request.cookie) : ThemePageInfo { };
         const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
         const bool bitmapDark = theme == ReadingTheme::Dark && recolorVectors && pageTheme.needsCompositing;
-        const auto paperColor = recolorVectors && !bitmapDark ? (theme == ReadingTheme::Dusk ? 0x303134U : 0x202124U)
-                                                              : readingPaperColor(m_settings);
+        const auto paperColor =
+            recolorVectors && !bitmapDark ? Model::ThemeColor::getBackground(theme) : readingPaperColor(m_settings);
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };

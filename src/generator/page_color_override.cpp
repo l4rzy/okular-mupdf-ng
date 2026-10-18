@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/page_color_override.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <KConfig>
 #include <KCoreConfigSkeleton>
@@ -25,7 +26,9 @@ struct SharedOverride {
     QPointer<KCoreConfigSkeleton> settings;
     std::size_t owners = 0;
     std::array<SavedSetting, 3> saved;
-    std::array<QVariant, 3> values { true, int(Okular::SettingsCore::EnumRenderMode::Paper), QColor(32, 33, 36) };
+    std::array<QVariant, 3> values { true,
+                                     int(Okular::SettingsCore::EnumRenderMode::Paper),
+                                     QColor::fromRgb(Model::ThemeColor::DarkBackground) };
 };
 
 SharedOverride& sharedOverride()
@@ -131,7 +134,7 @@ void PageColorOverride::setTheme(Model::ReadingTheme theme)
             return;
 
     preserveChangedPreferences(state);
-    state.values[2] = theme == Model::ReadingTheme::Dusk ? QColor(48, 49, 52) : QColor(32, 33, 36);
+    state.values[2] = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     if (!state.owners) {
         state.settings = settings;
         for (std::size_t i = 0; i < items.size(); ++i)

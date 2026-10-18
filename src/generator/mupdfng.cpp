@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/mupdfng.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <okular/core/fileprinter.h>
 #include <okular/core/page.h>
@@ -501,10 +502,7 @@ void Main::setupActions()
 void Main::updatePagePlaceholderColor(Model::ReadingTheme theme)
 {
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-    const QColor color = theme == Model::ReadingTheme::Dark ? QColor(32, 33, 36)
-        : theme == Model::ReadingTheme::Dusk                ? QColor(48, 49, 52)
-        : theme == Model::ReadingTheme::Twilight            ? QColor(214, 214, 214)
-                                                            : QColor(Qt::white);
+    const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
 #else

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/theming/palette.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <algorithm>
 #include <array>
@@ -35,7 +36,8 @@ ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::a
 
 std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcept
 {
-    return settings.readingTheme == Model::ReadingTheme::Default ? settings.paperColorRgb : 0xFFFFFF;
+    return settings.readingTheme == Model::ReadingTheme::Default ? settings.paperColorRgb
+                                                                 : Model::ThemeColor::DefaultBackground;
 }
 
 bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
@@ -153,12 +155,12 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTh
     bool invertBrightness = false;
     switch (theme) {
     case Model::ReadingTheme::Twilight:
-        background = { 214, 214, 214 };
-        foreground = { 36, 36, 36 };
+        background = Model::ThemeColor::splitRgb(Model::ThemeColor::TwilightBackground);
+        foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::TwilightForeground);
         break;
     case Model::ReadingTheme::Dark:
-        background = { 32, 33, 36 };
-        foreground = { 218, 220, 224 };
+        background = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkBackground);
+        foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
         invertBrightness = true;
         break;
     default:
