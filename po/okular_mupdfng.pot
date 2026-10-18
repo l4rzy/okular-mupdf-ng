@@ -863,7 +863,7 @@ msgstr ""
 
 #: src/generator/mupdfng.cpp:957
 msgid ""
-"[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
+"The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
 "To open this document, switch Sandbox Enforcement to Relaxed. This will "
 "reduce security protections.\n"
@@ -1164,4 +1164,8 @@ msgstr ""
 
 #: rc.cpp:46
 msgid "Page Size"
+msgstr ""
+
+#: src/generator/placeholder.cpp
+msgid "Document unavailable"
 msgstr ""

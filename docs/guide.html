@@ -68,6 +68,20 @@
         <img src="assets/guide/security.png" alt="General Security settings with Strict sandbox enforcement, degraded-sandbox notifications enabled, and JavaScript disabled" width="604" height="138" loading="lazy">
         <figcaption>Configure sandbox enforcement and notifications in General → Security.</figcaption>
       </figure>
+      <h3>Blocked documents and warnings</h3>
+      <p>When Strict enforcement blocks a document because the worker is not fully
+        hardened, a guidance card appears instead of the document.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/sandbox_strict.png" alt="MuPDF NG Document unavailable card explaining that Strict sandbox enforcement blocks the document because the worker is not fully hardened" width="736" height="356" loading="lazy">
+        <figcaption>Strict enforcement withholds the document when sandbox protection is incomplete.</figcaption>
+      </figure>
+      <p>When degraded-sandbox notifications are enabled, Okular also reports
+        incomplete protection in a warning banner. This example shows an
+        unconfined worker; Relaxed enforcement allows documents to open in this state.</p>
+      <figure class="guide-screenshot">
+        <img src="assets/guide/sandbox_warning.png" alt="Okular warning banner reporting that the MuPDF worker is unconfined and cannot protect against malicious documents" width="686" height="63" loading="lazy">
+        <figcaption>Example notification for an unconfined worker. Notifications do not change the enforcement policy.</figcaption>
+      </figure>
       <h3>Probe the worker</h3>
       <p>Run the installed worker as your normal user to check the protections
         available on your system. For a typical <code>/usr/lib</code> installation:</p>

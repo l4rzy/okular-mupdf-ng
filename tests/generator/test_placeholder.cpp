@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QFontMetrics>
+#include <QGuiApplication>
 #include <QImage>
 #include <QTest>
 #include <QThread>
@@ -162,6 +164,52 @@ private Q_SLOTS:
         placeholder.reset();
         placeholder.activate(QString(), Placeholder::Reason::WorkerUnavailable);
         QVERIFY(!placeholder.image(320, 240).isNull());
+    }
+
+    void imageHandlesSmallAndTranslatedCards_data()
+    {
+        QTest::addColumn<QSize>("size");
+        QTest::newRow("thumbnail") << QSize(80, 60);
+        QTest::newRow("logo-only") << QSize(160, 120);
+        QTest::newRow("compact") << QSize(320, 240);
+        QTest::newRow("page") << QSize(595, 842);
+    }
+
+    void imageHandlesSmallAndTranslatedCards()
+    {
+        QFETCH(QSize, size);
+        Placeholder placeholder;
+        placeholder.activate(QStringLiteral("Hộp cát của worker chưa được gia cố đầy đủ.\n"
+                                            "Để mở tài liệu này, hãy chuyển chế độ Thực thi hộp cát sang Nới lỏng. "
+                                            "Thao tác này sẽ giảm mức bảo vệ.\nLỗi: Không rõ"),
+                             Placeholder::Reason::SandboxGate);
+        const auto image = placeholder.image(size.width(), size.height());
+        QCOMPARE(image.size(), size);
+        QCOMPARE(image.format(), QImage::Format_ARGB32_Premultiplied);
+    }
+
+    void imagePreservesWrappedHeading()
+    {
+        const auto originalFont = QGuiApplication::font();
+        auto wideFont = originalFont;
+        // Force wrapping independently of installed translations and system fonts.
+        wideFont.setLetterSpacing(QFont::PercentageSpacing, 200);
+        QGuiApplication::setFont(wideFont);
+        Placeholder placeholder;
+        placeholder.activate(QStringLiteral("message"), Placeholder::Reason::SandboxGate);
+        const auto image = placeholder.image(240, 180);
+        QGuiApplication::setFont(originalFont);
+
+        int firstRow = image.height(), lastRow = -1;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = image.width() / 3; x < image.width(); ++x)
+                if (image.pixelColor(x, y) == QColor(139, 86, 17)) {
+                    firstRow = qMin(firstRow, y);
+                    lastRow = qMax(lastRow, y);
+                }
+        wideFont.setPixelSize(16);
+        wideFont.setBold(true);
+        QVERIFY(lastRow - firstRow > QFontMetrics(wideFont).height());
     }
 };
 

@@ -186,8 +186,10 @@ cmake_pop_check_state()
 configure_file(generator/okular_compat.hpp.in ${MU_GENERATED_INCLUDE_DIR}/generator/okular_compat.hpp)
 
 add_library(mupdf_generator_placeholder STATIC generator/placeholder.cpp)
+target_compile_definitions(mupdf_generator_placeholder PRIVATE
+    MUPDFNG_LOGO_PATH="${CMAKE_INSTALL_FULL_DATADIR}/icons/hicolor/scalable/apps/mupdfng.svg")
 target_include_directories(mupdf_generator_placeholder PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mupdf_generator_placeholder PUBLIC Okular::Core Qt6::Core)
+target_link_libraries(mupdf_generator_placeholder PUBLIC Okular::Core Qt6::Core KF6::I18n)
 
 add_library(mupdf_generator_adapters STATIC
   generator/conversion/annotation.cpp

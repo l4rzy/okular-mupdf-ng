@@ -921,13 +921,13 @@ msgstr "Số lần khởi động lại worker: %1"
 
 #: src/generator/mupdfng.cpp:957
 msgid ""
-"[WARN] The worker sandbox is not fully hardened and sandbox enforcement is "
+"The worker sandbox is not fully hardened and sandbox enforcement is "
 "Strict.\n"
 "To open this document, switch Sandbox Enforcement to Relaxed. This will "
 "reduce security protections.\n"
 "Error: %1"
 msgstr ""
-"[CẢNH BÁO] Hộp cát của worker chưa được gia cố đầy đủ và chế độ thực thi hộp "
+"Hộp cát của worker chưa được gia cố đầy đủ và chế độ thực thi hộp "
 "cát đang ở mức Nghiêm ngặt.\n"
 "Để mở tài liệu này, hãy chuyển chế độ Thực thi hộp cát sang Nới lỏng. Thao "
 "tác này sẽ giảm mức bảo vệ.\n"
@@ -1234,3 +1234,7 @@ msgstr "Phông chữ"
 #: rc.cpp:46
 msgid "Page Size"
 msgstr "Khổ giấy"
+
+#: src/generator/placeholder.cpp
+msgid "Document unavailable"
+msgstr "Không thể hiển thị tài liệu"

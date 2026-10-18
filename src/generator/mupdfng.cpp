@@ -979,10 +979,10 @@ bool Main::workerReady() const
 QString Main::sandboxGateMessage() const
 {
     const QString reason = QString::fromStdString(m_worker.sandboxStatus().reason);
-    return i18n("[WARN] The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
+    return i18n("The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
                 "To open this document, switch Sandbox Enforcement to Relaxed. This will reduce security "
                 "protections.\nError: %1",
-                reason.isEmpty() ? QString() : QStringLiteral("[%1]").arg(reason));
+                reason.isEmpty() ? i18n("Unknown") : QStringLiteral("[%1]").arg(reason));
 }
 
 // =============================================================================

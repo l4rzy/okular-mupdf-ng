@@ -59,8 +59,8 @@ public:
     [[nodiscard]] Reason reason() const noexcept { return m_reason; }
 
     [[nodiscard]] QString message() const;
-    /// Renders the guidance card at the requested pixel dimensions; an empty
-    /// message renders the card without text.
+    /// Renders the branded card at the requested pixel dimensions; an empty
+    /// message omits the guidance text.
     [[nodiscard]] QImage image(int width, int height) const;
 
 private:
