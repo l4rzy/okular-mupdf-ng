@@ -124,8 +124,12 @@ void fillImage(
         return;
     }
     const fz_matrix transform = fz_concat(ctm, state->transform);
-    const auto bounds =
+    auto bounds =
         fz_intersect_irect(fz_round_rect(fz_transform_rect(fz_unit_rect, transform)), state->bounds[state->tileDepth]);
+    // Pattern cells use their own bounds; the container scissor describes the repeated area.
+    if (!state->tileDepth)
+        bounds = fz_intersect_irect(
+            bounds, fz_round_rect(fz_transform_rect(fz_device_current_scissor(context, device), state->transform)));
     if (fz_is_empty_irect(bounds) || alpha == 0)
         return;
     validateBounds(context, bounds);

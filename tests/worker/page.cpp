@@ -284,6 +284,98 @@ private slots:
         QCOMPARE(sourcePixel, rgba);
     }
 
+    void themesClippedImages_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<bool>("rotated");
+        QTest::addColumn<bool>("tiled");
+        for (int theme : { 2, 3 })
+            for (bool rotated : { false, true })
+                for (bool tiled : { false, true })
+                    QTest::newRow(qPrintable(QStringLiteral("%1-%2-%3").arg(theme).arg(rotated).arg(tiled)))
+                        << theme << rotated << tiled;
+    }
+
+    void themesClippedImages()
+    {
+        QFETCH(int, theme);
+        QFETCH(bool, rotated);
+        QFETCH(bool, tiled);
+        using namespace Mu::Worker::Engine;
+        PdfDocument owner;
+        auto* ctx = owner.context();
+        auto* source = fz_new_pixmap(ctx, fz_device_rgb(ctx), 2, 2, nullptr, 1);
+        const std::array<unsigned char, 4> shades { 48, 80, 112, 120 };
+        for (std::size_t i = 0; i < shades.size(); ++i) {
+            auto* pixel = fz_pixmap_samples(ctx, source) + i * 4;
+            std::fill_n(pixel, 3, shades[i]);
+            pixel[3] = 128;
+        }
+        auto* image = fz_new_image_from_pixmap(ctx, source, nullptr);
+        auto* clip = fz_new_path(ctx);
+        fz_rectto(ctx, clip, 4.25f, 4.25f, 11.75f, 11.75f);
+        const auto transform = tiled ? fz_scale(2, 2) : fz_identity;
+        const fz_matrix position = rotated ? fz_matrix { 0, 16, -16, 0, 16, 0 } : fz_scale(16, 16);
+        const int size = tiled ? 32 : 16;
+        const auto readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        std::array<QByteArray, 2> pixels;
+        int imageWidth = 0, imageHeight = 0;
+        for (bool themed : { false, true }) {
+            auto* output = fz_new_pixmap(ctx, fz_device_rgb(ctx), size, size, nullptr, 1);
+            fz_clear_pixmap(ctx, output);
+            auto* draw = fz_new_draw_device(ctx, transform, output);
+
+            struct ImageProbe {
+                fz_device super;
+                int* width;
+                int* height;
+            };
+
+            auto* probe =
+                reinterpret_cast<ImageProbe*>(fz_new_passthrough_device_of_size(ctx, draw, sizeof(ImageProbe)));
+            probe->width = &imageWidth;
+            probe->height = &imageHeight;
+            probe->super.fill_image = [](fz_context* context,
+                                         fz_device* device,
+                                         fz_image* sourceImage,
+                                         fz_matrix ctm,
+                                         float alpha,
+                                         fz_color_params params) {
+                auto* state = reinterpret_cast<ImageProbe*>(device);
+                *state->width = sourceImage->w;
+                *state->height = sourceImage->h;
+                fz_fill_image(context, device->passthrough, sourceImage, ctm, alpha, params);
+            };
+            auto* device = themed
+                ? newThemeDevice(ctx, &probe->super, transform, { 0, 0, size, size }, nullptr, readingTheme)
+                : fz_keep_device(ctx, &probe->super);
+            fz_clip_path(ctx, device, clip, 0, fz_identity, fz_infinite_rect);
+            fz_fill_image(ctx, device, image, position, 1, fz_default_color_params);
+            fz_pop_clip(ctx, device);
+            fz_close_device(ctx, device);
+            if (!themed) {
+                if (theme == int(Mu::Model::ReadingTheme::Dusk))
+                    dimImageRow(fz_pixmap_samples(ctx, output), size * size);
+                else
+                    applyDocumentTheme(ctx, output, readingTheme, nullptr);
+            }
+            pixels[themed] = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, output)), size * size * 4);
+            fz_drop_device(ctx, device);
+            fz_drop_device(ctx, &probe->super);
+            fz_drop_device(ctx, draw);
+            fz_drop_pixmap(ctx, output);
+        }
+        fz_drop_path(ctx, clip);
+        fz_drop_image(ctx, image);
+        fz_drop_pixmap(ctx, source);
+        QCOMPARE(imageWidth, size / 2);
+        QCOMPARE(imageHeight, size / 2);
+        for (qsizetype i = 0; i < pixels[0].size(); ++i)
+            QVERIFY(
+                std::abs(int(static_cast<unsigned char>(pixels[0][i])) - int(static_cast<unsigned char>(pixels[1][i])))
+                <= 1);
+    }
+
     void themeStencilAndCancellation_data()
     {
         QTest::addColumn<int>("theme");
