@@ -9,6 +9,7 @@
 #include <bit>
 #include <cstddef>
 #include <cstring>
+#include <mupdf/pdf.h>
 
 namespace Mu::Worker::Engine {
 namespace {
@@ -18,6 +19,7 @@ using ThemePalette = std::array<std::array<std::uint8_t, 256>, 3>;
 struct PageProbe {
     fz_device super;
     ThemePageInfo* info;
+    bool highlight;
 };
 
 ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::array<int, 3>& foreground) noexcept
@@ -100,14 +102,40 @@ inspectThemePage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* 
             // Non-isolated groups can depend on everything painted before them.
             // Their original paints must be composited before recoloring.
             auto* state = reinterpret_cast<PageProbe*>(dev);
-            state->info->needsCompositing |= (blendmode & FZ_BLEND_MODEMASK) != FZ_BLEND_NORMAL || knockout != 0;
+            const int mode = blendmode & FZ_BLEND_MODEMASK;
+            // Highlights need Multiply against the themed backdrop to retain text contrast.
+            state->info->needsCompositing |=
+                knockout != 0 || (mode != FZ_BLEND_NORMAL && !(state->highlight && mode == FZ_BLEND_MULTIPLY));
             fz_begin_group(ctx, dev->passthrough, area, cs, isolated, knockout, blendmode, alpha);
         };
         fz_drop_device(context, device);
         device = &probe->super;
         if (list)
             fz_run_display_list(context, list, device, fz_identity, fz_infinite_rect, cookie);
-        else
+        else if (auto* pdfPage = pdf_page_from_fz_page(context, page)) {
+            fz_run_page_contents(context, page, device, fz_identity, cookie);
+            // Inspect each annotation in its original order so only highlights
+            // receive the exception; custom annotation blend modes remain protected.
+            fz_try(context)
+            {
+                pdf_update_page(context, pdfPage);
+                for (auto* annot = pdf_first_annot(context, pdfPage); annot; annot = pdf_next_annot(context, annot)) {
+                    if (cookie && cookie->abort)
+                        fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
+                    probe->highlight = pdf_annot_type(context, annot) == PDF_ANNOT_HIGHLIGHT;
+                    pdf_run_annot(context, annot, device, fz_identity, cookie);
+                }
+            }
+            fz_catch(context)
+            {
+                // Match fz_run_page_annots' handling of malformed appearances and cancellation.
+                device->close_device = nullptr;
+                fz_rethrow_unless(context, FZ_ERROR_ABORT);
+                fz_ignore_error(context);
+            }
+            probe->highlight = false;
+            fz_run_page_widgets(context, page, device, fz_identity, cookie);
+        } else
             fz_run_page(context, page, device, fz_identity, cookie);
         fz_close_device(context, device);
         if (cookie && cookie->abort)

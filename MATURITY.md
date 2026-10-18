@@ -56,7 +56,9 @@ pages' vector colors unchanged but still dims their images.
 Dark falls back to transforming the completed page when recoloring is needed
 and non-normal blend modes or knockout groups are present. This preserves native
 compositing, but selective image inversion and image dimming are unavailable on
-those pages.
+those pages. Multiply blending in PDF highlights does not trigger this fallback,
+so highlighted text retains contrast. Other blends on the same page can still
+require the fallback.
 
 On Okular versions without the per-page placeholder color API, Dusk and Dark
 use temporary accessibility **Change Paper Color** settings. The workaround

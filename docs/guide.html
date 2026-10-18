@@ -228,7 +228,9 @@ sudo apt install tesseract-ocr-eng</code></pre>
         follow the text palette.</p>
       <p>For pages that need recoloring and use non-normal blend modes or knockout
         groups, Dark transforms the completed page to preserve correct compositing.
-        Selective image inversion and 80% image dimming are unavailable on those pages.</p>
+        Selective image inversion and 80% image dimming are unavailable on those pages.
+        PDF highlights&rsquo; Multiply blending does not trigger this fallback,
+        keeping highlighted text readable unless other blends require it.</p>
       <p>Themes affect viewing only. OCR, printing, exports, and the document&rsquo;s
         saved content retain their original colors. You can assign
         <a href="#keyboard-shortcuts">keyboard shortcuts</a> to toggle themes.</p>

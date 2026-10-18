@@ -695,6 +695,105 @@ private slots:
                                themed.begin() + ((y + tile.y) * width + tile.x) * 4));
     }
 
+    void themesHighlights_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<std::uint32_t>("color");
+        QTest::newRow("dusk") << 2 << std::uint32_t(0xFFFFFF00);
+        QTest::newRow("dark") << 3 << std::uint32_t(0xFFFFFF00);
+        QTest::newRow("dark-translucent") << 3 << std::uint32_t(0x80FFFF00);
+    }
+
+    void themesHighlights()
+    {
+        QFETCH(int, theme);
+        QFETCH(std::uint32_t, color);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("theme-highlight.pdf");
+        createTextPDF(document.context(), path, "BT /F1 40 Tf 100 400 Td (TEST) Tj ET");
+        QVERIFY(openDocument(document, path));
+        Mu::Model::Annotation annotation;
+        annotation.subtype = Mu::Model::AnnotationType::Highlight;
+        annotation.x0 = .1;
+        annotation.y0 = .4;
+        annotation.x1 = .9;
+        annotation.y1 = .6;
+        annotation.color = color;
+        annotation.extras.quads.push_back({ { .1, .4 }, { .9, .4 }, { .9, .6 }, { .1, .6 } });
+        std::int32_t object = -1;
+        QVERIFY(document.addAnnotation(0, annotation, &object));
+        constexpr int width = 153, height = 198, stride = width * 4;
+        std::vector<std::uint8_t> original(height * stride), themed(height * stride);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
+        auto settings = document.settings();
+        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        document.setSettings(settings);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
+        // Highlighted paper stays dark, while the text remains light.
+        const auto background = std::size_t(85 * stride + 20 * 4);
+        for (std::size_t channel = 0; channel < 3; ++channel)
+            QVERIFY(themed[background + channel] < 70);
+        int brightest = 0;
+        for (int y = 85; y < 105; ++y)
+            for (int x = 25; x < 65; ++x)
+                brightest = std::max(brightest, int(themed[std::size_t(y * stride + x * 4)]));
+        QVERIFY(brightest > 150);
+        constexpr DocumentBase::RenderTile tile { 16, 80, 56, 32 };
+        std::vector<std::uint8_t> tiled(tile.width * tile.height * 4);
+        QVERIFY(document.renderToBuffer({ 0, width, height, tile }, tiled.data(), tile.width * 4));
+        for (int y = 0; y < tile.height; ++y)
+            for (int x = 0; x < tile.width * 4; ++x)
+                QVERIFY(std::abs(int(tiled[std::size_t(y * tile.width * 4 + x)])
+                                 - int(themed[std::size_t((y + tile.y) * stride + tile.x * 4 + x)]))
+                        <= 2);
+        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        document.setSettings(settings);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
+        QCOMPARE(themed, original);
+    }
+
+    void keepsAnnotationBlendFallback_data()
+    {
+        QTest::addColumn<int>("type");
+        QTest::addColumn<QByteArray>("blend");
+        QTest::newRow("square-multiply") << int(PDF_ANNOT_SQUARE) << QByteArray("Multiply");
+        QTest::newRow("square-difference") << int(PDF_ANNOT_SQUARE) << QByteArray("Difference");
+        QTest::newRow("highlight-difference") << int(PDF_ANNOT_HIGHLIGHT) << QByteArray("Difference");
+    }
+
+    void keepsAnnotationBlendFallback()
+    {
+        QFETCH(int, type);
+        QFETCH(QByteArray, blend);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("annotation-blend.pdf");
+        createTextPDF(document.context(), path, "");
+        QVERIFY(openDocument(document, path));
+        auto* ctx = document.context();
+        auto* pdf = pdf_document_from_fz_document(ctx, document.document());
+        auto* page = pdf_load_page(ctx, pdf, 0);
+        auto* annot = pdf_create_annot(ctx, page, static_cast<enum pdf_annot_type>(type));
+        if (type == PDF_ANNOT_HIGHLIGHT) {
+            const auto quad = fz_quad_from_rect({ 20, 20, 60, 60 });
+            pdf_set_annot_quad_points(ctx, annot, 1, &quad);
+        } else
+            pdf_set_annot_rect(ctx, annot, { 20, 20, 60, 60 });
+        auto* resources = pdf_new_dict(ctx, pdf, 1);
+        pdf_dict_putp_drop(ctx, resources, "ExtGState/B/BM", pdf_new_name(ctx, blend.constData()));
+        constexpr char commands[] = "/B gs 1 1 0 rg 0 0 40 40 re f";
+        auto* contents =
+            fz_new_buffer_from_copied_data(ctx, reinterpret_cast<const unsigned char*>(commands), sizeof(commands) - 1);
+        pdf_set_annot_appearance(ctx, annot, "N", nullptr, fz_identity, { 0, 0, 40, 40 }, resources, contents);
+        fz_drop_buffer(ctx, contents);
+        pdf_drop_obj(ctx, resources);
+        const auto info = inspectThemePage(ctx, &page->super, fz_bound_page(ctx, &page->super), nullptr);
+        pdf_drop_annot(ctx, annot);
+        fz_drop_page(ctx, &page->super);
+        QVERIFY(info.needsCompositing);
+    }
+
     void preservesDarkBlendModes_data()
     {
         QTest::addColumn<QByteArray>("blend");
