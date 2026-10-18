@@ -834,7 +834,7 @@ msgid "MuPDF: %1 (system library)"
 msgstr ""
 
 #: src/generator/mupdfng.cpp:914
-msgid "MuPDF: %1 (bundled)"
+msgid "MuPDF: %1 (bundled, patched)"
 msgstr ""
 
 #: src/generator/mupdfng.cpp:918

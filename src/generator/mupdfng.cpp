@@ -936,7 +936,7 @@ QString Main::generatorExtraDescription() const
     }
 
     QString result = m_worker.usesSystemMuPdf() ? i18n("MuPDF: %1 (system library)", engineVersion)
-                                                : i18n("MuPDF: %1 (bundled)", engineVersion);
+                                                : i18n("MuPDF: %1 (bundled, patched)", engineVersion);
 
     const Model::SandboxStatus status = m_worker.sandboxStatus();
     if (status.isFullyHardened()) {

@@ -892,8 +892,8 @@ msgid "MuPDF: %1 (system library)"
 msgstr "MuPDF: %1 (thư viện hệ thống)"
 
 #: src/generator/mupdfng.cpp:914
-msgid "MuPDF: %1 (bundled)"
-msgstr "MuPDF: %1 (đi kèm)"
+msgid "MuPDF: %1 (bundled, patched)"
+msgstr "MuPDF: %1 (đi kèm, đã vá lỗi)"
 
 #: src/generator/mupdfng.cpp:918
 msgid "Sandbox: Fully hardened [OK]"
