@@ -553,6 +553,54 @@ private slots:
         QCOMPARE(tiled, nativeTile);
     }
 
+    void clipsThemeShading_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<int>("scale");
+        for (int theme : { 2, 3 })
+            for (int scale : { 1, 2 })
+                QTest::newRow(qPrintable(QStringLiteral("%1-%2").arg(theme).arg(scale))) << theme << scale;
+    }
+
+    void clipsThemeShading()
+    {
+        QFETCH(int, theme);
+        QFETCH(int, scale);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("clipped-shading.pdf");
+        QVERIFY(createShadingPdf(document.context(), path, 0));
+        QVERIFY(openDocument(document, path));
+        auto* ctx = document.context();
+        auto* page = fz_load_page(ctx, document.document(), 0);
+        QSize rasterSize;
+
+        struct RasterProbe {
+            fz_device super;
+            QSize* size;
+        };
+
+        auto* probe = reinterpret_cast<RasterProbe*>(fz_new_device_of_size(ctx, sizeof(RasterProbe)));
+        probe->size = &rasterSize;
+        probe->super.fill_image =
+            [](fz_context*, fz_device* device, fz_image* image, fz_matrix, float, fz_color_params) {
+                *reinterpret_cast<RasterProbe*>(device)->size = QSize(image->w, image->h);
+            };
+        auto* device = newThemeDevice(ctx,
+                                      &probe->super,
+                                      fz_scale(float(scale), float(scale)),
+                                      { 0, 0, 64 * scale, 64 * scale },
+                                      nullptr,
+                                      static_cast<Mu::Model::ReadingTheme>(theme));
+        fz_run_page(ctx, page, device, fz_identity, nullptr);
+        fz_close_device(ctx, device);
+        fz_drop_device(ctx, device);
+        fz_drop_device(ctx, &probe->super);
+        fz_drop_page(ctx, page);
+        // The gradient spans the page, but its clip only exposes a 24-point strip.
+        QCOMPARE(rasterSize, QSize(64 * scale, 24 * scale));
+    }
+
     void themeShading_data()
     {
         QTest::addColumn<int>("theme");

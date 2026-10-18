@@ -75,6 +75,17 @@ void validateBounds(fz_context* context, fz_irect bounds)
         fz_throw(context, FZ_ERROR_LIMIT, "Theme image, shading or pattern exceeds render dimensions");
 }
 
+fz_irect clipPaintBounds(fz_context* context, fz_device* device, fz_irect bounds)
+{
+    const auto* state = reinterpret_cast<ThemeDevice*>(device);
+    bounds = fz_intersect_irect(bounds, state->bounds[state->tileDepth]);
+    // Pattern cells use their own bounds; the container scissor describes the repeated area.
+    if (!state->tileDepth)
+        bounds = fz_intersect_irect(
+            bounds, fz_round_rect(fz_transform_rect(fz_device_current_scissor(context, device), state->transform)));
+    return bounds;
+}
+
 // Classify the whole image independently of zoom, clipping, and requested tiles.
 // Weight by alpha so transparent padding is ignored and faint pixels contribute less.
 bool isMostlyDarkImage(fz_context* context, const ThemeDevice* state, fz_image* source, fz_color_params params)
@@ -127,12 +138,7 @@ void fillImage(
         return;
     }
     const fz_matrix transform = fz_concat(ctm, state->transform);
-    auto bounds =
-        fz_intersect_irect(fz_round_rect(fz_transform_rect(fz_unit_rect, transform)), state->bounds[state->tileDepth]);
-    // Pattern cells use their own bounds; the container scissor describes the repeated area.
-    if (!state->tileDepth)
-        bounds = fz_intersect_irect(
-            bounds, fz_round_rect(fz_transform_rect(fz_device_current_scissor(context, device), state->transform)));
+    const auto bounds = clipPaintBounds(context, device, fz_round_rect(fz_transform_rect(fz_unit_rect, transform)));
     if (fz_is_empty_irect(bounds) || alpha == 0)
         return;
     validateBounds(context, bounds);
@@ -193,9 +199,8 @@ void fillShade(
     // just this mark, recolor its unpremultiplied RGB, then composite it at the
     // original position in the drawing sequence and clipping/group stack.
     const fz_matrix transform = fz_concat(ctm, state->transform);
-    const fz_irect bounds =
-        fz_intersect_irect(fz_round_rect(fz_bound_shade(context, shade, transform)), state->bounds[state->tileDepth]);
-    if (fz_is_empty_irect(bounds))
+    const auto bounds = clipPaintBounds(context, device, fz_round_rect(fz_bound_shade(context, shade, transform)));
+    if (fz_is_empty_irect(bounds) || alpha == 0)
         return;
     validateBounds(context, bounds);
     fz_pixmap* volatile pixmap = nullptr;
