@@ -12,7 +12,7 @@ set(mupdf_worker_core_SRCS
     runtime/command_service.cpp
     runtime/frame_pool.cpp
     engine/document_base.cpp
-    engine/theming/theme_device.cpp
+    engine/theming/device.cpp
     engine/theming/palette.cpp
     engine/pdf/document.cpp
     engine/pdf/page.cpp

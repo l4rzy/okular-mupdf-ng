@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "engine/theming/theme_device.hpp"
+#include "engine/theming/device.hpp"
 #include "engine/theming/palette.hpp"
 #include "shared/model/theme_colors.hpp"
 

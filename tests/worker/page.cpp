@@ -4,8 +4,8 @@
 #include "engine/epub/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
+#include "engine/theming/device.hpp"
 #include "engine/theming/palette.hpp"
-#include "engine/theming/theme_device.hpp"
 #include "genpdf.hpp"
 #include "shared/model/theme_colors.hpp"
 
@@ -995,7 +995,7 @@ private slots:
         QTest::addColumn<int>("theme");
         QTest::addColumn<QByteArray>("expected");
         QTest::newRow("default") << 0 << QByteArray::fromHex("ffffffff000000ffff0000ff");
-        QTest::newRow("twilight") << 1 << QByteArray::fromHex("d6d6d6ff242424ffd62424ff");
+        QTest::newRow("twilight") << 1 << QByteArray::fromHex("d0cab8ff000000ffd00000ff");
         QTest::newRow("dark") << 3 << QByteArray::fromHex("202124ffdadce0ffda9295ff");
     }
 

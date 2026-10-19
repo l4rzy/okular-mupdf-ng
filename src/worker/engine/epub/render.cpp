@@ -10,8 +10,8 @@
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
+#include "engine/theming/device.hpp"
 #include "engine/theming/palette.hpp"
-#include "engine/theming/theme_device.hpp"
 #include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
