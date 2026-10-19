@@ -15,16 +15,16 @@ license=('GPL-3.0-or-later')
 # the two large static archives much faster than lld and is a hard requirement
 # so packaging stays deterministic.
 makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
-             'gcc' 'git' 'harfbuzz' 'jbig2dec' 'jq'
+             'gcc' 'git' 'jq'
              'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'pkgconf'
              'patch' 'qt6-tools')
-# The static package still links system FreeType, JPEG, JBIG2, Brotli, and zlib;
-# OpenJPEG and the other bundled libraries add no runtime dependencies.
+# The static package still links system FreeType, JPEG, Brotli, and zlib;
+# JBIG2, OpenJPEG, and the other bundled libraries add no runtime dependencies.
 # Global depends serves the pre-build dependency check; each package function
 # overrides depends for its own link variant.
 _common_depends=('okular' 'qt6-base' 'nss' 'libseccomp')
 depends=("${_common_depends[@]}"
-         'brotli' 'freetype2' 'jbig2dec'
+         'brotli' 'freetype2'
          'libjpeg-turbo' 'zlib')
 conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 # Replace the local Git URL with git+$url.git when the PKGBUILD is standalone.

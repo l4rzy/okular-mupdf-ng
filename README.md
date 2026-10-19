@@ -47,21 +47,21 @@ and the source-tree layout.
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
 | **Formats** | PDF, ePUB, MOBI | ✓ | ✓ |
+| **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
 | **Document Theming** | Default, Twilight, Dusk, and Dark viewing themes for all supported formats | ✓ | Accessibility color modes |
-| **ePUB/MOBI customisation** | Custom CSS, Pagesizes | ✓ | ✗ |
+| **ePUB/MOBI customisation** | Custom CSS, Pagesize | ✓ | ✗ |
 | **ePUB/MOBI export** | Export ePUB/MOBI to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
 | **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
 | **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
 | **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
 | **Cert Manager** | NSS certificate manager; generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
-| **Annotations export** | Export PDF annotations to XFDF | ✓ | ✗ |
+| **Annotation export** | Export PDF annotations to XFDF | ✓ | ✗ |
 | **Flattened PDF export** | Bake annotations and form fields into PDF page content | ✓ | ✗ |
 | **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
 | **PDF Heuristic Outline** | Outline generation for PDFs that don't have embedded outline | ✓ | ✗ |
 | **Printing & Exporting** | Print & Export | ✓ | ✓ |
 | **PDF layers** | Toggle optional content in the Layers sidebar | ✓ | ✓ |
-| **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
 
 ## Limitations
 

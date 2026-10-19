@@ -32,8 +32,6 @@ jobs:
             freetype2-devel \
             gcc-c++ \
             git \
-            harfbuzz-devel \
-            jbig2dec-devel \
             kf6-kconfig-devel \
             kf6-kconfigwidgets-devel \
             kf6-kcoreaddons-devel \

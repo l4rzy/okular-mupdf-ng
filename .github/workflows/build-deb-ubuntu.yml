@@ -30,8 +30,6 @@ jobs:
             git \
             libbrotli-dev \
             libfreetype-dev \
-            libharfbuzz-dev \
-            libjbig2dec0-dev \
             libjpeg-dev \
             libnss3-dev \
             libnss3-tools \

@@ -30,8 +30,6 @@ jobs:
             git \
             libbrotli-dev \
             libfreetype-dev \
-            libharfbuzz-dev \
-            libjbig2dec0-dev \
             libjpeg-dev \
             libkf6config-dev \
             libkf6configwidgets-dev \

@@ -95,7 +95,6 @@ else()
 
     pkg_check_modules(MUPDF_FREETYPE REQUIRED IMPORTED_TARGET freetype2)
     pkg_check_modules(MUPDF_JPEG REQUIRED IMPORTED_TARGET libjpeg)
-    pkg_check_modules(MUPDF_JBIG2DEC REQUIRED IMPORTED_TARGET jbig2dec)
     pkg_check_modules(MUPDF_BROTLI REQUIRED IMPORTED_TARGET libbrotlidec libbrotlienc)
 
     if(MUPDF_OPTIMIZED_BUILD)
@@ -205,6 +204,7 @@ else()
             # Refresh handlers and objects whose dependency headers change with build flags.
             -W source/fitz/document-all.c
             -W source/fitz/load-jpx.c
+            -W source/fitz/load-jbig2.c
             -W source/fitz/xml.c
             -j${MUPDF_BUILD_JOBS}
             "CC=${CMAKE_C_COMPILER}"
@@ -220,6 +220,7 @@ else()
             USE_SYSTEM_LIBS=yes
             USE_SYSTEM_HARFBUZZ=no
             USE_SYSTEM_OPENJPEG=no
+            USE_SYSTEM_JBIG2DEC=no
             USE_SYSTEM_GUMBO=no
             USE_SYSTEM_TESSERACT=no
             USE_SYSTEM_LEPTONICA=no
@@ -265,7 +266,6 @@ else()
         "-Wl,--end-group"
         PkgConfig::MUPDF_FREETYPE
         PkgConfig::MUPDF_JPEG
-        PkgConfig::MUPDF_JBIG2DEC
         PkgConfig::MUPDF_BROTLI
         ZLIB::ZLIB
         Threads::Threads

@@ -70,9 +70,8 @@ Build from source — see [Building and testing](#building-and-testing).
 - For Clang LTO: LLVM tools (`llvm-ar`, `llvm-ranlib`) and the matching LLVMgold
   plugin for mold/GNU ld. Install `llvm`; on openSUSE also install `llvm-gold`.
 - NSS/NSPR for certificate and signature operations.
-- System libraries required by bundled MuPDF: FreeType, JPEG, JBIG2, Brotli,
-  and Zlib. OpenJPEG, HarfBuzz, Gumbo, LCMS2, Tesseract, and Leptonica are bundled
-  by default.
+- System libraries required by bundled MuPDF: FreeType, JPEG, Brotli, and Zlib.
+  JBIG2, OpenJPEG, HarfBuzz, Gumbo, LCMS2, Tesseract, and Leptonica are bundled.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
 - `patch` for applying the bundled MuPDF fixes during CMake configuration.
 
