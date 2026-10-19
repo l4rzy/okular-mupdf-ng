@@ -1,0 +1,6 @@
+-------------------------------------------------------------------
+Sun Oct 18 00:00:00 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.4.6.
+- Use bundled JBIG2 and OpenJPEG; remove their system build dependencies.
+- Refine Dusk & Dark modes; improve performance & correctness
