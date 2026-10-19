@@ -12,13 +12,8 @@ endif()
 set(MUPDF_REQUIRED_VERSION "${_mupdf_file_version}")
 
 option(USE_SYSTEM_MUPDF "Use the system MuPDF package instead of bundled MuPDF" OFF)
-option(USE_SYSTEM_GUMBO "Use the system Gumbo package instead of bundled Gumbo" OFF)
 option(MUPDF_OPTIMIZED_BUILD "Build bundled MuPDF with the release profile (-O2)" ON)
 option(ENABLE_FORM_JAVASCRIPT "Enable PDF form JavaScript support" ON)
-
-if(USE_SYSTEM_MUPDF AND USE_SYSTEM_GUMBO)
-    message(WARNING "USE_SYSTEM_GUMBO is ignored when USE_SYSTEM_MUPDF is ON")
-endif()
 
 if(USE_SYSTEM_MUPDF)
     # The bundled build is pinned to MUPDF_REQUIRED_VERSION; the system variant
@@ -102,13 +97,6 @@ else()
     pkg_check_modules(MUPDF_JPEG REQUIRED IMPORTED_TARGET libjpeg)
     pkg_check_modules(MUPDF_JBIG2DEC REQUIRED IMPORTED_TARGET jbig2dec)
     pkg_check_modules(MUPDF_BROTLI REQUIRED IMPORTED_TARGET libbrotlidec libbrotlienc)
-
-    if(USE_SYSTEM_GUMBO)
-        set(MUPDF_USE_SYSTEM_GUMBO yes)
-        pkg_check_modules(MUPDF_GUMBO REQUIRED IMPORTED_TARGET gumbo)
-    else()
-        set(MUPDF_USE_SYSTEM_GUMBO no)
-    endif()
 
     if(MUPDF_OPTIMIZED_BUILD)
         set(MUPDF_BUILD_PROFILE release)
@@ -214,9 +202,10 @@ else()
             "CXXFLAGS="
             "${MUPDF_MAKE_EXECUTABLE}"
             -C "${MUPDF_SOURCE_DIR}"
-            # Refresh handler registration and JPX headers when build flags change.
+            # Refresh handlers and objects whose dependency headers change with build flags.
             -W source/fitz/document-all.c
             -W source/fitz/load-jpx.c
+            -W source/fitz/xml.c
             -j${MUPDF_BUILD_JOBS}
             "CC=${CMAKE_C_COMPILER}"
             "CXX=${CMAKE_CXX_COMPILER}"
@@ -231,7 +220,7 @@ else()
             USE_SYSTEM_LIBS=yes
             USE_SYSTEM_HARFBUZZ=no
             USE_SYSTEM_OPENJPEG=no
-            USE_SYSTEM_GUMBO=${MUPDF_USE_SYSTEM_GUMBO}
+            USE_SYSTEM_GUMBO=no
             USE_SYSTEM_TESSERACT=no
             USE_SYSTEM_LEPTONICA=no
             USE_SYSTEM_CURL=no
@@ -274,11 +263,7 @@ else()
         "${MUPDF_THIRD_LIBRARY}"
         "${MUPDF_THREADS_LIBRARY}"
         "-Wl,--end-group"
-        PkgConfig::MUPDF_FREETYPE)
-    if(USE_SYSTEM_GUMBO)
-        list(APPEND MUPDF_ENGINE_LINK_LIBRARIES PkgConfig::MUPDF_GUMBO)
-    endif()
-    list(APPEND MUPDF_ENGINE_LINK_LIBRARIES
+        PkgConfig::MUPDF_FREETYPE
         PkgConfig::MUPDF_JPEG
         PkgConfig::MUPDF_JBIG2DEC
         PkgConfig::MUPDF_BROTLI

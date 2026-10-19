@@ -96,7 +96,6 @@ jobs:
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
             -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
-            -DUSE_SYSTEM_GUMBO=OFF \
             -DBUILD_TESTING=ON \
             -DENABLE_MU_DEBUG=OFF \
             -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
