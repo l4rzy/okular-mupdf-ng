@@ -25,21 +25,20 @@ public:
         : QObject(factory)
     {
         setComponentName(QStringLiteral("okular_mupdfng"), i18n("MuPDF"));
-        connect(factory, &KXMLGUIFactory::clientAdded, this, [this](KXMLGUIClient* client) {
-            refreshActions();
-            if (client == this || m_rebuildPending)
+        connect(factory, &KXMLGUIFactory::makingChanges, this, [this, factory](bool changing) {
+            if (!changing || m_rebuildPending || !this->factory())
                 return;
-            // Tab changes rebuild the part after our persistent client. Plug
-            // our rows last again once the factory finishes merging clients.
+            // Unplug before the owning part is removed; otherwise XMLGUI
+            // leaves Tools alive without an owner and cannot remove it later.
             m_rebuildPending = true;
-            QTimer::singleShot(0, this, [this] {
+            // Queue first: clientRemoved callbacks may destroy this controller.
+            QTimer::singleShot(0, this, [this, factory] {
                 m_rebuildPending = false;
-                if (auto* currentFactory = this->factory()) {
-                    currentFactory->removeClient(this);
-                    currentFactory->addClient(this);
-                }
+                factory->addClient(this);
             });
+            factory->removeClient(this);
         });
+        connect(factory, &KXMLGUIFactory::clientAdded, this, &WindowMenus::refreshActions);
         connect(factory, &KXMLGUIFactory::clientRemoved, this, [this](KXMLGUIClient* client) {
             if (client != this)
                 refreshActions();

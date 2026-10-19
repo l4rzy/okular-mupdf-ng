@@ -17,6 +17,7 @@
 #include <QImage>
 #include <QMainWindow>
 #include <QMenu>
+#include <QMenuBar>
 #include <QMimeDatabase>
 #include <QPainter>
 #include <QPdfWriter>
@@ -47,6 +48,22 @@ public:
                                       new QAction(QStringLiteral("Previous"), actionCollection()));
         setXML(QStringLiteral("<gui name=\"test\" translationDomain=\"okular_mupdfng\"><MenuBar><Menu name=\"tools\">"
                               "<text>Tools</text><Action name=\"previous\"/></Menu></MenuBar></gui>"));
+    }
+};
+
+class TestMenuClient : public KXMLGUIClient {
+public:
+    TestMenuClient(const QStringList& menus, bool shell = false)
+    {
+        QString xml = QStringLiteral("<gui name=\"%1\" translationDomain=\"okular_mupdfng\"><MenuBar>")
+                          .arg(shell ? QStringLiteral("test_shell") : QStringLiteral("test_part"));
+        for (const auto& name : menus) {
+            if (shell && name == QStringLiteral("settings"))
+                xml += QStringLiteral("<Merge/>");
+            actionCollection()->addAction(name, new QAction(name, actionCollection()));
+            xml += QStringLiteral("<Menu name=\"%1\"><text>%1</text><Action name=\"%1\"/></Menu>").arg(name);
+        }
+        setXML(xml + QStringLiteral("</MenuBar></gui>"));
     }
 };
 
@@ -388,6 +405,106 @@ private slots:
                                         << QStringLiteral("Never");
     }
 
+    void menuBarOrder_data()
+    {
+        QTest::addColumn<int>("teardown");
+        QTest::newRow("close-after-rebuild") << 0;
+        QTest::newRow("close-before-rebuild") << 1;
+        QTest::newRow("destroy-factory-before-rebuild") << 2;
+        QTest::newRow("close-during-unplug") << 3;
+    }
+
+    void menuBarOrder()
+    {
+        QFETCH(int, teardown);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        config->sync();
+        QMainWindow window;
+        KXMLGUIBuilder builder(&window);
+        auto factory = std::make_unique<KXMLGUIFactory>(&builder);
+        TestMenuClient shell({ "file", "view", "settings", "help" }, true);
+        TestMenuClient firstPart({ "edit", "go", "bookmarks", "tools" });
+        TestMenuClient secondPart({ "edit", "go", "bookmarks", "tools" });
+        Okular::Document first(nullptr), second(nullptr);
+        auto cleanup = qScopeGuard([&] {
+            if (!factory)
+                return;
+            for (auto* document : { &first, &second }) {
+                if (auto* client = document->guiClient(); client && client->factory())
+                    factory->removeClient(client);
+            }
+            factory->removeClient(&firstPart);
+            factory->removeClient(&secondPart);
+            factory->removeClient(&shell);
+        });
+        factory->addClient(&shell);
+        factory->addClient(&firstPart);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        const auto mime = QMimeDatabase().mimeTypeForFile(path);
+        QCOMPARE(first.openDocument(path, QUrl::fromLocalFile(path), mime), Okular::Document::OpenSuccess);
+        factory->addClient(first.guiClient());
+        const auto tools = [&]() {
+            return qobject_cast<QMenu*>(factory->container(QStringLiteral("tools"), nullptr));
+        };
+        QTRY_VERIFY(tools() && tools()->actions().size() == 5);
+        QPointer<QAction> theme = tools()->actions().at(3);
+        const auto menuOrder = [&] {
+            QStringList order;
+            if (auto* bar = qobject_cast<QMenuBar*>(factory->container(QStringLiteral("menubar"), nullptr, true))) {
+                for (auto* action : bar->actions())
+                    order.append(action->menu()->objectName());
+            }
+            return order;
+        };
+        const QStringList expected { "file", "view", "edit", "go", "bookmarks", "tools", "settings", "help" };
+        QCOMPARE(menuOrder(), expected);
+        factory->removeClient(&firstPart);
+        factory->addClient(&secondPart);
+        QCOMPARE(second.openDocument(path, QUrl::fromLocalFile(path), mime), Okular::Document::OpenSuccess);
+        factory->addClient(second.guiClient());
+        QTRY_VERIFY(tools() && tools()->actions().contains(theme));
+        QCOMPARE(menuOrder(), expected);
+        for (int index = 0; index < 6; ++index) {
+            auto* oldPart = index % 2 == 0 ? &secondPart : &firstPart;
+            auto* newPart = index % 2 == 0 ? &firstPart : &secondPart;
+            factory->removeClient(oldPart);
+            factory->addClient(newPart);
+            QTRY_VERIFY(tools() && tools()->actions().contains(theme));
+            QCOMPARE(menuOrder(), expected);
+            QCOMPARE(tools()->actions().size(), 5);
+            QCOMPARE(tools()->actions().front(), newPart->actionCollection()->action(QStringLiteral("tools")));
+        }
+        // Leave a rebuild queued while removing the last document or GUI factory.
+        if (teardown == 3) {
+            connect(factory.get(), &KXMLGUIFactory::clientRemoved, &window, [&](KXMLGUIClient* client) {
+                if (client->xmlFile() == QStringLiteral("mupdfngui.rc")) {
+                    factory->removeClient(first.guiClient());
+                    factory->removeClient(second.guiClient());
+                }
+            });
+        }
+        factory->removeClient(&secondPart);
+        factory->addClient(&firstPart);
+        if (teardown == 0)
+            QTRY_VERIFY(tools() && tools()->actions().contains(theme));
+        if (teardown == 2) {
+            factory.reset();
+        } else {
+            factory->removeClient(first.guiClient());
+            factory->removeClient(second.guiClient());
+        }
+        QVERIFY(theme.isNull());
+        QCoreApplication::processEvents();
+        if (factory) {
+            QVERIFY(tools());
+            QCOMPARE(tools()->actions().size(), 1);
+            QCOMPARE(menuOrder(), expected);
+        }
+        first.closeDocument();
+        second.closeDocument();
+    }
+
     void sharedWindowMenus_data()
     {
         QTest::addColumn<int>("firstClosed");
@@ -430,14 +547,14 @@ private slots:
         for (int index = 0; index < 3; ++index) {
             documents[index] = std::make_unique<Okular::Document>(nullptr);
             const auto& path = paths.at(index);
-            QCOMPARE(documents[index]->openDocument(path, QUrl::fromLocalFile(path),
-                                                   QMimeDatabase().mimeTypeForFile(path)),
-                     Okular::Document::OpenSuccess);
+            QCOMPARE(
+                documents[index]->openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                Okular::Document::OpenSuccess);
             clients[index] = documents[index]->guiClient();
             documents[index]->reparseConfig();
             (index == 2 ? otherFactory : factory).addClient(clients[index]);
         }
-        auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
+        QPointer<QMenu> tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
         auto* otherTools = qobject_cast<QMenu*>(otherFactory.container(QStringLiteral("tools"), &otherHost));
         QVERIFY(tools);
         QVERIFY(otherTools);
@@ -451,13 +568,15 @@ private slots:
         TestGuiClient part;
         factory.addClient(&part);
         factory.removeClient(&part);
-        QCOMPARE(tools->actions().size(), 5);
-        // A tab switch replaces the part's Tools rows while the shared menu
-        // client remains registered. Its rows must still follow the part's.
+        QTRY_COMPARE(tools->actions().size(), 5);
+        // A tab switch rebuilds Tools along with the part. Reacquire its menu;
+        // the shared rows must still follow the part's after the queued merge.
         for (int index = 0; index < 2; ++index) {
             factory.removeClient(&host);
             factory.addClient(&host);
-            QTRY_COMPARE(tools->actions().front(), host.actionCollection()->action(QStringLiteral("previous")));
+            QTRY_VERIFY((tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host)))
+                        && tools->actions().size() == 5);
+            QCOMPARE(tools->actions().front(), host.actionCollection()->action(QStringLiteral("previous")));
             QCOMPARE(tools->actions().at(2)->objectName(), QStringLiteral("mupdf_ocr"));
             QCOMPARE(tools->actions().at(3), theme);
             QCOMPARE(tools->actions().back()->objectName(), QStringLiteral("mupdf_manage_certificates"));
@@ -477,6 +596,7 @@ private slots:
         factory.removeClient(clients[firstClosed]);
         documents[firstClosed]->closeDocument();
         documents[firstClosed].reset();
+        QTRY_COMPARE(tools->actions().size(), 5);
         if (checkToggle) {
             toggle->trigger();
             config->reparseConfiguration();
@@ -574,7 +694,7 @@ private slots:
         proxy->trigger();
         QCOMPARE(triggered.count(), 1);
         QVERIFY(!client->factory());
-        QCOMPARE(tools->actions().size(), keepOtherDocument ? 5 : 1);
+        QTRY_COMPARE(tools->actions().size(), keepOtherDocument ? 5 : 1);
         if (keepOtherDocument) {
             QVERIFY(proxy);
             QSignalSpy otherTriggered(second.guiClient()->actionCollection()->action(actionName), &QAction::triggered);
