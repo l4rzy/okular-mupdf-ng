@@ -9,6 +9,9 @@
   <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING"><img src="https://img.shields.io/github/license/l4rzy/okular-mupdf-ng" alt="GitHub license"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/actions"><img src="https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml" alt="GitHub Workflow Status"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
+  <br>
+  <a href="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/package/okular-mupdf-ng/"><img src="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/package/okular-mupdf-ng/status_image/last_build.png" /></a>
+  <a href="https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng"><img src="https://build.opensuse.org/projects/home:23ro/packages/okular-mupdf-ng/badge.svg?type=default" alt="OpenSUSE OBS"></a>
 </p>
 
 A MuPDF-based **secure** and fast backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.
@@ -19,7 +22,7 @@ A MuPDF-based **secure** and fast backend for Okular. Document rendering is move
 
 ## Installation
 
-See [INSTALL.md](INSTALL.md) for prebuilt packages, build requirements, and
+See [INSTALL.md](INSTALL.md) for community repos, prebuilt packages, build requirements, and
 instructions for building from source.
 
 ---

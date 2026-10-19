@@ -3,7 +3,8 @@
 ## Prebuilt packages
 
 Prebuilt packages for supported distros are attached to each
-[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). The commands
+[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). Repository
+installations receive updates through your package manager. The commands
 below install v0.4.6.
 
 Installing this plugin will override the default backend for PDF and ePUB. You
@@ -29,6 +30,16 @@ sudo pacman -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.6
 
 ### Fedora
 
+Enable the [COPR repository](https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/)
+and install the package:
+
+```bash
+sudo dnf copr enable l4rzy/okular-mupdf-ng
+sudo dnf install okular-mupdf-ng
+```
+
+Alternatively, install a release RPM directly:
+
 ```bash
 # Fedora 44 x86_64
 sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.6/okular-mupdf-ng-0.4.6-1.fc44.x86_64.rpm
@@ -38,6 +49,17 @@ sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4
 ```
 
 ### openSUSE Tumbleweed
+
+Add the [OBS repository](https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng)
+and install the package:
+
+```bash
+sudo zypper addrepo --refresh https://download.opensuse.org/repositories/home:/23ro/openSUSE_Tumbleweed/home:23ro.repo
+sudo zypper refresh
+sudo zypper install okular-mupdf-ng
+```
+
+Alternatively, install a release RPM directly:
 
 ```bash
 sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.6/okular-mupdf-ng-0.4.6-1.tumbleweed.x86_64.rpm
