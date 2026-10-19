@@ -47,14 +47,14 @@ promise that every input or workflow has been tested.
 Document themes are viewing-only and have mainly synthetic rendering coverage;
 complex documents may need further tuning. Dusk dims raster images to 80%
 brightness, including text in scanned pages. Vector illustrations follow the
-text palette. Dark leaves mostly dark pages' vector colors unchanged and dims
-their images to 80% brightness. On other pages, it inverts lighter images and dims
+text palette. Dark always recolors vectors, inverts lighter images, and dims
 mostly dark images to 80% without inversion. Image decisions use the whole image independently
-of zoom or tiles, with transparency taken into account. Dusk leaves mostly dark
-pages' vector colors unchanged but still dims their images.
+of zoom or tiles, with transparency taken into account. Dusk preserves vector colors
+only when both the page and its border are mostly dark, but still dims images.
+Light vector text over a preserved dark image may lose contrast in Dark mode.
 
-Dark falls back to transforming the completed page when recoloring is needed
-and non-normal blend modes or knockout groups are present. This preserves native
+Dark falls back to transforming the completed page when non-normal blend modes
+or knockout groups are present. This preserves native
 compositing, but selective image inversion and image dimming are unavailable on
 those pages. Multiply blending in PDF highlights does not trigger this fallback,
 so highlighted text retains contrast. Other blends on the same page can still

@@ -114,7 +114,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         const auto theme = m_settings.readingTheme;
         const bool deviceTheme = theme == ReadingTheme::Dusk || theme == ReadingTheme::Dark;
         const auto pageTheme =
-            deviceTheme ? inspectThemePage(m_context, nativePage, bounds, request.cookie) : ThemePageInfo { };
+            deviceTheme ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie) : ThemePageInfo { };
         const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
         const bool bitmapDark = theme == ReadingTheme::Dark && recolorVectors && pageTheme.needsCompositing;
         const auto paperColor =

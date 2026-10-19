@@ -43,8 +43,9 @@ void mapColor(float* rgb, const std::array<int, 3>& background)
     const float high = std::max({ rgb[0], rgb[1], rgb[2] });
     // Match Dark's fixed saturation blend without changing neutral colors or edge coverage.
     for (std::size_t i = 0; i < 3; ++i)
-        rgb[i] = (static_cast<float>(foreground[i])
-                  + static_cast<float>(background[i] - foreground[i]) * (low + (high - rgb[i]) * 0.4f))
+        rgb[i] =
+            (static_cast<float>(foreground[i])
+             + static_cast<float>(background[i] - foreground[i]) * (low + (high - rgb[i]) * Theme::SaturationBlend))
             / 255.0f;
 }
 
@@ -97,26 +98,28 @@ bool isMostlyDarkImage(fz_context* context, const ThemeDevice* state, fz_image* 
     fz_try(context)
     {
         checkCancellation(context, state);
-        thumbnail = fz_new_pixmap(context, fz_device_rgb(context), 64, 64, nullptr, 1);
+        thumbnail =
+            fz_new_pixmap(context, fz_device_rgb(context), Theme::ThumbnailSize, Theme::ThumbnailSize, nullptr, 1);
         fz_clear_pixmap(context, thumbnail);
         raster = fz_new_draw_device(context, fz_identity, thumbnail);
         fz_set_default_colorspaces(context, raster, state->defaultColorspaces);
-        fz_fill_image(context, raster, source, fz_scale(64, 64), 1, params);
+        fz_fill_image(context, raster, source, fz_scale(Theme::ThumbnailSize, Theme::ThumbnailSize), 1, params);
         fz_close_device(context, raster);
         const int stride = fz_pixmap_stride(context, thumbnail);
         const auto* samples = fz_pixmap_samples(context, thumbnail);
         unsigned visibleWeight = 0, darkWeight = 0;
-        for (int y = 0; y < 64; ++y) {
+        for (int y = 0; y < Theme::ThumbnailSize; ++y) {
             checkCancellation(context, state);
             const auto* pixel = samples + y * stride;
-            for (int x = 0; x < 64; ++x, pixel += 4) {
+            for (int x = 0; x < Theme::ThumbnailSize; ++x, pixel += 4) {
                 const unsigned alpha = pixel[3];
                 visibleWeight += alpha;
-                if (54U * pixel[0] + 183U * pixel[1] + 19U * pixel[2] < 128 * alpha)
+                if (Theme::RedWeight * pixel[0] + Theme::GreenWeight * pixel[1] + Theme::BlueWeight * pixel[2]
+                    < Theme::ImageDarknessCutoff * alpha)
                     darkWeight += alpha;
             }
         }
-        dark = darkWeight > visibleWeight / 2;
+        dark = darkWeight > visibleWeight / Theme::DarkCoverageDivisor;
     }
     fz_always(context)
     {

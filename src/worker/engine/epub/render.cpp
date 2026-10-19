@@ -112,7 +112,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (deviceTheme && request.cookie)
             list = fz_new_display_list_from_page(m_context, page);
         const auto pageTheme =
-            deviceTheme ? inspectThemePage(m_context, page, bounds, request.cookie, list) : ThemePageInfo { };
+            deviceTheme ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo { };
         const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
         const bool bitmapDark = theme == ReadingTheme::Dark && recolorVectors && pageTheme.needsCompositing;
         const auto paperColor =

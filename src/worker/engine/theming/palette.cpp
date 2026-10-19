@@ -22,6 +22,43 @@ struct PageProbe {
     bool highlight;
 };
 
+bool isDarkPixel(const unsigned char* pixel) noexcept
+{
+    // Packed, alignment-safe loads allow baseline SSE2 to vectorize reductions.
+    std::uint32_t rgba;
+    std::memcpy(&rgba, pixel, sizeof(rgba));
+    if constexpr (std::endian::native == std::endian::big)
+        rgba = std::byteswap(rgba);
+    const auto red = rgba & 0xFF;
+    const auto green = (rgba >> 8) & 0xFF;
+    const auto blue = (rgba >> 16) & 0xFF;
+    // Approximate perceptual luminance with integer weights that sum to 256.
+    const auto luminance = Theme::RedWeight * red + Theme::GreenWeight * green + Theme::BlueWeight * blue;
+    return luminance < Theme::PageDarknessCutoff * Theme::LuminanceScale;
+}
+
+bool hasMostlyDarkBorder(fz_context* context, fz_pixmap* pixmap)
+{
+    // The page probe supplies an opaque RGBA thumbnail.
+    const int width = fz_pixmap_width(context, pixmap);
+    const int height = fz_pixmap_height(context, pixmap);
+    if (width < 2 || height < 2)
+        return false;
+    const auto stride = static_cast<std::size_t>(fz_pixmap_stride(context, pixmap));
+    const auto* top = fz_pixmap_samples(context, pixmap);
+    const auto* bottom = top + static_cast<std::size_t>(height - 1) * stride;
+    std::size_t darkPixels = 0;
+    for (int x = 0; x < width; ++x)
+        darkPixels += isDarkPixel(top + x * 4) + isDarkPixel(bottom + x * 4);
+    for (int y = 1; y < height - 1; ++y) {
+        const auto* row = top + static_cast<std::size_t>(y) * stride;
+        darkPixels += isDarkPixel(row) + isDarkPixel(row + (width - 1) * 4);
+    }
+    // Count corners once and require a strict majority, as in the full-page scan.
+    const auto borderPixels = 2 * (static_cast<std::size_t>(width) + static_cast<std::size_t>(height)) - 4;
+    return darkPixels > borderPixels / Theme::DarkCoverageDivisor;
+}
+
 ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::array<int, 3>& foreground) noexcept
 {
     ThemePalette palette { };
@@ -54,26 +91,21 @@ bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
     for (int y = 0; y < height; ++y) {
         const auto* pixel = samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
         std::uint32_t darkRow = 0;
-        for (int x = 0; x < width; ++x, pixel += 4) {
-            // A packed, alignment-safe load lets baseline SSE2 vectorize the reduction.
-            std::uint32_t rgba;
-            std::memcpy(&rgba, pixel, sizeof(rgba));
-            if constexpr (std::endian::native == std::endian::big)
-                rgba = std::byteswap(rgba);
-            // Approximate perceptual luminance; the maximum sum is 255 * 256.
-            const auto luminance =
-                static_cast<std::uint16_t>(54 * (rgba & 255) + 183 * ((rgba >> 8) & 255) + 19 * ((rgba >> 16) & 255));
-            darkRow += luminance < 128 * 256;
-        }
+        for (int x = 0; x < width; ++x, pixel += 4)
+            darkRow += isDarkPixel(pixel);
         darkPixels += darkRow;
     }
-    return darkPixels > static_cast<std::size_t>(width) * static_cast<std::size_t>(height) / 2;
+    return darkPixels > static_cast<std::size_t>(width) * static_cast<std::size_t>(height) / Theme::DarkCoverageDivisor;
 }
 
-// Always sample the whole page, independently of the requested tile or zoom.
+// Dusk samples the whole page, independently of the requested tile or zoom.
 // Keep the thumbnail temporary so edits and layer changes cannot leave stale decisions.
-ThemePageInfo
-inspectThemePage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* cookie, fz_display_list* list)
+ThemePageInfo inspectThemePage(fz_context* context,
+                               fz_page* page,
+                               fz_rect bounds,
+                               Model::ReadingTheme theme,
+                               fz_cookie* cookie,
+                               fz_display_list* list)
 {
     fz_pixmap* volatile thumbnail = nullptr;
     fz_device* volatile device = nullptr;
@@ -83,11 +115,18 @@ inspectThemePage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* 
     {
         if (cookie && cookie->abort)
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
-        thumbnail = fz_new_pixmap(context, fz_device_rgb(context), 64, 64, nullptr, 1);
-        fz_clear_pixmap_with_value(context, thumbnail, 255);
-        const fz_matrix transform = fz_concat(fz_translate(-bounds.x0, -bounds.y0),
-                                              fz_scale(64 / (bounds.x1 - bounds.x0), 64 / (bounds.y1 - bounds.y0)));
-        device = fz_new_draw_device(context, transform, thumbnail);
+        if (theme == Model::ReadingTheme::Dusk) {
+            thumbnail =
+                fz_new_pixmap(context, fz_device_rgb(context), Theme::ThumbnailSize, Theme::ThumbnailSize, nullptr, 1);
+            fz_clear_pixmap_with_value(context, thumbnail, 255);
+            const fz_matrix transform = fz_concat(fz_translate(-bounds.x0, -bounds.y0),
+                                                  fz_scale(Theme::ThumbnailSize / (bounds.x1 - bounds.x0),
+                                                           Theme::ThumbnailSize / (bounds.y1 - bounds.y0)));
+            device = fz_new_draw_device(context, transform, thumbnail);
+        } else {
+            // Dark only needs blend inspection; avoid rasterizing a page thumbnail.
+            device = fz_new_device_of_size(context, sizeof(fz_device));
+        }
         auto* probe =
             reinterpret_cast<PageProbe*>(fz_new_passthrough_device_of_size(context, device, sizeof(PageProbe)));
         probe->info = &info;
@@ -140,7 +179,9 @@ inspectThemePage(fz_context* context, fz_page* page, fz_rect bounds, fz_cookie* 
         fz_close_device(context, device);
         if (cookie && cookie->abort)
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
-        info.mostlyDark = isMostlyDarkPixmap(context, thumbnail);
+        // Require dark edges too: a large inset photograph can dominate a light page.
+        info.mostlyDark =
+            thumbnail && isMostlyDarkPixmap(context, thumbnail) && hasMostlyDarkBorder(context, thumbnail);
     }
     fz_always(context)
     {
@@ -160,9 +201,14 @@ void dimImageRow(unsigned char* pixel, int width) noexcept
         std::memcpy(&rgba, pixel, sizeof(rgba));
         if constexpr (std::endian::native == std::endian::big)
             rgba = std::byteswap(rgba);
-        const auto red = ((rgba & 255) * 4 + 2) / 5;
-        const auto green = (((rgba >> 8) & 255) * 4 + 2) / 5;
-        const auto blue = (((rgba >> 16) & 255) * 4 + 2) / 5;
+        const auto red = ((rgba & 255) * Theme::ImageBrightnessNumerator + Theme::ImageBrightnessDenominator / 2)
+            / Theme::ImageBrightnessDenominator;
+        const auto green =
+            (((rgba >> 8) & 255) * Theme::ImageBrightnessNumerator + Theme::ImageBrightnessDenominator / 2)
+            / Theme::ImageBrightnessDenominator;
+        const auto blue =
+            (((rgba >> 16) & 255) * Theme::ImageBrightnessNumerator + Theme::ImageBrightnessDenominator / 2)
+            / Theme::ImageBrightnessDenominator;
         rgba = (rgba & 0xFF000000U) | red | (green << 8) | (blue << 16);
         if constexpr (std::endian::native == std::endian::big)
             rgba = std::byteswap(rgba);
@@ -218,9 +264,9 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTh
                 // A fixed blend preserves antialiased coverage against neutral paper.
                 const int low = std::min({ red, green, blue });
                 const int high = std::max({ red, green, blue });
-                red = low + (high - red) * 2 / 5;
-                green = low + (high - green) * 2 / 5;
-                blue = low + (high - blue) * 2 / 5;
+                red = low + (high - red) * Theme::SaturationNumerator / Theme::SaturationDenominator;
+                green = low + (high - green) * Theme::SaturationNumerator / Theme::SaturationDenominator;
+                blue = low + (high - blue) * Theme::SaturationNumerator / Theme::SaturationDenominator;
             }
             pixel[0] = static_cast<unsigned char>((palette[0][static_cast<std::size_t>(red)] * alpha + 127) / 255);
             pixel[1] = static_cast<unsigned char>((palette[1][static_cast<std::size_t>(green)] * alpha + 127) / 255);

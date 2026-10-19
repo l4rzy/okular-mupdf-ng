@@ -7,6 +7,7 @@
 #include "engine/theming/palette.hpp"
 #include "engine/theming/theme_device.hpp"
 #include "genpdf.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <QFile>
 #include <QTemporaryDir>
@@ -219,8 +220,10 @@ private slots:
         QTest::newRow("dark-transparent-padding")
             << 3 << QByteArray::fromHex("000000000000000000000000ffffffff") << false << false;
         QTest::newRow("dark-fully-transparent") << 3 << QByteArray::fromHex("00000000") << false << false;
-        QTest::newRow("dark-below-threshold") << 3 << QByteArray::fromHex("7f7f7fff") << false << true;
-        QTest::newRow("dark-at-threshold") << 3 << QByteArray::fromHex("808080ff") << false << false;
+        QTest::newRow("dark-medium-image") << 3 << QByteArray::fromHex("808080ff") << false << true;
+        QTest::newRow("dark-transparent-medium-image") << 3 << QByteArray::fromHex("40404080") << false << true;
+        QTest::newRow("dark-below-threshold") << 3 << QByteArray::fromHex("9f9f9fff") << false << true;
+        QTest::newRow("dark-at-threshold") << 3 << QByteArray::fromHex("a0a0a0ff") << false << false;
         QTest::newRow("dark-luminosity-mask") << 3 << QByteArray::fromHex("ffffffff") << true << false;
     }
 
@@ -452,10 +455,10 @@ private slots:
         settings.readingTheme = Mu::Model::ReadingTheme::Dark;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, dark.data(), stride));
-        QCOMPARE(dark[0], std::uint8_t(darkPage ? 0 : 32));
+        QCOMPARE(dark[0], std::uint8_t(darkPage ? 218 : 32));
         for (const int x : { 30, 70 }) {
             const auto offset = std::size_t(85 * stride + x * 4);
-            if (preserved || darkPage) {
+            if (preserved) {
                 for (std::size_t channel = 0; channel < 3; ++channel)
                     QVERIFY(std::abs(int(dark[offset + channel]) - (int(original[offset + channel]) * 4 + 2) / 5) <= 1);
                 QCOMPARE(dark[offset + 3], original[offset + 3]);
@@ -729,7 +732,7 @@ private slots:
         std::vector<std::uint8_t> original(height * stride), themed(height * stride);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
         auto settings = document.settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Dark;
+        settings.readingTheme = Mu::Model::ReadingTheme::Dusk;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
         QCOMPARE(themed == original, preserved);
@@ -741,6 +744,37 @@ private slots:
             QVERIFY(std::equal(tiled.begin() + y * tile.width * 4,
                                tiled.begin() + (y + 1) * tile.width * 4,
                                themed.begin() + ((y + tile.y) * width + tile.x) * 4));
+    }
+
+    void themesImageHeavyPages_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::newRow("dusk") << int(Mu::Model::ReadingTheme::Dusk);
+        QTest::newRow("dark") << int(Mu::Model::ReadingTheme::Dark);
+    }
+
+    void themesImageHeavyPages()
+    {
+        QFETCH(int, theme);
+        using namespace Mu::Worker::Engine;
+        PdfDocument document;
+        const auto path = m_tempDir.filePath("image-heavy-page.pdf");
+        createTextPDF(document.context(),
+                      path,
+                      "1 g 0 0 612 792 re f "
+                      "q 500 0 0 600 56 140 cm BI /W 1 /H 1 /BPC 8 /CS /G /F /AHx ID 50> EI Q");
+        QVERIFY(openDocument(document, path));
+        auto settings = document.settings();
+        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        document.setSettings(settings);
+        constexpr int width = 153, height = 198, stride = width * 4;
+        std::vector<std::uint8_t> pixels(height * stride);
+        QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, pixels.data(), stride));
+        const auto paper = Mu::Model::ThemeColor::splitRgb(Mu::Model::ThemeColor::getBackground(settings.readingTheme));
+        for (std::size_t channel = 0; channel < paper.size(); ++channel)
+            QCOMPARE(pixels[channel], static_cast<std::uint8_t>(paper[channel]));
+        // The dark image is dimmed to 80%; it must not suppress theming of the paper.
+        QCOMPARE(pixels[80 * stride + 70 * 4], std::uint8_t(64));
     }
 
     void themesHighlights_data()
@@ -836,7 +870,8 @@ private slots:
         pdf_set_annot_appearance(ctx, annot, "N", nullptr, fz_identity, { 0, 0, 40, 40 }, resources, contents);
         fz_drop_buffer(ctx, contents);
         pdf_drop_obj(ctx, resources);
-        const auto info = inspectThemePage(ctx, &page->super, fz_bound_page(ctx, &page->super), nullptr);
+        const auto info = inspectThemePage(
+            ctx, &page->super, fz_bound_page(ctx, &page->super), Mu::Model::ReadingTheme::Dark, nullptr);
         pdf_drop_annot(ctx, annot);
         fz_drop_page(ctx, &page->super);
         QVERIFY(info.needsCompositing);
@@ -865,7 +900,8 @@ private slots:
         QVERIFY(createBlendPdf(document.context(), path, blend, alpha, knockout));
         QVERIFY(openDocument(document, path));
         auto* page = fz_load_page(document.context(), document.document(), 0);
-        const auto info = inspectThemePage(document.context(), page, fz_bound_page(document.context(), page), nullptr);
+        const auto info = inspectThemePage(
+            document.context(), page, fz_bound_page(document.context(), page), Mu::Model::ReadingTheme::Dark, nullptr);
         fz_drop_page(document.context(), page);
         QVERIFY(info.needsCompositing);
         QVERIFY(!info.mostlyDark);

@@ -219,14 +219,14 @@ sudo apt install tesseract-ocr-eng</code></pre>
           </tbody>
         </table>
       </div>
-      <p>Dark leaves mostly dark pages&rsquo; vector colors unchanged and dims their
-        images to 80% brightness. On other pages, it checks each raster image
-        separately: mostly dark images stay uninverted at 80% brightness, while
-        lighter images are inverted. Dusk also leaves mostly dark pages&rsquo; vector
-        colors unchanged but still dims their images. Dusk distinguishes images from vectors,
+      <p>Dark always recolors vectors and checks each raster image separately:
+        mostly dark images stay uninverted at 80% brightness, while lighter images
+        are inverted. Light vector text over a preserved dark image may lose contrast.
+        Dusk preserves vector colors only when both the page and its border are
+        mostly dark, but still dims images. Dusk distinguishes images from vectors,
         not their content: scanned text dims with its image, and vector illustrations
         follow the text palette.</p>
-      <p>For pages that need recoloring and use non-normal blend modes or knockout
+      <p>For pages that use non-normal blend modes or knockout
         groups, Dark transforms the completed page to preserve correct compositing.
         Selective image inversion and 80% image dimming are unavailable on those pages.
         PDF highlights&rsquo; Multiply blending does not trigger this fallback,
