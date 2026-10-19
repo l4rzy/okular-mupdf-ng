@@ -10,8 +10,8 @@
 namespace Mu::Model::ThemeColor {
 
 inline constexpr std::uint32_t DefaultBackground = 0xFFFFFF;
-inline constexpr std::uint32_t TwilightBackground = 0xD6D6D6;
-inline constexpr std::uint32_t TwilightForeground = 0x242424;
+inline constexpr std::uint32_t TwilightBackground = 0xD0CAB8;
+inline constexpr std::uint32_t TwilightForeground = 0x000000;
 inline constexpr std::uint32_t DuskBackground = 0x303134;
 inline constexpr std::uint32_t DarkBackground = 0x202124;
 inline constexpr std::uint32_t DarkForeground = 0xDADCE0;

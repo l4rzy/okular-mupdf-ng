@@ -174,7 +174,7 @@ private slots:
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
             const QColor expectedColor = action->text() == QStringLiteral("Dark") ? QColor(32, 33, 36)
                 : action->text() == QStringLiteral("Dusk")                        ? QColor(48, 49, 52)
-                : action->text() == QStringLiteral("Twilight")                    ? QColor(214, 214, 214)
+                : action->text() == QStringLiteral("Twilight")                    ? QColor(208, 202, 184)
                                                                                   : QColor(Qt::white);
             for (int page = 0; page < static_cast<int>(document.pages()); ++page) {
                 QCOMPARE(document.page(page)->placeholderColor(), expectedColor);
