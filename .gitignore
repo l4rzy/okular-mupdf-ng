@@ -9,6 +9,7 @@ dist/*
 !dist/PKGBUILD
 !dist/mupdfng.svg
 !dist/obs/
+!dist/copr/
 dist/aur/*
 !dist/aur/PKGBUILD
 !dist/aur/.SRCINFO
