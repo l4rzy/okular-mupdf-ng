@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/mupdfng.hpp"
+#include "generator/window_menus.hpp"
 #include "shared/model/theme_colors.hpp"
 
 #include <okular/core/fileprinter.h>
@@ -279,6 +280,7 @@ Main::Main(QObject* parent, const QVariantList& args)
 // Okular Generator Func: stops worker activity and releases generator resources.
 Main::~Main()
 {
+    m_menuRegistration.reset();
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
     // Cancel callbacks before removing queued events or releasing UI-owned data.
@@ -470,16 +472,9 @@ void Main::setupActions()
     };
     auto* toggle = new QAction(menu->icon(), i18n("Toggle MuPDF OCR"), this);
     actionCollection()->addAction(QStringLiteral("mupdf_ocr_toggle"), toggle);
-    connect(toggle, &QAction::triggered, this, [setMode, previousMode = int(Mode::Never)]() mutable {
-        const int mode = MuPDFNGSettings::ocrTriggerMode();
-        if (mode == Mode::Always) {
-            setMode(previousMode);
-        } else {
-            previousMode = mode;
-            setMode(Mode::Always);
-        }
+    connect(toggle, &QAction::triggered, this, [this, setMode] {
+        setMode(m_menuRegistration->nextOcrMode(MuPDFNGSettings::ocrTriggerMode()));
     });
-    syncOcrActions();
     connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncOcrActions);
     connect(
         m_ocrActions, &QActionGroup::triggered, this, [setMode](QAction* action) { setMode(action->data().toInt()); });
@@ -496,7 +491,19 @@ void Main::setupActions()
         dialog.exec();
     });
     setupThemeActions();
-    setXMLFile(QStringLiteral("mupdfngui.rc"));
+    // Both action groups are complete before their initial state is applied.
+    syncOcrActions();
+    // A separate client presents one set of actions per window, even when
+    // Okular leaves inactive tabs' generator clients in the GUI factory.
+    setXML(QStringLiteral("<gui name=\"okular_mupdfng_document\"/>"));
+    m_menuRegistration = std::make_unique<MenuRegistration>(guiClient());
+}
+
+KActionCollection* Main::actionCollection() const
+{
+    if (m_menuRegistration)
+        m_menuRegistration->schedule();
+    return KXMLGUIClient::actionCollection();
 }
 
 void Main::updatePagePlaceholderColor(Model::ReadingTheme theme)
@@ -571,13 +578,10 @@ void Main::setupThemeActions()
         },
         Qt::QueuedConnection);
     connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncThemeActions);
-    syncThemeActions();
 }
 
 void Main::syncThemeActions()
 {
-    if (!m_themeActions)
-        return;
     const bool enabled = !m_okularPages.isEmpty() && !m_placeholder.isActive();
     actionCollection()->action(QStringLiteral("mupdf_theme"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dusk"))->setEnabled(enabled);

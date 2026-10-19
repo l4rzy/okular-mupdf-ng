@@ -268,6 +268,7 @@ endif()
 
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
+  generator/window_menus.cpp
   generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp
   generator/config/csseditor/highlighter.cpp

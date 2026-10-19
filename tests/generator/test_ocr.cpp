@@ -20,6 +20,7 @@
 #include <QMimeDatabase>
 #include <QPainter>
 #include <QPdfWriter>
+#include <QPointer>
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -33,6 +34,7 @@
 #include <okular/interfaces/configinterface.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
@@ -279,14 +281,19 @@ private slots:
     void ocrMenuModels_data()
     {
         QTest::addColumn<QStringList>("files");
-        QTest::newRow("empty") << QStringList();
-        QTest::newRow("support-only") << QStringList { "osd.traineddata", "equ.traineddata" };
-        QTest::newRow("language") << QStringList { "test.traineddata" };
+        QTest::addColumn<bool>("shared");
+        QTest::newRow("empty") << QStringList() << false;
+        QTest::newRow("support-only") << QStringList { "osd.traineddata", "equ.traineddata" } << false;
+        QTest::newRow("language") << QStringList { "test.traineddata" } << false;
+        QTest::newRow("shared-empty") << QStringList() << true;
+        QTest::newRow("shared-support-only") << QStringList { "osd.traineddata", "equ.traineddata" } << true;
+        QTest::newRow("shared-language") << QStringList { "test.traineddata" } << true;
     }
 
     void ocrMenuModels()
     {
         QFETCH(QStringList, files);
+        QFETCH(bool, shared);
         QTemporaryDir models;
         QVERIFY(models.isValid());
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
@@ -310,6 +317,28 @@ private slots:
         QVERIFY(ocrMenu);
         auto* menu = ocrMenu->menu();
         QVERIFY(menu);
+        QSignalSpy refreshed(menu, &QMenu::aboutToShow);
+        QMainWindow window;
+        KXMLGUIBuilder builder(&window);
+        KXMLGUIFactory factory(&builder);
+        TestGuiClient host;
+        factory.addClient(&host);
+        auto cleanup = qScopeGuard([&] {
+            factory.removeClient(client);
+            factory.removeClient(&host);
+        });
+        if (shared) {
+            factory.addClient(client);
+            auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
+            QVERIFY(tools);
+            QTRY_COMPARE(tools->actions().size(), 5);
+            for (auto* candidate : factory.clients()) {
+                if (candidate->xmlFile() == QStringLiteral("mupdfngui.rc"))
+                    actions = candidate->actionCollection();
+            }
+            QVERIFY(actions != client->actionCollection());
+            menu = actions->action(QStringLiteral("mupdf_ocr"))->menu();
+        }
         // Refresh on opening, including models installed/removed while Okular is running.
         for (const bool installed : { true, false }) {
             for (const QString& file : files) {
@@ -320,6 +349,7 @@ private slots:
                     QVERIFY(model.remove());
             }
             QVERIFY(QMetaObject::invokeMethod(menu, "aboutToShow"));
+            QCOMPARE(refreshed.count(), installed ? 1 : 2);
             const bool hasModels =
                 !Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR), models.path() }).isEmpty();
             QList<QAction*> visible;
@@ -358,6 +388,204 @@ private slots:
                                         << QStringLiteral("Never");
     }
 
+    void sharedWindowMenus_data()
+    {
+        QTest::addColumn<int>("firstClosed");
+        QTest::addColumn<QString>("secondPath");
+        QTest::addColumn<QString>("initialMode");
+        QTest::newRow("close-owner") << 0 << QStringLiteral(TEST_PDF_PATH) << QStringLiteral("Five");
+        QTest::newRow("close-newer") << 1 << QStringLiteral(TEST_PDF_PATH) << QStringLiteral("Five");
+        QTest::newRow("mixed-formats") << 0 << QStringLiteral(TEST_EPUB_PATH) << QStringLiteral("Five");
+        QTest::newRow("close-owner-twenty") << 0 << QStringLiteral(TEST_PDF_PATH) << QStringLiteral("Twenty");
+        QTest::newRow("close-owner-off") << 0 << QStringLiteral(TEST_PDF_PATH) << QStringLiteral("Never");
+    }
+
+    void sharedWindowMenus()
+    {
+        QFETCH(int, firstClosed);
+        QFETCH(QString, secondPath);
+        QFETCH(QString, initialMode);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        KConfigGroup ocr(config, QStringLiteral("OCR"));
+        ocr.writeEntry("OcrTriggerMode", initialMode);
+        config->sync();
+        QMainWindow window, otherWindow;
+        KXMLGUIBuilder builder(&window), otherBuilder(&otherWindow);
+        KXMLGUIFactory factory(&builder), otherFactory(&otherBuilder);
+        TestGuiClient host, otherHost;
+        factory.addClient(&host);
+        otherFactory.addClient(&otherHost);
+        std::unique_ptr<Okular::Document> documents[3];
+        KXMLGUIClient* clients[3] = { };
+        auto cleanup = qScopeGuard([&] {
+            for (int index = 0; index < 3; ++index) {
+                if (documents[index] && clients[index] && clients[index]->factory())
+                    clients[index]->factory()->removeClient(clients[index]);
+            }
+            factory.removeClient(&host);
+            otherFactory.removeClient(&otherHost);
+        });
+        const QStringList paths { QStringLiteral(TEST_PDF_PATH), secondPath, QStringLiteral(TEST_PDF_PATH) };
+        for (int index = 0; index < 3; ++index) {
+            documents[index] = std::make_unique<Okular::Document>(nullptr);
+            const auto& path = paths.at(index);
+            QCOMPARE(documents[index]->openDocument(path, QUrl::fromLocalFile(path),
+                                                   QMimeDatabase().mimeTypeForFile(path)),
+                     Okular::Document::OpenSuccess);
+            clients[index] = documents[index]->guiClient();
+            documents[index]->reparseConfig();
+            (index == 2 ? otherFactory : factory).addClient(clients[index]);
+        }
+        auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
+        auto* otherTools = qobject_cast<QMenu*>(otherFactory.container(QStringLiteral("tools"), &otherHost));
+        QVERIFY(tools);
+        QVERIFY(otherTools);
+        QTRY_COMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(otherTools->actions().size(), 5);
+        auto* theme = tools->actions().at(3);
+        QVERIFY(theme != otherTools->actions().at(3));
+        for (auto* client : clients)
+            QVERIFY(client->actionCollection()->associatedWidgets().isEmpty());
+        // Simulate the shell switching parts without unregistering generators.
+        TestGuiClient part;
+        factory.addClient(&part);
+        factory.removeClient(&part);
+        QCOMPARE(tools->actions().size(), 5);
+        // A tab switch replaces the part's Tools rows while the shared menu
+        // client remains registered. Its rows must still follow the part's.
+        for (int index = 0; index < 2; ++index) {
+            factory.removeClient(&host);
+            factory.addClient(&host);
+            QTRY_COMPARE(tools->actions().front(), host.actionCollection()->action(QStringLiteral("previous")));
+            QCOMPARE(tools->actions().at(2)->objectName(), QStringLiteral("mupdf_ocr"));
+            QCOMPARE(tools->actions().at(3), theme);
+            QCOMPARE(tools->actions().back()->objectName(), QStringLiteral("mupdf_manage_certificates"));
+        }
+        QAction* toggle = nullptr;
+        for (auto* candidate : factory.clients()) {
+            if (candidate->xmlFile() == QStringLiteral("mupdfngui.rc"))
+                toggle = candidate->actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"));
+        }
+        QVERIFY(toggle);
+        const bool checkToggle = toggle->isEnabled() && secondPath == QStringLiteral(TEST_PDF_PATH);
+        if (checkToggle) {
+            toggle->trigger();
+            config->reparseConfiguration();
+            QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), QStringLiteral("Always"));
+        }
+        factory.removeClient(clients[firstClosed]);
+        documents[firstClosed]->closeDocument();
+        documents[firstClosed].reset();
+        if (checkToggle) {
+            toggle->trigger();
+            config->reparseConfiguration();
+            QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), initialMode);
+        }
+        QCOMPARE(tools->actions().size(), 5);
+        QCOMPARE(tools->actions().at(3), theme);
+        const int remaining = 1 - firstClosed;
+        auto* source = clients[remaining]->actionCollection()->action(QStringLiteral("mupdf_theme_dark"));
+        QSignalSpy triggered(source, &QAction::triggered);
+        theme->menu()->actions().back()->trigger();
+        QCOMPARE(triggered.count(), 1);
+        // Removing and re-adding a cached client must restore one presentation.
+        if (checkToggle)
+            toggle->trigger();
+        factory.removeClient(clients[remaining]);
+        QCOMPARE(tools->actions().size(), 1);
+        QCOMPARE(otherTools->actions().size(), 5);
+        if (checkToggle) {
+            // The registration also retains history while no GUI is attached.
+            auto* detachedToggle = clients[remaining]->actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"));
+            detachedToggle->trigger();
+            config->reparseConfiguration();
+            QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), initialMode);
+            detachedToggle->trigger();
+        }
+        factory.addClient(clients[remaining]);
+        QTRY_COMPARE(tools->actions().size(), 5);
+        if (checkToggle) {
+            for (auto* candidate : factory.clients()) {
+                if (candidate->xmlFile() == QStringLiteral("mupdfngui.rc"))
+                    candidate->actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->trigger();
+            }
+            config->reparseConfiguration();
+            QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), initialMode);
+        }
+        factory.removeClient(clients[remaining]);
+        documents[remaining]->closeDocument();
+        documents[remaining].reset();
+        QCOMPARE(tools->actions().size(), 1);
+        QCOMPARE(otherTools->actions().size(), 5);
+    }
+
+    void closesDocumentDuringMenuAction_data()
+    {
+        QTest::addColumn<QString>("actionName");
+        QTest::addColumn<bool>("keepOtherDocument");
+        QTest::newRow("submenu-last-document") << QStringLiteral("mupdf_theme_dark") << false;
+        QTest::newRow("submenu-surviving-document") << QStringLiteral("mupdf_theme_dark") << true;
+        QTest::newRow("toggle-last-document") << QStringLiteral("mupdf_theme_toggle_dark") << false;
+        QTest::newRow("toggle-surviving-document") << QStringLiteral("mupdf_theme_toggle_dark") << true;
+    }
+
+    void closesDocumentDuringMenuAction()
+    {
+        QFETCH(QString, actionName);
+        QFETCH(bool, keepOtherDocument);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        config->sync();
+        Okular::Document first(nullptr), second(nullptr);
+        QMainWindow window;
+        KXMLGUIBuilder builder(&window);
+        KXMLGUIFactory factory(&builder);
+        TestGuiClient host;
+        factory.addClient(&host);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        for (auto* document : { &first, &second }) {
+            if (document == &second && !keepOtherDocument)
+                break;
+            QCOMPARE(document->openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                     Okular::Document::OpenSuccess);
+            factory.addClient(document->guiClient());
+        }
+        auto cleanup = qScopeGuard([&] {
+            for (auto* document : { &first, &second }) {
+                if (auto* client = document->guiClient(); client && client->factory())
+                    factory.removeClient(client);
+            }
+            factory.removeClient(&host);
+        });
+        auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
+        QVERIFY(tools);
+        QTRY_COMPARE(tools->actions().size(), 5);
+        QPointer<QAction> proxy;
+        for (auto* client : factory.clients()) {
+            if (client->xmlFile() == QStringLiteral("mupdfngui.rc"))
+                proxy = client->actionCollection()->action(actionName);
+        }
+        QVERIFY(proxy);
+        auto* client = first.guiClient();
+        auto* source = client->actionCollection()->action(actionName);
+        QSignalSpy triggered(source, &QAction::triggered);
+        connect(source, &QAction::triggered, &factory, [&factory, client] { factory.removeClient(client); });
+        proxy->trigger();
+        QCOMPARE(triggered.count(), 1);
+        QVERIFY(!client->factory());
+        QCOMPARE(tools->actions().size(), keepOtherDocument ? 5 : 1);
+        if (keepOtherDocument) {
+            QVERIFY(proxy);
+            QSignalSpy otherTriggered(second.guiClient()->actionCollection()->action(actionName), &QAction::triggered);
+            proxy->trigger();
+            QCOMPARE(otherTriggered.count(), 1);
+            QCOMPARE(triggered.count(), 1);
+        } else {
+            QVERIFY(proxy.isNull());
+        }
+    }
+
     void ocrMenu()
     {
         if (Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR) }).isEmpty())
@@ -389,20 +617,26 @@ private slots:
         });
         auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
         QVERIFY(tools);
-        QCOMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 5);
         QVERIFY(tools->actions().at(1)->isSeparator());
-        auto* certificates = client->actionCollection()->action(QStringLiteral("mupdf_manage_certificates"));
+        KXMLGUIClient* presentation = nullptr;
+        for (auto* candidate : factory.clients()) {
+            if (candidate->xmlFile() == QStringLiteral("mupdfngui.rc"))
+                presentation = candidate;
+        }
+        QVERIFY(presentation);
+        auto* certificates = presentation->actionCollection()->action(QStringLiteral("mupdf_manage_certificates"));
         QVERIFY(certificates);
         QCOMPARE(tools->actions().back(), certificates);
         QCOMPARE(certificates->text(), QStringLiteral("Manage Certificates…"));
-        QCOMPARE(tools->actions().at(3), client->actionCollection()->action(QStringLiteral("mupdf_theme")));
+        QCOMPARE(tools->actions().at(3), presentation->actionCollection()->action(QStringLiteral("mupdf_theme")));
         auto* menu = tools->actions().at(2)->menu();
         QVERIFY(menu);
         QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
         QCOMPARE(menu->actions().size(), 4);
         QVERIFY(!menu->actions().back()->isVisible());
         QCOMPARE(client->actionCollection()->actions().count(), 14);
-        for (QAction* registered : client->actionCollection()->actions())
+        for (QAction* registered : presentation->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle")
                          || registered->objectName().startsWith(QStringLiteral("mupdf_theme_toggle_")));
@@ -415,18 +649,19 @@ private slots:
         const QString initialMenuMode = initialMode == QStringLiteral("Twenty") ? QStringLiteral("Five") : initialMode;
         for (int i = 0; i < modes.size(); ++i)
             QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
-        auto* action = client->actionCollection()->action(actionName);
+        auto* action = presentation->actionCollection()->action(actionName);
         QVERIFY(action);
         QSignalSpy notices(&document, &Okular::Document::notice);
-        auto clearShortcut = qScopeGuard([&] {
+        const auto resetShortcut = [&] {
             action->setShortcut({ });
-            client->actionCollection()->writeSettings();
-        });
+            presentation->actionCollection()->writeSettings();
+        };
+        auto clearShortcut = qScopeGuard(resetShortcut);
         if (actionName == QStringLiteral("mupdf_ocr_toggle")) {
             QVERIFY(KActionCollection::isShortcutsConfigurable(action));
             const QKeySequence shortcut(Qt::CTRL | Qt::ALT | Qt::Key_F9);
             action->setShortcut(shortcut);
-            client->actionCollection()->writeSettings();
+            presentation->actionCollection()->writeSettings();
             action->setShortcut({ });
             factory.refreshActionProperties();
             QCOMPARE(action->shortcut(), shortcut);
@@ -489,6 +724,8 @@ private slots:
                 QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expected);
             }
         }
+        resetShortcut();
+        clearShortcut.dismiss();
         factory.removeClient(client);
         QCOMPARE(tools->actions().size(), 1);
         factory.removeClient(&host);

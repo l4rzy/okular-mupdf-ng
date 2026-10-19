@@ -42,6 +42,8 @@ class QActionGroup;
 
 namespace Mu::Generator {
 
+class MenuRegistration;
+
 /// Okular-facing coordinator for the isolated MuPDF worker.
 ///
 /// Lifecycle overview:
@@ -69,6 +71,8 @@ public:
     Main(QObject* parent, const QVariantList& args);
     // Okular Generator Func: stops worker activity and releases generator resources.
     virtual ~Main();
+
+    KActionCollection* actionCollection() const override;
 
     // Okular Generator Func: opens a file and creates its Okular pages.
     Okular::Document::OpenResult
@@ -228,6 +232,7 @@ private:
     // Owns asynchronous OCR scheduling, focus tracking, and result retention;
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;
+    std::unique_ptr<MenuRegistration> m_menuRegistration;
     QActionGroup* m_ocrActions = nullptr;
     QActionGroup* m_themeActions = nullptr;
     QAction* m_ocrUnavailableAction = nullptr;
