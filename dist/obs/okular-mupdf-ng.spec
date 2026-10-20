@@ -4,20 +4,14 @@
 %global mupdf_version 1.28.5
 %global mupdf_sha256 98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934
 %global __builddir build
-%if 0%{?fedora}
-%global _vpath_builddir %{__builddir}
-%global tessdata_dir %{_datadir}/tesseract/tessdata
-%global tessdata_package tesseract-langpack-eng
-%else
 %global __builder ninja
 %global tessdata_dir %{_datadir}/tessdata
 %global tessdata_package tesseract-ocr-traineddata-eng
-%endif
 
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.4.6
+Version:        0.4.8
 Release:        0%{?dist}
 Summary:        MuPDF backend for Okular with an isolated document worker
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -29,19 +23,9 @@ BuildRequires:  gcc-c++
 BuildRequires:  make
 BuildRequires:  patch
 BuildRequires:  pkgconfig
-%if 0%{?fedora}
-BuildRequires:  extra-cmake-modules >= 6.3.0
-# Resolve Breeze's system-logos provider choice in OBS.
-BuildRequires:  generic-logos
-BuildRequires:  gettext
-BuildRequires:  ninja-build
-# Resolve KWallet's pinentry-gui provider choice in OBS.
-BuildRequires:  pinentry-qt
-%else
 BuildRequires:  gettext-tools
 BuildRequires:  ninja
 BuildRequires:  kf6-extra-cmake-modules >= 6.3.0
-%endif
 BuildRequires:  cmake(KF6Config)
 BuildRequires:  cmake(KF6ConfigWidgets)
 BuildRequires:  cmake(KF6CoreAddons)
@@ -64,15 +48,10 @@ BuildRequires:  pkgconfig(libseccomp)
 BuildRequires:  pkgconfig(nss)
 BuildRequires:  pkgconfig(zlib)
 %if %{with tests}
-%if 0%{?fedora}
-BuildRequires:  dejavu-fonts-all
-BuildRequires:  nss-tools
-%else
 BuildRequires:  dejavu-fonts
 # Resolve the language data package's alternative engine dependency for OBS.
 BuildRequires:  libtesseract5
 BuildRequires:  mozilla-nss-tools
-%endif
 BuildRequires:  openssl
 BuildRequires:  %{tessdata_package}
 BuildRequires:  cmake(Qt6Test)

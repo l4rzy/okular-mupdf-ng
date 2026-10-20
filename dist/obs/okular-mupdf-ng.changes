@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Tue Oct 20 04:24:51 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.4.8.
+- Support icon and custom image stamps embedded in PDFs; add native stamp colors.
+- Share one menu controller per window and preserve menu order across tab switches.
+- Display annotation operation errors in the GUI; update Vietnamese translations.
+
+-------------------------------------------------------------------
 Sun Oct 18 00:00:00 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.4.6.

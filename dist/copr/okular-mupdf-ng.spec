@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.4.6
+Version:        0.4.8
 Release:        1%{?dist}
 Summary:        MuPDF backend for Okular with an isolated document worker
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -106,5 +106,10 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Tue Oct 20 2026 l4rzy <me@23ro.org> - 0.4.8-1
+- Support icon and custom image stamps embedded in PDFs; add native stamp colors.
+- Share one menu controller per window and preserve menu order across tab switches.
+- Display annotation operation errors in the GUI
+
 * Mon Oct 19 2026 l4rzy <me@23ro.org> - 0.4.6-1
 - Add Fedora COPR packaging.
