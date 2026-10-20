@@ -721,6 +721,10 @@ msgstr ""
 msgid "Create"
 msgstr "Tạo"
 
+#: src/generator/mupdfng.cpp:129
+msgid "Document operation failed: %1"
+msgstr "Thao tác với tài liệu không thành công: %1"
+
 #: src/generator/mupdfng.cpp:168
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
