@@ -757,17 +757,17 @@ std::vector<Font> WorkerTransport::fonts(int page)
     return { };
 }
 
-std::vector<EmbeddedFile> WorkerTransport::embeddedFiles()
+std::optional<std::vector<EmbeddedFile>> WorkerTransport::embeddedFiles()
 {
-    auto response = call(EmbeddedFilesRequest { });
+    auto response = call(EmbeddedFilesRequest { }, /*reportFailure=*/true);
     if (!response || response->error)
-        return { };
+        return std::nullopt;
     if (auto* value = std::get_if<EmbeddedFilesResponse>(&response->payload))
         return std::move(value->files);
-    return { };
+    return std::nullopt;
 }
 
-std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* generatedSynopsis)
+std::optional<std::vector<OutlineNode>> WorkerTransport::synopsis(bool allowHeuristic, bool* generatedSynopsis)
 {
     if (generatedSynopsis)
         *generatedSynopsis = false;
@@ -781,9 +781,9 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
             return *cached->outline;
         }
     }
-    auto response = call(SynopsisRequest { });
+    auto response = call(SynopsisRequest { }, /*reportFailure=*/true);
     if (!response || response->error)
-        return { };
+        return std::nullopt;
     if (auto* value = std::get_if<OutlineResponse>(&response->payload)) {
         if (m_sourceFile && m_pdfPageCount > 0) {
             // Embedded outlines take precedence and avoid hashing/scanning.
@@ -794,7 +794,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
             }
             // Disabled policy bypasses generated results in memory and on disk.
             if (!allowHeuristic)
-                return { };
+                return std::vector<OutlineNode> { };
             const QString cachePath = Caching::PDF::tocCachePath(m_sourceFile->handle());
             if (auto cached = Caching::PDF::loadToc(cachePath, m_pdfPageCount)) {
                 m_pdfSynopsis = std::move(*cached);
@@ -803,13 +803,13 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
                     *generatedSynopsis = true;
                 return *m_pdfSynopsis;
             }
-            auto generated = call(SynopsisRequest { true });
+            auto generated = call(SynopsisRequest { true }, /*reportFailure=*/true);
             // call() can drain a worker disconnect and clear the PDF source.
             if (!generated || generated->error || !m_sourceFile)
-                return { };
+                return std::nullopt;
             auto* outline = std::get_if<OutlineResponse>(&generated->payload);
             if (!outline)
-                return { };
+                return std::nullopt;
             m_pdfSynopsis = std::move(outline->nodes);
             m_pdfSynopsisGenerated = true;
             if (generatedSynopsis)
@@ -823,7 +823,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
             (void)Caching::EPUB::Cache::saveOutlineAt(epubCachePath(m_sourcePath), value->nodes);
         return std::move(value->nodes);
     }
-    return { };
+    return std::nullopt;
 }
 
 std::optional<Model::LayersResponse> WorkerTransport::layers()

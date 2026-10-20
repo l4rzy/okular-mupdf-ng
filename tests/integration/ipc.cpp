@@ -785,6 +785,62 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void inspectionFailuresRemainDistinct_data()
+    {
+        QTest::addColumn<bool>("openDocument");
+        QTest::newRow("not-open") << false;
+        QTest::newRow("empty") << true;
+    }
+
+    void inspectionFailuresRemainDistinct()
+    {
+        QFETCH(bool, openDocument);
+        using namespace Mu::Model;
+        if (openDocument) {
+            QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+            QCOMPARE(m_client.open(m_pdf, { }, pages), OpenStatus::Success);
+        }
+        QSignalSpy failures(&m_client, &::Mu::Plugin::WorkerClient::operationFailed);
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            const auto outline = m_client.synopsis(false);
+            const auto files = m_client.embeddedFiles();
+            QCOMPARE(outline.has_value(), openDocument);
+            QCOMPARE(files.has_value(), openDocument);
+            if (openDocument) {
+                QVERIFY(outline->empty());
+                QVERIFY(files->empty());
+            }
+            if (!openDocument) {
+                QTRY_COMPARE(failures.count(), 2 * (attempt + 1));
+            }
+        }
+        for (const auto& failure : failures) {
+            QCOMPARE(failure.at(1).value<ErrorCode>(), ErrorCode::NotOpen);
+            QVERIFY(!failure.at(0).toString().isEmpty());
+        }
+        QCOMPARE(failures.count(), openDocument ? 0 : 4);
+    }
+
+    void attachmentLimitsReportFailure()
+    {
+        using namespace Mu::Model;
+        const QString path = m_fixtureRoot.filePath(QStringLiteral("oversized-attachment.pdf"));
+        auto* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        const auto cleanup = qScopeGuard([&] { fz_drop_context(context); });
+        // The declared size rejects this tiny fixture before allocation.
+        QVERIFY(createAttachmentPDF(context, path, 32LL * 1024 * 1024));
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
+        QSignalSpy failures(&m_client, &::Mu::Plugin::WorkerClient::operationFailed);
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            QVERIFY(!m_client.embeddedFiles());
+            QTRY_COMPARE(failures.count(), attempt + 1);
+            QCOMPARE(failures.last().at(1).value<ErrorCode>(), ErrorCode::ResourceLimit);
+            QVERIFY(failures.last().at(0).toString().contains(QStringLiteral("attachments exceed")));
+        }
+    }
+
     void pdfGeneratedOutlineCacheRoundTrip()
     {
         using namespace Mu::Model;
@@ -799,32 +855,43 @@ private slots:
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
         const auto first = m_client.synopsis();
-        QCOMPARE(first.size(), std::size_t(1));
-        QCOMPARE(first.front().title, std::string("1 Introduction"));
+        QVERIFY(first);
+        QCOMPARE(first->size(), std::size_t(1));
+        QCOMPARE(first->front().title, std::string("1 Introduction"));
         QFile source(path);
         QVERIFY(source.open(QIODevice::ReadOnly));
         const QString cachePath = ::Mu::Plugin::Caching::PDF::tocCachePath(source.handle());
         const auto cached = ::Mu::Plugin::Caching::PDF::loadToc(cachePath, 1);
         QVERIFY(cached);
-        QCOMPARE(cached->front().title, first.front().title);
+        QCOMPARE(cached->front().title, first->front().title);
         QVERIFY(m_client.close());
         // A distinguishable cached result proves reopen uses the cache rather
         // than generating the same tree again.
-        auto replacement = first;
+        auto replacement = *first;
         replacement.front().title = "Cached heading";
         QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, replacement));
         QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
-        QCOMPARE(m_client.synopsis().front().title, std::string("Cached heading"));
+        const auto hit = m_client.synopsis();
+        QVERIFY(hit);
+        QCOMPARE(hit->front().title, std::string("Cached heading"));
         QVERIFY(m_client.close());
         // Empty completed scans are cache hits too.
         QVERIFY(::Mu::Plugin::Caching::PDF::saveToc(cachePath, 1, { }));
         QCOMPARE(m_client.open(path, { }, pages), OpenStatus::Success);
-        QVERIFY(m_client.synopsis().empty());
+        {
+            const auto empty = m_client.synopsis();
+            QVERIFY(empty);
+            QVERIFY(empty->empty());
+        }
         QVERIFY(m_client.close());
         // Memory-backed opens use the staged source's content identity.
         QVERIFY(source.seek(0));
         QCOMPARE(m_client.openData(source.readAll(), { }, pages), OpenStatus::Success);
-        QVERIFY(m_client.synopsis().empty());
+        {
+            const auto empty = m_client.synopsis();
+            QVERIFY(empty);
+            QVERIFY(empty->empty());
+        }
         QVERIFY(m_client.close());
     }
 
@@ -874,25 +941,30 @@ private slots:
         QCOMPARE(status, OpenStatus::Success);
         bool generated = false;
         const auto outline = m_client.synopsis(enabled, &generated);
+        QVERIFY(outline);
         QCOMPARE(generated, enabled);
         if (enabled) {
-            QCOMPARE(outline.size(), std::size_t(1));
-            QCOMPARE(outline.front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
+            QCOMPARE(outline->size(), std::size_t(1));
+            QCOMPARE(outline->front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
         } else {
-            QVERIFY(outline.empty());
+            QVERIFY(outline->empty());
             QCOMPARE(QFile::exists(cachePath), cached);
         }
         // Changing request policy must bypass a memoized generated tree too,
         // and leave existing disk entries available for re-enabling.
         const auto restored = m_client.synopsis(true, &generated);
+        QVERIFY(restored);
         QVERIFY(generated);
-        QCOMPARE(restored.size(), std::size_t(1));
-        QCOMPARE(restored.front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
-        QVERIFY(m_client.synopsis(false).empty());
+        QCOMPARE(restored->size(), std::size_t(1));
+        QCOMPARE(restored->front().title, std::string(cached ? "Cached heading" : "1 Introduction"));
+        const auto disabled = m_client.synopsis(false);
+        QVERIFY(disabled);
+        QVERIFY(disabled->empty());
         const auto reused = m_client.synopsis(true, &generated);
+        QVERIFY(reused);
         QVERIFY(generated);
-        QCOMPARE(reused.size(), std::size_t(1));
-        QCOMPARE(reused.front().title, restored.front().title);
+        QCOMPARE(reused->size(), std::size_t(1));
+        QCOMPARE(reused->front().title, restored->front().title);
         QVERIFY(m_client.close());
     }
 
@@ -937,9 +1009,10 @@ private slots:
         QCOMPARE(m_client.open(saved, { }, pages), OpenStatus::Success);
         bool generated = true;
         const auto outline = m_client.synopsis(enabled, &generated);
+        QVERIFY(outline);
         QVERIFY(!generated);
-        QCOMPARE(outline.size(), std::size_t(1));
-        QCOMPARE(outline.front().title, std::string("Embedded heading"));
+        QCOMPARE(outline->size(), std::size_t(1));
+        QCOMPARE(outline->front().title, std::string("Embedded heading"));
         QVERIFY(m_client.close());
     }
 
@@ -948,20 +1021,22 @@ private slots:
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
         const auto first = m_client.synopsis();
-        QVERIFY(!first.empty());
+        QVERIFY(first);
+        QVERIFY(!first->empty());
 
         const auto cached = ::Mu::Plugin::Caching::EPUB::Cache::load(m_epub, ::Mu::Model::DocumentSettings { });
         QVERIFY(cached);
         QVERIFY(cached->accelerator);
         QVERIFY(cached->outline);
-        QCOMPARE(cached->outline->size(), first.size());
-        QCOMPARE(cached->outline->front().title, first.front().title);
+        QCOMPARE(cached->outline->size(), first->size());
+        QCOMPARE(cached->outline->front().title, first->front().title);
         QVERIFY(m_client.close());
 
         QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
         const auto second = m_client.synopsis();
-        QCOMPARE(second.size(), first.size());
-        QCOMPARE(second.front().title, first.front().title);
+        QVERIFY(second);
+        QCOMPARE(second->size(), first->size());
+        QCOMPARE(second->front().title, first->front().title);
         QVERIFY(m_client.close());
     }
 

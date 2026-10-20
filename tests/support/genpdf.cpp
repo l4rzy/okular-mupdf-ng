@@ -7,6 +7,50 @@
 #include <QFile>
 #include <cstring>
 
+bool createAttachmentPDF(fz_context* ctx, const QString& path, std::int64_t declaredSize)
+{
+    pdf_document* document = nullptr;
+    pdf_obj* page = nullptr;
+    pdf_obj* filespec = nullptr;
+    fz_buffer* content = nullptr;
+    bool success = false;
+    fz_var(document);
+    fz_var(page);
+    fz_var(filespec);
+    fz_var(content);
+    fz_var(success);
+    const QByteArray encodedPath = QFile::encodeName(path);
+    fz_try(ctx)
+    {
+        document = pdf_create_document(ctx);
+        page = pdf_add_page(ctx, document, { 0, 0, 300, 300 }, 0, nullptr, nullptr);
+        pdf_insert_page(ctx, document, -1, page);
+        content = fz_new_buffer_from_copied_data(ctx, reinterpret_cast<const unsigned char*>("abc"), 3);
+        filespec = pdf_add_embedded_file(ctx, document, "attachment.txt", "text/plain", content, 0, 0, 0);
+        pdf_obj* stream = pdf_dict_getp(ctx, filespec, "EF/F");
+        pdf_dict_put_int(ctx, pdf_dict_get(ctx, stream, PDF_NAME(Params)), PDF_NAME(Size), declaredSize);
+        pdf_obj* catalog = pdf_dict_get(ctx, pdf_trailer(ctx, document), PDF_NAME(Root));
+        pdf_dict_putp_drop(ctx, catalog, "Names/EmbeddedFiles/Names", pdf_new_array(ctx, document, 2));
+        pdf_obj* entries = pdf_dict_getp(ctx, catalog, "Names/EmbeddedFiles/Names");
+        pdf_array_push_drop(ctx, entries, pdf_new_text_string(ctx, "attachment.txt"));
+        pdf_array_push(ctx, entries, filespec);
+        pdf_save_document(ctx, document, encodedPath.constData(), &pdf_default_write_options);
+        success = true;
+    }
+    fz_always(ctx)
+    {
+        fz_drop_buffer(ctx, content);
+        pdf_drop_obj(ctx, filespec);
+        pdf_drop_obj(ctx, page);
+        pdf_drop_document(ctx, document);
+    }
+    fz_catch(ctx)
+    {
+        qWarning() << "createAttachmentPDF failed:" << fz_caught_message(ctx);
+    }
+    return success;
+}
+
 void createMultiPagePDF(fz_context* ctx, const QString& path, int numPages)
 {
     fz_try(ctx)

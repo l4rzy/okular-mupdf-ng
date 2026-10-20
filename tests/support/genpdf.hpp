@@ -9,7 +9,10 @@
 
 #include <QString>
 
+#include <cstdint>
+
 void createMultiPagePDF(fz_context* ctx, const QString& path, int numPages);
+bool createAttachmentPDF(fz_context* ctx, const QString& path, std::int64_t declaredSize);
 void createTextPDF(fz_context* ctx,
                    const QString& path,
                    const char* streamData = "BT\n/F1 12 Tf\n72 700 Td(Hello World)Tj\nET\n");

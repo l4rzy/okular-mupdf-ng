@@ -258,12 +258,12 @@ std::vector<Font> WorkerClient::fonts(int p) const
     return sync([&](WorkerTransport* transport) { return transport->fonts(p); });
 }
 
-std::vector<EmbeddedFile> WorkerClient::embeddedFiles() const
+std::optional<std::vector<EmbeddedFile>> WorkerClient::embeddedFiles() const
 {
     return sync([&](WorkerTransport* transport) { return transport->embeddedFiles(); });
 }
 
-std::vector<OutlineNode> WorkerClient::synopsis(bool allowHeuristic, bool* generatedSynopsis) const
+std::optional<std::vector<OutlineNode>> WorkerClient::synopsis(bool allowHeuristic, bool* generatedSynopsis) const
 {
     return sync([&](WorkerTransport* transport) { return transport->synopsis(allowHeuristic, generatedSynopsis); });
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plugin/caching/epub_cache.hpp"
+#include "support/genpdf.hpp"
 #include "support/synopsis.hpp"
 #include "support/text_inspection.hpp"
 
@@ -171,6 +172,51 @@ private slots:
         KConfigGroup(config, QStringLiteral("Advanced"))
             .writeEntry("CacheLastVacuum", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         config->sync();
+    }
+
+    void attachmentResultsAreCachedOnlyOnSuccess_data()
+    {
+        QTest::addColumn<int>("declaredSize");
+        QTest::newRow("no-attachments") << 0;
+        QTest::newRow("attachment") << 3;
+        QTest::newRow("resource-limit") << 32 * 1024 * 1024;
+    }
+
+    void attachmentResultsAreCachedOnlyOnSuccess()
+    {
+        QFETCH(int, declaredSize);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("attachments.pdf"));
+        auto* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+        QVERIFY(context);
+        const auto cleanup = qScopeGuard([&] { fz_drop_context(context); });
+        if (declaredSize)
+            QVERIFY(createAttachmentPDF(context, path, declaredSize));
+        else
+            createTextPDF(context, path);
+
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        QSignalSpy warnings(&document, &Okular::Document::warning);
+        if (declaredSize > 3) {
+            // Each failure must reach the worker again rather than cache an empty list.
+            for (int attempt = 0; attempt < 2; ++attempt) {
+                QVERIFY(!document.embeddedFiles());
+                QTRY_COMPARE(warnings.count(), attempt + 1);
+                QVERIFY(warnings.last().first().toString().contains(QStringLiteral("attachments exceed")));
+            }
+            return;
+        }
+
+        const auto* files = document.embeddedFiles();
+        QVERIFY(files);
+        QCOMPARE(files->size(), declaredSize ? 1 : 0);
+        if (declaredSize)
+            QCOMPARE(files->first()->data(), QByteArray("abc"));
+        QCOMPARE(document.embeddedFiles(), files);
+        QVERIFY(warnings.isEmpty());
     }
 
     void roundTrip_data()

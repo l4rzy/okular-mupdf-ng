@@ -353,8 +353,9 @@ private slots:
         QCOMPARE(client.open(QStringLiteral(TEST_MOBI_DIR "/toc-palmdoc.mobi"), { }, pages, Model::DocumentType::Mobi),
                  Model::OpenStatus::Success);
         const auto outline = client.synopsis();
-        QCOMPARE(outline.size(), std::size_t { 2 });
-        QCOMPARE(outline[0].children.size(), std::size_t { 1 });
+        QVERIFY(outline);
+        QCOMPARE(outline->size(), std::size_t { 2 });
+        QCOMPARE((*outline)[0].children.size(), std::size_t { 1 });
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("toc.pdf"));
         QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
@@ -367,12 +368,12 @@ private slots:
         std::string error;
         QVERIFY2(pdf.openFd(::dup(file.handle()), "toc.pdf", &error), error.c_str());
         const auto bookmarks = pdf.outline(&error);
-        QCOMPARE(bookmarks.size(), outline.size());
-        QCOMPARE(bookmarks[0].title, outline[0].title);
-        QCOMPARE(bookmarks[0].link.viewport.page, outline[0].link.viewport.page);
-        QCOMPARE(bookmarks[0].children.size(), outline[0].children.size());
-        QCOMPARE(bookmarks[0].children[0].link.viewport.page, outline[0].children[0].link.viewport.page);
-        QCOMPARE(bookmarks[1].link.viewport.page, outline[1].link.viewport.page);
+        QCOMPARE(bookmarks.size(), outline->size());
+        QCOMPARE(bookmarks[0].title, (*outline)[0].title);
+        QCOMPARE(bookmarks[0].link.viewport.page, (*outline)[0].link.viewport.page);
+        QCOMPARE(bookmarks[0].children.size(), (*outline)[0].children.size());
+        QCOMPARE(bookmarks[0].children[0].link.viewport.page, (*outline)[0].children[0].link.viewport.page);
+        QCOMPARE(bookmarks[1].link.viewport.page, (*outline)[1].link.viewport.page);
         QVERIFY2(error.empty(), error.c_str());
     }
 
@@ -461,10 +462,11 @@ private slots:
         QCOMPARE(client.render(0, 320, 240, { }, [] { return false; }), image);
         QVERIFY(!client.getTextBoxesForPage(0, 72, 72, true).empty());
         const auto outline = client.synopsis();
-        QCOMPARE(outline.size(), std::size_t { 1 });
-        QCOMPARE(outline.front().title, std::string("Legacy MOBI"));
-        QVERIFY(outline.front().link.valid);
-        QCOMPARE(outline.front().link.viewport.page, 0);
+        QVERIFY(outline);
+        QCOMPARE(outline->size(), std::size_t { 1 });
+        QCOMPARE(outline->front().title, std::string("Legacy MOBI"));
+        QVERIFY(outline->front().link.valid);
+        QCOMPARE(outline->front().link.viewport.page, 0);
 
         QTemporaryDir directory;
         const QString target = directory.filePath(QStringLiteral("export.pdf"));

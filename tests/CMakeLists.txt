@@ -265,7 +265,7 @@ target_compile_definitions(test_generator_forms PRIVATE
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
 add_dependencies(test_generator_forms okularGenerator_mupdfng mupdfng-worker)
 
-add_layer_test(test_generator_epub generator/test_epub.cpp "generator;integration")
+add_layer_test(test_generator_epub generator/test_epub.cpp "generator;integration" support/genpdf.cpp)
 target_include_directories(test_generator_epub PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR} ${MU_GENERATED_INCLUDE_DIR})
 target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore mupdf_plugin_cache MuPDF::Engine)
 target_compile_definitions(test_generator_epub PRIVATE

@@ -1453,7 +1453,9 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
     locker.unlock();
     bool generated = false;
     const auto nodes = m_worker.synopsis(allowHeuristic, &generated);
-    auto synopsis = Conversion::documentSynopsis(nodes);
+    if (!nodes)
+        return nullptr;
+    auto synopsis = Conversion::documentSynopsis(*nodes);
     locker.relock();
     if (!workerReady())
         return nullptr;
@@ -1765,8 +1767,10 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
         if (!workerReady())
             return nullptr;
         const auto source = m_worker.embeddedFiles();
+        if (!source)
+            return nullptr;
         m_embeddedFilesCache = std::make_unique<QList<Okular::EmbeddedFile*>>();
-        for (const auto& ef : source) {
+        for (const auto& ef : *source) {
             m_embeddedFilesCache->append(Conversion::embeddedFile(ef).release());
         }
     }

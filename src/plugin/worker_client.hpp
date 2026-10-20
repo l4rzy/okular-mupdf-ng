@@ -83,9 +83,12 @@ public:
     Model::OcrResult ocrResult(quint64 jobId) const;
     bool cancelOcrJobs() const;
     std::vector<Model::Font> fonts(int page) const;
-    std::vector<Model::EmbeddedFile> embeddedFiles() const;
+    /// Empty collections are successful; nullopt preserves retrieval failure.
+    std::optional<std::vector<Model::EmbeddedFile>> embeddedFiles() const;
+    /// Empty outlines are successful; nullopt preserves retrieval failure.
     /// Disabling the PDF fallback also bypasses cached generated outlines.
-    std::vector<Model::OutlineNode> synopsis(bool allowHeuristic = true, bool* generatedSynopsis = nullptr) const;
+    std::optional<std::vector<Model::OutlineNode>>
+    synopsis(bool allowHeuristic = true, bool* generatedSynopsis = nullptr) const;
     std::optional<Model::LayersResponse> layers() const;
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request) const;
     bool setSettings(const Model::DocumentSettings& settings);
