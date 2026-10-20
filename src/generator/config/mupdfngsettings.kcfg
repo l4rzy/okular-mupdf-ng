@@ -113,7 +113,7 @@
       </choices>
     </entry>
     <entry key="OcrNotify" type="Bool">
-      <default>false</default>
+      <default>true</default>
     </entry>
   </group>
   <group name="Signatures">
