@@ -284,6 +284,27 @@ std::string readFormatHint(fz_context* context, pdf_obj* field)
 // Widget Appearance Refresh & Mutation Collection
 // =============================================================================
 
+// Called inside the mutation's fz_try so lookup failures share its cleanup.
+pdf_annot* findFormWidget(fz_context* context, fz_page* page, std::int32_t objectNumber)
+{
+    pdf_page* pdfPage = pdf_page_from_fz_page(context, page);
+    if (!pdfPage)
+        fz_throw(context, FZ_ERROR_GENERIC, "not a PDF page");
+
+    for (pdf_annot* widget = pdf_first_widget(context, pdfPage); widget; widget = pdf_next_widget(context, widget)) {
+        pdf_obj* field = pdf_annot_obj(context, widget);
+        if (field && pdf_to_num(context, field) == objectNumber)
+            return widget;
+    }
+    fz_throw(context, FZ_ERROR_GENERIC, "widget object not found on page");
+}
+
+void requireWritableFormField(fz_context* context, int fieldFlags, int annotationFlags)
+{
+    if ((fieldFlags & PDF_FIELD_IS_READ_ONLY) != 0 || (annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0)
+        fz_throw(context, FZ_ERROR_GENERIC, "form field is read-only");
+}
+
 void updateAllPages(fz_context* context, fz_document* document, int pageCount, pdf_obj* changedChoiceField = nullptr)
 {
     // Field values can be shared by widgets on different pages. Rebuild every
@@ -617,18 +638,39 @@ std::vector<FormField> PdfDocument::extractPageFormFields(
 // Field Updates, Reset & Button Activation
 // =============================================================================
 
+pdf_document* PdfDocument::requireFormDocument(std::string* error) const
+{
+    if (!m_document || m_locked) {
+        fail(error, "document is not open");
+        return nullptr;
+    }
+    pdf_document* document = pdf_specifics(m_context, m_document);
+    if (!document)
+        fail(error, "document is not a PDF");
+    return document;
+}
+
+bool PdfDocument::finishFormMutation(std::vector<FieldMutation>* mutations,
+                                     std::string* error,
+                                     pdf_obj* changedChoiceField)
+{
+    // Refresh and collect even after a late MuPDF error so callers learn about
+    // any field changes that the action committed before it failed.
+    updateAllPages(m_context, m_document, pageCount(), changedChoiceField);
+    pdf_drop_obj(m_context, changedChoiceField);
+    clearPageCache();
+    return collectFormMutations(mutations, error);
+}
+
 bool PdfDocument::updateFormField(int page,
                                   std::int32_t objectNumber,
                                   const Model::FormValue& value,
                                   std::vector<FieldMutation>* mutations,
                                   std::string* error)
 {
-    if (!m_document || m_locked)
-        return fail(error, "document is not open");
-
-    pdf_document* pdfDocument = pdf_specifics(m_context, m_document);
+    pdf_document* pdfDocument = requireFormDocument(error);
     if (!pdfDocument)
-        return fail(error, "document is not a PDF");
+        return false;
 
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
@@ -644,30 +686,11 @@ bool PdfDocument::updateFormField(int page,
     // edited through the wrong widget.
     fz_try(m_context)
     {
-        pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
-        if (!pdfPage)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "not a PDF page");
-
-        pdf_annot* targetWidget = nullptr;
-        for (pdf_annot* widget = pdf_first_widget(m_context, pdfPage); widget;
-             widget = pdf_next_widget(m_context, widget)) {
-            pdf_obj* field = pdf_annot_obj(m_context, widget);
-            if (field && pdf_to_num(m_context, field) == objectNumber) {
-                targetWidget = widget;
-                break;
-            }
-        }
-
-        if (!targetWidget)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "widget object not found on page");
-
+        pdf_annot* targetWidget = findFormWidget(m_context, nativePage, objectNumber);
         pdf_obj* field = pdf_annot_obj(m_context, targetWidget);
         const int annotationFlags = pdf_dict_get_int(m_context, field, PDF_NAME(F));
         const int fieldFlags = pdf_field_flags(m_context, field);
-        const bool readOnly =
-            (fieldFlags & PDF_FIELD_IS_READ_ONLY) != 0 || (annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0;
-        if (readOnly)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "form field is read-only");
+        requireWritableFormField(m_context, fieldFlags, annotationFlags);
 
         const auto widgetType = pdf_widget_type(m_context, targetWidget);
 
@@ -815,12 +838,7 @@ bool PdfDocument::updateFormField(int page,
     if (!operationError.empty())
         fz_warn(m_context, "form update failed after effects may have been applied: %s", operationError.c_str());
 
-    // Refresh and collect even after a late MuPDF error so callers learn about
-    // any field changes that the action committed before it failed.
-    updateAllPages(m_context, m_document, pageCount(), changedChoiceField);
-    pdf_drop_obj(m_context, changedChoiceField);
-    clearPageCache();
-    return collectFormMutations(mutations, error);
+    return finishFormMutation(mutations, error, changedChoiceField);
 }
 
 bool PdfDocument::resetForm(int page,
@@ -828,12 +846,9 @@ bool PdfDocument::resetForm(int page,
                             std::vector<FieldMutation>* mutations,
                             std::string* error)
 {
-    if (!m_document || m_locked)
-        return fail(error, "document is not open");
-
-    pdf_document* pdfDocument = pdf_specifics(m_context, m_document);
+    pdf_document* pdfDocument = requireFormDocument(error);
     if (!pdfDocument)
-        return fail(error, "document is not a PDF");
+        return false;
 
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
@@ -844,28 +859,10 @@ bool PdfDocument::resetForm(int page,
     // visible value.
     fz_try(m_context)
     {
-        pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
-        if (!pdfPage)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "not a PDF page");
-
-        pdf_annot* targetWidget = nullptr;
-        for (pdf_annot* widget = pdf_first_widget(m_context, pdfPage); widget;
-             widget = pdf_next_widget(m_context, widget)) {
-            pdf_obj* field = pdf_annot_obj(m_context, widget);
-            if (field && pdf_to_num(m_context, field) == objectNumber) {
-                targetWidget = widget;
-                break;
-            }
-        }
-        if (!targetWidget)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "widget object not found on page");
-
+        pdf_annot* targetWidget = findFormWidget(m_context, nativePage, objectNumber);
         pdf_obj* field = pdf_annot_obj(m_context, targetWidget);
         const int annotationFlags = pdf_dict_get_int(m_context, field, PDF_NAME(F));
-        if ((pdf_field_flags(m_context, field) & PDF_FIELD_IS_READ_ONLY) != 0
-            || (annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0) {
-            fz_throw(m_context, FZ_ERROR_GENERIC, "form field is read-only");
-        }
+        requireWritableFormField(m_context, pdf_field_flags(m_context, field), annotationFlags);
         if ((pdf_field_flags(m_context, field) & PDF_BTN_FIELD_IS_PUSHBUTTON) == 0)
             fz_throw(m_context, FZ_ERROR_GENERIC, "field is not a push button");
 
@@ -902,12 +899,9 @@ bool PdfDocument::clickFormButton(int page,
                                   std::vector<FieldMutation>* mutations,
                                   std::string* error)
 {
-    if (!m_document || m_locked)
-        return fail(error, "document is not open");
-
-    pdf_document* pdfDocument = pdf_specifics(m_context, m_document);
+    pdf_document* pdfDocument = requireFormDocument(error);
     if (!pdfDocument)
-        return fail(error, "document is not a PDF");
+        return false;
     if (!pdf_js_supported(m_context, pdfDocument))
         return fail(error, "PDF form JavaScript is unavailable");
 
@@ -919,29 +913,13 @@ bool PdfDocument::clickFormButton(int page,
     std::string operationError;
     fz_try(m_context)
     {
-        pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
-        if (!pdfPage)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "not a PDF page");
-
-        pdf_annot* targetWidget = nullptr;
-        for (pdf_annot* widget = pdf_first_widget(m_context, pdfPage); widget;
-             widget = pdf_next_widget(m_context, widget)) {
-            pdf_obj* field = pdf_annot_obj(m_context, widget);
-            if (field && pdf_to_num(m_context, field) == objectNumber) {
-                targetWidget = widget;
-                break;
-            }
-        }
-        if (!targetWidget)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "widget object not found on page");
-
+        pdf_annot* targetWidget = findFormWidget(m_context, nativePage, objectNumber);
         pdf_obj* field = pdf_annot_obj(m_context, targetWidget);
         const int fieldFlags = pdf_field_flags(m_context, field);
         const int annotationFlags = pdf_dict_get_int(m_context, field, PDF_NAME(F));
         if ((fieldFlags & PDF_BTN_FIELD_IS_PUSHBUTTON) == 0)
             fz_throw(m_context, FZ_ERROR_GENERIC, "field is not a push button");
-        if ((fieldFlags & PDF_FIELD_IS_READ_ONLY) != 0 || (annotationFlags & PDF_ANNOT_IS_READ_ONLY) != 0)
-            fz_throw(m_context, FZ_ERROR_GENERIC, "form field is read-only");
+        requireWritableFormField(m_context, fieldFlags, annotationFlags);
         if (resetAction(m_context, field))
             fz_throw(m_context, FZ_ERROR_GENERIC, "reset buttons use the form reset operation");
         if (!hasJavaScriptClickAction(m_context, field))
@@ -981,10 +959,7 @@ bool PdfDocument::clickFormButton(int page,
     if (!operationError.empty())
         fz_warn(m_context, "push button action failed after effects may have been applied: %s", operationError.c_str());
 
-    // Button scripts can change fields and appearances anywhere in the document.
-    updateAllPages(m_context, m_document, pageCount());
-    clearPageCache();
-    return collectFormMutations(mutations, error);
+    return finishFormMutation(mutations, error);
 }
 
 } // namespace Mu::Worker::Engine

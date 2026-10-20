@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cmath>
 #include <cstring>
@@ -2698,6 +2699,80 @@ private slots:
         QVERIFY(!doc.updateFormField(
             0, field.pdfObjectNumber, ::Mu::Model::FormTextValue { invalidUtf8 }, &mutations, &error));
         QVERIFY(QString::fromStdString(error).contains(QStringLiteral("maximum length")));
+    }
+
+    void formMutationsRejectInvalidTargets_data()
+    {
+        QTest::addColumn<QString>("operation");
+        QTest::addColumn<QString>("failure");
+        const std::array operations { "update", "reset", "click" };
+        const std::array failures { "closed", "missing-widget", "wrong-page", "field-read-only", "annot-read-only" };
+        for (const auto* operation : operations) {
+            for (const auto* failure : failures) {
+                const auto name = QByteArray(operation) + '-' + failure;
+                QTest::newRow(name.constData()) << QString::fromLatin1(operation) << QString::fromLatin1(failure);
+            }
+        }
+    }
+
+    void formMutationsRejectInvalidTargets()
+    {
+        QFETCH(QString, operation);
+        QFETCH(QString, failure);
+        ::Mu::Worker::Engine::PdfDocument document;
+        auto settings = document.settings();
+        settings.formJavaScriptEnabled = true;
+        document.setSettings(settings);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(directory.filePath("mutation-targets.pdf"));
+        std::string error;
+        if (failure != "closed") {
+            const bool button = operation != "update";
+            const int fieldFlags = (button ? PDF_BTN_FIELD_IS_PUSHBUTTON : 0)
+                | (failure == "field-read-only" ? PDF_FIELD_IS_READ_ONLY : 0);
+            const int annotationFlags = failure == "annot-read-only" ? PDF_ANNOT_IS_READ_ONLY : 0;
+            QVERIFY(writePdfObjects(file.fileName(),
+                                    { "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R] >> >>",
+                                      "<< /Type /Pages /Count 2 /Kids [3 0 R 4 0 R] >>",
+                                      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>",
+                                      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Annots [5 0 R] >>",
+                                      "<< /Type /Annot /Subtype /Widget /Parent 6 0 R /Rect [10 10 90 30] /F "
+                                          + QByteArray::number(annotationFlags) + " >>",
+                                      "<< /T (Target) /FT /" + QByteArray(button ? "Btn" : "Tx") + " /Ff "
+                                          + QByteArray::number(fieldFlags) + " /V (original) /Kids [5 0 R] >>" }));
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QVERIFY2(document.openFd(::dup(file.handle()), "mutation-targets.pdf", &error), error.c_str());
+            if (operation == "click" && !TEST_FORM_JAVASCRIPT)
+                QSKIP("PDF form JavaScript support is disabled in this configuration");
+        }
+
+        const int page = failure == "wrong-page" ? 0 : 1;
+        const int objectNumber = failure == "missing-widget" ? 99 : 5;
+        std::vector<::Mu::Worker::Engine::DocumentBase::FieldMutation> mutations;
+        bool accepted = false;
+        if (operation == "update") {
+            accepted = document.updateFormField(
+                page, objectNumber, ::Mu::Model::FormTextValue { "changed" }, &mutations, &error);
+        } else if (operation == "reset") {
+            accepted = document.resetForm(page, objectNumber, &mutations, &error);
+        } else {
+            accepted = document.clickFormButton(page, objectNumber, &mutations, &error);
+        }
+        QVERIFY(!accepted);
+        const std::string expectedError = failure == "closed"        ? "document is not open"
+            : failure == "missing-widget" || failure == "wrong-page" ? "widget object not found on page"
+                                                                     : "form field is read-only";
+        QCOMPARE(error, expectedError);
+        QVERIFY(mutations.empty());
+        if (failure != "closed") {
+            error.clear();
+            const auto details = document.pageDetails(1, &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(details.formFields.size(), size_t(1));
+            if (operation == "update")
+                QCOMPARE(details.formFields.front().text, std::string("original"));
+        }
     }
 
     void formMutationsCollectOnlyEditableWidgets_data()

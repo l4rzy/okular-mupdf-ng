@@ -187,6 +187,14 @@ private:
     /// Collects canonical values across all pages after a form mutation.
     bool collectFormMutations(std::vector<FieldMutation>* mutations, std::string* error);
 
+    /// Validates document state before a form mutation; reports failures through error.
+    [[nodiscard]] pdf_document* requireFormDocument(std::string* error) const;
+
+    /// Refreshes appearances, consumes a retained choice-field reference, and collects values.
+    bool finishFormMutation(std::vector<FieldMutation>* mutations,
+                            std::string* error,
+                            pdf_obj* changedChoiceField = nullptr);
+
     /// Parses links from a MuPDF page handle.
     [[nodiscard]] std::vector<Link>
     extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error, ByteBudget& budget) const;
