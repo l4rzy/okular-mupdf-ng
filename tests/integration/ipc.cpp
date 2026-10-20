@@ -318,8 +318,18 @@ private slots:
         invalid->contents = "must not be applied";
         invalid->extras.stampImage.emplace(png.begin(), png.end());
         (*invalid->extras.stampImage)[25] = 1;
+        QSignalSpy failures(&m_client, &Plugin::WorkerClient::operationFailed);
         QVERIFY(!m_client.modifyAnnotation(0, stamp.nativeId().toString(), *invalid, true));
         QVERIFY(!m_client.addAnnotation(0, *invalid));
+        QTRY_COMPARE(failures.size(), 2);
+        for (const auto& failure : failures) {
+            QVERIFY(!failure.at(0).toString().isEmpty());
+            QCOMPARE(failure.at(1).value<Model::ErrorCode>(), Model::ErrorCode::Internal);
+        }
+        QVERIFY(!m_client.removeAnnotation(0, QStringLiteral("unknown-handle")));
+        QTRY_COMPARE(failures.size(), 3);
+        QCOMPARE(failures.last().at(0).toString(), QStringLiteral("invalid annotation handle"));
+        QCOMPARE(failures.last().at(1).value<Model::ErrorCode>(), Model::ErrorCode::InvalidRequest);
         QCOMPARE(imageHash(m_client.render(0, 612, 792)), imageHash(rendered));
         const QString snapshotPath = directory.filePath(QStringLiteral("snapshot.pdf"));
         QVERIFY(m_client.saveToFile(snapshotPath));

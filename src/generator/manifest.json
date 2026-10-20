@@ -20,7 +20,7 @@
             "application/epub+zip",
             "application/x-mobipocket-ebook"
         ],
-        "Name": "MuPDF Backend for Okular",
+        "Name": "MuPDF Backend for Okular - Next Gen",
         "ServiceTypes": [
             "okular/Generator"
         ],

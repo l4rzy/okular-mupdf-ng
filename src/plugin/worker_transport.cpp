@@ -863,7 +863,7 @@ DocumentMetadata WorkerTransport::getDocumentInfo(const QStringList& keys)
 
 std::optional<AnnotationHandle> WorkerTransport::addAnnotation(int page, const Annotation& annotation)
 {
-    auto response = call(AnnotationAddRequest { page, annotation });
+    auto response = call(AnnotationAddRequest { page, annotation }, true);
     if (!response || response->error)
         return std::nullopt;
     if (auto* value = std::get_if<AnnotationResponse>(&response->payload))
@@ -873,13 +873,13 @@ std::optional<AnnotationHandle> WorkerTransport::addAnnotation(int page, const A
 
 bool WorkerTransport::modifyAnnotation(int page, const QString& handle, const Annotation& annotation, bool appearance)
 {
-    auto response = call(AnnotationModifyRequest { { page, { handle.toStdString() }, annotation, appearance } });
+    auto response = call(AnnotationModifyRequest { { page, { handle.toStdString() }, annotation, appearance } }, true);
     return response && !response->error;
 }
 
 bool WorkerTransport::removeAnnotation(int page, const QString& handle)
 {
-    auto response = call(AnnotationRemoveRequest { page, { handle.toStdString() } });
+    auto response = call(AnnotationRemoveRequest { page, { handle.toStdString() } }, true);
     return response && !response->error;
 }
 
@@ -1110,7 +1110,7 @@ bool WorkerTransport::settings(const DocumentSettings& settings)
 // Request Dispatch & Notification Processing
 // =============================================================================
 
-std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
+std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, bool reportFailure)
 {
     // Phase 1: verify serialization preconditions. The protocol permits one
     // synchronous request at a time, so a disconnected transport bails out and a
@@ -1192,6 +1192,8 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload)
         ResponseMessage response;
         if (IPC::ZppCodec::decode(frame, &response, &e)) {
             if (response.id == id) {
+                if (reportFailure && response.error && response.error->code != ErrorCode::Cancelled)
+                    Q_EMIT operationFailed(QString::fromStdString(response.error->message), response.error->code);
                 if (!response.error && std::holds_alternative<OpenRequest>(request.payload)) {
                     // Publish the generation before the guard drains queued link notifications.
                     if (const auto* opened = std::get_if<OpenResponse>(&response.payload))

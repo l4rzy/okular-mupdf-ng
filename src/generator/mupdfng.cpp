@@ -121,6 +121,18 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
+    connect(
+        &m_worker,
+        &Plugin::WorkerClient::operationFailed,
+        this,
+        [this](const QString& message, Model::ErrorCode code) {
+            const QString text = i18n("Document operation failed: %1", message.toHtmlEscaped());
+            if (code == Model::ErrorCode::Unavailable || code == Model::ErrorCode::NotOpen)
+                Q_EMIT error(text, LongWarningMs);
+            else
+                Q_EMIT warning(text, WarningMs);
+        },
+        Qt::QueuedConnection);
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
     // NSS init is one-way per process; the empty path makes the defaulted
     // selection create and initialize the missing database on first launch.

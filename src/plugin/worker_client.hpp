@@ -110,6 +110,7 @@ public:
     [[nodiscard]] bool usesSystemMuPdf() const noexcept { return m_lifecycle.info.systemMuPdf; }
 
 signals:
+    void operationFailed(const QString& message, Model::ErrorCode code);
     void workerDied(int exitCode);
     /// A fresh worker is available. It deliberately has no document open.
     void workerRestarted();

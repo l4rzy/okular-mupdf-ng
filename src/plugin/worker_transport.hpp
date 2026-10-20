@@ -110,6 +110,7 @@ public:
     bool settings(const Model::DocumentSettings& settings);
 
 signals:
+    void operationFailed(const QString& message, Model::ErrorCode code);
     void processExited(int);
     void ocrDone(quint64, int);
     void pageLinksReady(quint64, std::vector<Model::PageLinks>, bool, QString);
@@ -191,7 +192,8 @@ private:
     // A request may receive asynchronous notifications while its response is
     // pending; call() serializes that exchange and handles both message kinds.
     std::optional<Model::ResponseMessage> requestOcr(int page, const QString& language, int dpi);
-    std::optional<Model::ResponseMessage> call(Model::RequestPayload payload);
+    // Opt in only when the caller has no existing error presentation.
+    std::optional<Model::ResponseMessage> call(Model::RequestPayload payload, bool reportFailure = false);
     void processIncomingNotifications();
     bool handleNotification(const Model::NotificationMessage& notification, std::string* error = nullptr);
     static void cleanupFrameLease(void* data);
