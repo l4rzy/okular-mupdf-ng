@@ -38,16 +38,6 @@ sudo dnf copr enable l4rzy/okular-mupdf-ng
 sudo dnf install okular-mupdf-ng
 ```
 
-Alternatively, install a release RPM directly:
-
-```bash
-# Fedora 44 x86_64
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.8/okular-mupdf-ng-0.4.8-1.fc44.x86_64.rpm
-
-# Fedora 43 aarch64/Asahi Linux
-sudo dnf install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.8/okular-mupdf-ng-0.4.8-1.fc43.aarch64.rpm
-```
-
 ### openSUSE Tumbleweed
 
 Add the [OBS repository](https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng)
@@ -57,12 +47,6 @@ and install the package:
 sudo zypper addrepo --refresh https://download.opensuse.org/repositories/home:/23ro/openSUSE_Tumbleweed/home:23ro.repo
 sudo zypper refresh
 sudo zypper install okular-mupdf-ng
-```
-
-Alternatively, install a release RPM directly:
-
-```bash
-sudo zypper install https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.8/okular-mupdf-ng-0.4.8-1.tumbleweed.x86_64.rpm
 ```
 
 ### Debian 13

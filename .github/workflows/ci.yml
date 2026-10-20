@@ -62,18 +62,18 @@ jobs:
 
   package-rpm-tumbleweed:
     needs: check-build
-    if: needs.check-build.outputs.build == 'true'
+    if: ${{ false }} # RPM builds are handled by OBS.
     uses: ./.github/workflows/build-rpm-tumbleweed.yml
 
   package-rpm-fedora:
     needs: check-build
-    if: needs.check-build.outputs.build == 'true'
+    if: ${{ false }} # RPM builds are handled by COPR.
     uses: ./.github/workflows/build-rpm-fedora.yml
 
   release:
     name: Publish Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [sanitizer, package-pacman, package-deb-ubuntu, package-deb-debian, package-rpm-tumbleweed, package-rpm-fedora]
+    needs: [sanitizer, package-pacman, package-deb-ubuntu, package-deb-debian]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -119,7 +119,6 @@ jobs:
           files: |
             release-assets/okular-mupdf-ng-[0-9]*.pkg.tar.zst
             release-assets/*.deb
-            release-assets/*.rpm
           body_path: changelog.md
           generate_release_notes: false
         env:
