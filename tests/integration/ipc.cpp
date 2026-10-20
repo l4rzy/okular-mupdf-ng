@@ -252,6 +252,40 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void nativeStampColors_data()
+    {
+        QTest::addColumn<QString>("symbol");
+        QTest::addColumn<QColor>("expected");
+        QTest::newRow("red") << QStringLiteral("TopSecret") << QColor(Qt::red);
+        QTest::newRow("green") << QStringLiteral("Approved") << QColor(0, 102, 0);
+        QTest::newRow("blue") << QStringLiteral("ForComment") << QColor(0, 0, 204);
+    }
+
+    void nativeStampColors()
+    {
+        QFETCH(QString, symbol);
+        QFETCH(QColor, expected);
+        QList<Mu::Model::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), Mu::Model::OpenStatus::Success);
+        Mu::Generator::Proxy::Annotation proxy(&m_client);
+        proxy.setAvailable(true);
+        Okular::StampAnnotation stamp;
+        stamp.setStampIconName(symbol);
+        stamp.setBoundingRectangle(Okular::NormalizedRect(.1, .5, .8, .7));
+        proxy.notifyAddition(&stamp, 0);
+        QVERIFY(stamp.nativeId().isValid());
+        const QImage rendered = m_client.render(0, 612, 792);
+        QVERIFY(!rendered.isNull());
+        int coloredPixels = 0;
+        for (int y = 396; y < 555; ++y) {
+            for (int x = 61; x < 490; ++x) {
+                if (rendered.pixelColor(x, y) == expected)
+                    ++coloredPixels;
+            }
+        }
+        QVERIFY(coloredPixels > 100);
+    }
+
     void bitmapStampRoundTrip_data()
     {
         QTest::addColumn<int>("alpha");

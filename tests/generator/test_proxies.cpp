@@ -86,6 +86,39 @@ class TestGeneratorProxies : public QObject {
 
 private slots:
 
+    void nativeStampColors_data()
+    {
+        QTest::addColumn<QString>("symbol");
+        QTest::addColumn<QColor>("expected");
+        QTest::newRow("top-secret") << QStringLiteral("TopSecret") << QColor(Qt::red);
+        QTest::newRow("confidential") << QStringLiteral("Confidential") << QColor(Qt::red);
+        QTest::newRow("expired") << QStringLiteral("Expired") << QColor(Qt::red);
+        QTest::newRow("not-for-public-release") << QStringLiteral("NotForPublicRelease") << QColor(Qt::red);
+        QTest::newRow("approved") << QStringLiteral("Approved") << QColor(0, 102, 0);
+        QTest::newRow("as-is") << QStringLiteral("AsIs") << QColor(0, 0, 204);
+        QTest::newRow("for-comment") << QStringLiteral("ForComment") << QColor(0, 0, 204);
+        QTest::newRow("draft") << QStringLiteral("Draft") << QColor(102, 102, 102);
+        QTest::newRow("experimental") << QStringLiteral("Experimental") << QColor(102, 102, 102);
+        QTest::newRow("icon") << QStringLiteral("help-about") << QColor(23, 45, 67);
+        QTest::newRow("file") << QStringLiteral("/tmp/custom.png") << QColor(23, 45, 67);
+    }
+
+    void nativeStampColors()
+    {
+        QFETCH(QString, symbol);
+        QFETCH(QColor, expected);
+        Okular::StampAnnotation stamp;
+        stamp.setStampIconName(symbol);
+        stamp.style().setColor(QColor(23, 45, 67));
+        for (const double opacity : { 0.0, 0.5, 1.0 }) {
+            stamp.style().setOpacity(opacity);
+            const auto model = Mu::Generator::Conversion::toModel(&stamp);
+            QVERIFY(model);
+            QCOMPARE(model->color & 0x00ffffffU, expected.rgb() & 0x00ffffffU);
+            QCOMPARE(model->color >> 24, static_cast<std::uint32_t>(opacity * 255));
+        }
+    }
+
     void stampImage_data()
     {
         QTest::addColumn<QString>("symbol");

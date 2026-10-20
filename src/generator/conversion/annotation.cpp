@@ -8,6 +8,8 @@
 #include <QFont>
 #include <QTimeZone>
 
+#include <utility>
+
 #include <okular/core/page.h>
 
 namespace Mu::Generator::Conversion {
@@ -19,6 +21,29 @@ namespace Mu::Generator::Conversion {
 static constexpr int annotationFlag(Model::AnnotationFlag flag) noexcept
 {
     return Model::annotationFlagValue(flag);
+}
+
+static std::uint32_t stampColor(const QString& symbol, std::uint32_t color)
+{
+    using namespace Qt::StringLiterals;
+    constexpr std::uint32_t red = 0xff0000U;
+    constexpr std::uint32_t green = 0x006600U;
+    constexpr std::uint32_t gray = 0x666666U;
+    constexpr std::uint32_t blue = 0x0000ccU;
+    static constexpr std::pair<QLatin1StringView, std::uint32_t> colors[] {
+        { "TopSecret"_L1, red },   { "Confidential"_L1, red },
+        { "Expired"_L1, red },     { "NotForPublicRelease"_L1, red },
+        { "NotApproved"_L1, red }, { "Sold"_L1, red },
+        { "Approved"_L1, green },  { "Final"_L1, blue },
+        { "Draft"_L1, gray },      { "Experimental"_L1, gray },
+        { "AsIs"_L1, blue },       { "Departmental"_L1, blue },
+        { "ForComment"_L1, blue }, { "ForPublicRelease"_L1, blue },
+    };
+    for (const auto& [name, rgb] : colors) {
+        if (symbol == name)
+            return (color & 0xff000000U) | rgb;
+    }
+    return color;
 }
 
 static int pdfFlagsFor(int flags)
@@ -193,7 +218,9 @@ std::optional<Model::Annotation> toModel(const Okular::Annotation* annotation)
             data.extras.inkPaths.push_back(std::move(values));
         }
     } else if (const auto* stamp = dynamic_cast<const Okular::StampAnnotation*>(annotation)) {
-        data.extras.style.appearance = Model::AnnotationAppearance { .icon = stamp->stampIconName().toStdString(),
+        const QString symbol = stamp->stampIconName();
+        data.color = stampColor(symbol, data.color);
+        data.extras.style.appearance = Model::AnnotationAppearance { .icon = symbol.toStdString(),
                                                                      .fontName = { },
                                                                      .fontSize = 0,
                                                                      .textColor = 0,
