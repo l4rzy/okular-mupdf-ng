@@ -695,6 +695,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
         for (const Model::Annotation& ad : pageInfo.annotations) {
             if (auto ann = Conversion::fromModel(ad)) {
+                m_annotationProxy.trackStamp(ann.get());
                 okularPage->addAnnotation(ann.release());
             }
         }
@@ -1268,8 +1269,11 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
     {
         // Mirrors clearWorkerDerivedState: live pages require userMutex().
         QMutexLocker locker(userMutex());
-        for (int i = 0; i < m_okularPages.size(); ++i)
+        for (int i = 0; i < m_okularPages.size(); ++i) {
             Conversion::rebuildPageAnnotations(m_okularPages.at(i), pages.at(i).annotations);
+            for (const auto* annotation : m_okularPages.at(i)->annotations())
+                m_annotationProxy.trackStamp(annotation);
+        }
     }
     // Phase 4: publish the clean state before accepting edits again.
     m_formsDirty = markFormChangesDirty && formValuesChanged;

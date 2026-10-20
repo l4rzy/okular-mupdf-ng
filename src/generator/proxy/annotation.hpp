@@ -9,6 +9,7 @@
 #include <functional>
 #include <optional>
 
+#include <QHash>
 #include <QImage>
 #include <QMutex>
 
@@ -31,6 +32,8 @@ public:
 
     // Disabled while the worker has no document or its native handles are stale.
     void setAvailable(bool available) noexcept;
+    // Record loaded stamps so ordinary edits never need their original image files.
+    void trackStamp(const Okular::Annotation* annotation);
 
     bool supports(Capability capability) const override;
     void notifyAddition(Okular::Annotation* annotation, int page) override;
@@ -57,6 +60,7 @@ private:
     Plugin::WorkerClient* m_backend = nullptr;
     MutationCallback m_mutationCallback;
     bool m_available = false;
+    QHash<QString, QString> m_stampSymbols;
 
     mutable QMutex m_pendingMutex;
     std::optional<PendingSignature> m_pending;

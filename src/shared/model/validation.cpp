@@ -28,6 +28,29 @@ bool failWith(std::string_view value, std::string_view* reason) noexcept
     return false;
 }
 
+bool isValidPngImage(std::span<const std::uint8_t> png,
+                     std::size_t maxBytes,
+                     std::uint32_t maxDimension,
+                     std::string_view* reason)
+{
+    if (png.empty())
+        return true;
+    if (png.size() > maxBytes)
+        return failWith("PNG image exceeds byte limit", reason);
+    constexpr std::array<std::uint8_t, 16> header { 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 'I', 'H', 'D', 'R' };
+    if (png.size() < 33 || !std::equal(header.begin(), header.end(), png.begin()))
+        return failWith("image is not a PNG with an IHDR header", reason);
+    const auto readUint32 = [&](std::size_t offset) {
+        return (std::uint32_t(png[offset]) << 24) | (std::uint32_t(png[offset + 1]) << 16)
+            | (std::uint32_t(png[offset + 2]) << 8) | std::uint32_t(png[offset + 3]);
+    };
+    const auto width = readUint32(16);
+    const auto height = readUint32(20);
+    if (width == 0 || height == 0 || width > maxDimension || height > maxDimension)
+        return failWith("PNG image dimensions exceed limit", reason);
+    return true;
+}
+
 bool isValidText(std::string_view value,
                  std::string_view tooLargeMessage,
                  std::string_view invalidUtf8Message,
@@ -315,6 +338,13 @@ bool isValidAnnotation(const Annotation& annotation, std::string_view* reason)
         return false;
     };
 
+    if (annotation.extras.stampImage) {
+        if (annotation.subtype != AnnotationType::Stamp)
+            return fail("bitmap payload is only valid for stamp annotations");
+        if (!isValidPngImage(
+                *annotation.extras.stampImage, Limit::MaxStampImageBytes, Limit::MaxStampImageDimension, reason))
+            return false;
+    }
     if (!isValidUtf8(annotation.contents) || !isValidUtf8(annotation.author) || !isValidUtf8(annotation.uuid))
         return fail("annotation contains invalid UTF-8 string");
     if (!hasNoEmbeddedNul(annotation.contents) || !hasNoEmbeddedNul(annotation.author)
@@ -560,23 +590,7 @@ bool isValidLayersResponse(const LayersResponse& response) noexcept
 
 bool isValidSignatureEmblemImage(std::span<const std::uint8_t> png, std::string_view* reason)
 {
-    if (png.empty())
-        return true;
-    if (png.size() > Limit::MaxSignatureEmblemBytes)
-        return failWith("signature emblem exceeds byte limit", reason);
-    constexpr std::array<std::uint8_t, 16> header { 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 'I', 'H', 'D', 'R' };
-    if (png.size() < 33 || !std::equal(header.begin(), header.end(), png.begin()))
-        return failWith("signature emblem is not a PNG with an IHDR header", reason);
-    const auto readUint32 = [&](std::size_t offset) {
-        return (std::uint32_t(png[offset]) << 24) | (std::uint32_t(png[offset + 1]) << 16)
-            | (std::uint32_t(png[offset + 2]) << 8) | std::uint32_t(png[offset + 3]);
-    };
-    const auto width = readUint32(16);
-    const auto height = readUint32(20);
-    if (width == 0 || height == 0 || width > Limit::MaxSignatureEmblemDimension
-        || height > Limit::MaxSignatureEmblemDimension)
-        return failWith("signature emblem dimensions exceed limit", reason);
-    return true;
+    return isValidPngImage(png, Limit::MaxSignatureEmblemBytes, Limit::MaxSignatureEmblemDimension, reason);
 }
 
 bool isValidSignRequest(const SignRequest& request, std::string_view* reason)

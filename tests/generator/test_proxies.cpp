@@ -3,10 +3,14 @@
 
 #include <QColor>
 #include <QDateTime>
+#include <QDir>
 #include <QDomDocument>
+#include <QFile>
+#include <QIcon>
 #include <QImage>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>
 
@@ -15,6 +19,8 @@
 #include "generator/conversion/annotation.hpp"
 #include "generator/conversion/document.hpp"
 #include "generator/proxy/annotation.hpp"
+#include "plugin/util/stamp_image.hpp"
+#include "shared/protocol/limits.hpp"
 
 #include "generator/conversion/text.hpp"
 #include "generator/printing.hpp"
@@ -79,6 +85,65 @@ class TestGeneratorProxies : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void stampImage_data()
+    {
+        QTest::addColumn<QString>("symbol");
+        QTest::addColumn<bool>("valid");
+        QTest::addColumn<bool>("bitmap");
+        QTest::newRow("approved") << QStringLiteral("Approved") << true << false;
+        QTest::newRow("draft") << QStringLiteral("Draft") << true << false;
+        QTest::newRow("custom") << QStringLiteral("custom") << true << true;
+        QTest::newRow("large-custom") << QStringLiteral("large") << true << true;
+        QTest::newRow("icon") << QStringLiteral("test-stamp-icon") << true << true;
+        QTest::newRow("missing-icon") << QStringLiteral("nonexistent-stamp-symbol") << false << false;
+        QTest::newRow("missing-file") << QStringLiteral("missing.png") << false << false;
+    }
+
+    void stampImage()
+    {
+        QFETCH(QString, symbol);
+        QFETCH(bool, valid);
+        QFETCH(bool, bitmap);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto oldPaths = QIcon::themeSearchPaths();
+        const auto oldTheme = QIcon::themeName();
+        auto restore = qScopeGuard([&] {
+            QIcon::setThemeSearchPaths(oldPaths);
+            QIcon::setThemeName(oldTheme);
+        });
+        QVERIFY(QDir(root.path()).mkpath(QStringLiteral("theme/32x32/actions")));
+        QFile index(root.filePath(QStringLiteral("theme/index.theme")));
+        QVERIFY(index.open(QIODevice::WriteOnly));
+        index.write("[Icon Theme]\nName=Stamps\nDirectories=32x32/actions\n"
+                    "[32x32/actions]\nSize=32\nType=Fixed\nContext=Actions\n");
+        index.close();
+        QImage image(symbol == QStringLiteral("large") ? QSize(2048, 1024) : QSize(32, 16), QImage::Format_ARGB32);
+        image.fill(QColor(255, 0, 0, 128));
+        const QString path = root.filePath(QStringLiteral("custom.png"));
+        QVERIFY(image.save(path));
+        QVERIFY(image.save(root.filePath(QStringLiteral("theme/32x32/actions/test-stamp-icon.png"))));
+        QIcon::setThemeSearchPaths({ root.path() });
+        QIcon::setThemeName(QStringLiteral("theme"));
+        if (symbol == QStringLiteral("custom") || symbol == QStringLiteral("large"))
+            symbol = path;
+        else if (symbol == QStringLiteral("missing.png"))
+            symbol = root.filePath(symbol);
+        const auto result = Mu::Plugin::Util::prepareStampImage(symbol);
+        QCOMPARE(result.has_value(), valid);
+        if (!valid)
+            return;
+        QCOMPARE(!result->empty(), bitmap);
+        if (!bitmap)
+            return;
+        QVERIFY(result->size() <= Mu::Limit::MaxStampImageBytes);
+        const auto decoded = QImage::fromData(result->data(), static_cast<int>(result->size()), "PNG");
+        QVERIFY(!decoded.isNull());
+        QVERIFY(decoded.width() <= static_cast<int>(Mu::Limit::MaxStampImageDimension));
+        QVERIFY(decoded.height() <= static_cast<int>(Mu::Limit::MaxStampImageDimension));
+        QCOMPARE(decoded.pixelColor(decoded.width() / 2, decoded.height() / 2), QColor(255, 0, 0, 128));
+    }
 
     // Mocks are per-test state: QtTest still calls cleanup() after an
     // aborted slot, so a leaked lambda can never poison a later test.

@@ -10,6 +10,7 @@
 
 #include <KLocalizedString>
 
+#include <QDebug>
 #include <QFont>
 #include <QMutexLocker>
 #include <QPainter>
@@ -23,10 +24,22 @@
 #include "generator/conversion/signing.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/signature_image.hpp"
+#include "plugin/util/stamp_image.hpp"
 #include "plugin/worker_client.hpp"
 
 namespace Mu::Generator::Proxy {
 namespace {
+
+bool setStampImage(Model::Annotation& model, const QString& symbol)
+{
+    auto image = Plugin::Util::prepareStampImage(symbol);
+    if (!image) {
+        qWarning() << "Could not load annotation stamp image:" << symbol;
+        return false;
+    }
+    model.extras.stampImage = std::move(*image);
+    return true;
+}
 
 // =============================================================================
 // Signature Result & Preview Helpers
@@ -91,8 +104,19 @@ Annotation::~Annotation() = default;
 void Annotation::setAvailable(bool available) noexcept
 {
     m_available = available;
-    if (!available)
+    if (!available) {
         clearPendingSignature();
+        m_stampSymbols.clear();
+    }
+}
+
+void Annotation::trackStamp(const Okular::Annotation* annotation)
+{
+    if (const auto* stamp = dynamic_cast<const Okular::StampAnnotation*>(annotation)) {
+        const QString handle = stamp->nativeId().toString();
+        if (!handle.isEmpty())
+            m_stampSymbols.insert(handle, stamp->stampIconName());
+    }
 }
 
 bool Annotation::supports(Capability capability) const
@@ -166,13 +190,18 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
     }
     if (!m_backend || !m_backend->isConnected())
         return;
-    const auto model = Conversion::toModel(annotation);
+    auto model = Conversion::toModel(annotation);
     if (!model)
         return;
+    if (const auto* stamp = dynamic_cast<const Okular::StampAnnotation*>(annotation)) {
+        if (!setStampImage(*model, stamp->stampIconName()))
+            return;
+    }
     const auto result = m_backend->addAnnotation(page, *model);
     if (result) {
         const QString id = QString::fromStdString(result->value);
         annotation->setNativeId(id);
+        trackStamp(annotation);
         // The worker, rather than Okular's overlay, draws native PDF
         // annotations. This makes Document refresh the page raster now.
         annotation->setFlags(annotation->flags() | Okular::Annotation::ExternallyDrawn);
@@ -191,13 +220,20 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
     }
     if (!m_backend || !m_backend->isConnected())
         return;
-    const auto model = Conversion::toModel(annotation);
+    auto model = Conversion::toModel(annotation);
     if (!model)
         return;
     const QString id = annotation->nativeId().toString();
     if (id.isEmpty())
         return;
+    if (const auto* stamp = dynamic_cast<const Okular::StampAnnotation*>(annotation)) {
+        const auto symbol = m_stampSymbols.constFind(id);
+        if ((symbol == m_stampSymbols.cend() || *symbol != stamp->stampIconName())
+            && !setStampImage(*model, stamp->stampIconName()))
+            return;
+    }
     if (m_backend->modifyAnnotation(page, id, *model, appearanceChanged)) {
+        trackStamp(annotation);
         if (m_mutationCallback)
             m_mutationCallback(page);
     }
@@ -217,6 +253,7 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
     if (id.isEmpty())
         return;
     if (m_backend->removeAnnotation(page, id)) {
+        m_stampSymbols.remove(id);
         annotation->setNativeId(QVariant());
         if (m_mutationCallback)
             m_mutationCallback(page);

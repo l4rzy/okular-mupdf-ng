@@ -1,4 +1,5 @@
 #include "engine/pdf/document.hpp"
+#include "generator/conversion/annotation.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "genpdf.hpp"
 #include "plugin/caching/cache_file.hpp"
@@ -249,6 +250,137 @@ private slots:
         // custom paper color or an open document from this test.
         QVERIFY(m_client.setSettings(::Mu::Model::DocumentSettings { }));
         QVERIFY(m_client.close());
+    }
+
+    void bitmapStampRoundTrip_data()
+    {
+        QTest::addColumn<int>("alpha");
+        QTest::newRow("opaque") << 255;
+        QTest::newRow("transparent") << 128;
+    }
+
+    void bitmapStampRoundTrip()
+    {
+        QFETCH(int, alpha);
+        using namespace Mu;
+        // Reloading PDF image resources can change antialiasing by one level.
+        const auto imagesMatch = [](const QImage& left, const QImage& right) {
+            if (left.size() != right.size() || left.format() != right.format())
+                return false;
+            for (int y = 0; y < left.height(); ++y) {
+                const auto* a = left.constScanLine(y);
+                const auto* b = right.constScanLine(y);
+                for (int x = 0; x < left.width() * 4; ++x) {
+                    if (std::abs(int(a[x]) - int(b[x])) > 2)
+                        return false;
+                }
+            }
+            return true;
+        };
+        QList<Model::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), Model::OpenStatus::Success);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath(QStringLiteral("stamp.png"));
+        QImage image(32, 32, QImage::Format_ARGB32);
+        image.fill(Qt::transparent);
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = image.width() / 2; x < image.width(); ++x)
+                image.setPixelColor(x, y, QColor(255, 0, 0, alpha));
+        }
+        QVERIFY(image.save(source));
+        QFile input(source);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        const QByteArray png = input.readAll();
+        input.close();
+        int mutations = 0;
+        Generator::Proxy::Annotation proxy(&m_client, [&](int) { ++mutations; });
+        proxy.setAvailable(true);
+        Okular::StampAnnotation stamp;
+        stamp.setStampIconName(source);
+        // A square in PDF points on the 612 x 792 fixture page.
+        stamp.setBoundingRectangle(Okular::NormalizedRect(.1, .5, .3, .5 + .2 * 612 / 792));
+        proxy.notifyAddition(&stamp, 0);
+        QCOMPARE(mutations, 1);
+        QVERIFY(stamp.nativeId().isValid());
+        const QImage rendered = m_client.render(0, 612, 792);
+        QVERIFY(!rendered.isNull());
+        QCOMPARE(rendered.pixelColor(90, 450), QColor(Qt::white));
+        const auto color = rendered.pixelColor(150, 450);
+        QVERIFY(color.red() > 240);
+        QVERIFY(std::abs(color.green() - (255 - alpha)) <= 2);
+        QVERIFY(std::abs(color.blue() - (255 - alpha)) <= 2);
+
+        // A protocol-valid PNG header with an invalid color type must fail without
+        // changing the existing appearance, metadata, or annotation count.
+        auto invalid = Generator::Conversion::toModel(&stamp);
+        QVERIFY(invalid);
+        invalid->contents = "must not be applied";
+        invalid->extras.stampImage.emplace(png.begin(), png.end());
+        (*invalid->extras.stampImage)[25] = 1;
+        QVERIFY(!m_client.modifyAnnotation(0, stamp.nativeId().toString(), *invalid, true));
+        QVERIFY(!m_client.addAnnotation(0, *invalid));
+        QCOMPARE(imageHash(m_client.render(0, 612, 792)), imageHash(rendered));
+        const QString snapshotPath = directory.filePath(QStringLiteral("snapshot.pdf"));
+        QVERIFY(m_client.saveToFile(snapshotPath));
+        QVERIFY(imagesMatch(m_client.render(0, 612, 792), rendered));
+        Worker::Engine::PdfDocument snapshot;
+        std::string error;
+        QVERIFY2(snapshot.openFd(::open(QFile::encodeName(snapshotPath).constData(), O_RDONLY), "snapshot.pdf", &error),
+                 error.c_str());
+        const auto unchanged = snapshot.extractAnnotations(0, &error);
+        QCOMPARE(unchanged.size(), std::size_t(1));
+        QVERIFY(unchanged.front().contents.empty());
+
+        QVERIFY(QFile::remove(source));
+        stamp.setContents(QStringLiteral("embedded stamp"));
+        proxy.notifyModification(&stamp, 0, false);
+        QCOMPARE(mutations, 2);
+        QVERIFY(imagesMatch(m_client.render(0, 612, 792), rendered));
+        stamp.setBoundingRectangle(Okular::NormalizedRect(.4, .6, .7, .6 + .3 * 612 / 792));
+        proxy.notifyModification(&stamp, 0, true);
+        QCOMPARE(mutations, 3);
+        const QImage moved = m_client.render(0, 612, 792);
+        QVERIFY(imageHash(moved) != imageHash(rendered));
+        const QString saved = directory.filePath(QStringLiteral("saved.pdf"));
+        QVERIFY(m_client.saveToFile(saved));
+        QVERIFY(m_client.close());
+        proxy.setAvailable(false);
+        QCOMPARE(m_client.open(saved, { }, pages), Model::OpenStatus::Success);
+        QVERIFY(imagesMatch(m_client.render(0, 612, 792), moved));
+        QCOMPARE(pages.front().annotations.size(), std::size_t(1));
+        QVERIFY(!pages.front().annotations.front().extras.stampImage);
+        auto loaded = Generator::Conversion::fromModel(pages.front().annotations.front());
+        auto* reloadedStamp = dynamic_cast<Okular::StampAnnotation*>(loaded.get());
+        QVERIFY(reloadedStamp);
+        proxy.trackStamp(reloadedStamp);
+        proxy.setAvailable(true);
+        reloadedStamp->setContents(QStringLiteral("edited after reopening"));
+        proxy.notifyModification(reloadedStamp, 0, false);
+        QCOMPARE(mutations, 4);
+        QVERIFY(imagesMatch(m_client.render(0, 612, 792), moved));
+
+        reloadedStamp->setStampIconName(QStringLiteral("Approved"));
+        proxy.notifyModification(reloadedStamp, 0, true);
+        QCOMPARE(mutations, 5);
+        const auto native = m_client.render(0, 612, 792);
+        QVERIFY(imageHash(native) != imageHash(moved));
+        image.fill(Qt::blue);
+        const QString replacement = directory.filePath(QStringLiteral("replacement.png"));
+        QVERIFY(image.save(replacement));
+        reloadedStamp->setStampIconName(replacement);
+        proxy.notifyModification(reloadedStamp, 0, true);
+        QCOMPARE(mutations, 6);
+        const auto replaced = m_client.render(0, 612, 792);
+        QVERIFY(imageHash(replaced) != imageHash(native));
+        QCOMPARE(replaced.pixelColor(300, 525), QColor(Qt::blue));
+        proxy.notifyRemoval(reloadedStamp, 0);
+        QCOMPARE(mutations, 7);
+        QVERIFY(m_client.saveToFile(snapshotPath));
+        snapshot.close();
+        QVERIFY2(snapshot.openFd(::open(QFile::encodeName(snapshotPath).constData(), O_RDONLY), "snapshot.pdf", &error),
+                 error.c_str());
+        QVERIFY(snapshot.extractAnnotations(0, &error).empty());
     }
 
     void annotationRemovalNotifiesChangedPage()

@@ -135,6 +135,7 @@ add_library(mupdf_plugin_util STATIC
   plugin/util/ocr_options.cpp
   plugin/util/process_memory.cpp
   plugin/util/signature_image.cpp
+  plugin/util/stamp_image.cpp
   plugin/util/render_image.cpp
   plugin/util/signing_timestamp.cpp
   plugin/xfdf/export.cpp

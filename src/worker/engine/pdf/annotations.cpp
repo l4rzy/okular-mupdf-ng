@@ -16,6 +16,7 @@ extern "C" {
 
 #include "engine/constants.hpp"
 #include "shared/model/types.hpp"
+#include "shared/model/validation.hpp"
 
 namespace Mu::Worker::Engine {
 
@@ -484,6 +485,9 @@ bool PdfDocument::withAnnotation(int page, std::int32_t objectNumber, std::strin
 // back by deleting the partial annotation from pdfPage and dropping its reference.
 bool PdfDocument::addAnnotation(int page, const Annotation& annotation, std::int32_t* objectNumber, std::string* error)
 {
+    std::string_view reason;
+    if (!isValidAnnotation(annotation, &reason))
+        return fail(error, reason);
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
         return false;
@@ -546,6 +550,9 @@ bool PdfDocument::addAnnotation(int page, const Annotation& annotation, std::int
 bool PdfDocument::modifyAnnotation(
     int page, std::int32_t objectNumber, const Annotation& annotation, bool appearanceChanged, std::string* error)
 {
+    std::string_view reason;
+    if (!isValidAnnotation(annotation, &reason))
+        return fail(error, reason);
     Annotation normalized = annotation;
     normalizeAnnotationForWrite(normalized);
     return withAnnotation(page, objectNumber, error, [&](pdf_page* pdfPage, pdf_annot* target) {
@@ -801,6 +808,9 @@ void PdfDocument::applyAnnotation(fz_context* context,
     fz_point* volatile linePoints = nullptr;
     int* volatile inkCounts = nullptr;
     fz_point* volatile inkPoints = nullptr;
+    fz_buffer* volatile stampBuffer = nullptr;
+    fz_image* volatile stampImage = nullptr;
+    pdf_obj* volatile stampImageObject = nullptr;
     fz_try(context)
     {
         const float pageWidth = pageBounds.x1 - pageBounds.x0;
@@ -815,6 +825,19 @@ void PdfDocument::applyAnnotation(fz_context* context,
             || (annotation.subtype == AnnotationType::Polygon && vertices < 3)
             || (annotation.subtype == AnnotationType::PolyLine && vertices < 2))
             fz_throw(context, FZ_ERROR_ARGUMENT, "annotation has an invalid vertex count");
+
+        // Decode and embed before mutating an existing annotation, so corrupt
+        // PNG data cannot partially replace its appearance or metadata.
+        if (annotation.extras.stampImage && !annotation.extras.stampImage->empty()) {
+            const auto& png = *annotation.extras.stampImage;
+            stampBuffer = fz_new_buffer_from_copied_data(context, png.data(), png.size());
+            stampImage = fz_new_image_from_buffer(context, stampBuffer);
+            if (stampImage->w <= 0 || stampImage->h <= 0
+                || stampImage->w > static_cast<int>(Limit::MaxStampImageDimension)
+                || stampImage->h > static_cast<int>(Limit::MaxStampImageDimension))
+                fz_throw(context, FZ_ERROR_LIMIT, "stamp image dimensions exceed limit");
+            stampImageObject = pdf_add_image(context, pdf_annot_page(context, target)->doc, stampImage);
+        }
 
         if (!annotation.uuid.empty())
             pdf_set_annot_name(context, target, annotation.uuid.c_str());
@@ -858,6 +881,15 @@ void PdfDocument::applyAnnotation(fz_context* context,
         if (annotation.extras.style.appearance && !annotation.extras.style.appearance->icon.empty()
             && pdf_annot_has_icon_name(context, target))
             pdf_set_annot_icon_name(context, target, annotation.extras.style.appearance->icon.c_str());
+
+        if (annotation.extras.stampImage) {
+            if (stampImageObject)
+                pdf_set_annot_stamp_image_obj(context, target, stampImageObject);
+            else {
+                pdf_dict_del(context, pdf_annot_obj(context, target), PDF_NAME(AP));
+                pdf_dirty_annot(context, target);
+            }
+        }
 
         if (annotation.extras.style.intent)
             pdf_set_annot_intent(context, target, pdfAnnotationIntent(*annotation.extras.style.intent));
@@ -960,11 +992,14 @@ void PdfDocument::applyAnnotation(fz_context* context,
         }
 
         // Synthesize visual appearance stream (/AP) for the annotation
-        if (updateAppearance)
+        if (updateAppearance || annotation.extras.stampImage)
             pdf_update_annot(context, target);
     }
     fz_always(context)
     {
+        pdf_drop_obj(context, stampImageObject);
+        fz_drop_image(context, stampImage);
+        fz_drop_buffer(context, stampBuffer);
         fz_free(context, quads);
         fz_free(context, linePoints);
         fz_free(context, inkCounts);

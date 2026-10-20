@@ -752,6 +752,68 @@ private slots:
         QVERIFY(!isValidSignRequest(sign, &reason));
     }
 
+    void validatesStampImage_data()
+    {
+        QTest::addColumn<QByteArray>("png");
+        QTest::addColumn<bool>("supplied");
+        QTest::addColumn<bool>("stamp");
+        QTest::addColumn<bool>("valid");
+        QImage image(8, 8, QImage::Format_ARGB32);
+        image.fill(QColor(255, 0, 0, 128));
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QTest::newRow("preserve") << QByteArray { } << false << true << true;
+        QTest::newRow("native") << QByteArray { } << true << true << true;
+        QTest::newRow("bitmap") << png << true << true << true;
+        QTest::newRow("non-stamp-bitmap") << png << true << false << false;
+        QTest::newRow("non-stamp-clear") << QByteArray { } << true << false << false;
+        QTest::newRow("not-png") << QByteArray("invalid") << true << true << false;
+        QTest::newRow("truncated") << png.left(32) << true << true << false;
+        auto invalid = png;
+        invalid[16] = 1;
+        QTest::newRow("oversized-width") << invalid << true << true << false;
+        invalid = png;
+        invalid[20] = 1;
+        QTest::newRow("oversized-height") << invalid << true << true << false;
+        invalid = png;
+        for (int i = 16; i < 20; ++i)
+            invalid[i] = 0;
+        QTest::newRow("zero-width") << invalid << true << true << false;
+        invalid = png;
+        invalid.resize(Mu::Limit::MaxStampImageBytes + 1);
+        QTest::newRow("oversized-bytes") << invalid << true << true << false;
+    }
+
+    void validatesStampImage()
+    {
+        using namespace Mu;
+        QFETCH(QByteArray, png);
+        QFETCH(bool, supplied);
+        QFETCH(bool, stamp);
+        QFETCH(bool, valid);
+        Model::Annotation annotation;
+        annotation.subtype = stamp ? Model::AnnotationType::Stamp : Model::AnnotationType::Text;
+        if (supplied)
+            annotation.extras.stampImage.emplace(png.begin(), png.end());
+        QCOMPARE(Model::isValidAnnotation(annotation), valid);
+        for (const Model::RequestPayload& payload :
+             { Model::RequestPayload(Model::AnnotationAddRequest { 0, annotation }),
+               Model::RequestPayload(Model::AnnotationModifyRequest { { 0, { "stamp" }, annotation, true } }) }) {
+            std::string error;
+            const auto encoded = IPC::ZppCodec::encode(Model::RequestMessage { 1, payload }, &error);
+            QVERIFY2(encoded, error.c_str());
+            Model::RequestMessage decoded;
+            QVERIFY2(IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
+            const auto& restored = std::holds_alternative<Model::AnnotationAddRequest>(decoded.payload)
+                ? std::get<Model::AnnotationAddRequest>(decoded.payload).annotation
+                : std::get<Model::AnnotationModifyRequest>(decoded.payload).mutation.annotation;
+            QCOMPARE(restored.extras.stampImage, annotation.extras.stampImage);
+            QCOMPARE(Model::isValidAnnotation(restored), valid);
+        }
+    }
+
     void validatesSignatureEmblem_data()
     {
         using namespace Mu;

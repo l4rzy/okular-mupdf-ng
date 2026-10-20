@@ -240,6 +240,8 @@ struct AnnotationExtras {
     AnnotationStyle style;
     bool caretSymbolP = false;
     Value::Object extension;
+    /// Stamp PNG replacement; absent preserves the appearance, empty restores a native stamp.
+    std::optional<std::vector<std::uint8_t>> stampImage;
 };
 
 /// Annotation data exchanged between the plugin and worker.

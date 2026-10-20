@@ -69,6 +69,8 @@ inline constexpr std::size_t MaxAnnotationQuads = 4096;
 inline constexpr std::size_t MaxAnnotationInkPaths = 1024;
 inline constexpr std::size_t MaxAnnotationCalloutPoints = 3;
 inline constexpr std::size_t MaxAnnotationInkPoints = 32'768;
+inline constexpr std::size_t MaxStampImageBytes = 4U * 1024U * 1024U;
+inline constexpr std::uint32_t MaxStampImageDimension = 1024;
 
 // --- Annotation Metadata Extension Limits ---
 inline constexpr std::size_t MaxAnnotationExtensionDepth = 8;
