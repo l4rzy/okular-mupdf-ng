@@ -13,6 +13,14 @@
 
 namespace Mu::Worker::Engine {
 
+/// Corrects an OCR character's height, maps it to page coordinates, and builds
+/// a normalized box. Rejects native-text overlaps, non-finite bounds, and invalid
+/// Unicode. pageBounds must have positive width and height.
+[[nodiscard]] std::optional<Model::TextBox> makeOcrTextBox(const fz_stext_char& character,
+                                                           const fz_stext_page& nativeText,
+                                                           fz_matrix ocrToPage,
+                                                           fz_rect pageBounds);
+
 /// Extracts clean Tesseract language identifier from traineddata filename or path.
 /// Strips `.traineddata` file extension and trailing DPI suffixes like `_300dpi`.
 std::string tessdataLanguage(std::string language);

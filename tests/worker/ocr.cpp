@@ -12,8 +12,14 @@
 #include <QTest>
 
 #include <atomic>
+#include <cmath>
 #include <fcntl.h>
+#include <limits>
 #include <unistd.h>
+
+Q_DECLARE_METATYPE(fz_quad)
+Q_DECLARE_METATYPE(fz_matrix)
+Q_DECLARE_METATYPE(fz_rect)
 
 class TestOcr : public QObject {
     Q_OBJECT
@@ -44,6 +50,151 @@ private slots:
         m_scannedPath = m_tempDir.filePath("scanned.pdf");
         createScannedPDF(context, m_textPath, m_scannedPath);
         fz_drop_context(context);
+    }
+
+    void testOcrTextBoxGeometry_data()
+    {
+        QTest::addColumn<fz_quad>("quad");
+        QTest::addColumn<fz_matrix>("ocrToPage");
+        QTest::addColumn<fz_rect>("pageBounds");
+        QTest::addColumn<fz_rect>("expected");
+        QTest::addColumn<bool>("accepted");
+        const auto quad = fz_quad_from_rect({ 10, 20, 30, 40 });
+        const fz_rect bounds { 0, 0, 100, 100 };
+        QTest::newRow("baseline-correction")
+            << quad << fz_identity << bounds << fz_rect { 0.1f, 0.28f, 0.3f, 0.4f } << true;
+        QTest::newRow("inverse-dpi-scale")
+            << quad << fz_scale(0.5f, 0.5f) << bounds << fz_rect { 0.05f, 0.14f, 0.15f, 0.2f } << true;
+        QTest::newRow("shifted-crop") << quad << fz_translate(100, 200) << fz_rect { 100, 200, 300, 400 }
+                                      << fz_rect { 0.05f, 0.14f, 0.15f, 0.2f } << true;
+        QTest::newRow("rotation-after-correction")
+            << quad << fz_matrix { 0, 1, -1, 0, 100, 0 } << bounds << fz_rect { 0.6f, 0.1f, 0.72f, 0.3f } << true;
+        QTest::newRow("all-four-corners") << fz_quad { { 20, 10 }, { 40, 20 }, { 10, 30 }, { 30, 40 } } << fz_identity
+                                          << bounds << fz_rect { 0.1f, 0.22f, 0.4f, 0.4f } << true;
+        QTest::newRow("clamp-to-page") << quad << fz_scale(10, 10) << fz_rect { 150, 300, 250, 350 }
+                                       << fz_rect { 0, 0, 1, 1 } << true;
+        QTest::newRow("fully-outside-page")
+            << quad << fz_translate(200, 0) << bounds << fz_rect { 1, 0.28f, 1, 0.4f } << true;
+        QTest::newRow("infinite-coordinate")
+            << quad << fz_translate(std::numeric_limits<float>::infinity(), 0) << bounds << fz_empty_rect << false;
+        QTest::newRow("nan-coordinate") << quad << fz_translate(std::numeric_limits<float>::quiet_NaN(), 0) << bounds
+                                        << fz_empty_rect << false;
+    }
+
+    void testOcrTextBoxGeometry()
+    {
+        QFETCH(fz_quad, quad);
+        QFETCH(fz_matrix, ocrToPage);
+        QFETCH(fz_rect, pageBounds);
+        QFETCH(fz_rect, expected);
+        QFETCH(bool, accepted);
+        fz_stext_char character { };
+        character.c = 'A';
+        character.origin = { 0, 40 };
+        character.quad = quad;
+        const fz_stext_page nativeText { };
+        const auto box = Mu::Worker::Engine::makeOcrTextBox(character, nativeText, ocrToPage, pageBounds);
+        QCOMPARE(box.has_value(), accepted);
+        if (!box)
+            return;
+        QCOMPARE(box->text, std::string("A"));
+        QVERIFY(std::abs(box->left - expected.x0) < 1e-6);
+        QVERIFY(std::abs(box->top - expected.y0) < 1e-6);
+        QVERIFY(std::abs(box->right - expected.x1) < 1e-6);
+        QVERIFY(std::abs(box->bottom - expected.y1) < 1e-6);
+        QVERIFY(!box->endOfLine);
+    }
+
+    void testOcrTextBoxUnicode_data()
+    {
+        QTest::addColumn<int>("codepoint");
+        QTest::addColumn<QByteArray>("utf8");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("ascii") << 0x41 << QByteArray("A") << true;
+        // MuPDF intentionally uses an overlong encoding for NUL.
+        QTest::newRow("nul-mupdf-encoding") << 0 << QByteArray::fromHex("c080") << true;
+        QTest::newRow("two-byte") << 0xE9 << QByteArray::fromHex("c3a9") << true;
+        QTest::newRow("three-byte") << 0x4E2D << QByteArray::fromHex("e4b8ad") << true;
+        QTest::newRow("four-byte") << 0x1F600 << QByteArray::fromHex("f09f9880") << true;
+        QTest::newRow("before-surrogates") << 0xD7FF << QByteArray::fromHex("ed9fbf") << true;
+        QTest::newRow("first-surrogate") << 0xD800 << QByteArray() << false;
+        QTest::newRow("last-surrogate") << 0xDFFF << QByteArray() << false;
+        QTest::newRow("after-surrogates") << 0xE000 << QByteArray::fromHex("ee8080") << true;
+        QTest::newRow("maximum-codepoint") << 0x10FFFF << QByteArray::fromHex("f48fbfbf") << true;
+        QTest::newRow("above-maximum") << 0x110000 << QByteArray() << false;
+        QTest::newRow("negative") << -1 << QByteArray() << false;
+    }
+
+    void testOcrTextBoxUnicode()
+    {
+        QFETCH(int, codepoint);
+        QFETCH(QByteArray, utf8);
+        QFETCH(bool, accepted);
+        fz_stext_char character { };
+        character.c = codepoint;
+        character.origin = { 0, 40 };
+        character.quad = fz_quad_from_rect({ 10, 20, 30, 40 });
+        const fz_stext_page nativeText { };
+        const auto box = Mu::Worker::Engine::makeOcrTextBox(character, nativeText, fz_identity, { 0, 0, 100, 100 });
+        QCOMPARE(box.has_value(), accepted);
+        if (box)
+            QCOMPARE(QByteArray::fromStdString(box->text), utf8);
+    }
+
+    void testOcrTextBoxNativeOverlap_data()
+    {
+        QTest::addColumn<fz_rect>("nativeBounds");
+        QTest::addColumn<fz_rect>("lineBounds");
+        QTest::addColumn<fz_rect>("blockBounds");
+        QTest::addColumn<fz_matrix>("ocrToPage");
+        QTest::addColumn<bool>("textBlock");
+        QTest::addColumn<bool>("hasCharacter");
+        QTest::addColumn<bool>("accepted");
+        const fz_rect broadBounds { 0, 0, 100, 100 };
+        const fz_rect covered { 18, 33, 22, 35 };
+        QTest::newRow("corrected-center-covered")
+            << covered << broadBounds << broadBounds << fz_identity << true << true << false;
+        QTest::newRow("only-edges-overlap")
+            << fz_rect { 25, 30, 35, 38 } << broadBounds << broadBounds << fz_identity << true << true << true;
+        QTest::newRow("bounding-boxes-only")
+            << fz_rect { 1, 1, 5, 5 } << broadBounds << broadBounds << fz_identity << true << true << true;
+        QTest::newRow("non-text-block") << covered << broadBounds << broadBounds << fz_identity << false << true
+                                        << true;
+        QTest::newRow("no-characters") << covered << broadBounds << broadBounds << fz_identity << true << false << true;
+        QTest::newRow("line-bounds-exclude-center")
+            << covered << fz_rect { 0, 0, 1, 1 } << broadBounds << fz_identity << true << true << true;
+        QTest::newRow("block-bounds-exclude-center")
+            << covered << broadBounds << fz_rect { 0, 0, 1, 1 } << fz_identity << true << true << true;
+        QTest::newRow("mapped-center-covered")
+            << fz_rect { 68, 33, 72, 35 } << broadBounds << broadBounds << fz_translate(50, 0) << true << true << false;
+    }
+
+    void testOcrTextBoxNativeOverlap()
+    {
+        QFETCH(fz_rect, nativeBounds);
+        QFETCH(fz_rect, lineBounds);
+        QFETCH(fz_rect, blockBounds);
+        QFETCH(fz_matrix, ocrToPage);
+        QFETCH(bool, textBlock);
+        QFETCH(bool, hasCharacter);
+        QFETCH(bool, accepted);
+        fz_stext_char character { };
+        character.c = 'A';
+        character.origin = { 0, 40 };
+        character.quad = fz_quad_from_rect({ 10, 20, 30, 40 });
+        fz_stext_char nativeCharacter { };
+        nativeCharacter.quad = fz_quad_from_rect(nativeBounds);
+        fz_stext_line nativeLine { };
+        nativeLine.bbox = lineBounds;
+        nativeLine.first_char = hasCharacter ? &nativeCharacter : nullptr;
+        fz_stext_block nativeBlock { };
+        nativeBlock.type = textBlock ? FZ_STEXT_BLOCK_TEXT : FZ_STEXT_BLOCK_IMAGE;
+        nativeBlock.bbox = blockBounds;
+        nativeBlock.u.t.first_line = &nativeLine;
+        fz_stext_page nativeText { };
+        nativeText.first_block = &nativeBlock;
+        const auto box = Mu::Worker::Engine::makeOcrTextBox(character, nativeText, ocrToPage, { 0, 0, 100, 100 });
+        QCOMPARE(box.has_value(), accepted);
     }
 
     void testTessdataDirectorySelection_data()

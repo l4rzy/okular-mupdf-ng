@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <string>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -30,6 +31,9 @@ using namespace ::Mu::Model;
 // =============================================================================
 
 namespace {
+
+// MuPDF's no-list OCR mode uses Courier at 10/6 of the word height.
+constexpr float OcrCharacterHeightScale = 6.0f / 10.0f;
 
 struct ImagePresenceDevice {
     fz_device super;
@@ -218,6 +222,47 @@ bool overlapsNativeText(const fz_stext_page* native, fz_quad quad)
 }
 
 } // namespace
+
+// =============================================================================
+// Recognized Character Conversion
+// =============================================================================
+
+std::optional<TextBox>
+makeOcrTextBox(const fz_stext_char& character, const fz_stext_page& nativeText, fz_matrix ocrToPage, fz_rect pageBounds)
+{
+    // Restore list mode's vertical scale around the baseline so selection boxes
+    // do not span adjacent lines. Apply this before mapping back to the page.
+    const fz_matrix correction {
+        1, 0, 0, OcrCharacterHeightScale, 0, character.origin.y * (1 - OcrCharacterHeightScale)
+    };
+    const auto quad = fz_transform_quad(character.quad, fz_concat(correction, ocrToPage));
+    if (overlapsNativeText(&nativeText, quad))
+        return std::nullopt;
+
+    const float width = pageBounds.x1 - pageBounds.x0;
+    const float height = pageBounds.y1 - pageBounds.y0;
+    const double left = (std::min({ quad.ul.x, quad.ur.x, quad.ll.x, quad.lr.x }) - pageBounds.x0) / width;
+    const double top = (std::min({ quad.ul.y, quad.ur.y, quad.ll.y, quad.lr.y }) - pageBounds.y0) / height;
+    const double right = (std::max({ quad.ul.x, quad.ur.x, quad.ll.x, quad.lr.x }) - pageBounds.x0) / width;
+    const double bottom = (std::max({ quad.ul.y, quad.ur.y, quad.ll.y, quad.lr.y }) - pageBounds.y0) / height;
+    if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom))
+        return std::nullopt;
+
+    if (character.c < 0 || character.c > Constant::UnicodeMaxCodePoint
+        || (character.c >= Constant::UnicodeSurrogateMin && character.c <= Constant::UnicodeSurrogateMax))
+        return std::nullopt;
+    char utf8[4] { };
+    const int length = fz_runetochar(utf8, character.c);
+    if (length <= 0)
+        return std::nullopt;
+
+    return TextBox { std::string(utf8, static_cast<std::size_t>(length)),
+                     std::clamp(left, 0.0, 1.0),
+                     std::clamp(top, 0.0, 1.0),
+                     std::clamp(right, 0.0, 1.0),
+                     std::clamp(bottom, 0.0, 1.0),
+                     false };
+}
 
 // =============================================================================
 // Language Identifier Sanitization
@@ -410,40 +455,8 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
                                 failed = true;
                                 break;
                             }
-                            // MuPDF's no-list OCR mode uses Courier at 10/6 of the
-                            // word height. Restore list mode's vertical scale around
-                            // the baseline so selection boxes do not span adjacent lines.
-                            constexpr float heightScale = 6.0f / 10.0f;
-                            const fz_matrix correction { 1,           0, 0,
-                                                         heightScale, 0, character->origin.y * (1 - heightScale) };
-                            const auto quad = fz_transform_quad(character->quad, fz_concat(correction, inverse));
-                            if (overlapsNativeText(nativeText, quad))
-                                continue;
-                            const double left =
-                                (std::min({ quad.ul.x, quad.ur.x, quad.ll.x, quad.lr.x }) - bounds.x0) / width;
-                            const double top =
-                                (std::min({ quad.ul.y, quad.ur.y, quad.ll.y, quad.lr.y }) - bounds.y0) / height;
-                            const double right =
-                                (std::max({ quad.ul.x, quad.ur.x, quad.ll.x, quad.lr.x }) - bounds.x0) / width;
-                            const double bottom =
-                                (std::max({ quad.ul.y, quad.ur.y, quad.ll.y, quad.lr.y }) - bounds.y0) / height;
-                            if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right)
-                                || !std::isfinite(bottom))
-                                continue;
-                            if (character->c < 0 || character->c > Constant::UnicodeMaxCodePoint
-                                || (character->c >= Constant::UnicodeSurrogateMin
-                                    && character->c <= Constant::UnicodeSurrogateMax))
-                                continue;
-                            char utf8[4] { };
-                            const int length = fz_runetochar(utf8, character->c);
-                            if (length <= 0)
-                                continue;
-                            result.boxes.emplace_back(std::string(utf8, static_cast<std::size_t>(length)),
-                                                      std::clamp(left, 0.0, 1.0),
-                                                      std::clamp(top, 0.0, 1.0),
-                                                      std::clamp(right, 0.0, 1.0),
-                                                      std::clamp(bottom, 0.0, 1.0),
-                                                      false);
+                            if (auto box = makeOcrTextBox(*character, *nativeText, inverse, bounds))
+                                result.boxes.push_back(std::move(*box));
                         }
                         if (failed || activeCookie->isCancelled())
                             break;
