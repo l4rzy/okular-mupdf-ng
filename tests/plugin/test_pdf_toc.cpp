@@ -4,6 +4,7 @@
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <stdexcept>
@@ -131,6 +132,52 @@ private slots:
         QCOMPARE(nodes[2].title, std::string("11.2 Missing parent"));
     }
 
+    void bodyStyleEstimation_data()
+    {
+        QTest::addColumn<QString>("bodyText");
+        QTest::addColumn<bool>("boldBody");
+        QTest::addColumn<int>("bodyLines");
+        QTest::newRow("prose") << "Ordinary prose that establishes a stable body style." << false << 1;
+        QTest::newRow("all-bold") << "Bold prose that establishes a stable body style." << true << 1;
+        QTest::newRow("short-lines") << "Body" << false << 4;
+    }
+
+    void bodyStyleEstimation()
+    {
+        QFETCH(QString, bodyText);
+        QFETCH(bool, boldBody);
+        QFETCH(int, bodyLines);
+        BookLayout layout;
+        for (int i = 0; i < bodyLines; ++i) {
+            layout.add(bodyText.toStdString(), 1, 50, 150 + i * 40, 11, 400, false);
+            layout.lines.back().boldFraction = boldBody ? 1 : 0;
+        }
+        layout.add("Target Heading", 1, 50, 450, 17, 200);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes.front().title, std::string("Target Heading"));
+    }
+
+    void repeatedMarginsCountDistinctPages_data()
+    {
+        QTest::addColumn<bool>("distinctPages");
+        QTest::newRow("same-page") << false;
+        QTest::newRow("different-pages") << true;
+    }
+
+    void repeatedMarginsCountDistinctPages()
+    {
+        QFETCH(bool, distinctPages);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes a stable body style.", 1, 50, 300, 11, 400, false);
+        for (int i = 0; i < 3; ++i)
+            layout.add("Running Header", distinctPages ? i + 1 : 1, 50, 20, 17, 200);
+        layout.add("Target Heading", 1, 50, 450, 17, 200);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), distinctPages ? std::size_t(1) : std::size_t(2));
+        QCOMPARE(nodes.back().title, std::string("Target Heading"));
+    }
+
     void reconstructBookLayout_data()
     {
         QTest::addColumn<bool>("printedContents");
@@ -226,6 +273,51 @@ private slots:
         QCOMPARE(nodes[0].title, std::string("A wrapped heading"));
         QCOMPARE(nodes[0].link.viewport.page, 2);
         QCOMPARE(nodes[3].title, std::string("Final title"));
+    }
+
+    void contentsPageOffsetAgreement_data()
+    {
+        QTest::addColumn<int>("agreeingAnchors");
+        QTest::addColumn<int>("totalAnchors");
+        QTest::addColumn<bool>("useContents");
+        QTest::newRow("one-anchor") << 1 << 1 << false;
+        QTest::newRow("two-anchors") << 2 << 2 << true;
+        QTest::newRow("below-sixty-percent") << 2 << 4 << false;
+        QTest::newRow("exactly-sixty-percent") << 3 << 5 << true;
+        QTest::newRow("above-sixty-percent") << 4 << 6 << true;
+        QTest::newRow("three-of-six") << 3 << 6 << false;
+    }
+
+    void contentsPageOffsetAgreement()
+    {
+        QFETCH(int, agreeingAnchors);
+        QFETCH(int, totalAnchors);
+        QFETCH(bool, useContents);
+        BookLayout layout;
+        layout.add("Contents", 0, 50, 70, 24, 150);
+        layout.add("Ordinary prose that establishes a stable body style.", 20, 50, 300, 11, 400, false);
+        // Keep at least three title matches, including an unnumbered entry,
+        // so the independent-title and selected-heading gates do not decide
+        // the result before the page-offset agreement can be exercised.
+        const int titles = std::max(3, totalAnchors + 1);
+        for (int i = 0; i < titles; ++i) {
+            const std::string title = std::string("Topic ") + static_cast<char>('A' + i);
+            std::string contentsTitle = title;
+            if (i < totalAnchors) {
+                // Agreeing anchors map printed pages to body pages with an
+                // offset of ten. Each remaining anchor votes for a different
+                // offset, avoiding an accidental second majority.
+                const int printedPage = i < agreeingAnchors ? 10 + i : 9;
+                contentsTitle += " " + std::to_string(printedPage);
+            }
+            layout.add(contentsTitle, 0, 50, 130 + i * 40, 11, 200);
+            layout.add(title, 20 + i, 50, 150, 17, 200);
+        }
+        layout.add("Unlisted callout", 30, 50, 500, 17, 200);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        const bool includesUnlisted =
+            std::any_of(nodes.begin(), nodes.end(), [](const auto& node) { return node.title == "Unlisted callout"; });
+        QCOMPARE(includesUnlisted, !useContents);
     }
 
     void contentsMentionIsNotContentsPage()

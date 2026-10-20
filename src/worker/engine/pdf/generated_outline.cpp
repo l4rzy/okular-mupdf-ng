@@ -22,6 +22,59 @@ namespace Mu::Worker::Engine {
 
 namespace {
 
+// Text recognition bounds.
+constexpr unsigned MaxHeadingNumberComponent = 9999;
+constexpr std::size_t MaxHeadingNumberDepth = 8;
+constexpr int MaxPrintedPageNumber = 100'000;
+constexpr std::size_t MaxRomanPageMarkerBytes = 8;
+
+// Geometry tolerances: page ratios, font-size multiples (em), and PDF points.
+constexpr double HeaderBoundaryRatio = 0.09;
+constexpr double FooterBoundaryRatio = 0.93;
+constexpr double FontSizeToleranceRatio = 0.05;
+constexpr double MinMatchingFontSizeRatio = 0.95;
+constexpr double BoldFractionTolerance = 0.3;
+constexpr double MaxLineOverlapEm = 0.5;
+constexpr double MaxLineGapEm = 0.8;
+constexpr double LeftAlignmentTolerancePoints = 5;
+constexpr double RightAlignmentToleranceEm = 0.35;
+// Compare sums of left/right edges, avoiding division to obtain each center.
+constexpr double DoubledCenterAlignmentTolerancePoints = 10;
+
+// Printed contents extraction and page-number association.
+constexpr std::size_t MaxContentsComparisons = 2'000'000;
+constexpr double ColumnBoundaryRatio = 0.5;
+constexpr std::size_t MinColumnTitleBytes = 9;
+constexpr int MinRightColumnTitles = 3;
+constexpr double MaxPageNumberOverlapPoints = 2;
+constexpr double MaxPageNumberGapRatio = 0.4;
+// The comparison uses top + bottom, twice each text box's vertical center.
+constexpr double DoubledPageNumberCenterToleranceEm = 1.5;
+constexpr double MaxWrappedLineTopGapEm = 1.4;
+constexpr int ContentsSearchPageLimit = 64;
+
+// Body-style estimation and heading selection.
+constexpr double FontSizeBucketsPerPoint = 2;
+constexpr double MaxBodyBoldFraction = 0.5;
+constexpr std::size_t MinBodySampleBytes = 25;
+constexpr std::size_t MinRepeatedMarginPages = 3;
+constexpr double MinHeadingSizeRatio = 1.22;
+constexpr double MinHeadingBoldFraction = 0.7;
+constexpr double MinBoldHeadingSizeRatio = 1.05;
+constexpr double MinChapterSizeRatio = 1.8;
+constexpr double MaxChapterTitleTopGapEm = 1.5;
+constexpr double MaxFontSizePoints = 1000;
+constexpr int MaxOutlineLevel = 7;
+
+// Evidence required before printed contents can override typography.
+constexpr std::size_t MinMatchedContentsTitles = 3;
+constexpr int MinPageOffsetAnchors = 2;
+constexpr int PageOffsetAgreementNumerator = 3;
+constexpr int PageOffsetAgreementDenominator = 5;
+constexpr int MaxContentsPageDistance = 1;
+constexpr int UnspecifiedContentsPageDistance = 1;
+constexpr std::size_t MinSelectedContentsHeadings = 3;
+
 // =============================================================================
 // Heading Text & Number Recognition
 // =============================================================================
@@ -61,7 +114,8 @@ std::optional<HeadingNumber> parseHeading(std::string_view text)
     while (!text.empty()) {
         unsigned number = 0;
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), number);
-        if (error != std::errc() || number > 9999 || result.components.size() >= 8)
+        if (error != std::errc() || number > MaxHeadingNumberComponent
+            || result.components.size() >= MaxHeadingNumberDepth)
             return std::nullopt;
         result.components.push_back(number);
         text.remove_prefix(static_cast<std::size_t>(end - text.data()));
@@ -119,7 +173,7 @@ std::optional<int> parsePageNumber(std::string_view text)
     const auto trimmed = trimText(text);
     int number = 0;
     const auto [end, error] = std::from_chars(trimmed.data(), trimmed.data() + trimmed.size(), number);
-    if (error != std::errc() || end != trimmed.data() + trimmed.size() || number <= 0 || number > 100'000)
+    if (error != std::errc() || end != trimmed.data() + trimmed.size() || number <= 0 || number > MaxPrintedPageNumber)
         return std::nullopt;
     return number;
 }
@@ -156,7 +210,7 @@ bool isContentsLabel(std::string_view text)
     std::string_view label = trimmed;
     const auto isPageMarker = [](std::string_view word) {
         return parsePageNumber(word).has_value()
-            || (!word.empty() && word.size() <= 8
+            || (!word.empty() && word.size() <= MaxRomanPageMarkerBytes
                 && word.find_first_not_of("ivxlcdmIVXLCDM") == std::string_view::npos);
     };
     const auto first = label.find_first_of(" \t");
@@ -183,23 +237,25 @@ bool isCaption(std::string_view text)
 
 bool isMarginLine(const OutlineLine& line)
 {
-    return line.top < line.pageHeight * 0.09 || line.bottom > line.pageHeight * 0.93;
+    return line.top < line.pageHeight * HeaderBoundaryRatio || line.bottom > line.pageHeight * FooterBoundaryRatio;
 }
 
 bool hasMatchingStyle(const OutlineLine& a, const OutlineLine& b)
 {
-    return a.fontFamily == b.fontFamily && std::abs(a.size - b.size) <= std::max(a.size, b.size) * 0.05
-        && std::abs(a.boldFraction - b.boldFraction) < 0.3;
+    return a.fontFamily == b.fontFamily
+        && std::abs(a.size - b.size) <= std::max(a.size, b.size) * FontSizeToleranceRatio
+        && std::abs(a.boldFraction - b.boldFraction) < BoldFractionTolerance;
 }
 
 bool canJoinLines(const OutlineLine& a, const OutlineLine& b)
 {
-    if (a.page != b.page || !hasMatchingStyle(a, b) || b.top < a.bottom - a.size * 0.5
-        || b.top - a.bottom > a.size * 0.8)
+    if (a.page != b.page || !hasMatchingStyle(a, b) || b.top < a.bottom - a.size * MaxLineOverlapEm
+        || b.top - a.bottom > a.size * MaxLineGapEm)
         return false;
     // Left, right, and centered display titles can all wrap across blocks.
-    return std::abs(a.left - b.left) < 5 || std::abs(a.right - b.right) < a.size * 0.35
-        || std::abs((a.left + a.right) - (b.left + b.right)) < 10;
+    return std::abs(a.left - b.left) < LeftAlignmentTolerancePoints
+        || std::abs(a.right - b.right) < a.size * RightAlignmentToleranceEm
+        || std::abs((a.left + a.right) - (b.left + b.right)) < DoubledCenterAlignmentTolerancePoints;
 }
 
 void appendLine(OutlineLine& target, const OutlineLine& next)
@@ -239,7 +295,7 @@ std::vector<ContentsEntry> readContents(const std::vector<OutlineLine>& lines, c
     // The outer line/node bounds alone do not bound these nested searches.
     std::size_t comparisons = 0;
     const auto checkWork = [&] {
-        if (++comparisons > 2'000'000)
+        if (++comparisons > MaxContentsComparisons)
             throw std::length_error("generated outline contents work limit exceeded");
     };
     std::map<int, std::vector<const OutlineLine*>> pageNumbers;
@@ -249,7 +305,8 @@ std::vector<ContentsEntry> readContents(const std::vector<OutlineLine>& lines, c
             continue;
         if (parsePageNumber(line.text))
             pageNumbers[line.page].push_back(&line);
-        else if (line.left > line.pageWidth * 0.5 && line.text.size() > 8 && !isMarginLine(line))
+        else if (line.left > line.pageWidth * ColumnBoundaryRatio && line.text.size() >= MinColumnTitleBytes
+                 && !isMarginLine(line))
             ++rightColumnTitles[line.page];
     }
     for (std::size_t i = 0; i < lines.size(); ++i) {
@@ -261,15 +318,18 @@ std::vector<ContentsEntry> readContents(const std::vector<OutlineLine>& lines, c
         auto page = takeTrailingPage(title.text);
         // Page numbers often occupy a separate text block. Prefer the closest
         // number to the right on the same baseline (within the same column).
-        const bool twoColumns = rightColumnTitles[title.page] >= 3;
+        const bool twoColumns = rightColumnTitles[title.page] >= MinRightColumnTitles;
         const auto findPage = [&](const OutlineLine& end) -> std::optional<int> {
             const OutlineLine* closest = nullptr;
             for (const auto* number : pageNumbers[title.page]) {
                 checkWork();
                 const auto& other = *number;
-                if ((twoColumns && end.left < end.pageWidth * 0.5 && other.left > end.pageWidth * 0.5)
-                    || other.left < end.right - 2 || other.left - end.right > end.pageWidth * 0.4
-                    || std::abs((other.top + other.bottom) - (end.top + end.bottom)) > end.size * 1.5)
+                if ((twoColumns && end.left < end.pageWidth * ColumnBoundaryRatio
+                     && other.left > end.pageWidth * ColumnBoundaryRatio)
+                    || other.left < end.right - MaxPageNumberOverlapPoints
+                    || other.left - end.right > end.pageWidth * MaxPageNumberGapRatio
+                    || std::abs((other.top + other.bottom) - (end.top + end.bottom))
+                        > end.size * DoubledPageNumberCenterToleranceEm)
                     continue;
                 if (!closest || other.left < closest->left)
                     closest = &other;
@@ -286,15 +346,16 @@ std::vector<ContentsEntry> readContents(const std::vector<OutlineLine>& lines, c
             for (std::size_t j = i + 1; j < lines.size() && lines[j].page == title.page; ++j) {
                 checkWork();
                 const auto& candidate = lines[j];
-                if (candidate.top - end.bottom > end.size * 0.8 || candidate.top - end.top > end.size * 1.4)
+                if (candidate.top - end.bottom > end.size * MaxLineGapEm
+                    || candidate.top - end.top > end.size * MaxWrappedLineTopGapEm)
                     break;
-                if (candidate.top <= end.top || std::abs(candidate.left - end.left) >= 5
+                if (candidate.top <= end.top || std::abs(candidate.left - end.left) >= LeftAlignmentTolerancePoints
                     || parsePageNumber(candidate.text))
                     continue;
                 next = &candidate;
                 break;
             }
-            if (!next || !canJoinLines(end, *next) || next->top - end.top > end.size * 1.4)
+            if (!next || !canJoinLines(end, *next) || next->top - end.top > end.size * MaxWrappedLineTopGapEm)
                 break;
             consumed.insert(next);
             std::string continuation = trimText(next->text);
@@ -321,7 +382,7 @@ std::vector<double> collectSizes(std::vector<double> sizes)
     std::sort(sizes.begin(), sizes.end(), std::greater<>());
     std::vector<double> distinct;
     for (double size : sizes) {
-        if (distinct.empty() || distinct.back() - size > distinct.back() * 0.05)
+        if (distinct.empty() || distinct.back() - size > distinct.back() * FontSizeToleranceRatio)
             distinct.push_back(size);
     }
     return distinct;
@@ -330,7 +391,7 @@ std::vector<double> collectSizes(std::vector<double> sizes)
 int rankSize(double size, const std::vector<double>& sizes)
 {
     for (std::size_t i = 0; i < sizes.size(); ++i) {
-        if (size >= sizes[i] * 0.95)
+        if (size >= sizes[i] * MinMatchingFontSizeRatio)
             return static_cast<int>(i);
     }
     return static_cast<int>(sizes.size());
@@ -342,54 +403,77 @@ struct Candidate {
     int level = 0;
 };
 
-std::vector<Candidate> findCandidates(const std::vector<OutlineLine>& lines, const std::set<int>& contentsPages)
+struct BodyStyle {
+    std::string fontFamily;
+    double fontSize = 0;
+};
+
+std::unordered_set<std::string> findRepeatedMargins(const std::vector<OutlineLine>& lines)
+{
+    std::unordered_map<std::string, std::set<int>> pagesByTitle;
+    for (const auto& line : lines) {
+        if (isMarginLine(line))
+            pagesByTitle[stripEdgeNumbers(line.text)].insert(line.page);
+    }
+    std::unordered_set<std::string> repeated;
+    for (const auto& [title, pages] : pagesByTitle) {
+        if (pages.size() >= MinRepeatedMarginPages)
+            repeated.insert(title);
+    }
+    return repeated;
+}
+
+BodyStyle estimateBodyStyle(const std::vector<OutlineLine>& lines, const std::set<int>& contentsPages)
 {
     // Estimate body style across the document, excluding contents and code.
     // One code-heavy page must not reclassify its numbered instructions.
     std::map<std::pair<std::string, int>, std::size_t> styles;
-    std::unordered_map<std::string, std::set<int>> margins;
     for (const auto& line : lines) {
-        if (isMarginLine(line))
-            margins[stripEdgeNumbers(line.text)].insert(line.page);
-        if (!contentsPages.contains(line.page) && !line.monospaced && line.boldFraction < 0.5 && line.text.size() >= 25
-            && !isMarginLine(line))
-            styles[{ line.fontFamily, static_cast<int>(std::round(line.size * 2)) }] += line.text.size();
+        if (!contentsPages.contains(line.page) && !line.monospaced && line.boldFraction < MaxBodyBoldFraction
+            && line.text.size() >= MinBodySampleBytes && !isMarginLine(line))
+            styles[{ line.fontFamily, static_cast<int>(std::round(line.size * FontSizeBucketsPerPoint)) }] +=
+                line.text.size();
     }
-    double bodySize = 0;
-    std::string bodyFamily;
+    BodyStyle body;
     std::size_t mostCharacters = 0;
-    for (const auto& [style, count] : styles) {
-        if (count > mostCharacters) {
-            mostCharacters = count;
-            bodyFamily = style.first;
-            bodySize = static_cast<double>(style.second) / 2;
-        }
-    }
-    // All-bold/short documents have no prose sample. Use their most frequent
-    // style as a conservative baseline rather than accepting every line.
-    if (bodySize == 0) {
-        for (const auto& line : lines) {
-            if (!line.monospaced && !contentsPages.contains(line.page))
-                styles[{ line.fontFamily, static_cast<int>(std::round(line.size * 2)) }] += line.text.size();
-        }
+    const auto selectDominantStyle = [&] {
+        // Map order preserves the existing tie-break between equally common styles.
         for (const auto& [style, count] : styles) {
             if (count > mostCharacters) {
                 mostCharacters = count;
-                bodyFamily = style.first;
-                bodySize = static_cast<double>(style.second) / 2;
+                body.fontFamily = style.first;
+                body.fontSize = static_cast<double>(style.second) / FontSizeBucketsPerPoint;
             }
         }
+    };
+    selectDominantStyle();
+    // All-bold/short documents have no prose sample. Use their most frequent
+    // style as a conservative baseline rather than accepting every line.
+    if (body.fontSize == 0) {
+        for (const auto& line : lines) {
+            if (!line.monospaced && !contentsPages.contains(line.page))
+                styles[{ line.fontFamily, static_cast<int>(std::round(line.size * FontSizeBucketsPerPoint)) }] +=
+                    line.text.size();
+        }
+        selectDominantStyle();
     }
+    return body;
+}
+
+std::vector<Candidate> findHeadingCandidates(const std::vector<OutlineLine>& lines,
+                                             const std::set<int>& contentsPages,
+                                             const BodyStyle& body,
+                                             const std::unordered_set<std::string>& repeatedMargins)
+{
     const auto isHeading = [&](const OutlineLine& line) {
         if (contentsPages.contains(line.page) || line.monospaced || line.text.empty() || isCaption(line.text)
             || isContentsLabel(line.text))
             return false;
-        const auto repeated = margins.find(stripEdgeNumbers(line.text));
-        if (isMarginLine(line) && repeated != margins.end() && repeated->second.size() >= 3)
+        if (isMarginLine(line) && repeatedMargins.contains(stripEdgeNumbers(line.text)))
             return false;
-        return line.size >= bodySize * 1.22
-            || (line.boldFraction >= 0.7 && line.size >= bodySize
-                && (line.fontFamily != bodyFamily || line.size >= bodySize * 1.05));
+        return line.size >= body.fontSize * MinHeadingSizeRatio
+            || (line.boldFraction >= MinHeadingBoldFraction && line.size >= body.fontSize
+                && (line.fontFamily != body.fontFamily || line.size >= body.fontSize * MinBoldHeadingSizeRatio));
     };
     std::vector<Candidate> result;
     for (std::size_t i = 0; i < lines.size(); ++i) {
@@ -400,11 +484,13 @@ std::vector<Candidate> findCandidates(const std::vector<OutlineLine>& lines, con
         bool chapter = false;
         // A display chapter number and its title can use different sizes and
         // separate blocks. Normal page numbers are too small to qualify.
-        if (parsePageNumber(heading.text) && heading.size >= bodySize * 1.8 && i + 1 < lines.size()) {
+        if (parsePageNumber(heading.text) && heading.size >= body.fontSize * MinChapterSizeRatio
+            && i + 1 < lines.size()) {
             const auto& next = lines[i + 1];
             if (isHeading(next) && !parsePageNumber(next.text) && heading.page == next.page
-                && heading.fontFamily == next.fontFamily && next.size >= bodySize * 1.8
-                && next.top >= heading.bottom - heading.size * 0.5 && next.top - heading.bottom < heading.size * 1.5
+                && heading.fontFamily == next.fontFamily && next.size >= body.fontSize * MinChapterSizeRatio
+                && next.top >= heading.bottom - heading.size * MaxLineOverlapEm
+                && next.top - heading.bottom < heading.size * MaxChapterTitleTopGapEm
                 && (std::abs(heading.right - next.right) < heading.size
                     || std::abs(heading.left - next.left) < heading.size)) {
                 heading.size = next.size;
@@ -432,42 +518,80 @@ std::vector<Candidate> findCandidates(const std::vector<OutlineLine>& lines, con
 // Contents Matching & Outline Levels
 // =============================================================================
 
-bool applyContents(std::vector<Candidate>& candidates, std::vector<ContentsEntry>& entries)
+bool hasReliablePageOffset(int agreeingAnchors, int totalAnchors)
 {
-    std::unordered_map<std::string, std::vector<const ContentsEntry*>> byTitle;
-    std::unordered_map<std::string, std::vector<const Candidate*>> bodyTitles;
-    std::vector<double> entrySizes;
-    for (const auto& entry : entries) {
+    // Require at least two independent anchors and 60% agreement. Keep the
+    // comparison in integers so acceptance at the boundary stays exact.
+    return agreeingAnchors >= MinPageOffsetAnchors
+        && agreeingAnchors * PageOffsetAgreementDenominator >= totalAnchors * PageOffsetAgreementNumerator;
+}
+
+// Entries are borrowed; the source vector stays alive and stable through matching.
+using ContentsByTitle = std::unordered_map<std::string, std::vector<const ContentsEntry*>>;
+
+ContentsByTitle indexContentsEntries(const std::vector<ContentsEntry>& entries)
+{
+    ContentsByTitle byTitle;
+    for (const auto& entry : entries)
         byTitle[headingKey(entry.line.text)].push_back(&entry);
-        entrySizes.push_back(entry.line.size);
-    }
+    return byTitle;
+}
+
+struct ContentsPageMapping {
+    int pageOffset = 0;
+    int agreeingAnchors = 0;
+    int totalAnchors = 0;
+    std::size_t matchedTitles = 0;
+};
+
+ContentsPageMapping inferContentsPageMapping(const std::vector<Candidate>& candidates,
+                                             const ContentsByTitle& contentsByTitle)
+{
+    std::unordered_map<std::string, std::vector<const Candidate*>> bodyTitles;
     for (const auto& candidate : candidates)
         bodyTitles[headingKey(candidate.line.text)].push_back(&candidate);
     std::map<int, int> offsets;
-    int anchors = 0;
-    std::size_t matchedTitles = 0;
-    for (const auto& [title, values] : byTitle) {
+    ContentsPageMapping mapping;
+    for (const auto& [title, values] : contentsByTitle) {
         const auto found = bodyTitles.find(title);
         if (found == bodyTitles.end())
             continue;
-        ++matchedTitles;
+        ++mapping.matchedTitles;
         if (values.size() == 1 && found->second.size() == 1 && values.front()->printedPage) {
             ++offsets[found->second.front()->line.page - *values.front()->printedPage];
-            ++anchors;
+            ++mapping.totalAnchors;
         }
     }
+    if (!offsets.empty()) {
+        const auto best = std::max_element(
+            offsets.begin(), offsets.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+        mapping.pageOffset = best->first;
+        mapping.agreeingAnchors = best->second;
+    }
+    return mapping;
+}
+
+bool hasReliableContentsMapping(const ContentsPageMapping& mapping)
+{
     // An incidental "contents" label is insufficient. Require actual title
     // matches and a page mapping corroborated by independent unique headings.
-    if (matchedTitles < 3 || offsets.empty())
-        return false;
-    const auto best = std::max_element(
-        offsets.begin(), offsets.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
-    if (best->second < 2 || best->second * 5 < anchors * 3)
-        return false;
-    const int offset = best->first;
+    return mapping.matchedTitles >= MinMatchedContentsTitles
+        && hasReliablePageOffset(mapping.agreeingAnchors, mapping.totalAnchors);
+}
+
+void assignContentsLevels(std::vector<ContentsEntry>& entries)
+{
+    std::vector<double> entrySizes;
+    for (const auto& entry : entries)
+        entrySizes.push_back(entry.line.size);
     const auto sizes = collectSizes(std::move(entrySizes));
     for (auto& entry : entries)
-        entry.level = std::min(7, rankSize(entry.line.size, sizes));
+        entry.level = std::min(MaxOutlineLevel, rankSize(entry.line.size, sizes));
+}
+
+std::vector<Candidate>
+matchContentsHeadings(const std::vector<Candidate>& candidates, const ContentsByTitle& contentsByTitle, int pageOffset)
+{
     std::vector<Candidate> selected;
     bool backMatter = false;
     double chapterSize = 0;
@@ -475,14 +599,15 @@ bool applyContents(std::vector<Candidate>& candidates, std::vector<ContentsEntry
         if (candidate.chapter)
             chapterSize = std::max(chapterSize, candidate.line.size);
     }
-    for (auto& candidate : candidates) {
-        const auto found = byTitle.find(headingKey(candidate.line.text));
-        if (found == byTitle.end())
+    for (const auto& candidate : candidates) {
+        const auto found = contentsByTitle.find(headingKey(candidate.line.text));
+        if (found == contentsByTitle.end())
             continue;
         const ContentsEntry* match = nullptr;
-        int distance = 2;
+        int distance = MaxContentsPageDistance + 1;
         for (const auto* entry : found->second) {
-            const int current = entry->printedPage ? std::abs(candidate.line.page - (*entry->printedPage + offset)) : 1;
+            const int current = entry->printedPage ? std::abs(candidate.line.page - (*entry->printedPage + pageOffset))
+                                                   : UnspecifiedContentsPageDistance;
             if (current < distance) {
                 distance = current;
                 match = entry;
@@ -490,22 +615,20 @@ bool applyContents(std::vector<Candidate>& candidates, std::vector<ContentsEntry
         }
         if (!match)
             continue;
-        candidate.level = match->level;
+        Candidate selectedCandidate = candidate;
+        selectedCandidate.level = match->level;
         const auto key = headingKey(candidate.line.text);
-        if (chapterSize > 0 && candidate.line.size >= chapterSize * 0.95
+        if (chapterSize > 0 && candidate.line.size >= chapterSize * MinMatchingFontSizeRatio
             && (key == "index" || key == "bibliography" || key == "references" || key == "glossary"))
             backMatter = true;
-        if (backMatter && !candidate.chapter && candidate.line.size >= chapterSize * 0.95)
-            candidate.level = 0;
-        selected.push_back(candidate);
+        if (backMatter && !candidate.chapter && candidate.line.size >= chapterSize * MinMatchingFontSizeRatio)
+            selectedCandidate.level = 0;
+        selected.push_back(std::move(selectedCandidate));
     }
-    if (selected.size() < 3)
-        return false;
-    candidates = std::move(selected);
-    return true;
+    return selected;
 }
 
-void assignLevels(std::vector<Candidate>& candidates)
+void assignTypographyLevels(std::vector<Candidate>& candidates)
 {
     std::vector<double> ordinarySizes;
     bool hasSections = false;
@@ -526,21 +649,15 @@ void assignLevels(std::vector<Candidate>& candidates)
             candidate.level = static_cast<int>(number->components.size()) - 1 + (hasSections ? 1 : 0);
         else
             candidate.level = rankSize(candidate.line.size, sizes) + (hasSections ? 1 : 0) + (hasChapters ? 1 : 0);
-        candidate.level = std::min(7, candidate.level);
+        candidate.level = std::min(MaxOutlineLevel, candidate.level);
     }
 }
 
-} // namespace
-
-// =============================================================================
-// Generated Outline Assembly
-// =============================================================================
-
-std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> lines)
+void prepareOutlineLines(std::vector<OutlineLine>& lines)
 {
     // Reject malformed records before sorting or dividing by page dimensions.
     std::erase_if(lines, [](const OutlineLine& line) {
-        return line.page < 0 || !std::isfinite(line.size) || line.size <= 0 || line.size >= 1000
+        return line.page < 0 || !std::isfinite(line.size) || line.size <= 0 || line.size >= MaxFontSizePoints
             || !std::isfinite(line.pageWidth) || line.pageWidth <= 0 || !std::isfinite(line.pageHeight)
             || line.pageHeight <= 0 || !std::isfinite(line.left) || !std::isfinite(line.right)
             || !std::isfinite(line.top) || !std::isfinite(line.bottom) || line.right < line.left
@@ -555,19 +672,20 @@ std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> l
             return a.top < b.top;
         return a.left < b.left;
     });
-    std::set<int> contentsPages;
+}
+
+std::set<int> findContentsPages(const std::vector<OutlineLine>& lines)
+{
+    std::set<int> pages;
     for (const auto& line : lines) {
-        if (line.page < 64 && isContentsLabel(line.text))
-            contentsPages.insert(line.page);
+        if (line.page < ContentsSearchPageLimit && isContentsLabel(line.text))
+            pages.insert(line.page);
     }
-    auto candidates = findCandidates(lines, contentsPages);
-    auto contents = readContents(lines, contentsPages);
-    if (!applyContents(candidates, contents)) {
-        // An uncorroborated contents label must not suppress its page's headings.
-        if (!contentsPages.empty())
-            candidates = findCandidates(lines, { });
-        assignLevels(candidates);
-    }
+    return pages;
+}
+
+std::vector<Model::OutlineNode> assembleOutline(const std::vector<Candidate>& candidates)
+{
     std::vector<Model::OutlineNode> result;
 
     struct Parent {
@@ -611,6 +729,41 @@ std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> l
         parents.push_back({ candidate.level, &siblings.back(), number ? number->components : std::vector<unsigned>() });
     }
     return result;
+}
+
+} // namespace
+
+// =============================================================================
+// Generated Outline Pipeline
+// =============================================================================
+
+std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> lines)
+{
+    prepareOutlineLines(lines);
+    const auto contentsPages = findContentsPages(lines);
+    const auto repeatedMargins = findRepeatedMargins(lines);
+    const auto body = estimateBodyStyle(lines, contentsPages);
+    auto candidates = findHeadingCandidates(lines, contentsPages, body, repeatedMargins);
+
+    auto contents = readContents(lines, contentsPages);
+    const auto contentsByTitle = indexContentsEntries(contents);
+    const auto mapping = inferContentsPageMapping(candidates, contentsByTitle);
+    if (hasReliableContentsMapping(mapping)) {
+        assignContentsLevels(contents);
+        const auto selected = matchContentsHeadings(candidates, contentsByTitle, mapping.pageOffset);
+        if (selected.size() >= MinSelectedContentsHeadings)
+            return assembleOutline(selected);
+    }
+
+    // An uncorroborated contents label must not suppress its page's headings
+    // or bias body-style estimation. Reconsider those pages as normal text.
+    if (!contentsPages.empty()) {
+        const std::set<int> noContentsPages;
+        const auto fallbackBody = estimateBodyStyle(lines, noContentsPages);
+        candidates = findHeadingCandidates(lines, noContentsPages, fallbackBody, repeatedMargins);
+    }
+    assignTypographyLevels(candidates);
+    return assembleOutline(candidates);
 }
 
 } // namespace Mu::Worker::Engine
