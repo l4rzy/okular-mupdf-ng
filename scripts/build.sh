@@ -16,6 +16,8 @@ case "$1" in
     BUILD_DIR="build-asan"
     BUILD_TYPE="Debug"
     RUN_TESTS=1
+    # Keep desktop theme plugins out of sanitizer test processes.
+    export QT_QPA_PLATFORMTHEME=generic
     ;;
   gcc)
     BUILD_DIR="build-gcc"
