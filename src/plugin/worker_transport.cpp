@@ -349,7 +349,7 @@ void WorkerTransport::cleanupSession()
     }
     m_sourcePath.clear();
     m_useEpubCache = false;
-    m_pdfSource.reset();
+    m_sourceFile.reset();
     m_pdfPageCount = 0;
     m_pdfSynopsis.reset();
     m_epubCachePath.reset();
@@ -459,7 +459,7 @@ OpenStatus WorkerTransport::openFile(const QString& path,
     };
     m_linkGeneration = 0;
     m_pdfSynopsis.reset();
-    m_pdfSource.reset();
+    m_sourceFile.reset();
     m_pdfPageCount = 0;
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt = pageLinksStartedAt;
@@ -490,9 +490,9 @@ OpenStatus WorkerTransport::openFile(const QString& path,
             pages->append(std::move(page));
     }
     if (type == DocumentType::Pdf) {
-        m_pdfSource = std::move(source);
         m_pdfPageCount = static_cast<int>(opened->pages.size());
     }
+    m_sourceFile = std::move(source);
     m_sourcePath = path;
     m_useEpubCache = useEpubAcceleratorCache && type == DocumentType::Epub;
     return OpenStatus::Success;
@@ -545,7 +545,7 @@ bool WorkerTransport::close()
     }
     m_sourcePath.clear();
     m_useEpubCache = false;
-    m_pdfSource.reset();
+    m_sourceFile.reset();
     m_pdfPageCount = 0;
     m_pdfSynopsis.reset();
     m_epubCachePath.reset();
@@ -685,32 +685,34 @@ std::vector<TextBox> WorkerTransport::getTextBoxesForPage(int page, qreal x, qre
 // OCR Input Transfer & Job Control
 // =============================================================================
 
-bool WorkerTransport::sendOcrInput(QFile& input, std::uint64_t& transfer)
+std::unique_ptr<QFile> WorkerTransport::openSourceInput() const
 {
-    // OCR uses the currently opened document as an FD transfer; no document
-    // path or contents are copied into the control protocol.
-    if (m_sourcePath.isEmpty() || !input.open(QIODevice::ReadOnly))
-        return false;
-    transfer = m_nextTransfer++;
-    std::string error;
-    return m_fd.send(transfer, input.handle(), &error);
+    if (!m_sourceFile)
+        return { };
+    // Reopening the descriptor pins the original inode even after unlink/rename.
+    // Unlike dup(), this gives each MuPDF FILE* stream its own seek position.
+    auto input = std::make_unique<QFile>(QStringLiteral("/proc/self/fd/%1").arg(m_sourceFile->handle()));
+    if (!input->open(QIODevice::ReadOnly))
+        return { };
+    return input;
 }
 
 std::optional<ResponseMessage> WorkerTransport::requestOcr(int page, const QString& language, int dpi)
 {
-    // The request must be known valid before sendOcrInput transfers the
+    // The request must be known valid before transferring the
     // document descriptor: the worker pre-validates this payload and would
     // reject it before reading the FD, stranding it on the channel.
     OcrPageRequest request { { m_nextTransfer }, page, dpi, language.toStdString() };
     if (!isValidOcrPageRequest(request))
         return std::nullopt;
 
-    QFile input(m_sourcePath);
-    std::uint64_t transfer = 0;
-    if (!sendOcrInput(input, transfer))
+    auto input = openSourceInput();
+    if (!input)
         return std::nullopt;
-    // sendOcrInput advances the same counter, so the validated candidate is the
-    // identifier the descriptor was sent with.
+    const auto transfer = m_nextTransfer++;
+    std::string error;
+    if (!m_fd.send(transfer, input->handle(), &error))
+        return std::nullopt;
     request.file.transferId = transfer;
     return call(std::move(request));
 }
@@ -783,7 +785,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
     if (!response || response->error)
         return { };
     if (auto* value = std::get_if<OutlineResponse>(&response->payload)) {
-        if (m_pdfSource) {
+        if (m_sourceFile && m_pdfPageCount > 0) {
             // Embedded outlines take precedence and avoid hashing/scanning.
             if (!value->nodes.empty()) {
                 m_pdfSynopsis = std::move(value->nodes);
@@ -793,7 +795,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
             // Disabled policy bypasses generated results in memory and on disk.
             if (!allowHeuristic)
                 return { };
-            const QString cachePath = Caching::PDF::tocCachePath(m_pdfSource->handle());
+            const QString cachePath = Caching::PDF::tocCachePath(m_sourceFile->handle());
             if (auto cached = Caching::PDF::loadToc(cachePath, m_pdfPageCount)) {
                 m_pdfSynopsis = std::move(*cached);
                 m_pdfSynopsisGenerated = true;
@@ -803,7 +805,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
             }
             auto generated = call(SynopsisRequest { true });
             // call() can drain a worker disconnect and clear the PDF source.
-            if (!generated || generated->error || !m_pdfSource)
+            if (!generated || generated->error || !m_sourceFile)
                 return { };
             auto* outline = std::get_if<OutlineResponse>(&generated->payload);
             if (!outline)
@@ -813,7 +815,7 @@ std::vector<OutlineNode> WorkerTransport::synopsis(bool allowHeuristic, bool* ge
             if (generatedSynopsis)
                 *generatedSynopsis = true;
             // Recheck source identity before persisting a completed scan.
-            if (!cachePath.isEmpty() && Caching::PDF::tocCachePath(m_pdfSource->handle()) == cachePath)
+            if (!cachePath.isEmpty() && Caching::PDF::tocCachePath(m_sourceFile->handle()) == cachePath)
                 (void)Caching::PDF::saveToc(cachePath, m_pdfPageCount, *m_pdfSynopsis);
             return *m_pdfSynopsis;
         }
@@ -937,16 +939,15 @@ bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& p
 
 std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, const QVector<int>& pages)
 {
-    // One export at a time; the caller falls back to the synchronous path when
-    // no source path exists (the background job needs a fresh input FD).
-    if (!isConnected() || m_export || m_sourcePath.isEmpty())
+    // One export at a time, using an independent reader of the opened source.
+    if (!isConnected() || m_export || !m_sourceFile)
         return std::nullopt;
 
     // Every fallible local step precedes any FD send: a descriptor queued but
     // never claimed by its request would desynchronize the channel.
-    QFile input(m_sourcePath);
-    if (!input.open(QIODevice::ReadOnly)) {
-        MU_LOG(warning, "Mu::Plugin", "could not open source for " + target.toStdString());
+    auto input = openSourceInput();
+    if (!input) {
+        MU_LOG(warning, "Mu::Plugin", "could not reopen retained source for " + target.toStdString());
         return std::nullopt;
     }
 
@@ -967,7 +968,7 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     }
 
     const auto inputTransfer = m_nextTransfer++;
-    if (!m_fd.send(inputTransfer, input.handle(), &e)) {
+    if (!m_fd.send(inputTransfer, input->handle(), &e)) {
         // The output descriptor is already queued, but no request will be sent
         // to claim it. Tear the session down so the orphaned packet cannot
         // desynchronize later FD exchanges.

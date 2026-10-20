@@ -21,6 +21,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
 #include <future>
@@ -688,27 +689,21 @@ private slots:
         QVERIFY(m_client.close());
     }
 
-    // A failed export submission must not queue an orphan descriptor: opening
-    // the source happens before any FD send, so the FD channel stays clean and
+    // A failed export submission must not queue an orphan descriptor: creating
+    // the output happens before any FD send, so the FD channel stays clean and
     // subsequent file operations keep working.
     void failedExportSubmitKeepsFdChannelClean()
     {
-        // Copy the corpus EPUB so its path can be deleted for this test.
-        const QString sourceCopy = m_fixtureRoot.filePath(QStringLiteral("export-source.epub"));
-        QVERIFY(QFile::copy(m_epub, sourceCopy));
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
-        QCOMPARE(m_client.open(sourceCopy, { }, pages, ::Mu::Model::DocumentType::Epub),
+        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub),
                  ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
-
-        // Deleting the source path makes the submit's source-open fail after
-        // the session is established; in-flight descriptors are unaffected.
-        QVERIFY(QFile::remove(sourceCopy));
 
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
-        QVERIFY(!m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("export.pdf")), { }).has_value());
+        QVERIFY(!m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { })
+                     .has_value());
 
         // The FD channel must be clean: a synchronous FD-based operation works.
         QVERIFY(m_client.savePdfToFile(outputDirectory.filePath(QStringLiteral("print.pdf")), { }));
@@ -716,6 +711,77 @@ private slots:
 
         // No export notification was queued by the failed submission.
         QVERIFY2(spy.isEmpty(), "failed submit must not emit a completion signal");
+        QVERIFY(m_client.close());
+    }
+
+    void backgroundJobsUseOpenedSource_data()
+    {
+        QTest::addColumn<bool>("exportPdf");
+        QTest::addColumn<bool>("replacePath");
+        QTest::newRow("ocr-replaced") << false << true;
+        QTest::newRow("ocr-deleted") << false << false;
+        QTest::newRow("export-replaced") << true << true;
+        QTest::newRow("export-deleted") << true << false;
+    }
+
+    void backgroundJobsUseOpenedSource()
+    {
+        QFETCH(bool, exportPdf);
+        QFETCH(bool, replacePath);
+        if (!exportPdf && !QFile::exists(QStringLiteral(TESSDATA_DIR "/eng.traineddata")))
+            QSKIP("English traineddata is not installed");
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString sourcePath =
+            directory.filePath(exportPdf ? QStringLiteral("source.epub") : QStringLiteral("source.pdf"));
+        QVERIFY(QFile::copy(exportPdf ? m_epub : m_pdf, sourcePath));
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        const auto type = exportPdf ? ::Mu::Model::DocumentType::Epub : ::Mu::Model::DocumentType::Pdf;
+        QCOMPARE(m_client.open(sourcePath, { }, pages, type), ::Mu::Model::OpenStatus::Success);
+        const auto originalImage = m_client.render(0, 200, 200);
+        QVERIFY(!originalImage.isNull());
+
+        if (replacePath) {
+            // Atomically replace the pathname with a different, encrypted PDF.
+            // The opened document and every background reader must keep the
+            // original inode, rather than following the new pathname contents.
+            const QString replacementPath = directory.filePath(QStringLiteral("replacement.pdf"));
+            QVERIFY(QFile::copy(m_encryptedPdf, replacementPath));
+            QVERIFY(::rename(QFile::encodeName(replacementPath).constData(), QFile::encodeName(sourcePath).constData())
+                    == 0);
+        } else {
+            QVERIFY(QFile::remove(sourcePath));
+        }
+
+        if (exportPdf) {
+            const QString outputPath = directory.filePath(QStringLiteral("export.pdf"));
+            QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+            const auto job = m_client.startPdfExport(outputPath, { });
+            QVERIFY(job);
+            // Exercise the live document while its background reader seeks.
+            QCOMPARE(imageHash(m_client.render(0, 200, 200)), imageHash(originalImage));
+            QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
+            QCOMPARE(spy.first().at(0).toULongLong(), *job);
+            QVERIFY2(spy.first().at(1).toBool(), qPrintable(spy.first().at(2).toString()));
+            QFile output(outputPath);
+            QVERIFY(output.open(QIODevice::ReadOnly));
+            ::Mu::Worker::Engine::PdfDocument exported;
+            std::string error;
+            QVERIFY2(exported.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
+            QCOMPARE(exported.pageCount(), pages.size());
+        } else {
+            QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::ocrDone);
+            const auto job = m_client.startOcrPage(0, QStringLiteral("eng"), 225);
+            QVERIFY(job);
+            QCOMPARE(imageHash(m_client.render(0, 200, 200)), imageHash(originalImage));
+            QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
+            QCOMPARE(spy.first().at(0).toULongLong(), *job);
+            // The original text-only page has no images: OCR succeeds without
+            // recognition. The replacement requires a password and must fail
+            // if the background job accidentally follows the pathname.
+            QCOMPARE(m_client.ocrResult(*job).status, ::Mu::Model::OcrStatus::Success);
+        }
         QVERIFY(m_client.close());
     }
 

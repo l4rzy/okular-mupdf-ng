@@ -100,7 +100,7 @@ public:
     bool flattenPdfToFile(const QString& target, const QVector<int>& pages = { });
     /// Submits an asynchronous background PDF export and returns its job id
     /// immediately; the output file is finalized when the worker reports
-    /// completion via pdfExportFinished. Returns nullopt when no source path
+    /// completion via pdfExportFinished. Returns nullopt when no retained source
     /// exists, the transport is busy, or the submit failed.
     std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages);
     Model::SignResponse signToFile(Model::SignRequest request, const QString& password, const QString& target);
@@ -180,7 +180,8 @@ private:
         return true;
     }
 
-    bool sendOcrInput(QFile& input, std::uint64_t& transfer);
+    /// Reopens the retained source with an independent offset for a background reader.
+    [[nodiscard]] std::unique_ptr<QFile> openSourceInput() const;
     /// Memoized EPUB cache path for a source; recomputed only when the source
     /// or the EPUB layout settings change.
     QString epubCachePath(const QString& sourcePath);
@@ -228,8 +229,9 @@ private:
     bool m_intentionalStop = false;
     bool m_inFlight = false;
     bool m_useEpubCache = false;
-    // Retain the exact opened source for PDF TOC identity (also covers openData).
-    std::unique_ptr<QFile> m_pdfSource;
+    // Retain the exact opened source for background jobs and PDF TOC identity
+    // (also covers openData). The original pathname may be replaced or deleted.
+    std::unique_ptr<QFile> m_sourceFile;
     int m_pdfPageCount = 0;
     std::optional<std::vector<Model::OutlineNode>> m_pdfSynopsis;
     bool m_pdfSynopsisGenerated = false;
