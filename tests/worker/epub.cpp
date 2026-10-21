@@ -22,6 +22,7 @@
 #include <cerrno>
 #include <cmath>
 #include <fcntl.h>
+#include <iterator>
 #include <poll.h>
 #include <string>
 #include <sys/mman.h>
@@ -1348,8 +1349,19 @@ private slots:
         }
     }
 
+    void testExportPdfOutlineNesting_data()
+    {
+        QTest::addColumn<bool>("subset");
+        QTest::addColumn<bool>("reverse");
+        QTest::newRow("full") << false << false;
+        QTest::newRow("subset") << true << false;
+        QTest::newRow("reversed") << false << true;
+    }
+
     void testExportPdfOutlineNesting()
     {
+        QFETCH(bool, subset);
+        QFETCH(bool, reverse);
         QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         ::Mu::Worker::Engine::EpubDocument document;
@@ -1357,12 +1369,24 @@ private slots:
         QVERIFY2(document.openFd(::dup(file.handle()), "linked.epub", &error), error.c_str());
         file.close();
 
+        const auto sourceNodes = document.outline(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(sourceNodes.size(), std::size_t(2));
+        QCOMPARE(sourceNodes.front().children.size(), std::size_t(1));
+        std::vector<int> pages;
+        for (int page = 0; page < document.pageCount(); ++page)
+            pages.push_back(page);
+        if (subset)
+            pages.resize(1);
+        if (reverse)
+            std::reverse(pages.begin(), pages.end());
+
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        QVERIFY2(document.savePdfFdWithReferences(fullFd, { }, &error), error.c_str());
+        QVERIFY2(document.savePdfFdWithReferences(fullFd, pages, &error), error.c_str());
 
         QFile fullFile(fullPath);
         QVERIFY(fullFile.open(QIODevice::ReadOnly));
@@ -1376,15 +1400,23 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(nodes.size(), std::size_t(2));
         QCOMPARE(QString::fromStdString(nodes.front().title), QStringLiteral("Chapter One"));
-        QVERIFY(nodes.front().link.valid);
-        QCOMPARE(nodes.front().link.viewport.page, 0);
         QCOMPARE(nodes.front().children.size(), std::size_t(1));
         QCOMPARE(QString::fromStdString(nodes.front().children.front().title), QStringLiteral("Section 1.1"));
-        QVERIFY(nodes.front().children.front().link.valid);
-        QVERIFY(nodes.front().children.front().link.viewport.page >= 1);
         QCOMPARE(QString::fromStdString(nodes.back().title), QStringLiteral("Chapter Two"));
-        QVERIFY(nodes.back().link.valid);
-        QVERIFY(nodes.back().link.viewport.page > nodes.front().children.front().link.viewport.page);
+
+        const auto verifyDestination = [&](const auto& exported, const auto& source) {
+            QVERIFY(source.link.valid);
+            QVERIFY(!source.link.external);
+            const auto target = std::find(pages.begin(), pages.end(), source.link.viewport.page);
+            QCOMPARE(exported.link.valid, target != pages.end());
+            if (target != pages.end()) {
+                QVERIFY(!exported.link.external);
+                QCOMPARE(exported.link.viewport.page, static_cast<int>(std::distance(pages.begin(), target)));
+            }
+        };
+        verifyDestination(nodes.front(), sourceNodes.front());
+        verifyDestination(nodes.front().children.front(), sourceNodes.front().children.front());
+        verifyDestination(nodes.back(), sourceNodes.back());
     }
 
     void testExportPdfSubsetAndErrors()

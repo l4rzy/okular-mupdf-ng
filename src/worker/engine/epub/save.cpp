@@ -34,6 +34,125 @@ const char* pdfInfoKey(std::string_view name)
     return nullptr;
 }
 
+// Source entries stay in document order and borrow nodes from the source tree.
+// Flattening resolves internal destinations before entering the MuPDF error domain.
+struct FlatOutline {
+    const OutlineNode* node;
+    std::int32_t destIndex;
+    std::int32_t depth;
+};
+
+/// Writes a preorder sequence using MuPDF's outline insertion cursor.
+class PdfOutlineWriter {
+public:
+    PdfOutlineWriter(fz_context* context, const std::vector<FlatOutline>& entries)
+        : m_context(context)
+        , m_entries(entries)
+    {
+    }
+
+    void write(pdf_document* destination)
+    {
+        // Iterator creation failures propagate to the surrounding export operation.
+        m_iterator = pdf_new_outline_iterator(m_context, destination);
+        // The writer belongs to the caller: its frame stack and pending URI
+        // outlive this function's setjmp and remain available after a longjmp.
+        fz_try(m_context)
+        {
+            writeEntries();
+        }
+        fz_always(m_context)
+        {
+            releaseUri();
+            fz_drop_outline_iterator(m_context, m_iterator);
+        }
+        fz_catch(m_context)
+        {
+            MU_LOG(
+                warning, "Mu::Worker::Epub", std::string("PDF outline build failed: ") + fz_caught_message(m_context));
+        }
+    }
+
+private:
+    struct OpenFrame {
+        std::size_t entry;
+        bool hasChildren;
+    };
+
+    void writeEntries()
+    {
+        // The cursor starts at the empty root. Each operation leaves it either
+        // below a newly inserted node or after a completed sibling subtree.
+        for (std::size_t index = 0; index < m_entries.size(); ++index) {
+            while (static_cast<std::int32_t>(m_openFrames.size()) > m_entries[index].depth)
+                finishSubtree();
+            insertEntry(index);
+        }
+        while (!m_openFrames.empty())
+            finishSubtree();
+    }
+
+    void insertEntry(std::size_t index)
+    {
+        const FlatOutline& entry = m_entries[index];
+        fz_outline_item item { };
+        fillItem(item, entry);
+        fz_outline_iterator_insert(m_context, m_iterator, &item);
+        releaseUri();
+        // Insertion advances the cursor past the new node. Return to that node
+        // and descend, leaving the cursor ready to insert its first child.
+        fz_outline_iterator_prev(m_context, m_iterator);
+        fz_outline_iterator_down(m_context, m_iterator);
+        m_openFrames.push_back({ index, index + 1 < m_entries.size() && m_entries[index + 1].depth > entry.depth });
+    }
+
+    void finishSubtree()
+    {
+        const OpenFrame frame = m_openFrames.back();
+        const FlatOutline& entry = m_entries[frame.entry];
+        // Ascend from the child insertion position to the completed node.
+        fz_outline_iterator_up(m_context, m_iterator);
+        if (frame.hasChildren && !entry.node->open) {
+            // Apply the source's collapsed state after writing its children.
+            fz_outline_item item { };
+            fillItem(item, entry);
+            fz_outline_iterator_update(m_context, m_iterator, &item);
+            releaseUri();
+        }
+        fz_outline_iterator_next(m_context, m_iterator);
+        m_openFrames.pop_back();
+    }
+
+    void fillItem(fz_outline_item& item, const FlatOutline& entry)
+    {
+        item.title = entry.node->title.empty() ? nullptr : const_cast<char*>(entry.node->title.c_str());
+        item.is_open = entry.node->open ? 1 : 0;
+        if (!entry.node->link.valid)
+            return;
+        if (entry.node->link.external) {
+            if (!entry.node->link.uri.empty())
+                item.uri = const_cast<char*>(entry.node->link.uri.c_str());
+        } else if (entry.destIndex >= 0) {
+            const float quietNaN = std::numeric_limits<float>::quiet_NaN();
+            m_generatedUri = pdf_new_uri_from_explicit_dest(
+                m_context, fz_make_link_dest_xyz(0, entry.destIndex, quietNaN, quietNaN, quietNaN));
+            item.uri = m_generatedUri;
+        }
+    }
+
+    void releaseUri()
+    {
+        fz_free(m_context, m_generatedUri);
+        m_generatedUri = nullptr;
+    }
+
+    fz_context* const m_context;
+    const std::vector<FlatOutline>& m_entries;
+    fz_outline_iterator* m_iterator = nullptr;
+    char* m_generatedUri = nullptr;
+    std::vector<OpenFrame> m_openFrames;
+};
+
 } // namespace
 
 // =============================================================================
@@ -93,15 +212,6 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
         for (std::size_t index = 0; index < targetPages.size(); ++index)
             destinationPages.emplace(targetPages[index], static_cast<int>(index));
     }
-
-    // Source table of contents flattened in document order, with internal
-    // destinations mapped to destination page indexes. Built outside fz_try;
-    // only plain reads of this data happen inside the MuPDF error domain.
-    struct FlatOutline {
-        const OutlineNode* node;
-        std::int32_t destIndex;
-        std::int32_t depth;
-    };
 
     // The outline tree outlives the flat copy and the fz_try region below,
     // which only reads it; it must not be scoped to the block that fills it.
@@ -328,85 +438,8 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
             // Outline destinations are resolved immediately against the page
             // tree, so this must also run after all pages exist. Best-effort: a
             // failed build keeps pages and links and only drops the TOC.
-            if (!flatOutline.empty()) {
-                struct OpenFrame {
-                    std::size_t entry;
-                    bool hasChildren;
-                };
-
-                // Declared before the nested fz_try: a skipped destructor on the
-                // error longjmp path would leak the frame stack.
-                std::vector<OpenFrame> openFrames;
-                fz_outline_iterator* volatile iterator = pdf_new_outline_iterator(m_context, destination);
-                fz_try(m_context)
-                {
-                    // Drives the destination outline iterator like MuPDF's
-                    // pdfmerge tool: each insert runs in the state the previous
-                    // step left (empty root, dangling MOD_BELOW below a fresh
-                    // item, or MOD_AFTER behind the previously emitted node).
-
-                    const auto fillItem = [&](fz_outline_item* item, const FlatOutline& entry) {
-                        item->title =
-                            entry.node->title.empty() ? nullptr : const_cast<char*>(entry.node->title.c_str());
-                        item->is_open = entry.node->open ? 1 : 0;
-                        if (!entry.node->link.valid)
-                            return;
-                        if (entry.node->link.external) {
-                            if (!entry.node->link.uri.empty())
-                                item->uri = const_cast<char*>(entry.node->link.uri.c_str());
-                        } else if (entry.destIndex >= 0) {
-                            generatedUri = pdf_new_uri_from_explicit_dest(
-                                m_context, fz_make_link_dest_xyz(0, entry.destIndex, quietNaN, quietNaN, quietNaN));
-                            item->uri = generatedUri;
-                        }
-                    };
-                    const auto releaseUri = [&] {
-                        fz_free(m_context, generatedUri);
-                        generatedUri = nullptr;
-                    };
-                    const auto popFrame = [&] {
-                        const OpenFrame frame = openFrames.back();
-                        const FlatOutline& entry = flatOutline[frame.entry];
-                        fz_outline_iterator_up(m_context, iterator);
-                        if (frame.hasChildren && !entry.node->open) {
-                            // Honor a collapsed source entry; expanded is the
-                            // automatic default for parents in PDF.
-                            fz_outline_item item { };
-                            fillItem(&item, entry);
-                            fz_outline_iterator_update(m_context, iterator, &item);
-                            releaseUri();
-                        }
-                        fz_outline_iterator_next(m_context, iterator);
-                        openFrames.pop_back();
-                    };
-
-                    for (std::size_t index = 0; index < flatOutline.size(); ++index) {
-                        const FlatOutline& entry = flatOutline[index];
-                        while (static_cast<std::int32_t>(openFrames.size()) > entry.depth)
-                            popFrame();
-                        fz_outline_item item { };
-                        fillItem(&item, entry);
-                        fz_outline_iterator_insert(m_context, iterator, &item);
-                        releaseUri();
-                        fz_outline_iterator_prev(m_context, iterator);
-                        fz_outline_iterator_down(m_context, iterator);
-                        openFrames.push_back(
-                            { index, index + 1 < flatOutline.size() && flatOutline[index + 1].depth > entry.depth });
-                    }
-                    while (!openFrames.empty())
-                        popFrame();
-                }
-                fz_always(m_context)
-                {
-                    fz_drop_outline_iterator(m_context, iterator);
-                }
-                fz_catch(m_context)
-                {
-                    MU_LOG(warning,
-                           "Mu::Worker::Epub",
-                           std::string("PDF outline build failed: ") + fz_caught_message(m_context));
-                }
-            }
+            if (!flatOutline.empty())
+                PdfOutlineWriter(m_context, flatOutline).write(destination);
         }
 
         pdf_update_open_pages(m_context, destination);
