@@ -288,10 +288,13 @@ target_compile_definitions(test_generator_ocr PRIVATE
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>"
     TESSDATA_DIR="${TESSDATA_DIR}")
 add_dependencies(test_generator_ocr okularGenerator_mupdfng mupdfng-worker)
+if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
+    target_sources(test_generator_ocr PRIVATE ../src/generator/page/background.cpp)
+endif()
 
-add_layer_test(test_generator_placeholder generator/test_placeholder.cpp generator)
-target_include_directories(test_generator_placeholder PRIVATE ../src)
-target_link_libraries(test_generator_placeholder PRIVATE mupdf_generator_placeholder Qt6::Gui KF6::I18n)
+add_layer_test(test_generator_page_error generator/test_page_error.cpp generator)
+target_include_directories(test_generator_page_error PRIVATE ../src)
+target_link_libraries(test_generator_page_error PRIVATE mupdf_generator_page_error Qt6::Gui KF6::I18n)
 
 add_layer_test(test_plugin_ocrcontroller plugin/test_ocrcontroller.cpp plugin)
 target_include_directories(test_plugin_ocrcontroller PRIVATE
@@ -312,12 +315,10 @@ add_layer_test(test_generator_config generator/test_config.cpp generator
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(test_generator_config PRIVATE Qt6::Gui Qt6::Concurrent KF6::I18n mupdf_generator_settings mupdf_plugin_crypto)
 
-if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
-    add_layer_test(test_generator_pagecolor generator/test_page_color_override.cpp generator
-        ../src/generator/page_color_override.cpp)
-    target_include_directories(test_generator_pagecolor PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
-    target_link_libraries(test_generator_pagecolor PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
-endif()
+add_layer_test(test_generator_pagebackground generator/test_page_background.cpp generator
+    ../src/generator/page/background.cpp)
+target_include_directories(test_generator_pagebackground PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_link_libraries(test_generator_pagebackground PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
 
 add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
 target_include_directories(test_generator_signaturepreview PRIVATE ../src)

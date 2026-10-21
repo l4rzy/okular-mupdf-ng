@@ -73,9 +73,9 @@ and the source-tree layout.
 - The NSS cryptographic code has not been fully audited.
 - Sandbox is Linux only and its availability depends on Linux kernel and system support. Default to Strict Enforcement.
 - Worker restart can not recover unsaved forms.
-- Twilight, Dusk, and Dark use Okular's per-page [placeholder color API](https://invent.kde.org/graphics/okular/-/merge_requests/1527) when available.
-  On older Okular versions, Dusk and Dark temporarily use accessibility **Change Paper Color**
-  to prevent white loading placeholders.
+- Twilight, Dusk, and Dark prefer Okular's per-page [placeholder color API](https://invent.kde.org/graphics/okular/-/merge_requests/1527) when available.
+  Older Okular versions use shared preview pixmaps and incomplete loading images. Extreme zoom or
+  uncovered tile regions can still show white loading gaps with this fallback.
 
 See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and
 automated test coverage.

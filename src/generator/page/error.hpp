@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MU_GENERATOR_PLACEHOLDER_HPP
-#define MU_GENERATOR_PLACEHOLDER_HPP
+#ifndef MU_GENERATOR_PAGE_ERROR_HPP
+#define MU_GENERATOR_PAGE_ERROR_HPP
 
 #include <QImage>
 #include <QString>
@@ -10,7 +10,7 @@
 #include <atomic>
 #include <memory>
 
-namespace Mu::Generator {
+namespace Mu::Generator::Page {
 
 /**
  * Owns the "document display interrupted" state for the generator.
@@ -36,7 +36,7 @@ namespace Mu::Generator {
  * null shared_ptr means inactive, and a non-null one is a fully constructed
  * string, so readers never observe a partial state.
  */
-class Placeholder final {
+class Error final {
 public:
     /// What interrupted the document display.
     enum class Reason {
@@ -71,6 +71,6 @@ private:
     bool m_reloadQueued = false;
 };
 
-} // namespace Mu::Generator
+} // namespace Mu::Generator::Page
 
-#endif // MU_GENERATOR_PLACEHOLDER_HPP
+#endif // MU_GENERATOR_PAGE_ERROR_HPP

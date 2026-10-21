@@ -186,11 +186,11 @@ int main() {
 cmake_pop_check_state()
 configure_file(generator/okular_compat.hpp.in ${MU_GENERATED_INCLUDE_DIR}/generator/okular_compat.hpp)
 
-add_library(mupdf_generator_placeholder STATIC generator/placeholder.cpp)
-target_compile_definitions(mupdf_generator_placeholder PRIVATE
+add_library(mupdf_generator_page_error STATIC generator/page/error.cpp)
+target_compile_definitions(mupdf_generator_page_error PRIVATE
     MUPDFNG_LOGO_PATH="${CMAKE_INSTALL_FULL_DATADIR}/icons/hicolor/scalable/apps/mupdfng.svg")
-target_include_directories(mupdf_generator_placeholder PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(mupdf_generator_placeholder PUBLIC Okular::Core Qt6::Core KF6::I18n)
+target_include_directories(mupdf_generator_page_error PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(mupdf_generator_page_error PUBLIC Okular::Core Qt6::Core KF6::I18n)
 
 add_library(mupdf_generator_adapters STATIC
   generator/conversion/annotation.cpp
@@ -254,7 +254,7 @@ target_compile_definitions(mupdf_generator_signature PRIVATE
 )
 set_target_properties(
     mupdf_plugin_ocr
-    mupdf_generator_placeholder
+    mupdf_generator_page_error
     mupdf_generator_adapters
     mupdf_generator_signature
     PROPERTIES POSITION_INDEPENDENT_CODE ON
@@ -262,7 +262,7 @@ set_target_properties(
 
 if(MU_DEBUG_BUILD)
     target_compile_definitions(mupdf_plugin_ocr PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(mupdf_generator_placeholder PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(mupdf_generator_page_error PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdf_generator_adapters PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdf_generator_signature PRIVATE MU_DEBUG_ENABLED)
 endif()
@@ -276,8 +276,9 @@ set(okularGenerator_mupdfng_SRCS
   generator/config/certmanager/manager_dialog.cpp
   generator/config/certmanager/self_signed_dialog.cpp
 )
+
 if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
-    list(APPEND okularGenerator_mupdfng_SRCS generator/page_color_override.cpp)
+    list(APPEND okularGenerator_mupdfng_SRCS generator/page/background.cpp)
 endif()
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
@@ -342,7 +343,7 @@ target_link_libraries(okularGenerator_mupdfng
     mupdf_generator_adapters
     mupdf_generator_signature
     mupdf_generator_settings
-    mupdf_generator_placeholder
+    mupdf_generator_page_error
     mupdf_plugin_cache
     mupdf_plugin_crypto
     mupdf_plugin_ocr

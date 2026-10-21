@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/placeholder.hpp"
+#include "generator/page/error.hpp"
 
 #include <KLocalizedString>
 #include <QFont>
@@ -10,7 +10,7 @@
 #include <QPainter>
 #include <QtGlobal>
 
-namespace Mu::Generator {
+namespace Mu::Generator::Page {
 
 namespace {
 
@@ -98,7 +98,7 @@ QImage drawErrorCard(int width, int height, const QString& message)
 
 } // namespace
 
-void Placeholder::activate(QString message, Reason reason)
+void Error::activate(QString message, Reason reason)
 {
     // Terminal state is sticky: never re-notify or downgrade WorkerUnavailable.
     if (isActive() && m_reason == Reason::WorkerUnavailable)
@@ -110,7 +110,7 @@ void Placeholder::activate(QString message, Reason reason)
     m_message.store(std::make_shared<const QString>(std::move(message)));
 }
 
-bool Placeholder::deactivate()
+bool Error::deactivate()
 {
     // The published message stays until the queued reopen completes and
     // reset() runs, keeping renders blocked in the meantime. Repeated
@@ -121,7 +121,7 @@ bool Placeholder::deactivate()
     return true;
 }
 
-void Placeholder::reset()
+void Error::reset()
 {
     // Terminal failure persists for the owning-thread lifetime.
     if (m_reason == Reason::WorkerUnavailable)
@@ -130,15 +130,15 @@ void Placeholder::reset()
     m_reloadQueued = false;
 }
 
-QString Placeholder::message() const
+QString Error::message() const
 {
     const auto snapshot = m_message.load();
     return snapshot ? *snapshot : QString();
 }
 
-QImage Placeholder::image(int width, int height) const
+QImage Error::image(int width, int height) const
 {
     return drawErrorCard(width, height, message());
 }
 
-} // namespace Mu::Generator
+} // namespace Mu::Generator::Page

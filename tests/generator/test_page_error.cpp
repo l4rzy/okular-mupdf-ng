@@ -9,39 +9,39 @@
 
 #include <atomic>
 
-#include "generator/placeholder.hpp"
+#include "generator/page/error.hpp"
 
-using ::Mu::Generator::Placeholder;
+using PageError = ::Mu::Generator::Page::Error;
 
-class TestGeneratorPlaceholder : public QObject {
+class TestPageError : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
 
     void activationRaisesFlagAndPublishesMessage()
     {
-        Placeholder placeholder;
+        PageError placeholder;
         QVERIFY(!placeholder.isActive());
         QVERIFY(placeholder.message().isEmpty());
 
-        placeholder.activate(QStringLiteral("gate message"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("gate message"), PageError::Reason::SandboxGate);
         QVERIFY(placeholder.isActive());
-        QCOMPARE(placeholder.reason(), Placeholder::Reason::SandboxGate);
+        QCOMPARE(placeholder.reason(), PageError::Reason::SandboxGate);
         QCOMPARE(placeholder.message(), QStringLiteral("gate message"));
 
         // Re-activation of the same state updates the message.
-        placeholder.activate(QStringLiteral("other"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("other"), PageError::Reason::SandboxGate);
         QCOMPARE(placeholder.message(), QStringLiteral("other"));
     }
 
     void deactivateRequestsReopenOncePerCycle()
     {
-        Placeholder placeholder;
+        PageError placeholder;
 
         // Inactive: no reopen request.
         QVERIFY(!placeholder.deactivate());
 
-        placeholder.activate(QStringLiteral("m"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("m"), PageError::Reason::SandboxGate);
         QVERIFY(placeholder.deactivate());
         QVERIFY(placeholder.isActive());
 
@@ -51,21 +51,21 @@ private Q_SLOTS:
         // After the reopen completes (reset), a new gate cycle must be able
         // to request a reopen again.
         placeholder.reset();
-        placeholder.activate(QStringLiteral("m"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("m"), PageError::Reason::SandboxGate);
         QVERIFY(placeholder.deactivate());
         QVERIFY(placeholder.isActive());
     }
 
     void resetClearsGateButPreservesTerminalState()
     {
-        Placeholder placeholder;
+        PageError placeholder;
 
-        placeholder.activate(QStringLiteral("m"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("m"), PageError::Reason::SandboxGate);
         placeholder.reset();
         QVERIFY(!placeholder.isActive());
         QVERIFY(placeholder.message().isEmpty());
 
-        placeholder.activate(QStringLiteral("terminal"), Placeholder::Reason::WorkerUnavailable);
+        placeholder.activate(QStringLiteral("terminal"), PageError::Reason::WorkerUnavailable);
         placeholder.reset();
         QVERIFY(placeholder.isActive());
         QCOMPARE(placeholder.message(), QStringLiteral("terminal"));
@@ -73,26 +73,26 @@ private Q_SLOTS:
 
     void terminalStateIsStickyAndCannotBeDowngraded()
     {
-        Placeholder placeholder;
+        PageError placeholder;
 
-        placeholder.activate(QStringLiteral("gate"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("gate"), PageError::Reason::SandboxGate);
         // Escalation to terminal replaces the reason and message.
-        placeholder.activate(QStringLiteral("terminal"), Placeholder::Reason::WorkerUnavailable);
-        QCOMPARE(placeholder.reason(), Placeholder::Reason::WorkerUnavailable);
+        placeholder.activate(QStringLiteral("terminal"), PageError::Reason::WorkerUnavailable);
+        QCOMPARE(placeholder.reason(), PageError::Reason::WorkerUnavailable);
         QCOMPARE(placeholder.message(), QStringLiteral("terminal"));
 
         // Deactivation cannot restore a terminal placeholder.
         QVERIFY(!placeholder.deactivate());
 
         // Later gate activations are ignored.
-        placeholder.activate(QStringLiteral("gate"), Placeholder::Reason::SandboxGate);
-        QCOMPARE(placeholder.reason(), Placeholder::Reason::WorkerUnavailable);
+        placeholder.activate(QStringLiteral("gate"), PageError::Reason::SandboxGate);
+        QCOMPARE(placeholder.reason(), PageError::Reason::WorkerUnavailable);
         QCOMPARE(placeholder.message(), QStringLiteral("terminal"));
     }
 
     void readerThreadObservesCompleteMessage()
     {
-        Placeholder placeholder;
+        PageError placeholder;
         QVERIFY(!placeholder.isActive());
 
         std::atomic<bool> stop = false;
@@ -129,7 +129,7 @@ private Q_SLOTS:
 
         // Pace the toggles so the reader reliably samples both states.
         for (int i = 0; i < 100; ++i) {
-            placeholder.activate(expected, Placeholder::Reason::SandboxGate);
+            placeholder.activate(expected, PageError::Reason::SandboxGate);
             QThread::msleep(1);
             placeholder.reset();
             QThread::msleep(1);
@@ -148,13 +148,13 @@ private Q_SLOTS:
 
     void imageRendersCardAtRequestedDimensions()
     {
-        Placeholder placeholder;
+        PageError placeholder;
 
         // Invalid dimensions render nothing.
         QVERIFY(placeholder.image(0, 100).isNull());
         QVERIFY(placeholder.image(100, 0).isNull());
 
-        placeholder.activate(QStringLiteral("render me"), Placeholder::Reason::SandboxGate);
+        placeholder.activate(QStringLiteral("render me"), PageError::Reason::SandboxGate);
         const QImage img = placeholder.image(320, 240);
         QCOMPARE(img.width(), 320);
         QCOMPARE(img.height(), 240);
@@ -162,7 +162,7 @@ private Q_SLOTS:
 
         // An empty message still renders the card.
         placeholder.reset();
-        placeholder.activate(QString(), Placeholder::Reason::WorkerUnavailable);
+        placeholder.activate(QString(), PageError::Reason::WorkerUnavailable);
         QVERIFY(!placeholder.image(320, 240).isNull());
     }
 
@@ -178,11 +178,11 @@ private Q_SLOTS:
     void imageHandlesSmallAndTranslatedCards()
     {
         QFETCH(QSize, size);
-        Placeholder placeholder;
+        PageError placeholder;
         placeholder.activate(QStringLiteral("Hộp cát của worker chưa được gia cố đầy đủ.\n"
                                             "Để mở tài liệu này, hãy chuyển chế độ Thực thi hộp cát sang Nới lỏng. "
                                             "Thao tác này sẽ giảm mức bảo vệ.\nLỗi: Không rõ"),
-                             Placeholder::Reason::SandboxGate);
+                             PageError::Reason::SandboxGate);
         const auto image = placeholder.image(size.width(), size.height());
         QCOMPARE(image.size(), size);
         QCOMPARE(image.format(), QImage::Format_ARGB32_Premultiplied);
@@ -195,8 +195,8 @@ private Q_SLOTS:
         // Force wrapping independently of installed translations and system fonts.
         wideFont.setLetterSpacing(QFont::PercentageSpacing, 200);
         QGuiApplication::setFont(wideFont);
-        Placeholder placeholder;
-        placeholder.activate(QStringLiteral("message"), Placeholder::Reason::SandboxGate);
+        PageError placeholder;
+        placeholder.activate(QStringLiteral("message"), PageError::Reason::SandboxGate);
         const auto image = placeholder.image(240, 180);
         QGuiApplication::setFont(originalFont);
 
@@ -213,6 +213,6 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestGeneratorPlaceholder)
+QTEST_MAIN(TestPageError)
 
-#include "test_placeholder.moc"
+#include "test_page_error.moc"

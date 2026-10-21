@@ -27,9 +27,9 @@
 #include "generator/layers_model.hpp"
 #include "generator/okular_compat.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-#include "generator/page_color_override.hpp"
+#include "generator/page/background.hpp"
 #endif
-#include "generator/placeholder.hpp"
+#include "generator/page/error.hpp"
 #include "generator/printing.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/certificate_store.hpp"
@@ -142,6 +142,11 @@ protected:
 
 private:
     void notifyVisibleRectsChanged() override;
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    void generatePixmap(Okular::PixmapRequest* request) override;
+    void notifyPageChanged(int page, int flags) override;
+    void notifyContentsCleared(int flags) override;
+#endif
     std::pair<Okular::SigningResult, QString> signResult(const Okular::NewSignatureData& data,
                                                          const QString& rFilename);
 
@@ -149,7 +154,7 @@ private:
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     void setupActions();
     void setupThemeActions();
-    void updatePagePlaceholderColor(Model::ReadingTheme theme);
+    void updatePageBackground(Model::ReadingTheme theme);
     void syncThemeActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
@@ -202,7 +207,7 @@ private:
     // transfers to the caller's Okular page vector.
     [[nodiscard]] Okular::Page* makeWithheldPage() const;
     // Drops worker-derived UI state while the placeholder withholds the document.
-    void clearPlaceholderDerivedState();
+    void clearPageErrorDerivedState();
     // Must be called while userMutex() is held; drops cached UI objects
     // derived from the worker document.
     void clearWorkerDerivedState();
@@ -280,7 +285,7 @@ private:
     // Single owner of interrupted-display state: sandbox-gate withholding
     // (restorable through an Okular reopen) and unrecoverable worker failure
     // (terminal for the generator lifetime).
-    Placeholder m_placeholder;
+    Page::Error m_pageError;
 
     // Session-scope worker configuration; EPUB settings are fixed during
     // worker startup (changes require restarting Okular rather than being
@@ -293,7 +298,7 @@ private:
     static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
     std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-    PageColorOverride m_pageColorOverride;
+    Page::Background m_pageBackground;
 #endif
 
     // Restart decision state: whether pending settings need an Okular restart.

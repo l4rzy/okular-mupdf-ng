@@ -32,6 +32,7 @@
 #include <okular/core/observer.h>
 #include <okular/core/page.h>
 #include <okular/core/settings_core.h>
+#include <okular/core/tile.h>
 #include <okular/interfaces/configinterface.h>
 
 #include <algorithm>
@@ -39,6 +40,9 @@
 
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+#include "generator/page/background.hpp"
+#endif
 
 class TestGuiClient : public KXMLGUIClient {
 public:
@@ -133,6 +137,249 @@ private slots:
         }
     }
 
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    void loadingPixmapsRemainIncomplete_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<int>("height");
+        QTest::addColumn<bool>("tiled");
+        QTest::addColumn<bool>("rotated");
+        QTest::addColumn<bool>("asynchronous");
+        QTest::newRow("page") << 300 << 400 << false << false << true;
+        QTest::newRow("zoom") << 900 << 1200 << false << false << true;
+        QTest::newRow("tiles") << 6000 << 8000 << true << false << true;
+        QTest::newRow("rotated") << 400 << 300 << false << true << true;
+        QTest::newRow("rotated-tiles") << 8000 << 6000 << true << true << true;
+        QTest::newRow("synchronous") << 300 << 400 << false << false << false;
+    }
+
+    void loadingPixmapsRemainIncomplete()
+    {
+        QFETCH(int, width);
+        QFETCH(int, height);
+        QFETCH(bool, tiled);
+        QFETCH(bool, rotated);
+        QFETCH(bool, asynchronous);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("ReadingTheme", "Dark");
+        config->sync();
+        const auto restore = qScopeGuard([&] {
+            general.writeEntry("ReadingTheme", "Default");
+            config->sync();
+        });
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        if (rotated)
+            document.setRotation(Okular::Rotation90);
+        const Okular::NormalizedRect region =
+            tiled ? Okular::NormalizedRect(0, 0, 0.05, 0.05) : Okular::NormalizedRect(0, 0, 1, 1);
+
+        struct Observer : Okular::DocumentObserver {
+            const Okular::Page* page = nullptr;
+            int width = 0;
+            int height = 0;
+            Okular::NormalizedRect region;
+            bool sawIncomplete = false;
+            int completed = 0;
+            bool sawColoredTiles = false;
+            bool invalidPreviewPixels = false;
+
+            void notifyPageChanged(int, int flags) override
+            {
+                if (!(flags & Pixmap))
+                    return;
+                if (page->hasPixmap(this, width, height, region))
+                    ++completed;
+                else {
+                    sawIncomplete = true;
+                    if (completed == 0 && page->hasTilesManager(this)) {
+                        for (const auto& tile : page->tilesAt(this, { 0, 0, 1, 1 })) {
+                            if (!tile.pixmap() || tile.pixmap()->isNull())
+                                continue;
+                            sawColoredTiles = true;
+                            const QImage image = tile.pixmap()->toImage();
+                            invalidPreviewPixels |= image.pixelColor(0, 0) != QColor(32, 33, 36)
+                                || image.pixelColor(image.width() - 1, image.height() - 1) != QColor(32, 33, 36);
+                        }
+                    }
+                }
+            }
+        } observer;
+
+        observer.page = document.page(0);
+        observer.width = width;
+        observer.height = height;
+        observer.region = region;
+        document.addObserver(&observer);
+        const auto remove = qScopeGuard([&] { document.removeObserver(&observer); });
+        document.setVisiblePageRects({ new Okular::VisiblePageRect(0, region) });
+        auto request = [&] {
+            auto* pixmap = new Okular::PixmapRequest(&observer,
+                                                     0,
+                                                     width,
+                                                     height,
+                                                     1,
+                                                     0,
+                                                     asynchronous ? Okular::PixmapRequest::Asynchronous
+                                                                  : Okular::PixmapRequest::NoFeature);
+            if (tiled)
+                pixmap->setNormalizedRect(region);
+            document.requestPixmaps({ pixmap });
+        };
+        // Exercise initial loading, an explicit refresh (which also sees the
+        // unregistered preview observer), and a second render after invalidation.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            observer.sawIncomplete = false;
+            request();
+            QTRY_VERIFY_WITH_TIMEOUT(observer.page->hasPixmap(&observer, width, height, region), 10000);
+            if (asynchronous)
+                QVERIFY(observer.sawIncomplete);
+            QCOMPARE(observer.page->hasTilesManager(&observer), tiled);
+            if (tiled && !rotated)
+                QVERIFY(observer.sawColoredTiles);
+            QVERIFY(!observer.invalidPreviewPixels);
+            if (attempt == 0) {
+                const int previousCompletions = observer.completed;
+                document.refreshPixmaps(0);
+                QTRY_VERIFY_WITH_TIMEOUT(observer.completed > previousCompletions, 10000);
+                const_cast<Okular::Page*>(observer.page)->deletePixmaps();
+            }
+        }
+    }
+
+    void backgroundRotationLifecycle_data()
+    {
+        QTest::addColumn<int>("rotation");
+        QTest::newRow("clockwise") << int(Okular::Rotation90);
+        QTest::newRow("counterclockwise") << int(Okular::Rotation270);
+    }
+
+    void backgroundRotationLifecycle()
+    {
+        QFETCH(int, rotation);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("ReadingTheme", "Default");
+        config->sync();
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        // Okular restores the last rotation for this fixture between test rows.
+        document.setRotation(Okular::Rotation0);
+        Mu::Generator::Page::Background background;
+        auto* page = const_cast<Okular::Page*>(document.page(0));
+        background.setTheme(Mu::Model::ReadingTheme::Dark);
+        background.seed(*page);
+
+        struct Observer : Okular::DocumentObserver {
+            Mu::Generator::Page::Background* background = nullptr;
+            Okular::Page* page = nullptr;
+            bool sawVertical = false;
+            bool restoredHorizontal = false;
+            bool clearing = false;
+            bool removedLatePreview = false;
+
+            void notifyPageChanged(int number, int flags) override
+            {
+                if (number != 0 || !(flags & Pixmap))
+                    return;
+                sawVertical |= page->hasPixmap(background, 1, 256);
+                restoredHorizontal |= sawVertical && page->hasPixmap(background, 256, 1);
+                const bool hadPreview = page->hasPixmap(background);
+                background->refresh(*page);
+                removedLatePreview |= clearing && hadPreview && !page->hasPixmap(background);
+            }
+        } observer;
+
+        observer.background = &background;
+        observer.page = page;
+        document.addObserver(&observer);
+        const auto cleanup = qScopeGuard([&] {
+            document.removeObserver(&observer);
+            document.closeDocument();
+        });
+        document.setRotation(static_cast<Okular::Rotation>(rotation));
+        QTRY_VERIFY(observer.restoredHorizontal);
+        QVERIFY(page->hasPixmap(&background, 256, 1));
+        // The queued Dusk rotation must not resurrect a preview after reset.
+        background.setTheme(Mu::Model::ReadingTheme::Dusk);
+        background.seed(*page);
+        background.setTheme(Mu::Model::ReadingTheme::Default);
+        background.seed(*page);
+        observer.clearing = true;
+        QTRY_VERIFY(observer.removedLatePreview);
+        QVERIFY(!page->hasPixmap(&background));
+        // Close with another preview rotation still queued, exercising teardown.
+        background.setTheme(Mu::Model::ReadingTheme::Dark);
+        background.seed(*page);
+    }
+
+    void backgroundRenderLifecycle_data()
+    {
+        QTest::addColumn<bool>("closeImmediately");
+        QTest::newRow("cancel-and-replace") << false;
+        QTest::newRow("close-during-render") << true;
+    }
+
+    void backgroundRenderLifecycle()
+    {
+        QFETCH(bool, closeImmediately);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("ReadingTheme", "Dark");
+        config->sync();
+        const auto restore = qScopeGuard([&] {
+            general.writeEntry("ReadingTheme", "Default");
+            config->sync();
+        });
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+
+        struct Observer : Okular::DocumentObserver {
+            Okular::Document* document = nullptr;
+            bool replace = false;
+            bool requestedReplacement = false;
+
+            void notifyPageChanged(int number, int flags) override
+            {
+                if (number != 0 || !(flags & Pixmap) || !replace || requestedReplacement
+                    || document->page(0)->hasPixmap(this, 600, 850))
+                    return;
+                requestedReplacement = true;
+                // A view may supersede a request inside the partial notification.
+                document->requestPixmaps(
+                    { new Okular::PixmapRequest(this, 0, 900, 1200, 1, 0, Okular::PixmapRequest::Asynchronous) });
+            }
+        } observer;
+
+        observer.document = &document;
+        observer.replace = !closeImmediately;
+        document.addObserver(&observer);
+        const auto cleanup = qScopeGuard([&] { document.removeObserver(&observer); });
+        document.requestPixmaps(
+            { new Okular::PixmapRequest(&observer, 0, 600, 850, 1, 0, Okular::PixmapRequest::Asynchronous) });
+        if (!closeImmediately) {
+            QVERIFY(observer.requestedReplacement);
+            QTRY_VERIFY_WITH_TIMEOUT(document.page(0)->hasPixmap(&observer, 900, 1200), 10000);
+            QVERIFY(!document.page(0)->hasPixmap(&observer, 600, 850));
+        }
+        document.closeDocument();
+    }
+
+#endif
+
     void readingThemeMenu_data()
     {
         QTest::addColumn<QString>("path");
@@ -199,21 +446,10 @@ private slots:
                 QCOMPARE(document.page(page)->placeholderColor(), expectedColor);
                 QCOMPARE(other.page(page)->placeholderColor(), expectedColor);
             }
+#endif
             QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
             QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
             QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
-#else
-            if (action->text() != QStringLiteral("Dark") && action->text() != QStringLiteral("Dusk")) {
-                QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
-                QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
-                QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
-            } else {
-                QVERIFY(Okular::SettingsCore::changeColors());
-                QCOMPARE(Okular::SettingsCore::renderMode(), int(Okular::SettingsCore::EnumRenderMode::Paper));
-                QCOMPARE(Okular::SettingsCore::paperColor(),
-                         action->text() == QStringLiteral("Dusk") ? QColor(48, 49, 52) : QColor(32, 33, 36));
-            }
-#endif
         }
         const QStringList toggles { "dusk", "dusk", "dark", "dusk", "dark", "dark", "twilight", "twilight" };
         const QStringList expected { "Dusk", "Default", "Dark", "Dusk", "Dark", "Default", "Twilight", "Default" };
@@ -267,11 +503,9 @@ private slots:
         actions->action(QStringLiteral("mupdf_theme_dark"))->trigger();
         QTRY_VERIFY(observer.refreshes > previousRefreshes);
         document.closeDocument();
-#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
         QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
+#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
         QCOMPARE(other.page(0)->placeholderColor(), QColor(32, 33, 36));
-#else
-        QCOMPARE(Okular::SettingsCore::paperColor(), QColor(32, 33, 36));
 #endif
         other.closeDocument();
         QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);

@@ -192,7 +192,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         }
     });
     connect(&m_worker, &Plugin::WorkerClient::workerRestarted, this, [this] {
-        if (m_placeholder.isActive())
+        if (m_pageError.isActive())
             return;
         // Defer recovery to avoid reopening the document from inside a worker
         // lifecycle signal; the queued call runs on the generator's Qt thread.
@@ -210,9 +210,9 @@ Main::Main(QObject* parent, const QVariantList& args)
                 if (sandboxGated()) {
                     // Degraded sandbox under Strict after restart: withhold document,
                     // keep session failed until Relaxed triggers reopenWithheldDocument.
-                    m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
+                    m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
                     m_worker.close();
-                    clearPlaceholderDerivedState();
+                    clearPageErrorDerivedState();
                     m_worker.commitSessionFailed();
                     Q_EMIT warning(sandboxGateMessage(), LongWarningMs);
                     return;
@@ -337,14 +337,10 @@ void Main::scheduleCacheVacuum()
     });
 }
 
-// Keep Okular's original paper color separate from the loading-placeholder override.
+// Read the user's paper color without changing accessibility preferences.
 void Main::refreshPaperColor()
 {
-#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     const QColor color = documentMetaData(Okular::Generator::PaperColorMetaData, true).value<QColor>();
-#else
-    const QColor color = PageColorOverride::originalPaperColor();
-#endif
     m_paperColorRgb = color.isValid() ? static_cast<std::uint32_t>(qRgb(color.red(), color.green(), color.blue()))
                                       : DefaultPaperColorRgb;
 }
@@ -357,8 +353,7 @@ bool Main::reparseConfig()
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
-    updatePagePlaceholderColor(m_placeholder.isActive() ? Model::ReadingTheme::Default
-                                                        : settings.rendering.readingTheme);
+    updatePageBackground(m_pageError.isActive() ? Model::ReadingTheme::Default : settings.rendering.readingTheme);
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
@@ -368,7 +363,7 @@ bool Main::reparseConfig()
     const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
     const bool pendingJavaScriptChanged =
         !m_pendingFormJavaScriptEnabled || *m_pendingFormJavaScriptEnabled != settings.formJavaScriptEnabled;
-    const bool activePdf = document() && !m_placeholder.isActive() && !m_okularPages.isEmpty()
+    const bool activePdf = document() && !m_pageError.isActive() && !m_okularPages.isEmpty()
         && m_document.type == Model::DocumentType::Pdf;
     const bool deferJavaScript = formJavaScriptChanged && activePdf && (m_formsDirty || m_annotationsDirty);
     const bool refreshJavaScript = formJavaScriptChanged && activePdf && !deferJavaScript && workerReady();
@@ -408,7 +403,7 @@ bool Main::reparseConfig()
     // successful reopen clears it in initPages(), so no render can reach the
     // worker while the document is still closed there.
     const bool newBlocked = sandboxGated();
-    if (newBlocked != m_placeholder.isActive() && document()) {
+    if (newBlocked != m_pageError.isActive() && document()) {
         MU_LOG(debug,
                "Mu::Generator::Main",
                std::string("sandbox enforcement changed: ") + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
@@ -423,10 +418,10 @@ bool Main::reparseConfig()
             }
             // Side effects run after activate() publishes the flag, so any
             // render triggered by them observes the active state.
-            m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
+            m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
             m_worker.close();
-            clearPlaceholderDerivedState();
-        } else if (m_placeholder.deactivate()) {
+            clearPageErrorDerivedState();
+        } else if (m_pageError.deactivate()) {
             reopenWithheldDocument();
         }
     }
@@ -518,14 +513,16 @@ KActionCollection* Main::actionCollection() const
     return KXMLGUIClient::actionCollection();
 }
 
-void Main::updatePagePlaceholderColor(Model::ReadingTheme theme)
+void Main::updatePageBackground(Model::ReadingTheme theme)
 {
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
 #else
-    m_pageColorOverride.setTheme(m_okularPages.isEmpty() ? Model::ReadingTheme::Default : theme);
+    m_pageBackground.setTheme(theme);
+    for (auto* page : m_okularPages)
+        m_pageBackground.seed(*page);
 #endif
 }
 
@@ -594,7 +591,7 @@ void Main::setupThemeActions()
 
 void Main::syncThemeActions()
 {
-    const bool enabled = !m_okularPages.isEmpty() && !m_placeholder.isActive();
+    const bool enabled = !m_okularPages.isEmpty() && !m_pageError.isActive();
     actionCollection()->action(QStringLiteral("mupdf_theme"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dusk"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
@@ -609,7 +606,7 @@ void Main::syncOcrActions()
 {
     syncThemeActions();
     const bool enabled =
-        m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_placeholder.isActive();
+        m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_pageError.isActive();
     const bool hasModels = !Config::installedOcrModels().isEmpty();
     actionCollection()->action(QStringLiteral("mupdf_ocr"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->setEnabled(enabled && hasModels);
@@ -650,7 +647,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
                                              QList<Plugin::WorkerClient::PageInfo>& pageInfos)
 {
     // Phase 1: reset state scoped to the previous document generation.
-    m_placeholder.reset();
+    m_pageError.reset();
     m_ocrController->reset();
 
     // Phase 2: document identity from a single worker round trip. Every
@@ -790,7 +787,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
-    updatePagePlaceholderColor(m_settings.rendering.readingTheme);
+    updatePageBackground(m_settings.rendering.readingTheme);
     syncOcrActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
@@ -988,7 +985,7 @@ bool Main::sandboxGated() const
 // the state.
 bool Main::workerReady() const
 {
-    return m_worker.operational() && !m_placeholder.isActive();
+    return m_worker.operational() && !m_pageError.isActive();
 }
 
 // Localized Strict-gate guidance shown on the placeholder card and in
@@ -1003,7 +1000,7 @@ QString Main::sandboxGateMessage() const
 }
 
 // =============================================================================
-// Withheld Documents & Placeholder State
+// Withheld Documents & Error State
 // =============================================================================
 
 Okular::Page* Main::makeWithheldPage() const
@@ -1022,9 +1019,9 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
 {
     // Side effects run after activate() publishes the flag; at load time the
     // worker has no document and no derived state, so both are best-effort.
-    m_placeholder.activate(sandboxGateMessage(), Placeholder::Reason::SandboxGate);
+    m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
     m_worker.close();
-    clearPlaceholderDerivedState();
+    clearPageErrorDerivedState();
     pages.append(makeWithheldPage());
     m_okularPages = pages;
     return Okular::Document::OpenSuccess;
@@ -1048,9 +1045,9 @@ void Main::clearWorkerDerivedState()
 
 // Drops worker-derived UI state while the placeholder withholds the document,
 // then refreshes pages so placeholder images replace stale real pixmaps.
-void Main::clearPlaceholderDerivedState()
+void Main::clearPageErrorDerivedState()
 {
-    updatePagePlaceholderColor(Model::ReadingTheme::Default);
+    updatePageBackground(Model::ReadingTheme::Default);
     syncOcrActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
@@ -1113,7 +1110,7 @@ void Main::reopenWithheldDocumentInternal()
 Okular::Generator::SwapBackingFileResult Main::swapBackingFile(const QString& newFileName,
                                                                QList<Okular::Page*>& newPages)
 {
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return SwapBackingFileError;
 
     // Okular adopts temporary replacement-page contents into these existing
@@ -1159,7 +1156,7 @@ void Main::notifyVisibleRectsChanged()
 
 void Main::observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText)
 {
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return;
     if (Model::isReflowableDocument(m_document.type) || !m_defaultLayerVisibility.load())
         return;
@@ -1310,14 +1307,14 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 void Main::failClosed(const QString& message)
 {
     // Terminal state is sticky; repeated worker failures must not re-notify.
-    if (m_placeholder.isActive() && m_placeholder.reason() == Placeholder::Reason::WorkerUnavailable)
+    if (m_pageError.isActive() && m_pageError.reason() == Page::Error::Reason::WorkerUnavailable)
         return;
 
-    m_placeholder.activate(message, Placeholder::Reason::WorkerUnavailable);
+    m_pageError.activate(message, Page::Error::Reason::WorkerUnavailable);
     // A terminal placeholder must not leave a connected worker able to mutate
     // a document whose UI state is no longer recoverable.
     m_worker.close();
-    clearPlaceholderDerivedState();
+    clearPageErrorDerivedState();
     Q_EMIT error(message, 0);
 
     const Okular::Document* currentDocument = document();
@@ -1333,14 +1330,14 @@ void Main::failClosed(const QString& message)
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
-    updatePagePlaceholderColor(Model::ReadingTheme::Default);
+    updatePageBackground(Model::ReadingTheme::Default);
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
     m_observingVisiblePages = false;
     // Step 1: Make queued OCR completions harmless before releasing page state.
     m_ocrController->reset();
     QCoreApplication::removePostedEvents(this);
-    m_placeholder.reset();
+    m_pageError.reset();
     // Step 2: Clear form proxies and cached UI objects while Okular's user
     // mutex protects their ownership.
     m_formsDirty = false;
@@ -1365,7 +1362,7 @@ bool Main::doCloseDocument()
 // Okular Generator Func: returns the requested document metadata.
 Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo::Key>& keys) const
 {
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return { };
     // Native text extraction is worker-owned.
     if (workerReady()) {
@@ -1476,7 +1473,7 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
 Okular::FontInfo::List Main::fontsForPage(int page)
 {
     QMutexLocker locker(userMutex());
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return { };
     if (workerReady()) {
         const std::vector<Model::Font> source = m_worker.fonts(page);
@@ -1502,6 +1499,43 @@ void Main::clearPageDisplayState(int page)
     }
 }
 
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+// Publish the loading image on the GUI thread; Okular marks partial updates as
+// incomplete, so the background can never satisfy the actual render request.
+void Main::generatePixmap(Okular::PixmapRequest* request)
+{
+    m_pageBackground.seed(*request->page());
+    const bool publishBackground = request->asynchronous() && request->partialUpdatesWanted()
+        && !request->page()->hasPixmap(request->observer()) && !m_pageError.isActive();
+    const QSize size = request->isTile()
+        ? request->normalizedRect().geometry(request->width(), request->height()).size()
+        : QSize(request->width(), request->height());
+    // Start the normal generator first, making it busy before notifying the view.
+    // Async completion is queued to this thread, keeping request alive here.
+    Okular::Generator::generatePixmap(request);
+    if (publishBackground) {
+        const QImage image = m_pageBackground.partialImage(size);
+        if (!image.isNull())
+            signalPartialPixmapRequest(request, image);
+    }
+}
+
+void Main::notifyPageChanged(int page, int flags)
+{
+    if ((flags & Okular::DocumentObserver::Pixmap) && page >= 0 && page < m_okularPages.size()) {
+        m_pageBackground.refresh(*m_okularPages.at(page));
+    }
+}
+
+void Main::notifyContentsCleared(int flags)
+{
+    if (flags & Okular::DocumentObserver::Pixmap)
+        for (auto* page : m_okularPages)
+            m_pageBackground.seed(*page);
+}
+
+#endif
+
 // Okular Generator Func: renders a page or tile for Okular.
 QImage Main::image(Okular::PixmapRequest* request)
 {
@@ -1515,8 +1549,8 @@ QImage Main::image(Okular::PixmapRequest* request)
 
     const int pageNum = request->page()->number();
 
-    if (m_placeholder.isActive()) {
-        QImage image = m_placeholder.image(request->width(), request->height());
+    if (m_pageError.isActive()) {
+        QImage image = m_pageError.image(request->width(), request->height());
         return shouldAbort() ? QImage { } : image;
     }
 
@@ -1677,7 +1711,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     };
     if (request->shouldAbortExtraction())
         return nullptr;
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return nullptr;
     const int pageNum = request->page()->number();
 
@@ -1758,7 +1792,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 {
     if (Model::isReflowableDocument(m_document.type))
         return nullptr;
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return nullptr;
     QMutexLocker locker(userMutex());
     // Convert shared embedded-file models to Okular objects on first
@@ -1786,7 +1820,7 @@ bool Main::supportsOption(SaveOption option) const
 {
     if (Model::isReflowableDocument(m_document.type))
         return false;
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return false;
     return option == SaveChanges;
 }
@@ -1795,9 +1829,9 @@ bool Main::supportsOption(SaveOption option) const
 bool Main::save(const QString& fileName, SaveOptions options, QString* errorText)
 {
     Q_UNUSED(options)
-    if (m_placeholder.isActive()) {
+    if (m_pageError.isActive()) {
         if (errorText)
-            *errorText = m_placeholder.reason() == Placeholder::Reason::SandboxGate
+            *errorText = m_pageError.reason() == Page::Error::Reason::SandboxGate
                 ? i18n("Strict sandbox enforcement blocks this document.")
                 : i18n("MuPDF worker is unavailable.");
         return false;
@@ -2021,9 +2055,9 @@ PrintOptionsPage* Main::printConfigurationWidget() const
 std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSignatureData& data,
                                                            const QString& rFilename)
 {
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return { Okular::GenericSigningError,
-                 m_placeholder.reason() == Placeholder::Reason::WorkerUnavailable
+                 m_pageError.reason() == Page::Error::Reason::WorkerUnavailable
                      ? QStringLiteral("MuPDF worker is unavailable")
                      : QStringLiteral("Strict sandbox enforcement blocks this document") };
     if (workerReady()) {
@@ -2083,7 +2117,7 @@ bool Main::canSign() const
 {
     if (Model::isReflowableDocument(m_document.type))
         return false;
-    if (m_placeholder.isActive())
+    if (m_pageError.isActive())
         return false;
     return !Plugin::Crypto::signingCertificates().isEmpty();
 }
