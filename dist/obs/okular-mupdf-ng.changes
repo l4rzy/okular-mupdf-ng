@@ -1,7 +1,9 @@
 -------------------------------------------------------------------
-Tue Oct 20 04:24:51 UTC 2026 - l4rzy <me@23ro.org>
+Wed Oct 21 12:00:00 UTC 2026 - l4rzy <me@23ro.org>
 
-- Update to version 0.4.8.
+- Update to version 0.4.9.
+- Refactor for readability.
+- Use a pixmap for the dark theme instead of accessibility inversion, improving selection in dark mode.
 - Support icon and custom image stamps embedded in PDFs; add native stamp colors.
 - Share one menu controller per window and preserve menu order across tab switches.
 - Display annotation operation errors in the GUI; update Vietnamese translations.

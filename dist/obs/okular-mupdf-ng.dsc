@@ -2,7 +2,7 @@ Format: 3.0 (quilt)
 Source: okular-mupdf-ng
 Binary: okular-mupdf-ng
 Architecture: any
-Version: 0.4.8-1
+Version: 0.4.9-1
 Maintainer: l4rzy <me@23ro.org>
 Homepage: https://github.com/l4rzy/okular-mupdf-ng
 Standards-Version: 4.7.0
@@ -37,7 +37,7 @@ Build-Depends: debhelper-compat (= 13),
  libnss3-tools,
  openssl,
  tesseract-ocr-eng
-Debtransform-Tar: okular-mupdf-ng-0.4.8.tar.gz
+Debtransform-Tar: okular-mupdf-ng-@VERSION@.tar.gz
 Debtransform-Files-Tar:
 Debtransform-Files: mupdf-1.28.5-source.tar.gz
 Debtransform-Release: 1
