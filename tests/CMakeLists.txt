@@ -289,7 +289,7 @@ target_compile_definitions(test_generator_ocr PRIVATE
     TESSDATA_DIR="${TESSDATA_DIR}")
 add_dependencies(test_generator_ocr okularGenerator_mupdfng mupdfng-worker)
 if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
-    target_sources(test_generator_ocr PRIVATE ../src/generator/page/background.cpp)
+    target_sources(test_generator_ocr PRIVATE ../src/generator/page/placeholder.cpp)
 endif()
 
 add_layer_test(test_generator_page_error generator/test_page_error.cpp generator)
@@ -315,10 +315,10 @@ add_layer_test(test_generator_config generator/test_config.cpp generator
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
 target_link_libraries(test_generator_config PRIVATE Qt6::Gui Qt6::Concurrent KF6::I18n mupdf_generator_settings mupdf_plugin_crypto)
 
-add_layer_test(test_generator_pagebackground generator/test_page_background.cpp generator
-    ../src/generator/page/background.cpp)
-target_include_directories(test_generator_pagebackground PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
-target_link_libraries(test_generator_pagebackground PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
+add_layer_test(test_generator_pageplaceholder generator/test_page_placeholder.cpp generator
+    ../src/generator/page/placeholder.cpp)
+target_include_directories(test_generator_pageplaceholder PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
+target_link_libraries(test_generator_pageplaceholder PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore)
 
 add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
 target_include_directories(test_generator_signaturepreview PRIVATE ../src)

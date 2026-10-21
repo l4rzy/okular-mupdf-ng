@@ -14,7 +14,7 @@ namespace Mu::Generator::Page {
 // Never register this observer with Document: its pixmaps are only cross-observer
 // previews, and must not acquire real render requests during refreshPixmaps().
 // All methods run on the generator's GUI thread, including partialImage().
-class Background final : public Okular::DocumentObserver {
+class Placeholder final : public Okular::DocumentObserver {
 public:
     void setTheme(Model::DocumentTheme theme);
     void seed(Okular::Page& page);

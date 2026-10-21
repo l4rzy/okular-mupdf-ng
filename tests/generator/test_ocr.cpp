@@ -41,7 +41,7 @@
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-#include "generator/page/background.hpp"
+#include "generator/page/placeholder.hpp"
 #endif
 
 class TestGuiClient : public KXMLGUIClient {
@@ -153,6 +153,8 @@ private slots:
         QTest::newRow("rotated-tiles") << 8000 << 6000 << true << true << true << true;
         QTest::newRow("synchronous") << 300 << 400 << false << false << false << true;
         QTest::newRow("default") << 300 << 400 << false << false << true << false;
+        QTest::newRow("default-rotated") << 400 << 300 << false << true << true << false;
+        QTest::newRow("default-tiles") << 6000 << 8000 << true << false << true << false;
         QTest::newRow("default-synchronous") << 300 << 400 << false << false << false << false;
     }
 
@@ -249,8 +251,10 @@ private slots:
             if (!themed)
                 QVERIFY(!observer.sawLoadingPixmap);
             QCOMPARE(observer.page->hasTilesManager(&observer), tiled);
-            if (tiled && !rotated)
+            if (tiled && !rotated && themed)
                 QVERIFY(observer.sawColoredTiles);
+            if (!themed)
+                QVERIFY(!observer.sawColoredTiles);
             QVERIFY(!observer.invalidPreviewPixels);
             if (attempt == 0) {
                 const int previousCompletions = observer.completed;
@@ -261,14 +265,14 @@ private slots:
         }
     }
 
-    void backgroundRotationLifecycle_data()
+    void placeholderRotationLifecycle_data()
     {
         QTest::addColumn<int>("rotation");
         QTest::newRow("clockwise") << int(Okular::Rotation90);
         QTest::newRow("counterclockwise") << int(Okular::Rotation270);
     }
 
-    void backgroundRotationLifecycle()
+    void placeholderRotationLifecycle()
     {
         QFETCH(int, rotation);
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
@@ -283,13 +287,13 @@ private slots:
         document.reparseConfig();
         // Okular restores the last rotation for this fixture between test rows.
         document.setRotation(Okular::Rotation0);
-        Mu::Generator::Page::Background background;
+        Mu::Generator::Page::Placeholder placeholder;
         auto* page = const_cast<Okular::Page*>(document.page(0));
-        background.setTheme(Mu::Model::DocumentTheme::Dark);
-        background.seed(*page);
+        placeholder.setTheme(Mu::Model::DocumentTheme::Dark);
+        placeholder.seed(*page);
 
         struct Observer : Okular::DocumentObserver {
-            Mu::Generator::Page::Background* background = nullptr;
+            Mu::Generator::Page::Placeholder* placeholder = nullptr;
             Okular::Page* page = nullptr;
             bool sawVertical = false;
             bool restoredHorizontal = false;
@@ -300,15 +304,15 @@ private slots:
             {
                 if (number != 0 || !(flags & Pixmap))
                     return;
-                sawVertical |= page->hasPixmap(background, 1, 256);
-                restoredHorizontal |= sawVertical && page->hasPixmap(background, 256, 1);
-                const bool hadPreview = page->hasPixmap(background);
-                background->refresh(*page);
-                removedLatePreview |= clearing && hadPreview && !page->hasPixmap(background);
+                sawVertical |= page->hasPixmap(placeholder, 1, 256);
+                restoredHorizontal |= sawVertical && page->hasPixmap(placeholder, 256, 1);
+                const bool hadPreview = page->hasPixmap(placeholder);
+                placeholder->refresh(*page);
+                removedLatePreview |= clearing && hadPreview && !page->hasPixmap(placeholder);
             }
         } observer;
 
-        observer.background = &background;
+        observer.placeholder = &placeholder;
         observer.page = page;
         document.addObserver(&observer);
         const auto cleanup = qScopeGuard([&] {
@@ -317,28 +321,28 @@ private slots:
         });
         document.setRotation(static_cast<Okular::Rotation>(rotation));
         QTRY_VERIFY(observer.restoredHorizontal);
-        QVERIFY(page->hasPixmap(&background, 256, 1));
+        QVERIFY(page->hasPixmap(&placeholder, 256, 1));
         // The queued Dusk rotation must not resurrect a preview after reset.
-        background.setTheme(Mu::Model::DocumentTheme::Dusk);
-        background.seed(*page);
-        background.setTheme(Mu::Model::DocumentTheme::Default);
-        background.seed(*page);
+        placeholder.setTheme(Mu::Model::DocumentTheme::Dusk);
+        placeholder.seed(*page);
+        placeholder.setTheme(Mu::Model::DocumentTheme::Default);
+        placeholder.seed(*page);
         observer.clearing = true;
         QTRY_VERIFY(observer.removedLatePreview);
-        QVERIFY(!page->hasPixmap(&background));
+        QVERIFY(!page->hasPixmap(&placeholder));
         // Close with another preview rotation still queued, exercising teardown.
-        background.setTheme(Mu::Model::DocumentTheme::Dark);
-        background.seed(*page);
+        placeholder.setTheme(Mu::Model::DocumentTheme::Dark);
+        placeholder.seed(*page);
     }
 
-    void backgroundRenderLifecycle_data()
+    void placeholderRenderLifecycle_data()
     {
         QTest::addColumn<bool>("closeImmediately");
         QTest::newRow("cancel-and-replace") << false;
         QTest::newRow("close-during-render") << true;
     }
 
-    void backgroundRenderLifecycle()
+    void placeholderRenderLifecycle()
     {
         QFETCH(bool, closeImmediately);
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));

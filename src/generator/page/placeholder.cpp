@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/page/background.hpp"
+#include "generator/page/placeholder.hpp"
 #include "shared/model/theme_colors.hpp"
 #include "shared/protocol/limits.hpp"
 #include <QTransform>
@@ -9,7 +9,7 @@
 
 namespace Mu::Generator::Page {
 
-void Background::setTheme(Model::DocumentTheme theme)
+void Placeholder::setTheme(Model::DocumentTheme theme)
 {
     const QColor color =
         theme == Model::DocumentTheme::Default ? QColor { } : QColor::fromRgb(Model::ThemeColor::getBackground(theme));
@@ -28,7 +28,7 @@ void Background::setTheme(Model::DocumentTheme theme)
     }
 }
 
-void Background::seed(Okular::Page& page)
+void Placeholder::seed(Okular::Page& page)
 {
     // PagePainter can borrow this pixmap, but hasPixmap(viewObserver) remains
     // false. Copies share one small allocation across every page in the document.
@@ -42,7 +42,7 @@ void Background::seed(Okular::Page& page)
     }
 }
 
-void Background::refresh(Okular::Page& page)
+void Placeholder::refresh(Okular::Page& page)
 {
     // Rotation jobs may finish after deletePixmap(), including after Default
     // was selected. Remove those stale previews without scheduling another job.
@@ -55,7 +55,7 @@ void Background::refresh(Okular::Page& page)
     }
 }
 
-QImage Background::partialImage(QSize size) const
+QImage Placeholder::partialImage(QSize size) const
 {
     // Tile geometry uses inclusive right/bottom edges, allowing one extra pixel.
     constexpr int maxDimension = Limit::MaxTiledRenderDimension + 1;

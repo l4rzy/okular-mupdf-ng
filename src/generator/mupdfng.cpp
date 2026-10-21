@@ -353,7 +353,7 @@ bool Main::reparseConfig()
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
-    updatePageBackground(m_pageError.isActive() ? Model::DocumentTheme::Default : settings.rendering.documentTheme);
+    updatePagePlaceholder(m_pageError.isActive() ? Model::DocumentTheme::Default : settings.rendering.documentTheme);
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
@@ -513,22 +513,23 @@ KActionCollection* Main::actionCollection() const
     return KXMLGUIClient::actionCollection();
 }
 
-void Main::updatePageBackground(Model::DocumentTheme theme)
+void Main::updatePagePlaceholder(Model::DocumentTheme theme)
 {
     const bool enabled = theme != Model::DocumentTheme::Default;
-    if (!enabled && !m_hasPageBackground)
+    if (!enabled && !m_hasPagePlaceholder)
         return;
     // A themed-to-Default transition clears existing previews once. Fresh
     // unthemed pages use Okular's normal background without visiting this code.
-    m_hasPageBackground = enabled;
+    m_hasPagePlaceholder = enabled;
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
 #else
-    m_pageBackground.setTheme(theme);
+    m_hasUsedPagePlaceholder |= enabled;
+    m_pagePlaceholder.setTheme(theme);
     for (auto* page : m_okularPages)
-        m_pageBackground.seed(*page);
+        m_pagePlaceholder.seed(*page);
 #endif
 }
 
@@ -793,7 +794,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
-    updatePageBackground(m_settings.rendering.documentTheme);
+    updatePagePlaceholder(m_settings.rendering.documentTheme);
     syncOcrActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
@@ -1053,7 +1054,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPageErrorDerivedState()
 {
-    updatePageBackground(Model::DocumentTheme::Default);
+    updatePagePlaceholder(Model::DocumentTheme::Default);
     syncOcrActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
@@ -1336,7 +1337,7 @@ void Main::failClosed(const QString& message)
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
-    updatePageBackground(Model::DocumentTheme::Default);
+    updatePagePlaceholder(Model::DocumentTheme::Default);
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
     m_observingVisiblePages = false;
@@ -1351,6 +1352,9 @@ bool Main::doCloseDocument()
     QMutexLocker locker(userMutex());
     clearWorkerDerivedState();
     m_okularPages.clear();
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    m_hasUsedPagePlaceholder = false;
+#endif
 
     // Step 3: Reset local identity before asking the worker to discard its copy.
     m_document = { };
@@ -1510,12 +1514,12 @@ void Main::clearPageDisplayState(int page)
 // incomplete, so the background can never satisfy the actual render request.
 void Main::generatePixmap(Okular::PixmapRequest* request)
 {
-    if (!m_hasPageBackground || m_pageError.isActive()) {
+    if (!m_hasPagePlaceholder || m_pageError.isActive()) {
         Okular::Generator::generatePixmap(request);
         return;
     }
-    m_pageBackground.seed(*request->page());
-    const bool publishBackground =
+    m_pagePlaceholder.seed(*request->page());
+    const bool publishPlaceholder =
         request->asynchronous() && request->partialUpdatesWanted() && !request->page()->hasPixmap(request->observer());
     const QSize size = request->isTile()
         ? request->normalizedRect().geometry(request->width(), request->height()).size()
@@ -1523,8 +1527,8 @@ void Main::generatePixmap(Okular::PixmapRequest* request)
     // Start the normal generator first, making it busy before notifying the view.
     // Async completion is queued to this thread, keeping request alive here.
     Okular::Generator::generatePixmap(request);
-    if (publishBackground) {
-        const QImage image = m_pageBackground.partialImage(size);
+    if (publishPlaceholder) {
+        const QImage image = m_pagePlaceholder.partialImage(size);
         if (!image.isNull())
             signalPartialPixmapRequest(request, image);
     }
@@ -1532,16 +1536,20 @@ void Main::generatePixmap(Okular::PixmapRequest* request)
 
 void Main::notifyPageChanged(int page, int flags)
 {
+    if (!m_hasUsedPagePlaceholder)
+        return;
     if ((flags & Okular::DocumentObserver::Pixmap) && page >= 0 && page < m_okularPages.size()) {
-        m_pageBackground.refresh(*m_okularPages.at(page));
+        m_pagePlaceholder.refresh(*m_okularPages.at(page));
     }
 }
 
 void Main::notifyContentsCleared(int flags)
 {
-    if (m_hasPageBackground && (flags & Okular::DocumentObserver::Pixmap))
+    if (!m_hasPagePlaceholder)
+        return;
+    if (flags & Okular::DocumentObserver::Pixmap)
         for (auto* page : m_okularPages)
-            m_pageBackground.seed(*page);
+            m_pagePlaceholder.seed(*page);
 }
 
 #endif

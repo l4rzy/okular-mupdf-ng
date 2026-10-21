@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/page/background.hpp"
+#include "generator/page/placeholder.hpp"
 #include <QTemporaryDir>
 #include <QTest>
 #include <limits>
 #include <okular/core/page.h>
 #include <okular/core/settings_core.h>
 
-using Mu::Generator::Page::Background;
+using Mu::Generator::Page::Placeholder;
 using Mu::Model::DocumentTheme;
 
-class TestPageBackground : public QObject {
+class TestPagePlaceholder : public QObject {
     Q_OBJECT
 
     QTemporaryDir m_root;
@@ -22,7 +22,7 @@ private slots:
     {
         QVERIFY(m_root.isValid());
         qputenv("XDG_CONFIG_HOME", m_root.path().toUtf8());
-        Okular::SettingsCore::instance(QStringLiteral("page-background-test"));
+        Okular::SettingsCore::instance(QStringLiteral("page-placeholder-test"));
     }
 
     void colors_data()
@@ -43,7 +43,7 @@ private slots:
         Okular::SettingsCore::setChangeColors(false);
         Okular::SettingsCore::setRenderMode(Okular::SettingsCore::EnumRenderMode::Inverted);
         Okular::SettingsCore::setPaperColor(Qt::yellow);
-        Background fallback;
+        Placeholder fallback;
         fallback.setTheme(static_cast<DocumentTheme>(theme));
         const auto image = fallback.partialImage({ 600, 850 });
         QCOMPARE(image.isNull(), !color.isValid());
@@ -59,7 +59,7 @@ private slots:
 
     void previewsDoNotCompleteViewRequests()
     {
-        Background fallback;
+        Placeholder fallback;
         Okular::DocumentObserver view;
         Okular::Page page(0, 600, 850, Okular::Rotation0);
         fallback.setTheme(DocumentTheme::Dark);
@@ -84,20 +84,20 @@ private slots:
 
     void refreshRemovesLatePreviews()
     {
-        Background background;
+        Placeholder placeholder;
         Okular::Page page(0, 600, 850, Okular::Rotation0);
-        background.setTheme(DocumentTheme::Dark);
-        background.seed(page);
-        QVERIFY(page.hasPixmap(&background, 256, 1));
+        placeholder.setTheme(DocumentTheme::Dark);
+        placeholder.seed(page);
+        QVERIFY(page.hasPixmap(&placeholder, 256, 1));
         // Model a rotation job restoring a preview after Default was selected.
-        background.setTheme(DocumentTheme::Default);
-        QVERIFY(page.hasPixmap(&background));
-        background.refresh(page);
-        QVERIFY(!page.hasPixmap(&background));
+        placeholder.setTheme(DocumentTheme::Default);
+        QVERIFY(page.hasPixmap(&placeholder));
+        placeholder.refresh(page);
+        QVERIFY(!page.hasPixmap(&placeholder));
         // Missing previews still recover when a theme is active.
-        background.setTheme(DocumentTheme::Dusk);
-        background.refresh(page);
-        QVERIFY(page.hasPixmap(&background, 256, 1));
+        placeholder.setTheme(DocumentTheme::Dusk);
+        placeholder.refresh(page);
+        QVERIFY(page.hasPixmap(&placeholder, 256, 1));
     }
 
     void boundedPartialImages_data()
@@ -120,11 +120,11 @@ private slots:
     {
         QFETCH(QSize, size);
         QFETCH(bool, accepted);
-        Background fallback;
+        Placeholder fallback;
         fallback.setTheme(DocumentTheme::Dark);
         QCOMPARE(!fallback.partialImage(size).isNull(), accepted);
     }
 };
 
-QTEST_MAIN(TestPageBackground)
-#include "test_page_background.moc"
+QTEST_MAIN(TestPagePlaceholder)
+#include "test_page_placeholder.moc"

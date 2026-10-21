@@ -278,7 +278,7 @@ set(okularGenerator_mupdfng_SRCS
 )
 
 if(NOT MU_OKULAR_PAGE_PLACEHOLDER_COLOR)
-    list(APPEND okularGenerator_mupdfng_SRCS generator/page/background.cpp)
+    list(APPEND okularGenerator_mupdfng_SRCS generator/page/placeholder.cpp)
 endif()
 
 ki18n_wrap_ui(okularGenerator_mupdfng_SRCS

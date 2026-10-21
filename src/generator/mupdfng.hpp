@@ -27,7 +27,7 @@
 #include "generator/layers_model.hpp"
 #include "generator/okular_compat.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-#include "generator/page/background.hpp"
+#include "generator/page/placeholder.hpp"
 #endif
 #include "generator/page/error.hpp"
 #include "generator/printing.hpp"
@@ -154,7 +154,7 @@ private:
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     void setupActions();
     void setupThemeActions();
-    void updatePageBackground(Model::DocumentTheme theme);
+    void updatePagePlaceholder(Model::DocumentTheme theme);
     void syncThemeActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
@@ -298,9 +298,11 @@ private:
     static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
     std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;
     // GUI-thread state: Default bypasses all loading-background rendering.
-    bool m_hasPageBackground = false;
+    bool m_hasPagePlaceholder = false;
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-    Page::Background m_pageBackground;
+    // Keep late rotation cleanup only for documents that actually used previews.
+    bool m_hasUsedPagePlaceholder = false;
+    Page::Placeholder m_pagePlaceholder;
 #endif
 
     // Restart decision state: whether pending settings need an Okular restart.
