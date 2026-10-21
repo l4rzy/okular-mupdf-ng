@@ -38,6 +38,22 @@ struct ThemePageInfo {
     bool needsCompositing = false;
 };
 
+struct ThemeRenderPlan {
+    bool useDevice = false;
+    bool recolorVectors = false;
+    std::uint32_t paperColor = 0;
+};
+
+/// Dusk and Dark inspect page content before choosing how to render the theme.
+constexpr bool shouldInspectThemePage(Model::DocumentTheme theme) noexcept
+{
+    return theme == Model::DocumentTheme::Dusk || theme == Model::DocumentTheme::Dark;
+}
+
+/// Selects the drawing device, vector recoloring, and initial background.
+/// When useDevice is false, apply the theme to the completed bitmap instead.
+ThemeRenderPlan planThemeRendering(const Model::DocumentSettings& settings, ThemePageInfo page) noexcept;
+
 std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcept;
 
 bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap);

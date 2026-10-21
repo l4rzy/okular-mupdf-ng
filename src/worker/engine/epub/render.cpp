@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/epub/document.hpp"
-#include "shared/model/theme_colors.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -108,22 +107,20 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         }
 
         const auto theme = m_settings.documentTheme;
-        const bool deviceTheme = theme == DocumentTheme::Dusk || theme == DocumentTheme::Dark;
-        if (deviceTheme && request.cookie)
+        const bool inspectPage = shouldInspectThemePage(theme);
+        if (inspectPage && request.cookie)
             list = fz_new_display_list_from_page(m_context, page);
         const auto pageTheme =
-            deviceTheme ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo { };
-        const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
-        const bool bitmapDark = theme == DocumentTheme::Dark && recolorVectors && pageTheme.needsCompositing;
-        const auto paperColor =
-            recolorVectors && !bitmapDark ? Model::ThemeColor::getBackground(theme) : readingPaperColor(m_settings);
+            inspectPage ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo {};
+        const auto themePlan = planThemeRendering(m_settings, pageTheme);
+        const auto paperColor = themePlan.paperColor;
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
         dev = fz_new_draw_device(m_context, ctm, pix);
-        if (deviceTheme && !bitmapDark) {
-            auto* themed = newThemeDevice(m_context, dev, ctm, bbox, request.cookie, theme, recolorVectors);
+        if (themePlan.useDevice) {
+            auto* themed = newThemeDevice(m_context, dev, ctm, bbox, request.cookie, theme, themePlan.recolorVectors);
             fz_drop_device(m_context, dev);
             dev = themed;
         }
@@ -145,7 +142,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (request.cookie && request.cookie->abort)
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
-        if (!deviceTheme || bitmapDark)
+        if (!themePlan.useDevice)
             applyDocumentTheme(m_context, pix, theme, request.cookie);
         fz_drop_device(m_context, dev);
         dev = nullptr;

@@ -79,6 +79,19 @@ std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcep
                                                                    : Model::ThemeColor::DefaultBackground;
 }
 
+ThemeRenderPlan planThemeRendering(const Model::DocumentSettings& settings, ThemePageInfo page) noexcept
+{
+    const auto theme = settings.documentTheme;
+    const bool deviceTheme = shouldInspectThemePage(theme);
+    const bool recolorVectors = deviceTheme && !page.mostlyDark;
+    // Dark recoloring uses the completed bitmap when drawing operations
+    // need compositing, so overlapping operations are themed together.
+    const bool bitmapDark = theme == Model::DocumentTheme::Dark && recolorVectors && page.needsCompositing;
+    const auto paperColor =
+        recolorVectors && !bitmapDark ? Model::ThemeColor::getBackground(theme) : readingPaperColor(settings);
+    return { deviceTheme && !bitmapDark, recolorVectors, paperColor };
+}
+
 bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
 {
     if (fz_pixmap_components(context, pixmap) != 4)

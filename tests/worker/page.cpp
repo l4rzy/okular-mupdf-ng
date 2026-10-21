@@ -176,6 +176,38 @@ private:
 
 private slots:
 
+    void plansThemeRendering()
+    {
+        using Mu::Model::DocumentTheme;
+        using Mu::Worker::Engine::ThemePageInfo;
+        using Mu::Worker::Engine::ThemeRenderPlan;
+        using namespace Mu::Model::ThemeColor;
+
+        const struct {
+            DocumentTheme theme;
+            ThemePageInfo page;
+            ThemeRenderPlan expected;
+        } cases[] {
+            { DocumentTheme::Default, {}, { false, false, 0x123456 } },
+            { DocumentTheme::Twilight, {}, { false, false, DefaultBackground } },
+            { DocumentTheme::Dusk, {}, { true, true, DuskBackground } },
+            { DocumentTheme::Dusk, { true, false }, { true, false, DefaultBackground } },
+            { DocumentTheme::Dark, {}, { true, true, DarkBackground } },
+            { DocumentTheme::Dark, { false, true }, { false, true, DefaultBackground } },
+            { DocumentTheme::Dark, { true, true }, { true, false, DefaultBackground } },
+        };
+
+        for (const auto& test : cases) {
+            Mu::Model::DocumentSettings settings;
+            settings.documentTheme = test.theme;
+            settings.paperColorRgb = 0x123456;
+            const auto plan = Mu::Worker::Engine::planThemeRendering(settings, test.page);
+            QCOMPARE(plan.useDevice, test.expected.useDevice);
+            QCOMPARE(plan.recolorVectors, test.expected.recolorVectors);
+            QCOMPARE(plan.paperColor, test.expected.paperColor);
+        }
+    }
+
     void dimsImageRows_data()
     {
         QTest::addColumn<int>("width");

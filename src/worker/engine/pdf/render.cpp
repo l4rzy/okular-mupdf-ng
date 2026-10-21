@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/pdf/document.hpp"
-#include "shared/model/theme_colors.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -112,13 +111,11 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         }
 
         const auto theme = m_settings.documentTheme;
-        const bool deviceTheme = theme == DocumentTheme::Dusk || theme == DocumentTheme::Dark;
+        const bool inspectPage = shouldInspectThemePage(theme);
         const auto pageTheme =
-            deviceTheme ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie) : ThemePageInfo { };
-        const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
-        const bool bitmapDark = theme == DocumentTheme::Dark && recolorVectors && pageTheme.needsCompositing;
-        const auto paperColor =
-            recolorVectors && !bitmapDark ? Model::ThemeColor::getBackground(theme) : readingPaperColor(m_settings);
+            inspectPage ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie) : ThemePageInfo {};
+        const auto themePlan = planThemeRendering(m_settings, pageTheme);
+        const auto paperColor = themePlan.paperColor;
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
@@ -128,9 +125,14 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         if (!m_settings.interpolateImages)
             fz_enable_device_hints(m_context, device, FZ_DONT_INTERPOLATE_IMAGES);
 
-        if (deviceTheme && !bitmapDark) {
-            auto* themed = newThemeDevice(
-                m_context, device, tiled ? transform : fz_identity, bbox, request.cookie, theme, recolorVectors);
+        if (themePlan.useDevice) {
+            auto* themed = newThemeDevice(m_context,
+                                          device,
+                                          tiled ? transform : fz_identity,
+                                          bbox,
+                                          request.cookie,
+                                          theme,
+                                          themePlan.recolorVectors);
             fz_drop_device(m_context, device);
             device = themed;
         }
@@ -142,7 +144,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
 
         fz_close_device(m_context, device);
-        if (!deviceTheme || bitmapDark)
+        if (!themePlan.useDevice)
             applyDocumentTheme(m_context, pixmap, theme, request.cookie);
 
         // Blit sub-tile region into the destination frame buffer with specified row stride
