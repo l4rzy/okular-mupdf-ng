@@ -18,6 +18,11 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __linux__
+#include <linux/landlock.h>
+#include <sys/syscall.h>
+#endif
+
 #include "sys/operation_budget.hpp"
 #include "sys/sandbox.hpp"
 
@@ -34,6 +39,7 @@ struct ProbeContext {
 };
 
 struct ProbeResult {
+    char reason[512] = { };
     std::uint8_t landlockActive = 0;
     std::uint8_t seccompActive = 0;
     std::uint8_t linuxNamespaceActive = 0;
@@ -116,6 +122,7 @@ bool runSandboxProbe(const ProbeContext& context, ProbeResult* result)
         ProbeResult probe;
         const auto status = ::Mu::Worker::Sandbox::activate({ context.requiredDirectory, context.optionalDirectory },
                                                             { pipeFds[1], context.inheritedFd });
+        std::strncpy(probe.reason, status.reason.c_str(), sizeof(probe.reason) - 1);
         probe.landlockActive = status.landlock;
         probe.seccompActive = status.seccomp;
         probe.linuxNamespaceActive = status.linuxNamespace;
@@ -371,8 +378,8 @@ private slots:
     void testOperationBudgets_data();
     void testOperationBudgets();
     void testFilesystemAndNetworkRestrictions();
-    void testMissingOptionalDirectoryDoesNotDisableLandlock();
-    void testMissingDefaultDirectoryKeepsLandlock();
+    void testMissingDirectoryKeepsLandlock_data();
+    void testMissingDirectoryKeepsLandlock();
 };
 
 void TestSandbox::testOperationBudgets_data()
@@ -455,6 +462,9 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
     if (!result.landlockActive && !result.seccompActive)
         QSKIP("Landlock and seccomp are unavailable on this host");
 
+    if (!result.landlockActive)
+        qInfo("Landlock inactive: %s", result.reason);
+
     QVERIFY(result.resourceLimitsActive);
 #ifdef MU_DEBUG_ENABLED
     QVERIFY(!result.unpreservedClosed);
@@ -482,55 +492,59 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
 #endif
 }
 
-void TestSandbox::testMissingOptionalDirectoryDoesNotDisableLandlock()
+void TestSandbox::testMissingDirectoryKeepsLandlock_data()
 {
-    if constexpr (MU_DISABLE_WORKER_SANDBOX)
-        QSKIP("Worker sandbox disabled by build configuration");
-#ifndef __linux__
-    QSKIP("Landlock is Linux-only");
-#else
-    QTemporaryDir requiredDir;
-    QVERIFY(requiredDir.isValid());
-    const QString requiredFile = requiredDir.filePath(QStringLiteral("required"));
-    QFile file(requiredFile);
-    QVERIFY(file.open(QIODevice::WriteOnly));
-    file.write("ok");
-    file.close();
-
-    const ProbeContext context { requiredDir.path().toStdString(),
-                                 requiredFile.toStdString(),
-                                 requiredFile.toStdString(),
-                                 requiredDir.path().toStdString(),
-                                 requiredDir.filePath(QStringLiteral("missing")).toStdString() };
-    ProbeResult result;
-    QVERIFY(runSandboxProbe(context, &result));
-    QVERIFY(result.landlockActive);
-#endif
+    QTest::addColumn<int>("missingDirectory");
+    QTest::newRow("missing-default") << 0;
+    QTest::newRow("missing-optional") << 1;
 }
 
-void TestSandbox::testMissingDefaultDirectoryKeepsLandlock()
+void TestSandbox::testMissingDirectoryKeepsLandlock()
 {
     if constexpr (MU_DISABLE_WORKER_SANDBOX)
         QSKIP("Worker sandbox disabled by build configuration");
 #ifndef __linux__
     QSKIP("Landlock is Linux-only");
 #else
-    QTemporaryDir optionalDir;
-    QVERIFY(optionalDir.isValid());
-    const QString optionalFile = optionalDir.filePath(QStringLiteral("optional"));
-    QFile file(optionalFile);
+    // Probe the host independently of our activation code. Only known host
+    // limitations skip the test; ruleset/activation regressions must still fail.
+    const long abi = ::syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
+    const int probeError = errno;
+    if (abi < 0 && (probeError == ENOSYS || probeError == EOPNOTSUPP || probeError == EPERM || probeError == EACCES))
+        QSKIP(qPrintable(QStringLiteral("Landlock ABI probe unavailable on this host: %1")
+                             .arg(QString::fromLocal8Bit(std::strerror(probeError)))));
+    QVERIFY2(abi > 0, std::strerror(probeError));
+
+    QFETCH(int, missingDirectory);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString allowedFile = directory.filePath(QStringLiteral("allowed"));
+    QFile file(allowedFile);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write("ok");
     file.close();
 
-    const ProbeContext context { optionalDir.path().toStdString(),
-                                 optionalFile.toStdString(),
-                                 optionalFile.toStdString(),
-                                 optionalDir.filePath(QStringLiteral("missing-default")).toStdString(),
-                                 optionalDir.path().toStdString() };
+    ProbeContext context { directory.path().toStdString(),
+                           allowedFile.toStdString(),
+                           allowedFile.toStdString(),
+                           directory.path().toStdString(),
+                           directory.path().toStdString() };
+    ProbeResult baseline;
+    QVERIFY(runSandboxProbe(context, &baseline));
+    QVERIFY2(baseline.landlockActive, baseline.reason);
+    QVERIFY(baseline.allowedRead);
+
+    const auto missing = directory.filePath(QStringLiteral("missing")).toStdString();
+    if (missingDirectory == 0)
+        context.requiredDirectory = missing;
+    else
+        context.optionalDirectory = missing;
     ProbeResult result;
     QVERIFY(runSandboxProbe(context, &result));
-    QVERIFY(result.landlockActive);
+    QVERIFY2(result.landlockActive, result.reason);
+    QVERIFY(result.allowedRead);
+    QVERIFY(result.pathWriteDenied);
+    QVERIFY(result.createDenied);
 #endif
 }
 
