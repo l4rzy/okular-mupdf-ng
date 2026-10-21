@@ -90,8 +90,8 @@ public:
     std::optional<std::vector<Model::EmbeddedFile>> embeddedFiles();
     /// Empty outlines are successful; nullopt preserves retrieval failure.
     /// Disabling the PDF fallback also bypasses cached generated outlines.
-    std::optional<std::vector<Model::OutlineNode>>
-    synopsis(bool allowHeuristic = true, bool* generatedSynopsis = nullptr);
+    std::optional<std::vector<Model::OutlineNode>> synopsis(bool allowHeuristic = true,
+                                                            bool* generatedSynopsis = nullptr);
     std::optional<Model::LayersResponse> layers();
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request);
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys);

@@ -248,7 +248,7 @@ private slots:
             auto* target = fz_new_draw_device(ctx, fz_identity, output);
             auto* device = themed
                 ? newThemeDevice(
-                      ctx, target, fz_identity, { 0, 0, 4, 4 }, nullptr, static_cast<Mu::Model::ReadingTheme>(theme))
+                      ctx, target, fz_identity, { 0, 0, 4, 4 }, nullptr, static_cast<Mu::Model::DocumentTheme>(theme))
                 : fz_keep_device(ctx, target);
             if (softMask) {
                 const float black = 0, grey = 0.5f;
@@ -271,12 +271,12 @@ private slots:
         fz_drop_pixmap(ctx, source);
 
         auto expected = pixels[0];
-        if (theme == int(Mu::Model::ReadingTheme::Dusk) || preserved) {
+        if (theme == int(Mu::Model::DocumentTheme::Dusk) || preserved) {
             dimImageRow(reinterpret_cast<unsigned char*>(expected.data()), 1);
         } else {
             auto* pixmap = fz_new_pixmap_with_data(
                 ctx, fz_device_rgb(ctx), 1, 1, nullptr, 1, 4, reinterpret_cast<unsigned char*>(expected.data()));
-            applyDocumentTheme(ctx, pixmap, Mu::Model::ReadingTheme::Dark, nullptr);
+            applyDocumentTheme(ctx, pixmap, Mu::Model::DocumentTheme::Dark, nullptr);
             fz_drop_pixmap(ctx, pixmap);
         }
         for (int channel = 0; channel < 3; ++channel)
@@ -320,7 +320,7 @@ private slots:
         const auto transform = tiled ? fz_scale(2, 2) : fz_identity;
         const fz_matrix position = rotated ? fz_matrix { 0, 16, -16, 0, 16, 0 } : fz_scale(16, 16);
         const int size = tiled ? 32 : 16;
-        const auto readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        const auto documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
         std::array<QByteArray, 2> pixels;
         int imageWidth = 0, imageHeight = 0;
         for (bool themed : { false, true }) {
@@ -350,17 +350,17 @@ private slots:
                 fz_fill_image(context, device->passthrough, sourceImage, ctm, alpha, params);
             };
             auto* device = themed
-                ? newThemeDevice(ctx, &probe->super, transform, { 0, 0, size, size }, nullptr, readingTheme)
+                ? newThemeDevice(ctx, &probe->super, transform, { 0, 0, size, size }, nullptr, documentTheme)
                 : fz_keep_device(ctx, &probe->super);
             fz_clip_path(ctx, device, clip, 0, fz_identity, fz_infinite_rect);
             fz_fill_image(ctx, device, image, position, 1, fz_default_color_params);
             fz_pop_clip(ctx, device);
             fz_close_device(ctx, device);
             if (!themed) {
-                if (theme == int(Mu::Model::ReadingTheme::Dusk))
+                if (theme == int(Mu::Model::DocumentTheme::Dusk))
                     dimImageRow(fz_pixmap_samples(ctx, output), size * size);
                 else
-                    applyDocumentTheme(ctx, output, readingTheme, nullptr);
+                    applyDocumentTheme(ctx, output, documentTheme, nullptr);
             }
             pixels[themed] = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, output)), size * size * 4);
             fz_drop_device(ctx, device);
@@ -400,7 +400,7 @@ private slots:
         auto* target = fz_new_draw_device(ctx, fz_identity, pixmap);
         fz_cookie cookie { };
         auto* device = newThemeDevice(
-            ctx, target, fz_identity, { 0, 0, 8, 8 }, &cookie, static_cast<Mu::Model::ReadingTheme>(theme));
+            ctx, target, fz_identity, { 0, 0, 8, 8 }, &cookie, static_cast<Mu::Model::DocumentTheme>(theme));
         const float black = 0;
         fz_fill_image_mask(ctx, device, image, fz_scale(8, 8), fz_device_gray(ctx), &black, 1, fz_default_color_params);
         const auto pixel = QByteArray(reinterpret_cast<const char*>(fz_pixmap_samples(ctx, pixmap)), 4);
@@ -452,7 +452,7 @@ private slots:
         std::vector<std::uint8_t> original(height * stride), dark(height * stride);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
         auto settings = document.settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Dark;
+        settings.documentTheme = Mu::Model::DocumentTheme::Dark;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, dark.data(), stride));
         QCOMPARE(dark[0], std::uint8_t(darkPage ? 218 : 32));
@@ -482,7 +482,7 @@ private slots:
                 QVERIFY(std::abs(int(tiled[std::size_t(y * tile.width * 4 + x)])
                                  - int(dark[std::size_t((y + tile.y) * stride + tile.x * 4 + x)]))
                         <= 2);
-        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        settings.documentTheme = Mu::Model::DocumentTheme::Default;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, dark.data(), stride));
         QCOMPARE(dark, original);
@@ -519,7 +519,7 @@ private slots:
         if (!kind)
             QVERIFY(document.renderToBuffer({ 0, width, height, tile }, nativeTile.data(), tile.width * 4));
         auto settings = document.settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Dusk;
+        settings.documentTheme = Mu::Model::DocumentTheme::Dusk;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, dusk.data(), stride));
         if (kind) {
@@ -550,7 +550,7 @@ private slots:
         // Compare matching native tile requests: image sampling can differ
         // between full-page rendering and tiles.
         verifyDimmedPixel(tiled, nativeTile, (70 * tile.width + 20) * 4);
-        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        settings.documentTheme = Mu::Model::DocumentTheme::Default;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, tile }, tiled.data(), tile.width * 4));
         QCOMPARE(tiled, nativeTile);
@@ -594,7 +594,7 @@ private slots:
                                       fz_scale(float(scale), float(scale)),
                                       { 0, 0, 64 * scale, 64 * scale },
                                       nullptr,
-                                      static_cast<Mu::Model::ReadingTheme>(theme));
+                                      static_cast<Mu::Model::DocumentTheme>(theme));
         fz_run_page(ctx, page, device, fz_identity, nullptr);
         fz_close_device(ctx, device);
         fz_drop_device(ctx, device);
@@ -629,7 +629,7 @@ private slots:
         std::vector<std::uint8_t> original(width * stride), themed(width * stride);
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, original.data(), stride));
         auto settings = document.settings();
-        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        settings.documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
         document.setSettings(settings);
         std::string error;
         QVERIFY2(document.renderToBuffer({ 0, width, width, std::nullopt }, themed.data(), stride, &error),
@@ -659,7 +659,7 @@ private slots:
             for (int x = tile.width * 4; x < tileStride; ++x)
                 QCOMPARE(tiled[std::size_t(y * tileStride + x)], std::uint8_t(0xAB));
         }
-        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        settings.documentTheme = Mu::Model::DocumentTheme::Default;
         document.setSettings(settings);
         std::vector<std::uint8_t> restored(width * stride);
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, restored.data(), stride));
@@ -732,7 +732,7 @@ private slots:
         std::vector<std::uint8_t> original(height * stride), themed(height * stride);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
         auto settings = document.settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Dusk;
+        settings.documentTheme = Mu::Model::DocumentTheme::Dusk;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
         QCOMPARE(themed == original, preserved);
@@ -749,8 +749,8 @@ private slots:
     void themesImageHeavyPages_data()
     {
         QTest::addColumn<int>("theme");
-        QTest::newRow("dusk") << int(Mu::Model::ReadingTheme::Dusk);
-        QTest::newRow("dark") << int(Mu::Model::ReadingTheme::Dark);
+        QTest::newRow("dusk") << int(Mu::Model::DocumentTheme::Dusk);
+        QTest::newRow("dark") << int(Mu::Model::DocumentTheme::Dark);
     }
 
     void themesImageHeavyPages()
@@ -765,12 +765,13 @@ private slots:
                       "q 500 0 0 600 56 140 cm BI /W 1 /H 1 /BPC 8 /CS /G /F /AHx ID 50> EI Q");
         QVERIFY(openDocument(document, path));
         auto settings = document.settings();
-        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        settings.documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
         document.setSettings(settings);
         constexpr int width = 153, height = 198, stride = width * 4;
         std::vector<std::uint8_t> pixels(height * stride);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, pixels.data(), stride));
-        const auto paper = Mu::Model::ThemeColor::splitRgb(Mu::Model::ThemeColor::getBackground(settings.readingTheme));
+        const auto paper =
+            Mu::Model::ThemeColor::splitRgb(Mu::Model::ThemeColor::getBackground(settings.documentTheme));
         for (std::size_t channel = 0; channel < paper.size(); ++channel)
             QCOMPARE(pixels[channel], static_cast<std::uint8_t>(paper[channel]));
         // The dark image is dimmed to 80%; it must not suppress theming of the paper.
@@ -809,7 +810,7 @@ private slots:
         std::vector<std::uint8_t> original(height * stride), themed(height * stride);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride));
         auto settings = document.settings();
-        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        settings.documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
         // Highlighted paper stays dark, while the text remains light.
@@ -829,7 +830,7 @@ private slots:
                 QVERIFY(std::abs(int(tiled[std::size_t(y * tile.width * 4 + x)])
                                  - int(themed[std::size_t((y + tile.y) * stride + tile.x * 4 + x)]))
                         <= 2);
-        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        settings.documentTheme = Mu::Model::DocumentTheme::Default;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, height, std::nullopt }, themed.data(), stride));
         QCOMPARE(themed, original);
@@ -871,7 +872,7 @@ private slots:
         fz_drop_buffer(ctx, contents);
         pdf_drop_obj(ctx, resources);
         const auto info = inspectThemePage(
-            ctx, &page->super, fz_bound_page(ctx, &page->super), Mu::Model::ReadingTheme::Dark, nullptr);
+            ctx, &page->super, fz_bound_page(ctx, &page->super), Mu::Model::DocumentTheme::Dark, nullptr);
         pdf_drop_annot(ctx, annot);
         fz_drop_page(ctx, &page->super);
         QVERIFY(info.needsCompositing);
@@ -901,7 +902,7 @@ private slots:
         QVERIFY(openDocument(document, path));
         auto* page = fz_load_page(document.context(), document.document(), 0);
         const auto info = inspectThemePage(
-            document.context(), page, fz_bound_page(document.context(), page), Mu::Model::ReadingTheme::Dark, nullptr);
+            document.context(), page, fz_bound_page(document.context(), page), Mu::Model::DocumentTheme::Dark, nullptr);
         fz_drop_page(document.context(), page);
         QVERIFY(info.needsCompositing);
         QVERIFY(!info.mostlyDark);
@@ -910,10 +911,10 @@ private slots:
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, expected.data(), stride));
         auto* pixmap = fz_new_pixmap_with_data(
             document.context(), fz_device_rgb(document.context()), width, width, nullptr, 1, stride, expected.data());
-        applyDocumentTheme(document.context(), pixmap, Mu::Model::ReadingTheme::Dark, nullptr);
+        applyDocumentTheme(document.context(), pixmap, Mu::Model::DocumentTheme::Dark, nullptr);
         fz_drop_pixmap(document.context(), pixmap);
         auto settings = document.settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Dark;
+        settings.documentTheme = Mu::Model::DocumentTheme::Dark;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, actual.data(), stride));
         QCOMPARE(actual, expected);
@@ -930,8 +931,8 @@ private slots:
     {
         QTest::addColumn<int>("theme");
         QTest::addColumn<QByteArray>("color");
-        for (const auto theme : { Mu::Model::ReadingTheme::Dusk, Mu::Model::ReadingTheme::Dark }) {
-            const auto name = theme == Mu::Model::ReadingTheme::Dusk ? QByteArray("dusk-") : QByteArray("dark-");
+        for (const auto theme : { Mu::Model::DocumentTheme::Dusk, Mu::Model::DocumentTheme::Dark }) {
+            const auto name = theme == Mu::Model::DocumentTheme::Dusk ? QByteArray("dusk-") : QByteArray("dark-");
             QTest::newRow((name + "blue").constData()) << int(theme) << QByteArray("0 0 1");
             QTest::newRow((name + "purple").constData()) << int(theme) << QByteArray("0.5 0 0.5");
         }
@@ -948,7 +949,7 @@ private slots:
         createTextPDF(document.context(), path, contents.constData());
         QVERIFY(openDocument(document, path));
         auto settings = document.settings();
-        settings.readingTheme = static_cast<Mu::Model::ReadingTheme>(theme);
+        settings.documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
         document.setSettings(settings);
         constexpr int width = 153, height = 198, stride = width * 4;
         std::vector<std::uint8_t> pixels(height * stride);
@@ -976,7 +977,7 @@ private slots:
                                                1,
                                                256 * 4,
                                                reinterpret_cast<unsigned char*>(pixels.data()));
-        applyDocumentTheme(owner.context(), pixmap, Mu::Model::ReadingTheme::Dark, nullptr);
+        applyDocumentTheme(owner.context(), pixmap, Mu::Model::DocumentTheme::Dark, nullptr);
         fz_drop_pixmap(owner.context(), pixmap);
         // Blue text coverage must blend smoothly into the paper, without a threshold jump.
         for (int level = 0; level < 256; ++level) {
@@ -990,7 +991,7 @@ private slots:
         }
     }
 
-    void readingThemePalette_data()
+    void documentThemePalette_data()
     {
         QTest::addColumn<int>("theme");
         QTest::addColumn<QByteArray>("expected");
@@ -999,7 +1000,7 @@ private slots:
         QTest::newRow("dark") << 3 << QByteArray::fromHex("202124ffdadce0ffda9295ff");
     }
 
-    void readingThemePalette()
+    void documentThemePalette()
     {
         QFETCH(int, theme);
         QFETCH(QByteArray, expected);
@@ -1014,7 +1015,7 @@ private slots:
                                                16,
                                                reinterpret_cast<unsigned char*>(pixels.data()));
         Mu::Worker::Engine::applyDocumentTheme(
-            owner.context(), pixmap, static_cast<Mu::Model::ReadingTheme>(theme), nullptr);
+            owner.context(), pixmap, static_cast<Mu::Model::DocumentTheme>(theme), nullptr);
         int cancellation = 0;
         if (theme != 0) {
             fz_cookie cookie { };
@@ -1022,7 +1023,7 @@ private slots:
             fz_try(owner.context())
             {
                 Mu::Worker::Engine::applyDocumentTheme(
-                    owner.context(), pixmap, static_cast<Mu::Model::ReadingTheme>(theme), &cookie);
+                    owner.context(), pixmap, static_cast<Mu::Model::DocumentTheme>(theme), &cookie);
             }
             fz_catch(owner.context())
             {
@@ -1035,7 +1036,7 @@ private slots:
         QCOMPARE(pixels.last(4), QByteArray::fromHex("abababab"));
     }
 
-    void readingThemesAcrossFormats_data()
+    void documentThemesAcrossFormats_data()
     {
         QTest::addColumn<int>("format");
         QTest::newRow("pdf") << 0;
@@ -1043,7 +1044,7 @@ private slots:
         QTest::newRow("mobi") << 2;
     }
 
-    void readingThemesAcrossFormats()
+    void documentThemesAcrossFormats()
     {
         QFETCH(int, format);
         using namespace Mu::Worker::Engine;
@@ -1082,9 +1083,9 @@ private slots:
         QVERIFY2(renderPrintOutput(originalPrint), error.c_str());
         const int count = document->pageCount();
         for (const auto theme :
-             { Mu::Model::ReadingTheme::Dark, Mu::Model::ReadingTheme::Twilight, Mu::Model::ReadingTheme::Dusk }) {
+             { Mu::Model::DocumentTheme::Dark, Mu::Model::DocumentTheme::Twilight, Mu::Model::DocumentTheme::Dusk }) {
             auto settings = document->settings();
-            settings.readingTheme = theme;
+            settings.documentTheme = theme;
             document->setSettings(settings);
             QCOMPARE(document->pageCount(), count);
             std::vector<std::uint8_t> themed(height * stride);
@@ -1115,7 +1116,7 @@ private slots:
                             <= 2);
         }
         auto settings = document->settings();
-        settings.readingTheme = Mu::Model::ReadingTheme::Default;
+        settings.documentTheme = Mu::Model::DocumentTheme::Default;
         document->setSettings(settings);
         std::vector<std::uint8_t> restored(height * stride);
         QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, restored.data(), stride, &error),

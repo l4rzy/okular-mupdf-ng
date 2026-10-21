@@ -695,15 +695,14 @@ private slots:
     void failedExportSubmitKeepsFdChannelClean()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
-        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub),
-                 ::Mu::Model::OpenStatus::Success);
+        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
 
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
-        QVERIFY(!m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { })
-                     .has_value());
+        QVERIFY(
+            !m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { }).has_value());
 
         // The FD channel must be clean: a synchronous FD-based operation works.
         QVERIFY(m_client.savePdfToFile(outputDirectory.filePath(QStringLiteral("print.pdf")), { }));

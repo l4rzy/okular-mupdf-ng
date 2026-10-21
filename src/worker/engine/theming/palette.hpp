@@ -44,7 +44,7 @@ bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap);
 ThemePageInfo inspectThemePage(fz_context* context,
                                fz_page* page,
                                fz_rect bounds,
-                               Model::ReadingTheme theme,
+                               Model::DocumentTheme theme,
                                fz_cookie* cookie,
                                fz_display_list* list = nullptr);
 
@@ -52,6 +52,6 @@ ThemePageInfo inspectThemePage(fz_context* context,
 void dimImageRow(unsigned char* pixel, int width) noexcept;
 
 // Transform an RGBA viewing pixmap, preserving premultiplied alpha.
-void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTheme theme, const fz_cookie* cookie);
+void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::DocumentTheme theme, const fz_cookie* cookie);
 
 } // namespace Mu::Worker::Engine

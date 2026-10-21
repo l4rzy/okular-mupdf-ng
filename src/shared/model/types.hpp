@@ -386,8 +386,8 @@ struct IdleTrimLevel {
 };
 
 /// Viewing palettes shared by all document formats.
-// Keep aligned with the ReadingTheme choices in mupdfngsettings.kcfg.
-enum class ReadingTheme : std::uint8_t { Default, Twilight, Dusk, Dark };
+// Keep aligned with the DocumentTheme choices in mupdfngsettings.kcfg.
+enum class DocumentTheme : std::uint8_t { Default, Twilight, Dusk, Dark };
 
 /// Rendering and layout settings shared by document engines.
 struct DocumentSettings {
@@ -411,7 +411,7 @@ struct DocumentSettings {
     /// Simulate PDF overprinting when rasterizing pages for viewing.
     bool overprintSimulation = false;
     /// Viewing-only palette; exports, printing, and OCR retain original colors.
-    ReadingTheme readingTheme = ReadingTheme::Default;
+    DocumentTheme documentTheme = DocumentTheme::Default;
 };
 
 /// Document metadata values and basic document identity.

@@ -5,7 +5,8 @@
       http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
   <kcfgfile name="okular-mupdf-ngrc"/>
   <group name="General">
-    <entry key="ReadingTheme" type="Enum">
+    <!-- Keep the stored key compatible with existing theme preferences. -->
+    <entry name="DocumentTheme" key="ReadingTheme" type="Enum">
       <default>Default</default>
       <choices>
         <choice name="Default" />

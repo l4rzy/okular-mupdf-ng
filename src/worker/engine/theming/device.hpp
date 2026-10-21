@@ -15,7 +15,7 @@ fz_device* newThemeDevice(fz_context* context,
                           fz_matrix transform,
                           fz_irect bounds,
                           const fz_cookie* cookie,
-                          Model::ReadingTheme theme,
+                          Model::DocumentTheme theme,
                           bool recolorVectors = true);
 
 } // namespace Mu::Worker::Engine

@@ -353,7 +353,7 @@ bool Main::reparseConfig()
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
-    updatePageBackground(m_pageError.isActive() ? Model::ReadingTheme::Default : settings.rendering.readingTheme);
+    updatePageBackground(m_pageError.isActive() ? Model::DocumentTheme::Default : settings.rendering.documentTheme);
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
@@ -513,8 +513,14 @@ KActionCollection* Main::actionCollection() const
     return KXMLGUIClient::actionCollection();
 }
 
-void Main::updatePageBackground(Model::ReadingTheme theme)
+void Main::updatePageBackground(Model::DocumentTheme theme)
 {
+    const bool enabled = theme != Model::DocumentTheme::Default;
+    if (!enabled && !m_hasPageBackground)
+        return;
+    // A themed-to-Default transition clears existing previews once. Fresh
+    // unthemed pages use Okular's normal background without visiting this code.
+    m_hasPageBackground = enabled;
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     for (auto* page : m_okularPages)
@@ -532,7 +538,7 @@ void Main::setupThemeActions()
     actionCollection()->addAction(QStringLiteral("mupdf_theme"), menu);
     KActionCollection::setShortcutsConfigurable(menu, false);
     m_themeActions = new QActionGroup(this);
-    const auto addTheme = [&](const QString& name, const QString& label, Model::ReadingTheme theme) {
+    const auto addTheme = [&](const QString& name, const QString& label, Model::DocumentTheme theme) {
         auto* action = new QAction(label, m_themeActions);
         action->setCheckable(true);
         action->setData(static_cast<int>(theme));
@@ -540,39 +546,39 @@ void Main::setupThemeActions()
         actionCollection()->addAction(name, action);
         menu->addAction(action);
     };
-    addTheme(QStringLiteral("mupdf_theme_default"), i18n("Default"), Model::ReadingTheme::Default);
-    addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::ReadingTheme::Twilight);
-    addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::ReadingTheme::Dusk);
-    addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::ReadingTheme::Dark);
-    const auto setTheme = [](Model::ReadingTheme theme) {
-        MuPDFNGSettings::setReadingTheme(static_cast<int>(theme));
+    addTheme(QStringLiteral("mupdf_theme_default"), i18n("Default"), Model::DocumentTheme::Default);
+    addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::DocumentTheme::Twilight);
+    addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::DocumentTheme::Dusk);
+    addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::DocumentTheme::Dark);
+    const auto setTheme = [](Model::DocumentTheme theme) {
+        MuPDFNGSettings::setDocumentTheme(static_cast<int>(theme));
         MuPDFNGSettings::self()->save();
     };
     connect(m_themeActions, &QActionGroup::triggered, this, [setTheme](QAction* action) {
-        setTheme(static_cast<Model::ReadingTheme>(action->data().toInt()));
+        setTheme(static_cast<Model::DocumentTheme>(action->data().toInt()));
     });
     const auto addToggle =
-        [this, setTheme](const QString& name, const QString& label, const QString& icon, Model::ReadingTheme theme) {
+        [this, setTheme](const QString& name, const QString& label, const QString& icon, Model::DocumentTheme theme) {
             auto* action = new QAction(QIcon::fromTheme(icon), label, this);
             actionCollection()->addAction(name, action);
             connect(action, &QAction::triggered, this, [setTheme, theme] {
-                setTheme(static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme()) == theme
-                             ? Model::ReadingTheme::Default
+                setTheme(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()) == theme
+                             ? Model::DocumentTheme::Default
                              : theme);
             });
         };
     addToggle(QStringLiteral("mupdf_theme_toggle_dusk"),
               i18n("Toggle Dusk Mode"),
               QStringLiteral("draw-halfcircle1"),
-              Model::ReadingTheme::Dusk);
+              Model::DocumentTheme::Dusk);
     addToggle(QStringLiteral("mupdf_theme_toggle_dark"),
               i18n("Toggle Dark Mode"),
               QStringLiteral("lighttable"),
-              Model::ReadingTheme::Dark);
+              Model::DocumentTheme::Dark);
     addToggle(QStringLiteral("mupdf_theme_toggle_twilight"),
               i18n("Toggle Twilight Mode"),
               QStringLiteral("draw-halfcircle2"),
-              Model::ReadingTheme::Twilight);
+              Model::DocumentTheme::Twilight);
     // Settings are shared by every open document. Refresh each worker after
     // the save completes, without re-entering the settings notification.
     connect(
@@ -581,8 +587,8 @@ void Main::setupThemeActions()
         this,
         [this] {
             if (const auto* currentDocument = document(); currentDocument
-                && m_settings.rendering.readingTheme
-                    != static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme()))
+                && m_settings.rendering.documentTheme
+                    != static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()))
                 const_cast<Okular::Document*>(currentDocument)->reparseConfig();
         },
         Qt::QueuedConnection);
@@ -597,7 +603,7 @@ void Main::syncThemeActions()
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_twilight"))->setEnabled(enabled);
     m_themeActions->setEnabled(enabled);
-    const auto theme = static_cast<Model::ReadingTheme>(MuPDFNGSettings::readingTheme());
+    const auto theme = static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme());
     for (QAction* action : m_themeActions->actions())
         action->setChecked(action->data().toInt() == static_cast<int>(theme));
 }
@@ -787,7 +793,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
-    updatePageBackground(m_settings.rendering.readingTheme);
+    updatePageBackground(m_settings.rendering.documentTheme);
     syncOcrActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
@@ -1047,7 +1053,7 @@ void Main::clearWorkerDerivedState()
 // then refreshes pages so placeholder images replace stale real pixmaps.
 void Main::clearPageErrorDerivedState()
 {
-    updatePageBackground(Model::ReadingTheme::Default);
+    updatePageBackground(Model::DocumentTheme::Default);
     syncOcrActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
@@ -1330,7 +1336,7 @@ void Main::failClosed(const QString& message)
 // Okular Generator Func: clears the current document and worker state.
 bool Main::doCloseDocument()
 {
-    updatePageBackground(Model::ReadingTheme::Default);
+    updatePageBackground(Model::DocumentTheme::Default);
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
     m_observingVisiblePages = false;
@@ -1504,9 +1510,13 @@ void Main::clearPageDisplayState(int page)
 // incomplete, so the background can never satisfy the actual render request.
 void Main::generatePixmap(Okular::PixmapRequest* request)
 {
+    if (!m_hasPageBackground || m_pageError.isActive()) {
+        Okular::Generator::generatePixmap(request);
+        return;
+    }
     m_pageBackground.seed(*request->page());
-    const bool publishBackground = request->asynchronous() && request->partialUpdatesWanted()
-        && !request->page()->hasPixmap(request->observer()) && !m_pageError.isActive();
+    const bool publishBackground =
+        request->asynchronous() && request->partialUpdatesWanted() && !request->page()->hasPixmap(request->observer());
     const QSize size = request->isTile()
         ? request->normalizedRect().geometry(request->width(), request->height()).size()
         : QSize(request->width(), request->height());
@@ -1529,7 +1539,7 @@ void Main::notifyPageChanged(int page, int flags)
 
 void Main::notifyContentsCleared(int flags)
 {
-    if (flags & Okular::DocumentObserver::Pixmap)
+    if (m_hasPageBackground && (flags & Okular::DocumentObserver::Pixmap))
         for (auto* page : m_okularPages)
             m_pageBackground.seed(*page);
 }

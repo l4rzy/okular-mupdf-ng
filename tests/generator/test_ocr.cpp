@@ -145,12 +145,15 @@ private slots:
         QTest::addColumn<bool>("tiled");
         QTest::addColumn<bool>("rotated");
         QTest::addColumn<bool>("asynchronous");
-        QTest::newRow("page") << 300 << 400 << false << false << true;
-        QTest::newRow("zoom") << 900 << 1200 << false << false << true;
-        QTest::newRow("tiles") << 6000 << 8000 << true << false << true;
-        QTest::newRow("rotated") << 400 << 300 << false << true << true;
-        QTest::newRow("rotated-tiles") << 8000 << 6000 << true << true << true;
-        QTest::newRow("synchronous") << 300 << 400 << false << false << false;
+        QTest::addColumn<bool>("themed");
+        QTest::newRow("page") << 300 << 400 << false << false << true << true;
+        QTest::newRow("zoom") << 900 << 1200 << false << false << true << true;
+        QTest::newRow("tiles") << 6000 << 8000 << true << false << true << true;
+        QTest::newRow("rotated") << 400 << 300 << false << true << true << true;
+        QTest::newRow("rotated-tiles") << 8000 << 6000 << true << true << true << true;
+        QTest::newRow("synchronous") << 300 << 400 << false << false << false << true;
+        QTest::newRow("default") << 300 << 400 << false << false << true << false;
+        QTest::newRow("default-synchronous") << 300 << 400 << false << false << false << false;
     }
 
     void loadingPixmapsRemainIncomplete()
@@ -160,10 +163,11 @@ private slots:
         QFETCH(bool, tiled);
         QFETCH(bool, rotated);
         QFETCH(bool, asynchronous);
+        QFETCH(bool, themed);
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
         KConfigGroup general(config, QStringLiteral("General"));
         general.writeEntry("SandboxEnforcement", "Relaxed");
-        general.writeEntry("ReadingTheme", "Dark");
+        general.writeEntry("ReadingTheme", themed ? "Dark" : "Default");
         config->sync();
         const auto restore = qScopeGuard([&] {
             general.writeEntry("ReadingTheme", "Default");
@@ -185,18 +189,20 @@ private slots:
             int height = 0;
             Okular::NormalizedRect region;
             bool sawIncomplete = false;
+            bool sawLoadingPixmap = false;
             int completed = 0;
             bool sawColoredTiles = false;
             bool invalidPreviewPixels = false;
 
-            void notifyPageChanged(int, int flags) override
+            void notifyPageChanged(int pageNumber, int flags) override
             {
-                if (!(flags & Pixmap))
+                if (pageNumber != page->number() || !(flags & Pixmap))
                     return;
                 if (page->hasPixmap(this, width, height, region))
                     ++completed;
                 else {
                     sawIncomplete = true;
+                    sawLoadingPixmap |= page->hasPixmap(this);
                     if (completed == 0 && page->hasTilesManager(this)) {
                         for (const auto& tile : page->tilesAt(this, { 0, 0, 1, 1 })) {
                             if (!tile.pixmap() || tile.pixmap()->isNull())
@@ -235,10 +241,13 @@ private slots:
         // unregistered preview observer), and a second render after invalidation.
         for (int attempt = 0; attempt < 2; ++attempt) {
             observer.sawIncomplete = false;
+            observer.sawLoadingPixmap = false;
             request();
             QTRY_VERIFY_WITH_TIMEOUT(observer.page->hasPixmap(&observer, width, height, region), 10000);
-            if (asynchronous)
+            if (asynchronous && themed)
                 QVERIFY(observer.sawIncomplete);
+            if (!themed)
+                QVERIFY(!observer.sawLoadingPixmap);
             QCOMPARE(observer.page->hasTilesManager(&observer), tiled);
             if (tiled && !rotated)
                 QVERIFY(observer.sawColoredTiles);
@@ -276,7 +285,7 @@ private slots:
         document.setRotation(Okular::Rotation0);
         Mu::Generator::Page::Background background;
         auto* page = const_cast<Okular::Page*>(document.page(0));
-        background.setTheme(Mu::Model::ReadingTheme::Dark);
+        background.setTheme(Mu::Model::DocumentTheme::Dark);
         background.seed(*page);
 
         struct Observer : Okular::DocumentObserver {
@@ -310,15 +319,15 @@ private slots:
         QTRY_VERIFY(observer.restoredHorizontal);
         QVERIFY(page->hasPixmap(&background, 256, 1));
         // The queued Dusk rotation must not resurrect a preview after reset.
-        background.setTheme(Mu::Model::ReadingTheme::Dusk);
+        background.setTheme(Mu::Model::DocumentTheme::Dusk);
         background.seed(*page);
-        background.setTheme(Mu::Model::ReadingTheme::Default);
+        background.setTheme(Mu::Model::DocumentTheme::Default);
         background.seed(*page);
         observer.clearing = true;
         QTRY_VERIFY(observer.removedLatePreview);
         QVERIFY(!page->hasPixmap(&background));
         // Close with another preview rotation still queued, exercising teardown.
-        background.setTheme(Mu::Model::ReadingTheme::Dark);
+        background.setTheme(Mu::Model::DocumentTheme::Dark);
         background.seed(*page);
     }
 
@@ -380,7 +389,7 @@ private slots:
 
 #endif
 
-    void readingThemeMenu_data()
+    void documentThemeMenu_data()
     {
         QTest::addColumn<QString>("path");
         QTest::newRow("pdf") << QStringLiteral(TEST_PDF_PATH);
@@ -388,7 +397,7 @@ private slots:
         QTest::newRow("mobi") << QStringLiteral(TEST_MOBI_PATH);
     }
 
-    void readingThemeMenu()
+    void documentThemeMenu()
     {
         QFETCH(QString, path);
         const bool originalChangeColors = Okular::SettingsCore::changeColors();
@@ -479,7 +488,7 @@ private slots:
             // Older Okular fillConfigDialog() requires its private BackendConfigDialog.
             // Exercise the plugin's public interface with our ordinary test dialog.
             configInterface->addPages(&dialog);
-            auto* theme = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_ReadingTheme"));
+            auto* theme = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_DocumentTheme"));
             QVERIFY(theme);
             QCOMPARE(theme->count(), 4);
             for (int i = 0; i < themes.size(); ++i)

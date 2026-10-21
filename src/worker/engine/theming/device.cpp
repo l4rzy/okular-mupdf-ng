@@ -20,7 +20,7 @@ struct ThemeDevice {
     fz_matrix transform;
     const fz_cookie* cookie;
     fz_default_colorspaces* defaultColorspaces;
-    Model::ReadingTheme theme;
+    Model::DocumentTheme theme;
     std::array<int, 3> background;
     bool recolorVectors;
     int maskDepth;
@@ -145,7 +145,7 @@ void fillImage(
     if (fz_is_empty_irect(bounds) || alpha == 0)
         return;
     validateBounds(context, bounds);
-    const bool invertImage = state->theme == Model::ReadingTheme::Dark && state->recolorVectors
+    const bool invertImage = state->theme == Model::DocumentTheme::Dark && state->recolorVectors
         && !isMostlyDarkImage(context, state, source, params);
     fz_pixmap* volatile pixmap = nullptr;
     fz_device* volatile raster = nullptr;
@@ -257,10 +257,10 @@ fz_device* newThemeDevice(fz_context* context,
                           fz_matrix transform,
                           fz_irect bounds,
                           const fz_cookie* cookie,
-                          Model::ReadingTheme theme,
+                          Model::DocumentTheme theme,
                           bool recolorVectors)
 {
-    if (theme != Model::ReadingTheme::Dusk && theme != Model::ReadingTheme::Dark)
+    if (theme != Model::DocumentTheme::Dusk && theme != Model::DocumentTheme::Dark)
         fz_throw(context, FZ_ERROR_ARGUMENT, "theme device requires Dusk or Dark");
     auto* state =
         reinterpret_cast<ThemeDevice*>(fz_new_passthrough_device_of_size(context, target, sizeof(ThemeDevice)));

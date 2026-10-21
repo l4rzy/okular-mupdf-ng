@@ -75,14 +75,14 @@ ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::a
 
 std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcept
 {
-    return settings.readingTheme == Model::ReadingTheme::Default ? settings.paperColorRgb
-                                                                 : Model::ThemeColor::DefaultBackground;
+    return settings.documentTheme == Model::DocumentTheme::Default ? settings.paperColorRgb
+                                                                   : Model::ThemeColor::DefaultBackground;
 }
 
 bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
 {
     if (fz_pixmap_components(context, pixmap) != 4)
-        fz_throw(context, FZ_ERROR_ARGUMENT, "reading theme requires an RGBA viewing pixmap");
+        fz_throw(context, FZ_ERROR_ARGUMENT, "document theme requires an RGBA viewing pixmap");
     const int width = fz_pixmap_width(context, pixmap);
     const int height = fz_pixmap_height(context, pixmap);
     const int stride = fz_pixmap_stride(context, pixmap);
@@ -103,7 +103,7 @@ bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
 ThemePageInfo inspectThemePage(fz_context* context,
                                fz_page* page,
                                fz_rect bounds,
-                               Model::ReadingTheme theme,
+                               Model::DocumentTheme theme,
                                fz_cookie* cookie,
                                fz_display_list* list)
 {
@@ -115,7 +115,7 @@ ThemePageInfo inspectThemePage(fz_context* context,
     {
         if (cookie && cookie->abort)
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
-        if (theme == Model::ReadingTheme::Dusk) {
+        if (theme == Model::DocumentTheme::Dusk) {
             thumbnail =
                 fz_new_pixmap(context, fz_device_rgb(context), Theme::ThumbnailSize, Theme::ThumbnailSize, nullptr, 1);
             fz_clear_pixmap_with_value(context, thumbnail, 255);
@@ -217,22 +217,22 @@ void dimImageRow(unsigned char* pixel, int width) noexcept
 }
 
 // Transform an RGBA viewing pixmap, preserving premultiplied alpha.
-void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::ReadingTheme theme, const fz_cookie* cookie)
+void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::DocumentTheme theme, const fz_cookie* cookie)
 {
     // Dusk is applied by its image-preserving rendering device.
-    if (theme == Model::ReadingTheme::Default || theme == Model::ReadingTheme::Dusk)
+    if (theme == Model::DocumentTheme::Default || theme == Model::DocumentTheme::Dusk)
         return;
     if (fz_pixmap_components(context, pixmap) != 4)
-        fz_throw(context, FZ_ERROR_ARGUMENT, "reading theme requires an RGBA viewing pixmap");
+        fz_throw(context, FZ_ERROR_ARGUMENT, "document theme requires an RGBA viewing pixmap");
     std::array<int, 3> background;
     std::array<int, 3> foreground;
     bool invertBrightness = false;
     switch (theme) {
-    case Model::ReadingTheme::Twilight:
+    case Model::DocumentTheme::Twilight:
         background = Model::ThemeColor::splitRgb(Model::ThemeColor::TwilightBackground);
         foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::TwilightForeground);
         break;
-    case Model::ReadingTheme::Dark:
+    case Model::DocumentTheme::Dark:
         background = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkBackground);
         foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
         invertBrightness = true;

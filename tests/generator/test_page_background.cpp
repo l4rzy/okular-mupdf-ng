@@ -9,7 +9,7 @@
 #include <okular/core/settings_core.h>
 
 using Mu::Generator::Page::Background;
-using Mu::Model::ReadingTheme;
+using Mu::Model::DocumentTheme;
 
 class TestPageBackground : public QObject {
     Q_OBJECT
@@ -29,10 +29,10 @@ private slots:
     {
         QTest::addColumn<int>("theme");
         QTest::addColumn<QColor>("color");
-        QTest::newRow("default") << int(ReadingTheme::Default) << QColor { };
-        QTest::newRow("twilight") << int(ReadingTheme::Twilight) << QColor(208, 202, 184);
-        QTest::newRow("dusk") << int(ReadingTheme::Dusk) << QColor(48, 49, 52);
-        QTest::newRow("dark") << int(ReadingTheme::Dark) << QColor(32, 33, 36);
+        QTest::newRow("default") << int(DocumentTheme::Default) << QColor { };
+        QTest::newRow("twilight") << int(DocumentTheme::Twilight) << QColor(208, 202, 184);
+        QTest::newRow("dusk") << int(DocumentTheme::Dusk) << QColor(48, 49, 52);
+        QTest::newRow("dark") << int(DocumentTheme::Dark) << QColor(32, 33, 36);
     }
 
     void colors()
@@ -44,7 +44,7 @@ private slots:
         Okular::SettingsCore::setRenderMode(Okular::SettingsCore::EnumRenderMode::Inverted);
         Okular::SettingsCore::setPaperColor(Qt::yellow);
         Background fallback;
-        fallback.setTheme(static_cast<ReadingTheme>(theme));
+        fallback.setTheme(static_cast<DocumentTheme>(theme));
         const auto image = fallback.partialImage({ 600, 850 });
         QCOMPARE(image.isNull(), !color.isValid());
         if (color.isValid()) {
@@ -62,7 +62,7 @@ private slots:
         Background fallback;
         Okular::DocumentObserver view;
         Okular::Page page(0, 600, 850, Okular::Rotation0);
-        fallback.setTheme(ReadingTheme::Dark);
+        fallback.setTheme(DocumentTheme::Dark);
         fallback.seed(page);
         QVERIFY(page.hasPixmap(&fallback));
         QVERIFY(!page.hasPixmap(&view));
@@ -73,10 +73,10 @@ private slots:
         QVERIFY(page.hasPixmap(&fallback));
         // Removing/changing the fallback must not remove a completed view image.
         page.setPixmap(&view, new QPixmap(600, 850));
-        fallback.setTheme(ReadingTheme::Dusk);
+        fallback.setTheme(DocumentTheme::Dusk);
         fallback.seed(page);
         QVERIFY(page.hasPixmap(&view, 600, 850));
-        fallback.setTheme(ReadingTheme::Default);
+        fallback.setTheme(DocumentTheme::Default);
         fallback.seed(page);
         QVERIFY(!page.hasPixmap(&fallback));
         QVERIFY(page.hasPixmap(&view, 600, 850));
@@ -86,16 +86,16 @@ private slots:
     {
         Background background;
         Okular::Page page(0, 600, 850, Okular::Rotation0);
-        background.setTheme(ReadingTheme::Dark);
+        background.setTheme(DocumentTheme::Dark);
         background.seed(page);
         QVERIFY(page.hasPixmap(&background, 256, 1));
         // Model a rotation job restoring a preview after Default was selected.
-        background.setTheme(ReadingTheme::Default);
+        background.setTheme(DocumentTheme::Default);
         QVERIFY(page.hasPixmap(&background));
         background.refresh(page);
         QVERIFY(!page.hasPixmap(&background));
         // Missing previews still recover when a theme is active.
-        background.setTheme(ReadingTheme::Dusk);
+        background.setTheme(DocumentTheme::Dusk);
         background.refresh(page);
         QVERIFY(page.hasPixmap(&background, 256, 1));
     }
@@ -121,7 +121,7 @@ private slots:
         QFETCH(QSize, size);
         QFETCH(bool, accepted);
         Background fallback;
-        fallback.setTheme(ReadingTheme::Dark);
+        fallback.setTheme(DocumentTheme::Dark);
         QCOMPARE(!fallback.partialImage(size).isNull(), accepted);
     }
 };

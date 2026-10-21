@@ -269,7 +269,7 @@ private slots:
             settings.interpolateImages = false;
             settings.memoryCacheBytes = 128ULL * 1024ULL * 1024ULL;
             settings.idleTrimAggressiveness = Model::IdleTrimLevel::Aggressive;
-            settings.readingTheme = Model::ReadingTheme::Dark;
+            settings.documentTheme = Model::DocumentTheme::Dark;
             settings.epub.fontSize = 17;
             settings.epub.pageSize = pageSize;
             settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(static_cast<std::uint8_t>(pageSize));
@@ -282,7 +282,7 @@ private slots:
             QVERIFY(::Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error));
             const auto& output = std::get<Model::SettingsRequest>(decoded.payload).settings;
             QCOMPARE(output.graphicsAntialiasing, 4);
-            QCOMPARE(output.readingTheme, Model::ReadingTheme::Dark);
+            QCOMPARE(output.documentTheme, Model::DocumentTheme::Dark);
             QCOMPARE(output.memoryCacheBytes, 128ULL * 1024ULL * 1024ULL);
             QCOMPARE(output.idleTrimAggressiveness, Model::IdleTrimLevel::Aggressive);
             QCOMPARE(output.epub.fontSize, 17);
@@ -645,15 +645,15 @@ private slots:
         QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng" }, &reason));
 
         DocumentSettings invalidTheme;
-        invalidTheme.readingTheme = static_cast<ReadingTheme>(255);
+        invalidTheme.documentTheme = static_cast<DocumentTheme>(255);
         QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
-        invalidTheme.readingTheme = static_cast<ReadingTheme>(4);
+        invalidTheme.documentTheme = static_cast<DocumentTheme>(4);
         QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
         DocumentSettings validSettings;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
-        validSettings.readingTheme = ReadingTheme::Twilight;
+        validSettings.documentTheme = DocumentTheme::Twilight;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
-        validSettings.readingTheme = ReadingTheme::Dusk;
+        validSettings.documentTheme = DocumentTheme::Dusk;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
         validSettings.memoryCacheBytes = ::Mu::Limit::MaxDocumentMemoryCacheBytes + 1;
         QVERIFY(!isValidDocumentSettings(validSettings, &reason));

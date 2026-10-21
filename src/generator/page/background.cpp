@@ -9,10 +9,10 @@
 
 namespace Mu::Generator::Page {
 
-void Background::setTheme(Model::ReadingTheme theme)
+void Background::setTheme(Model::DocumentTheme theme)
 {
     const QColor color =
-        theme == Model::ReadingTheme::Default ? QColor { } : QColor::fromRgb(Model::ThemeColor::getBackground(theme));
+        theme == Model::DocumentTheme::Default ? QColor { } : QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     if (color == m_color)
         return;
     m_color = color;
@@ -47,8 +47,12 @@ void Background::refresh(Okular::Page& page)
     // Rotation jobs may finish after deletePixmap(), including after Default
     // was selected. Remove those stale previews without scheduling another job.
     // Checking dimensions also prevents a rotation-notification/reseed loop.
-    if (m_preview.isNull() || !page.hasPixmap(this, m_preview.width(), m_preview.height()))
+    if (m_preview.isNull()) {
+        if (page.hasPixmap(this))
+            page.deletePixmap(this);
+    } else if (!page.hasPixmap(this, m_preview.width(), m_preview.height())) {
         seed(page);
+    }
 }
 
 QImage Background::partialImage(QSize size) const

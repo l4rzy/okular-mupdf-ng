@@ -201,7 +201,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QComboBox" name="kcfg_ReadingTheme">
+             <widget class="QComboBox" name="kcfg_DocumentTheme">
               <item>
                <property name="text">
                 <string>Default</string>

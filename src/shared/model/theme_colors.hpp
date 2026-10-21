@@ -16,14 +16,14 @@ inline constexpr std::uint32_t DuskBackground = 0x303134;
 inline constexpr std::uint32_t DarkBackground = 0x202124;
 inline constexpr std::uint32_t DarkForeground = 0xDADCE0;
 
-constexpr std::uint32_t getBackground(ReadingTheme theme) noexcept
+constexpr std::uint32_t getBackground(DocumentTheme theme) noexcept
 {
     switch (theme) {
-    case ReadingTheme::Twilight:
+    case DocumentTheme::Twilight:
         return TwilightBackground;
-    case ReadingTheme::Dusk:
+    case DocumentTheme::Dusk:
         return DuskBackground;
-    case ReadingTheme::Dark:
+    case DocumentTheme::Dark:
         return DarkBackground;
     default:
         return DefaultBackground;

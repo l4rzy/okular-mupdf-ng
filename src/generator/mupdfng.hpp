@@ -154,7 +154,7 @@ private:
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     void setupActions();
     void setupThemeActions();
-    void updatePageBackground(Model::ReadingTheme theme);
+    void updatePageBackground(Model::DocumentTheme theme);
     void syncThemeActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
@@ -297,6 +297,8 @@ private:
     // Opaque page background requested by Okular (paper-color setting).
     static constexpr std::uint32_t DefaultPaperColorRgb = 0xFFFFFF;
     std::uint32_t m_paperColorRgb = DefaultPaperColorRgb;
+    // GUI-thread state: Default bypasses all loading-background rendering.
+    bool m_hasPageBackground = false;
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     Page::Background m_pageBackground;
 #endif

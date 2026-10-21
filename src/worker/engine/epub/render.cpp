@@ -107,14 +107,14 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
             pix = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
         }
 
-        const auto theme = m_settings.readingTheme;
-        const bool deviceTheme = theme == ReadingTheme::Dusk || theme == ReadingTheme::Dark;
+        const auto theme = m_settings.documentTheme;
+        const bool deviceTheme = theme == DocumentTheme::Dusk || theme == DocumentTheme::Dark;
         if (deviceTheme && request.cookie)
             list = fz_new_display_list_from_page(m_context, page);
         const auto pageTheme =
             deviceTheme ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo { };
         const bool recolorVectors = deviceTheme && !pageTheme.mostlyDark;
-        const bool bitmapDark = theme == ReadingTheme::Dark && recolorVectors && pageTheme.needsCompositing;
+        const bool bitmapDark = theme == DocumentTheme::Dark && recolorVectors && pageTheme.needsCompositing;
         const auto paperColor =
             recolorVectors && !bitmapDark ? Model::ThemeColor::getBackground(theme) : readingPaperColor(m_settings);
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
