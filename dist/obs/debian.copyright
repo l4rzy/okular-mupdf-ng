@@ -1,0 +1,22 @@
+Upstream: okular-mupdf-ng
+Source: https://github.com/l4rzy/okular-mupdf-ng
+Copyright: 2026 l4rzy <me@23ro.org> and the respective source-file authors
+License: GPL-3.0-or-later
+
+The backend is distributed under the GNU General Public License, version 3
+or later. On Debian systems, the full GPL version 3 text is available in
+/usr/share/common-licenses/GPL-3.
+
+The bundled MuPDF engine is copyright Artifex Software, Inc. and its
+contributors, and is distributed under the GNU Affero General Public License,
+version 3 or later. Its full license is installed as
+/usr/share/doc/okular-mupdf-ng/MuPDF-COPYING. The upstream MuPDF source archive
+also retains the copyright and license notices of its bundled dependencies.
+
+The bundled Allura font is copyright 2010 The Allura Project Authors
+(https://github.com/googlefonts/allura) and is distributed under the SIL Open
+Font License, version 1.1. Its full license is installed as
+/usr/share/doc/okular-mupdf-ng/Allura-OFL.txt.
+
+Other third-party code retains its own copyright and license notices in the
+source distribution. See the corresponding files under thirdparty/.

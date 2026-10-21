@@ -1,0 +1,6 @@
+okular-mupdf-ng (0.4.8-1) unstable; urgency=medium
+
+  * Add OBS packaging for Debian 13, Debian testing, and Ubuntu 26.04 LTS.
+  * Build with Clang, Ninja, and the pinned bundled MuPDF source.
+
+ -- l4rzy <me@23ro.org>  Tue, 20 Oct 2026 05:58:42 +0000
