@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title description">
   <title id="title">okular-mupdf-ng</title>
-  <desc id="description">Shaded ivory paper with a copper folded corner over a muted golden sheet, with a bold ng monogram, matching copper highlights, and a teal lens labeled MuPDF inside the g.</desc>
+  <desc id="description">Shaded ivory paper with a copper folded corner over a muted golden sheet, with a bold ng monogram standing over a copper-rimmed sandbox, matching copper highlights, and a teal lens labeled MuPDF inside the g.</desc>
 
   <!-- Original geometry with an Oxygen-inspired material treatment. -->
   <defs>
@@ -35,6 +35,15 @@
       <stop offset=".5" stop-color="#278F99"/>
       <stop offset="1" stop-color="#123A53"/>
     </linearGradient>
+    <linearGradient id="sand" x1="272" y1="286" x2="272" y2="334" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9E7BD"/>
+      <stop offset="1" stop-color="#D9B578"/>
+    </linearGradient>
+    <linearGradient id="sandbox-front" x1="272" y1="332" x2="272" y2="371" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DB9862"/>
+      <stop offset=".45" stop-color="#B97749"/>
+      <stop offset="1" stop-color="#8D5335"/>
+    </linearGradient>
     <radialGradient id="ground">
       <stop stop-color="#15262C" stop-opacity=".3"/>
       <stop offset="1" stop-color="#15262C" stop-opacity="0"/>
@@ -50,6 +59,9 @@
     <!-- Concentric arcs keep each letter's stroke even through its bends. -->
     <path id="n-shape" d="M166 295V213H224A38 38 0 0 1 262 251V295H234V251A10 10 0 0 0 224 241H204A10 10 0 0 0 194 251V295H166Z"/>
     <path id="g-shape" d="M308 213H376V304A30 30 0 0 1 346 334H294V310H346A6 6 0 0 0 352 304V295H308Q280 295 280 267V241Q280 213 308 213Z"/>
+    <clipPath id="sand-shadow-clip" clipPathUnits="userSpaceOnUse">
+      <path d="M173 305L192 267H350L371 305Z"/>
+    </clipPath>
   </defs>
 
   <ellipse cx="256" cy="476" rx="191" ry="26" fill="url(#ground)"/>
@@ -75,19 +87,37 @@
     <path d="M324 66L410 152H339Q324 152 324 137V66Z" fill="url(#fold)" stroke="#94502E" stroke-width="2" stroke-linejoin="round"/>
     <path d="M329 78V136Q329 147 340 147H397" stroke="#FFF0D5" stroke-opacity=".8" stroke-width="2"/>
 
-    <!-- Equal 96-unit letter widths and a shared top/baseline; the n has
-         28-unit strokes to balance the g's 24-unit strokes and filled lens.
-         The 1-unit offset centers the monogram on the page at x=272. -->
-    <!-- Explicit silhouettes also render in viewers without SVG filter support. -->
-    <g transform="translate(1 -11)" fill="#10272D" opacity=".22">
-      <use xlink:href="#n-shape"/>
-      <use xlink:href="#g-shape"/>
+    <!-- A shallow sand tray grounds the monogram and represents worker isolation. -->
+    <g id="sandbox" transform="translate(0 -20)" stroke-linejoin="round">
+      <path d="M159 340H386V370Q386 375 381 375H164Q159 375 159 370Z" fill="#10272D" fill-opacity=".13"/>
+      <path d="M158 332L184 276H358L386 332Z" fill="url(#accent)" stroke="#A3673E" stroke-width="2"/>
+      <path d="M173 325L192 287H350L371 325Z" fill="url(#sand)" stroke="#B58C56" stroke-width="2"/>
+      <path d="M177 323L194 290H348" stroke="#FFF3D5" stroke-opacity=".7" stroke-width="2"/>
+      <path d="M183 315Q206 309 229 315M242 324Q256 319 272 322M319 319L337 319" stroke="#B58C56" stroke-opacity=".45" stroke-width="2" stroke-linecap="round"/>
     </g>
+
+    <!-- Light comes from above and in front: compress the silhouettes toward
+         the back of the sand, anchoring the n to its tilted foot line and the g
+         to the buried hook. Clip all letter shadows to the sand surface. -->
+    <g id="sand-letter-shadows" clip-path="url(#sand-shadow-clip)" fill="#59452F" opacity=".18">
+      <g transform="matrix(1 .114036 0 .28 0 178.7995)">
+        <use xlink:href="#n-shape" transform="translate(1 -18) rotate(9 180 295)"/>
+      </g>
+      <g transform="matrix(1 0 0 .28 0 219.6)">
+        <use xlink:href="#g-shape" transform="translate(1 -18)"/>
+      </g>
+    </g>
+
+    <!-- Equal 96-unit letter widths balance the monogram. Tilt the n around
+         its left foot so its right leg dips into the sand. The front rim
+         stays above both letters and their cast shadows. -->
     <g id="monogram" transform="translate(1 -18)">
-    <use xlink:href="#n-shape" fill="url(#ink)" stroke="#17313C" stroke-width="1.6" stroke-linejoin="round"/>
-    <path d="M170 291V217H190" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.6"/>
-    <path d="M194 217H224A34 34 0 0 1 258 251" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
-    <path d="M238 291V251A14 14 0 0 0 224 237H204" stroke="#FFFFFF" stroke-opacity=".2" stroke-width="1.6"/>
+    <g transform="rotate(9 180 295)">
+      <use xlink:href="#n-shape" fill="url(#ink)" stroke="#17313C" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M170 291V217H190" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.6"/>
+      <path d="M194 217H224A34 34 0 0 1 258 251" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+      <path d="M238 291V251A14 14 0 0 0 224 237H204" stroke="#FFFFFF" stroke-opacity=".2" stroke-width="1.6"/>
+    </g>
     <use xlink:href="#g-shape" fill="url(#ink)" stroke="#17313C" stroke-width="1.6" stroke-linejoin="round"/>
     <path d="M284 265V241Q284 217 308 217H372M298 314H346A10 10 0 0 0 356 304" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.6"/>
     <path d="M372 302V304A26 26 0 0 1 346 330H338" stroke="url(#hook-accent)" stroke-width="3" stroke-linecap="round"/>
@@ -102,7 +132,21 @@
     </g>
     </g>
 
-    <path d="M172 361H372M209 381H335" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
-    <path d="M172 359H372M209 379H335" stroke="#8B9B9B" stroke-opacity=".6" stroke-width="4" stroke-linecap="round"/>
+    <!-- A small sand lip covers the tilted foot where it enters the surface. -->
+    <g id="n-sand-contact" transform="translate(0 -20)">
+      <path d="M231 306Q240 303 249 307Q260 311 267 308V317H231Z" fill="url(#sand)"/>
+      <path d="M231 306Q240 303 249 307Q260 311 267 308" stroke="#B58C56" stroke-opacity=".45" stroke-width="1.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- Both edges of the front lip pass in front of the g hook. -->
+    <g id="sandbox-rim" transform="translate(0 -20)" stroke-linejoin="round">
+      <path d="M173 325H371L386 332H158Z" fill="url(#accent)" stroke="#A3673E" stroke-width="2"/>
+      <path d="M173 325H371" stroke="#B58C56" stroke-width="2"/>
+      <path d="M158 332H386V366Q386 371 381 371H163Q158 371 158 366Z" fill="url(#sandbox-front)" stroke="#895437" stroke-width="2"/>
+      <path d="M162 335H382" stroke="#FFE3B2" stroke-width="3" stroke-linecap="round"/>
+      <path d="M164 364H380" stroke="#673C2B" stroke-opacity=".4" stroke-width="2"/>
+      <path d="M164 340V360M380 340V360" stroke="#F5BF86" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+    </g>
+
   </g>
 </svg>
