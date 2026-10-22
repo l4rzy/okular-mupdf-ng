@@ -522,6 +522,18 @@ WorkerTransport::openData(const QByteArray& data, const QString& password, QList
 
 bool WorkerTransport::close()
 {
+    // Abandon before the close RPC: call() also drains notifications, so an
+    // export completing during that exchange must already be stale. Remove
+    // its temporary file and stop its timer without emitting a signal that
+    // could be attributed to the next document. The worker finishes on its
+    // own; its late notification is discarded by the jobId check.
+    if (m_export) {
+        if (m_exportTimer)
+            m_exportTimer->stop();
+        MU_LOG(
+            debug, "Mu::Plugin", "export abandoned at document boundary (job " + std::to_string(m_export->jobId) + ")");
+        m_export.reset();
+    }
     // Document state belongs to the worker, while staged input belongs to the
     // plugin; clear both even when the close RPC fails.
     auto response = call(CloseRequest { });
@@ -530,18 +542,6 @@ bool WorkerTransport::close()
     if (!m_tempPath.isEmpty()) {
         QFile::remove(m_tempPath);
         m_tempPath.clear();
-    }
-    // A document boundary abandons the awaiting export without notifying: the
-    // generator holds no export state, and a failure signal here would be
-    // attributed to whatever document is open next. The worker job finishes on
-    // its own; its late notification is discarded by the jobId check. The
-    // temporary file is removed with the owned QTemporaryFile.
-    if (m_export) {
-        if (m_exportTimer)
-            m_exportTimer->stop();
-        MU_LOG(
-            debug, "Mu::Plugin", "export abandoned at document boundary (job " + std::to_string(m_export->jobId) + ")");
-        m_export.reset();
     }
     m_sourcePath.clear();
     m_useEpubCache = false;

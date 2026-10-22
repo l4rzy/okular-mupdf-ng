@@ -6,6 +6,8 @@
 #include "plugin/caching/epub_cache.hpp"
 #include "plugin/caching/pdf_toc_cache.hpp"
 #include "plugin/worker_client.hpp"
+#include "plugin/worker_transport.hpp"
+#include "shared/protocol/zpp_codec.hpp"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -16,16 +18,19 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtEndian>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
 #include <future>
 #include <optional>
+#include <span>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
@@ -649,23 +654,73 @@ private slots:
 
     // Closing the document abandons the awaiting export: no completion signal,
     // no target file, and the worker's late notification stays silent.
+    void epubExportAbandonedOnDocumentClose_data()
+    {
+        QTest::addColumn<bool>("completionQueued");
+        QTest::newRow("close-immediately") << false;
+        QTest::newRow("completion-queued-before-close") << true;
+    }
+
     void epubExportAbandonedOnDocumentClose()
     {
+        QFETCH(bool, completionQueued);
+        // Keep transport dispatch on this thread so no completion can be
+        // delivered between submission and close, regardless of CPU speed.
+        ::Mu::Plugin::WorkerTransport transport;
+        QVERIFY(transport.start(QStringLiteral(RENDER_WORKER_BUILD_PATH), { }, nullptr));
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
-        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        QCOMPARE(transport.open(m_epub, { }, &pages, ::Mu::Model::DocumentType::Epub),
+                 ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
 
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-abandoned.pdf"));
-        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
-        const auto job = m_client.startPdfExport(outputPath, { });
+        QSignalSpy spy(&transport, &::Mu::Plugin::WorkerTransport::pdfExportFinished);
+        const auto job = transport.startPdfExport(outputPath, { });
         QVERIFY(job.has_value());
-        QVERIFY(m_client.close());
+        if (completionQueued) {
+            pid_t workerPid = -1;
+            const int socket = workerControlSocket(workerPid);
+            QVERIFY(socket >= 0);
+            // Peek without consuming or dispatching: close() must encounter
+            // this completed export while waiting for its own RPC response.
+            const auto hasCompletion = [&] {
+                int available = 0;
+                if (::ioctl(socket, FIONREAD, &available) != 0 || available <= 0)
+                    return false;
+                QByteArray bytes(available, Qt::Uninitialized);
+                const auto count =
+                    ::recv(socket, bytes.data(), static_cast<std::size_t>(bytes.size()), MSG_PEEK | MSG_DONTWAIT);
+                if (count <= 0)
+                    return false;
+                bytes.resize(count);
+                qsizetype offset = 0;
+                while (bytes.size() - offset >= 4) {
+                    const auto length = qFromBigEndian<quint32>(bytes.constData() + offset);
+                    offset += 4;
+                    if (length > static_cast<quint64>(bytes.size() - offset))
+                        return false;
+                    ::Mu::Model::NotificationMessage notification;
+                    const std::span frame(reinterpret_cast<const std::byte*>(bytes.constData() + offset), length);
+                    if (::Mu::IPC::ZppCodec::decode(frame, &notification)) {
+                        const auto* done = std::get_if<::Mu::Model::ExportDoneNotification>(&notification.payload);
+                        if (done && done->jobId == *job)
+                            return true;
+                    }
+                    offset += length;
+                }
+                return false;
+            };
+            bool ready = false;
+            for (int attempt = 0; attempt < 500 && !(ready = hasCompletion()); ++attempt)
+                QTest::qSleep(10);
+            QVERIFY2(ready, "worker did not queue the export completion");
+        }
+        QVERIFY(transport.close());
 
-        // The job may still be running in the worker; wait out the export and
-        // any subsequent timeout window to prove the signal never arrives and
-        // the target file never appears.
+        // Process late notifications after the document boundary. They must
+        // neither emit a completion signal nor publish the target file.
         const auto hasAbandonedJob = [&]() {
             return std::any_of(spy.cbegin(), spy.cend(), [&](const QList<QVariant>& arguments) {
                 return arguments.at(0).toULongLong() == *job;
@@ -680,13 +735,14 @@ private slots:
 
         // A fresh export after the boundary works again once the abandoned
         // job's slot frees (the thread runs to completion in the worker).
-        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        QCOMPARE(transport.open(m_epub, { }, &pages, ::Mu::Model::DocumentType::Epub),
+                 ::Mu::Model::OpenStatus::Success);
         std::optional<quint64> resumed;
-        for (int attempt = 0; attempt < 50 && !(resumed = m_client.startPdfExport(outputPath, { })).has_value();
+        for (int attempt = 0; attempt < 50 && !(resumed = transport.startPdfExport(outputPath, { })).has_value();
              ++attempt)
             QTest::qWait(100);
         QVERIFY2(resumed.has_value(), "worker did not free the export slot after the abandoned job");
-        QVERIFY(m_client.close());
+        QVERIFY(transport.close());
     }
 
     // A failed export submission must not queue an orphan descriptor: creating
