@@ -6,12 +6,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
-  <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/COPYING"><img src="https://img.shields.io/github/license/l4rzy/okular-mupdf-ng" alt="GitHub license"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/actions"><img src="https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml" alt="GitHub Workflow Status"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
   <br>
-  <a href="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/package/okular-mupdf-ng/"><img src="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/package/okular-mupdf-ng/status_image/last_build.png" /></a>
-  <a href="https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng"><img src="https://build.opensuse.org/projects/home:23ro/packages/okular-mupdf-ng/badge.svg?type=default" alt="OpenSUSE OBS"></a>
+  <a href="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/"> <img src="https://img.shields.io/badge/Fedora_COPR-okular--mupdf--ng-3c6eb4?logo=fedora&logoColor=white" alt="Fedora COPR - okular-mupdf-ng"/></a>
+  <a href="https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng"> <img src="https://img.shields.io/badge/openSUSE_OBS-okular--mupdf--ng-73ba25?logo=opensuse&logoColor=white" alt="openSUSE OBS - okular-mupdf-ng"/></a>
 </p>
 
 A MuPDF-based **secure** and fast backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.

@@ -14,7 +14,8 @@ the "Show backend selection dialog" option in Okular.
 ### Arch Linux
 
 ```bash
-yay -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng-0.4.9-1-x86_64.archlinux.pkg.tar.zst
+wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng-0.4.9-1-x86_64.archlinux.pkg.tar.zst
+yay -U okular-mupdf-ng-0.4.9-1-x86_64.archlinux.pkg.tar.zst
 ```
 
 Arch Linux updates to Okular, KDE Frameworks 6 (KF6), Qt, or other dependencies
@@ -25,7 +26,8 @@ using [dist/PKGBUILD](dist/PKGBUILD) so it matches your installed libraries.
 ### Manjaro Linux
 
 ```bash
-sudo pacman -U https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng-0.4.9-1-x86_64.manjaro.pkg.tar.zst
+wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng-0.4.9-1-x86_64.manjaro.pkg.tar.zst
+yay -U okular-mupdf-ng-0.4.9-1-x86_64.manjaro.pkg.tar.zst
 ```
 
 ### Fedora
@@ -35,16 +37,25 @@ and install the package:
 
 ```bash
 sudo dnf copr enable l4rzy/okular-mupdf-ng
+sudo dnf dsync --refresh
 sudo dnf install okular-mupdf-ng
 ```
 
-### openSUSE Tumbleweed
+### openSUSE Tumbleweed & Slowroll
 
 Add the [OBS repository](https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng)
 and install the package:
 
+For Tumbleweed:
 ```bash
-sudo zypper addrepo --refresh https://download.opensuse.org/repositories/home:/23ro/openSUSE_Tumbleweed/home:23ro.repo
+sudo zypper addrepo https://download.opensuse.org/repositories/home:/23ro/openSUSE_Tumbleweed/home:23ro.repo
+sudo zypper refresh
+sudo zypper install okular-mupdf-ng
+```
+
+For Slowroll:
+```bash
+sudo zypper addrepo https://download.opensuse.org/repositories/home:/23ro/openSUSE_Slowroll/home:23ro.repo
 sudo zypper refresh
 sudo zypper install okular-mupdf-ng
 ```
