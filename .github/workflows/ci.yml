@@ -62,12 +62,12 @@ jobs:
 
   package-rpm-tumbleweed:
     needs: check-build
-    if: ${{ false }} # RPM builds are handled by OBS.
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-rpm-tumbleweed.yml
 
   package-rpm-fedora:
     needs: check-build
-    if: ${{ false }} # RPM builds are handled by COPR.
+    if: needs.check-build.outputs.build == 'true'
     uses: ./.github/workflows/build-rpm-fedora.yml
 
   release:

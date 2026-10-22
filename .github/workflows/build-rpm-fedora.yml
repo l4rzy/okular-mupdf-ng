@@ -1,11 +1,11 @@
-name: Build Fedora RPM Packages (Clang)
+name: Build Fedora RPM Packages (Clang, None)
 
 on:
   workflow_call:
 
 jobs:
   package-rpm-fedora:
-    name: Build Fedora ${{ matrix.version }} ${{ matrix.arch }} RPM (Clang)
+    name: Build Fedora ${{ matrix.version }} ${{ matrix.arch }} RPM (Clang, None)
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -87,7 +87,7 @@ jobs:
       - name: Configure CMake
         run: |
           cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=None \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_INSTALL_PREFIX=/usr \
@@ -95,7 +95,7 @@ jobs:
             -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DBUILD_TESTING=ON \
-            -DENABLE_MU_DEBUG=OFF \
+            -DENABLE_MU_DEBUG=ON \
             -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
             -DCPACK_RPM_PACKAGE_RELEASE_DIST=ON \
             "-DCPACK_RPM_PACKAGE_REQUIRES=okular"
@@ -136,10 +136,3 @@ jobs:
           file "$worker" | grep -q "$ELF_ARCH"
           rpm --checksig "$package"
           rpm --info -qp "$package"
-
-      - name: Upload Fedora RPM package
-        uses: actions/upload-artifact@v7
-        with:
-          name: fedora-${{ matrix.version }}-${{ matrix.arch }}-rpm-package
-          path: build/packages/*.rpm
-          if-no-files-found: error
