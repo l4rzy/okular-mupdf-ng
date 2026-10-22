@@ -69,6 +69,11 @@ public:
     void close();
 
 private:
+    // Parses at most one frame. peerClosed applies only after pending socket
+    // bytes have been drained; partial input otherwise remains buffered.
+    ReadStatus consumeBufferedFrame(std::vector<std::byte>* payload, bool peerClosed, std::string* error);
+    ReadStatus receiveFrameBytes(std::vector<std::byte>* payload, std::string* error);
+
     int m_fd = -1;
     std::vector<std::byte> m_rxBuffer;
     std::optional<std::uint32_t> m_rxFrameLength;

@@ -370,6 +370,46 @@ private slots:
         QCOMPARE(::Mu::IPC::tryReadFrame(reader, &frame, &error), ::Mu::IPC::ReadStatus::Closed);
     }
 
+    void nonBlockingReaderDrainsBeforeTruncatedTail_data()
+    {
+        QTest::addColumn<int>("payloadSize");
+        QTest::addColumn<int>("tailSize");
+        QTest::newRow("complete-frame") << 1 << 0;
+        QTest::newRow("partial-header") << 1 << 2;
+        QTest::newRow("partial-payload") << 1 << 5;
+        QTest::newRow("multiple-chunks") << (64 * 1024 + 1) << 5;
+    }
+
+    void nonBlockingReaderDrainsBeforeTruncatedTail()
+    {
+        QFETCH(int, payloadSize);
+        QFETCH(int, tailSize);
+        int fds[2] { -1, -1 };
+        QVERIFY(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds) == 0);
+        ::Mu::IPC::CtrlChannel writer(fds[0]);
+        ::Mu::IPC::CtrlChannel reader(fds[1]);
+        const std::vector<std::byte> expected(payloadSize, std::byte(0x7f));
+        std::vector<std::byte> encoded { std::byte((payloadSize >> 24) & 0xff),
+                                         std::byte((payloadSize >> 16) & 0xff),
+                                         std::byte((payloadSize >> 8) & 0xff),
+                                         std::byte(payloadSize & 0xff) };
+        encoded.insert(encoded.end(), expected.begin(), expected.end());
+        const std::array<std::byte, 5> tail { std::byte(0), std::byte(0), std::byte(0), std::byte(4), std::byte('x') };
+        encoded.insert(encoded.end(), tail.begin(), tail.begin() + tailSize);
+        QCOMPARE(::write(writer.fd(), encoded.data(), encoded.size()), ssize_t(encoded.size()));
+        writer.close();
+
+        std::vector<std::byte> frame;
+        std::string error;
+        QCOMPARE(::Mu::IPC::tryReadFrame(reader, &frame, &error), ::Mu::IPC::ReadStatus::Complete);
+        QCOMPARE(frame, expected);
+        QVERIFY(reader.valid());
+        QCOMPARE(::Mu::IPC::tryReadFrame(reader, &frame, &error), ::Mu::IPC::ReadStatus::Closed);
+        QVERIFY(frame.empty());
+        QVERIFY(!reader.valid());
+        QVERIFY(error.find("closed during a frame") != std::string::npos);
+    }
+
     void payloadTimeoutUsesTheWholeFrameDeadline()
     {
         int fds[2] { -1, -1 };

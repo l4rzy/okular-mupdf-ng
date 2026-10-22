@@ -64,6 +64,8 @@ bool verifyPeer(int fd, std::int64_t expectedPeerPid, std::string* error)
 // Frame Length Encoding & Exact Transfers
 // =============================================================================
 
+constexpr std::size_t FrameReadChunkBytes = 64 * 1024;
+
 std::array<std::byte, 4> encodeFrameLength(std::size_t length)
 {
     // Control frames use a four-byte network-order length independent of the
@@ -405,6 +407,112 @@ bool readFrame(CtrlChannel& socket, std::vector<std::byte>* payload, int timeout
     }
 }
 
+ReadStatus CtrlChannel::consumeBufferedFrame(std::vector<std::byte>* payload, bool peerClosed, std::string* error)
+{
+    // First decode a pending length, then wait until exactly that many
+    // payload bytes are available. A larger buffer contains the next frame.
+    if (!m_rxFrameLength) {
+        if (m_rxBuffer.size() < sizeof(std::uint32_t)) {
+            if (peerClosed) {
+                if (error)
+                    *error = "control socket closed during a frame";
+                close();
+                return ReadStatus::Closed;
+            }
+            return m_rxBuffer.empty() ? ReadStatus::NoData : ReadStatus::Partial;
+        }
+        std::uint32_t length = 0;
+        if (!decodeFrameLength(std::span<const std::byte>(m_rxBuffer.data(), sizeof(std::uint32_t)), &length, error)) {
+            close();
+            return ReadStatus::Error;
+        }
+        m_rxBuffer.erase(m_rxBuffer.begin(), m_rxBuffer.begin() + sizeof(std::uint32_t));
+        try {
+            m_rxBuffer.reserve(length);
+        } catch (const std::exception& exception) {
+            if (error)
+                *error = std::string("control frame allocation failed: ") + exception.what();
+            close();
+            return ReadStatus::Error;
+        }
+        m_rxFrameLength = length;
+    }
+
+    if (m_rxBuffer.size() < *m_rxFrameLength) {
+        if (peerClosed) {
+            if (error)
+                *error = "control socket closed during a frame";
+            close();
+            return ReadStatus::Closed;
+        }
+        return ReadStatus::Partial;
+    }
+
+    if (m_rxBuffer.size() == *m_rxFrameLength) {
+        *payload = std::move(m_rxBuffer);
+    } else {
+        try {
+            payload->assign(m_rxBuffer.begin(), m_rxBuffer.begin() + *m_rxFrameLength);
+        } catch (const std::exception& exception) {
+            if (error)
+                *error = std::string("control frame allocation failed: ") + exception.what();
+            close();
+            return ReadStatus::Error;
+        }
+        m_rxBuffer.erase(m_rxBuffer.begin(), m_rxBuffer.begin() + *m_rxFrameLength);
+    }
+    m_rxFrameLength.reset();
+    if (m_rxBuffer.empty())
+        std::vector<std::byte>().swap(m_rxBuffer);
+    return ReadStatus::Complete;
+}
+
+ReadStatus CtrlChannel::receiveFrameBytes(std::vector<std::byte>* payload, std::string* error)
+{
+    // Read in bounded chunks so an adversarial frame cannot force one oversized
+    // temporary allocation before its declared length has been validated.
+    std::array<std::byte, FrameReadChunkBytes> chunk {};
+    for (;;) {
+        const std::size_t bufferedBytes = m_rxBuffer.size();
+        const std::size_t requiredBytes = m_rxFrameLength ? static_cast<std::size_t>(*m_rxFrameLength) - bufferedBytes
+                                                          : sizeof(std::uint32_t) - bufferedBytes;
+        const std::size_t readSize = std::min(chunk.size(), requiredBytes);
+        const ssize_t count = ::recv(fd(), chunk.data(), readSize, MSG_DONTWAIT);
+        if (count > 0) {
+            try {
+                m_rxBuffer.insert(m_rxBuffer.end(), chunk.begin(), chunk.begin() + count);
+            } catch (const std::exception& exception) {
+                if (error)
+                    *error = std::string("control frame allocation failed: ") + exception.what();
+                close();
+                return ReadStatus::Error;
+            }
+            // A hangup can accompany readable data. Keep draining the socket
+            // before treating an incomplete buffered frame as closed.
+            const ReadStatus status = consumeBufferedFrame(payload, false, error);
+            if (status == ReadStatus::Complete)
+                m_rxPeerClosed = false;
+            if (status == ReadStatus::Complete || status == ReadStatus::Closed || status == ReadStatus::Error)
+                return status;
+            continue;
+        }
+        if (count == 0) {
+            m_rxPeerClosed = true;
+            break;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            break;
+        if (error)
+            *error = std::strerror(errno);
+        close();
+        return ReadStatus::Error;
+    }
+
+    return consumeBufferedFrame(payload, m_rxPeerClosed, error);
+}
+
 ReadStatus tryReadFrame(CtrlChannel& socket, std::vector<std::byte>* payload, std::string* error)
 {
     if (!payload || socket.fd() < 0) {
@@ -417,67 +525,7 @@ ReadStatus tryReadFrame(CtrlChannel& socket, std::vector<std::byte>* payload, st
     // there until the stream provides more data.
     payload->clear();
 
-    const auto consumeBuffered = [&]() -> ReadStatus {
-        // First decode a pending length, then wait until exactly that many
-        // payload bytes are available. A larger buffer contains the next frame.
-        if (!socket.m_rxFrameLength) {
-            if (socket.m_rxBuffer.size() < sizeof(std::uint32_t)) {
-                if (socket.m_rxPeerClosed) {
-                    if (error)
-                        *error = "control socket closed during a frame";
-                    socket.close();
-                    return ReadStatus::Closed;
-                }
-                return socket.m_rxBuffer.empty() ? ReadStatus::NoData : ReadStatus::Partial;
-            }
-            std::uint32_t length = 0;
-            if (!decodeFrameLength(
-                    std::span<const std::byte>(socket.m_rxBuffer.data(), sizeof(std::uint32_t)), &length, error)) {
-                socket.close();
-                return ReadStatus::Error;
-            }
-            socket.m_rxBuffer.erase(socket.m_rxBuffer.begin(), socket.m_rxBuffer.begin() + sizeof(std::uint32_t));
-            try {
-                socket.m_rxBuffer.reserve(length);
-            } catch (const std::exception& exception) {
-                if (error)
-                    *error = std::string("control frame allocation failed: ") + exception.what();
-                socket.close();
-                return ReadStatus::Error;
-            }
-            socket.m_rxFrameLength = length;
-        }
-
-        if (socket.m_rxBuffer.size() < *socket.m_rxFrameLength) {
-            if (socket.m_rxPeerClosed) {
-                if (error)
-                    *error = "control socket closed during a frame";
-                socket.close();
-                return ReadStatus::Closed;
-            }
-            return ReadStatus::Partial;
-        }
-
-        if (socket.m_rxBuffer.size() == *socket.m_rxFrameLength) {
-            *payload = std::move(socket.m_rxBuffer);
-        } else {
-            try {
-                payload->assign(socket.m_rxBuffer.begin(), socket.m_rxBuffer.begin() + *socket.m_rxFrameLength);
-            } catch (const std::exception& exception) {
-                if (error)
-                    *error = std::string("control frame allocation failed: ") + exception.what();
-                socket.close();
-                return ReadStatus::Error;
-            }
-            socket.m_rxBuffer.erase(socket.m_rxBuffer.begin(), socket.m_rxBuffer.begin() + *socket.m_rxFrameLength);
-        }
-        socket.m_rxFrameLength.reset();
-        if (socket.m_rxBuffer.empty())
-            std::vector<std::byte>().swap(socket.m_rxBuffer);
-        return ReadStatus::Complete;
-    };
-
-    const ReadStatus buffered = consumeBuffered();
+    const ReadStatus buffered = socket.consumeBufferedFrame(payload, socket.m_rxPeerClosed, error);
     if (buffered == ReadStatus::Complete || buffered == ReadStatus::Closed || buffered == ReadStatus::Error)
         return buffered;
 
@@ -510,49 +558,7 @@ ReadStatus tryReadFrame(CtrlChannel& socket, std::vector<std::byte>* payload, st
     if (readiness.revents & POLLHUP)
         socket.m_rxPeerClosed = true;
 
-    // Read in bounded chunks so an adversarial frame cannot force one oversized
-    // temporary allocation before its declared length has been validated.
-    std::array<std::byte, 64 * 1024> chunk { };
-    for (;;) {
-        const std::size_t bufferedBytes = socket.m_rxBuffer.size();
-        const std::size_t requiredBytes = socket.m_rxFrameLength
-            ? static_cast<std::size_t>(*socket.m_rxFrameLength) - bufferedBytes
-            : sizeof(std::uint32_t) - bufferedBytes;
-        const std::size_t readSize = std::min(chunk.size(), requiredBytes);
-        const ssize_t count = ::recv(socket.fd(), chunk.data(), readSize, MSG_DONTWAIT);
-        if (count > 0) {
-            try {
-                socket.m_rxBuffer.insert(socket.m_rxBuffer.end(), chunk.begin(), chunk.begin() + count);
-            } catch (const std::exception& exception) {
-                if (error)
-                    *error = std::string("control frame allocation failed: ") + exception.what();
-                socket.close();
-                return ReadStatus::Error;
-            }
-            const bool peerClosed = socket.m_rxPeerClosed;
-            socket.m_rxPeerClosed = false;
-            const ReadStatus status = consumeBuffered();
-            if (status == ReadStatus::Partial || status == ReadStatus::NoData)
-                socket.m_rxPeerClosed = peerClosed;
-            if (status == ReadStatus::Complete || status == ReadStatus::Closed || status == ReadStatus::Error)
-                return status;
-            continue;
-        }
-        if (count == 0) {
-            socket.m_rxPeerClosed = true;
-            break;
-        }
-        if (errno == EINTR)
-            continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            break;
-        if (error)
-            *error = std::strerror(errno);
-        socket.close();
-        return ReadStatus::Error;
-    }
-
-    return consumeBuffered();
+    return socket.receiveFrameBytes(payload, error);
 }
 
 } // namespace Mu::IPC
