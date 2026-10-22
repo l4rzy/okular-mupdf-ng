@@ -7,8 +7,8 @@ Maintainer: l4rzy <me@23ro.org>
 Homepage: https://github.com/l4rzy/okular-mupdf-ng
 Standards-Version: 4.7.0
 Build-Depends: debhelper-compat (= 13),
- clang,
- llvm,
+ gcc,
+ g++,
  cmake (>= 3.20),
  extra-cmake-modules (>= 6.3.0),
  gettext,
@@ -30,6 +30,7 @@ Build-Depends: debhelper-compat (= 13),
  libkf6xmlgui-dev,
  libnss3-dev,
  libseccomp-dev,
+ libselinux1-dev,
  okular-dev,
  qt6-base-dev,
  zlib1g-dev,
