@@ -258,9 +258,16 @@ else()
             "${MUPDF_THIRD_LIBRARY}"
             "${MUPDF_THREADS_LIBRARY}")
 
+    # Model the archive's zlib dependency so CMake keeps zlib after its user,
+    # even when another target also links zlib before MuPDF (ld.bfd --as-needed).
+    add_library(MuPDF::Core STATIC IMPORTED GLOBAL)
+    set_target_properties(MuPDF::Core PROPERTIES
+        IMPORTED_LOCATION "${MUPDF_CORE_LIBRARY}"
+        INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
+
     set(MUPDF_ENGINE_LINK_LIBRARIES
         "-Wl,--start-group"
-        "${MUPDF_CORE_LIBRARY}"
+        MuPDF::Core
         "${MUPDF_THIRD_LIBRARY}"
         "${MUPDF_THREADS_LIBRARY}"
         "-Wl,--end-group"
