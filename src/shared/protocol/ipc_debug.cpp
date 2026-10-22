@@ -11,7 +11,6 @@
 #include <string_view>
 #include <type_traits>
 #include <variant>
-#include <vector>
 
 #include "shared/model/types.hpp"
 
@@ -106,16 +105,6 @@ inline void field(std::ostringstream& out, std::string_view name, const std::str
     field(out, name, std::string_view(value));
 }
 
-inline void bytes(std::ostringstream& out, std::string_view name, const std::vector<std::uint8_t>& value)
-{
-    if (!name.empty())
-        out << ' ' << name << '=';
-    out << "0x" << std::hex << std::setfill('0');
-    for (const auto byte : value)
-        out << std::setw(2) << static_cast<unsigned>(byte);
-    out << std::dec << std::setfill(' ');
-}
-
 inline void timestamp(std::ostringstream& out, std::string_view name, const Model::Timestamp& value)
 {
     out << ' ' << name << '=' << (value.valid ? std::to_string(value.unixMilliseconds) : "invalid");
@@ -145,12 +134,9 @@ inline void value(std::ostringstream& out, const Model::Value& input, std::size_
                 out << item;
             else if constexpr (std::is_same_v<T, std::string>)
                 out << std::quoted(item);
-            else if constexpr (std::is_same_v<T, Model::Value::Bytes>) {
-                out << "0x" << std::hex << std::setfill('0');
-                for (const auto byte : item)
-                    out << std::setw(2) << static_cast<unsigned>(byte);
-                out << std::dec << std::setfill(' ');
-            } else if constexpr (std::is_same_v<T, Model::Value::Array>) {
+            else if constexpr (std::is_same_v<T, Model::Value::Bytes>)
+                out << "<bytes=" << item.size() << '>';
+            else if constexpr (std::is_same_v<T, Model::Value::Array>) {
                 out << '[';
                 for (std::size_t i = 0; i < item.size(); ++i) {
                     if (i)
@@ -208,7 +194,7 @@ inline void signature(std::ostringstream& out, const Model::SignatureField& valu
         << " certStatus=" << static_cast<int>(value.certificateStatus);
     rect(out, "rect", value.left, value.top, value.right, value.bottom);
     field(out, "byteRange", value.byteRange.size());
-    bytes(out, "cms", value.cmsSignature);
+    field(out, "cmsBytes", value.cmsSignature.size());
     out << " signed=" << value.signedField << "} ";
 }
 
@@ -537,9 +523,6 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                 else if constexpr (std::is_same_v<T, Model::OcrResponse>) {
                     out << " status=" << static_cast<int>(value.result.status)
                         << " boxes=" << value.result.boxes.size();
-                    for (const auto& box : value.result.boxes)
-                        out << " {text=" << std::quoted(box.text) << " rect=[" << box.left << ',' << box.top << ','
-                            << box.right << ',' << box.bottom << "] end=" << box.endOfLine << '}';
                 } else if constexpr (std::is_same_v<T, Model::MetadataResponse>) {
                     out << " pageCount=" << value.metadata.pageCount
                         << " mime=" << std::quoted(value.metadata.mimeType);
@@ -560,9 +543,8 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                     out << " count=" << value.files.size();
                     for (const auto& file : value.files) {
                         out << " {name=" << std::quoted(file.name) << " description=" << std::quoted(file.description)
-                            << " size=" << file.size << " tooLarge=" << file.contentTooLarge << " data=";
-                        Detail::bytes(out, "", file.data);
-                        out << '}';
+                            << " size=" << file.size << " tooLarge=" << file.contentTooLarge
+                            << " dataBytes=" << file.data.size() << '}';
                     }
                 } else if constexpr (std::is_same_v<T, Model::AnnotationResponse>)
                     out << " handle=" << std::quoted(value.handle.value);
