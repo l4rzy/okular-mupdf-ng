@@ -100,21 +100,7 @@ Main::Main(QObject* parent, const QVariantList& args)
           [this](int page, QSize size, const LinkPreview::Cancelled& cancelled) {
               return m_worker.render(page, size.width(), size.height(), { }, cancelled);
           },
-          [this](int page) -> LinkPreviewPage {
-              if (!workerReady() || page < 0 || page >= m_okularPages.size())
-                  return { };
-              const auto* target = m_okularPages.at(page);
-              const bool sideways =
-                  target->rotation() == Okular::Rotation90 || target->rotation() == Okular::Rotation270;
-              const QSizeF size =
-                  sideways ? QSizeF(target->height(), target->width()) : QSizeF(target->width(), target->height());
-              const bool reflowable = Model::isReflowableDocument(m_document.type);
-              return { size,
-                       reflowable
-                           ? static_cast<double>(std::clamp(
-                                 m_settings.startupEpub.fontSize, Limit::MinEpubFontSize, Limit::MaxEpubFontSize))
-                           : 0.0 };
-          })
+          [this](int page) { return LinkPreview::describePage(workerReady() ? m_okularPages.value(page) : nullptr); })
     , m_annotationProxy(&m_worker,
                         [this](int page) {
                             m_linkPreview.reset();
@@ -137,11 +123,14 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
-    m_linkPreview.setMode(Config::readLinkPreviewMode());
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
 
     // Step 2: Build the UI-side adapters before the worker can emit events.
+    m_linkPreview.setMode(Config::readLinkPreviewMode());
+    connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
+        m_linkPreview.setMode(Config::readLinkPreviewMode());
+    });
     connect(
         &m_worker,
         &Plugin::WorkerClient::operationFailed,
@@ -235,7 +224,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                     // Degraded sandbox under Strict after restart: withhold document,
                     // keep session failed until Relaxed triggers reopenWithheldDocument.
                     m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
-                    m_worker.close();
+                    closeWorkerDocument();
                     clearPageErrorDerivedState();
                     m_worker.commitSessionFailed();
                     Q_EMIT warning(sandboxGateMessage(), LongWarningMs);
@@ -264,7 +253,7 @@ Main::Main(QObject* parent, const QVariantList& args)
             for (const auto& pageLinks : pages) {
                 if (pageLinks.page >= 0 && pageLinks.page < m_okularPages.size())
                     m_okularPages.at(pageLinks.page)
-                        ->setObjectRects(Conversion::objectRects(pageLinks.links, &m_linkPreview));
+                        ->setObjectRects(Conversion::objectRects(pageLinks.links, &m_linkPreview, pageLinks.page));
             }
             if (!error.isEmpty()) {
                 MU_LOG(warning,
@@ -448,7 +437,7 @@ bool Main::reparseConfig()
             // Side effects run after activate() publishes the flag, so any
             // render triggered by them observes the active state.
             m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
-            m_worker.close();
+            closeWorkerDocument();
             clearPageErrorDerivedState();
         } else if (m_pageError.deactivate()) {
             reopenWithheldDocument();
@@ -799,7 +788,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
             }
         }
 
-        okularPage->setObjectRects(Conversion::objectRects(pageInfo.links, &m_linkPreview));
+        okularPage->setObjectRects(Conversion::objectRects(pageInfo.links, &m_linkPreview, pageInfo.number));
         if (!formFields.isEmpty()) {
             okularPage->setFormFields(formFields);
         }
@@ -1024,6 +1013,13 @@ bool Main::workerReady() const
     return m_worker.operational() && !m_pageError.isActive();
 }
 
+// Cancel previews before a synchronous close can wait behind their render RPC.
+void Main::closeWorkerDocument()
+{
+    m_linkPreview.reset();
+    m_worker.close();
+}
+
 // Localized Strict-gate guidance shown on the placeholder card and in
 // refusals. The gating policy itself lives in Main::sandboxGated().
 QString Main::sandboxGateMessage() const
@@ -1056,7 +1052,7 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
     // Side effects run after activate() publishes the flag; at load time the
     // worker has no document and no derived state, so both are best-effort.
     m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
-    m_worker.close();
+    closeWorkerDocument();
     clearPageErrorDerivedState();
     pages.append(makeWithheldPage());
     m_okularPages = pages;
@@ -1283,7 +1279,7 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
             || (hash != metadata.values.end() && QString::fromStdString(hash->second) == m_document.hash));
     if (!valid) {
         MU_LOG(warning, "Mu::Generator::Main", "reopened document does not match the active document");
-        m_worker.close();
+        closeWorkerDocument();
         return false;
     }
 
@@ -1294,7 +1290,7 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
                 && !m_layersModel->restoreLayers(
                     *layers, [this](const Model::SetLayerRequest& request) { return m_worker.setLayer(request); }))
             || (!m_layersModel && !layers->entries.empty())) {
-            m_worker.close();
+            closeWorkerDocument();
             return false;
         }
     }
@@ -1351,7 +1347,7 @@ void Main::failClosed(const QString& message)
     m_pageError.activate(message, Page::Error::Reason::WorkerUnavailable);
     // A terminal placeholder must not leave a connected worker able to mutate
     // a document whose UI state is no longer recoverable.
-    m_worker.close();
+    closeWorkerDocument();
     clearPageErrorDerivedState();
     Q_EMIT error(message, 0);
 
@@ -1391,7 +1387,7 @@ bool Main::doCloseDocument()
     m_document = { };
     syncOcrActions();
     // Closing is best effort: an unavailable worker has already lost its copy.
-    m_worker.close();
+    closeWorkerDocument();
 
     return true;
 }
@@ -1540,11 +1536,15 @@ void Main::clearPageDisplayState(int page)
     }
 }
 
-#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-// Publish the loading image on the GUI thread; Okular marks partial updates as
-// incomplete, so the background can never satisfy the actual render request.
+// Observe full-page geometry on the GUI thread before handing off to rendering.
 void Main::generatePixmap(Okular::PixmapRequest* request)
 {
+    if (!request->shouldAbortRender())
+        m_linkPreview.observeRender(dynamic_cast<QWidget*>(request->observer()),
+                                    request->pageNumber(),
+                                    QSize(request->width(), request->height()));
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    // Partial placeholders must never satisfy the actual render request.
     if (!m_hasPagePlaceholder || m_pageError.isActive()) {
         Okular::Generator::generatePixmap(request);
         return;
@@ -1563,8 +1563,12 @@ void Main::generatePixmap(Okular::PixmapRequest* request)
         if (!image.isNull())
             signalPartialPixmapRequest(request, image);
     }
+#else
+    Okular::Generator::generatePixmap(request);
+#endif
 }
 
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 void Main::notifyPageChanged(int page, int flags)
 {
     if (!m_hasUsedPagePlaceholder)

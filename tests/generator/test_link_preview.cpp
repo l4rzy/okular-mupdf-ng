@@ -8,6 +8,7 @@
 #include <QApplication>
 #include <QCursor>
 #include <QLabel>
+#include <QLayout>
 #include <QScopeGuard>
 #include <QScreen>
 #include <QScrollArea>
@@ -23,6 +24,7 @@
 #include <atomic>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 using namespace Mu;
@@ -40,11 +42,16 @@ Model::Viewport destination(double y = 0)
     return viewport;
 }
 
+auto pageRange(int count, QSizeF size = QSizeF(640, 960))
+{
+    return [count, size](int page) {
+        return LinkPreviewPage { page >= 0 && page < count ? size : QSizeF { } };
+    };
+}
+
 auto singlePage(QSizeF size)
 {
-    return [size](int page) {
-        return LinkPreviewPage { page == 0 ? size : QSizeF { } };
-    };
+    return pageRange(1, size);
 }
 
 QImage solidPage(QSize size, QColor color = Qt::red)
@@ -60,6 +67,12 @@ QWidget* previewWindow()
         if (widget->objectName() == QStringLiteral("mupdfLinkPreview") && widget->isVisible())
             return widget;
     return nullptr;
+}
+
+QScrollArea* previewScrollArea()
+{
+    auto* window = previewWindow();
+    return window ? window->findChild<QScrollArea*>() : nullptr;
 }
 
 QImage previewImage()
@@ -78,6 +91,14 @@ QLabel* previewPage(int number)
         if (label->property("pageNumber").isValid() && label->property("pageNumber").toInt() == number)
             return label;
     return nullptr;
+}
+
+int scrollToPage(int page)
+{
+    auto* bar = previewScrollArea()->verticalScrollBar();
+    const int position = std::min(previewPage(page)->y(), bar->maximum());
+    bar->setValue(position);
+    return position;
 }
 
 QImage pageImage(int number)
@@ -130,6 +151,11 @@ class TestLinkPreview : public QObject {
     Q_OBJECT
     Host m_host;
 
+    QSize renderSize(QSizeF page = QSizeF(640, 960), LinkPreviewMode mode = LinkPreviewMode::Large) const
+    {
+        return Generator::sizeLinkPreview(mode, m_host.size(), m_host.screen()->geometry().size(), { page }).render;
+    }
+
 private slots:
 
     void init()
@@ -149,37 +175,72 @@ private slots:
         QTest::addColumn<QSize>("window");
         QTest::addColumn<QSize>("screen");
         QTest::addColumn<QSizeF>("page");
-        QTest::addColumn<double>("font");
+        QTest::addColumn<double>("scale");
         QTest::addColumn<QSize>("render");
         QTest::addColumn<int>("height");
+        QTest::addColumn<QSize>("sessionScreen");
         const QSize window(1000, 800), screen(1920, 1080);
         const QSizeF page(600, 900);
-        QTest::newRow("off") << LinkPreviewMode::Off << window << screen << page << 0.0 << QSize() << 0;
-        QTest::newRow("small") << LinkPreviewMode::Small << window << screen << page << 0.0 << QSize(480, 720) << 300;
-        QTest::newRow("large") << LinkPreviewMode::Large << window << screen << page << 0.0 << QSize(640, 960) << 400;
-        QTest::newRow("auto-pdf") << LinkPreviewMode::AutoSize << window << screen << page << 0.0 << QSize(550, 825)
-                                  << 440;
-        QTest::newRow("auto-small-font") << LinkPreviewMode::AutoSize << window << screen << page << 10.0
-                                         << QSize(700, 1050) << 440;
-        QTest::newRow("auto-large-font") << LinkPreviewMode::AutoSize << window << screen << page << 20.0
-                                         << QSize(480, 720) << 440;
-        QTest::newRow("auto-large-window") << LinkPreviewMode::AutoSize << QSize(2400, 1600) << QSize(2560, 1920)
-                                           << page << 0.0 << QSize(800, 1200) << 560;
+        QTest::newRow("off") << LinkPreviewMode::Off << window << screen << page << 0.0 << QSize() << 0 << QSize();
+        QTest::newRow("small") << LinkPreviewMode::Small << window << screen << page << 0.0 << QSize(468, 702) << 222
+                               << QSize();
+        QTest::newRow("large") << LinkPreviewMode::Large << window << screen << page << 0.0 << QSize(628, 942) << 312
+                               << QSize();
+        QTest::newRow("auto-pdf") << LinkPreviewMode::AdaptiveSize << window << screen << page << 0.0 << QSize(550, 825)
+                                  << 440 << QSize();
+        QTest::newRow("auto-window-bound")
+            << LinkPreviewMode::AdaptiveSize << window << screen << page << 2.0 << QSize(700, 1050) << 440 << QSize();
+        QTest::newRow("auto-preview-scale")
+            << LinkPreviewMode::AdaptiveSize << window << screen << page << 1.0 << QSize(600, 900) << 440 << QSize();
+        QTest::newRow("auto-zoomed-out") << LinkPreviewMode::AdaptiveSize << window << screen << page << 0.5
+                                         << QSize(300, 450) << 440 << QSize();
+        QTest::newRow("auto-large-window") << LinkPreviewMode::AdaptiveSize << QSize(2400, 1600) << QSize(2560, 1920)
+                                           << page << 0.0 << QSize(1268, 1902) << 880 << QSize();
         QTest::newRow("screen-bound") << LinkPreviewMode::Large << window << QSize(320, 240) << page << 0.0
-                                      << QSize(272, 408) << 192;
+                                      << QSize(94, 141) << 32 << QSize();
         QTest::newRow("short-page") << LinkPreviewMode::Large << window << screen << QSizeF(1200, 300) << 0.0
-                                    << QSize(640, 160) << 160;
+                                    << QSize(628, 157) << 157 << QSize();
+        QTest::newRow("wide-page") << LinkPreviewMode::Large << window << screen << QSizeF(1120, 560) << 0.0
+                                   << QSize(628, 314) << 312 << QSize();
+        QTest::newRow("extremely-wide-page") << LinkPreviewMode::Large << window << screen << QSizeF(1e300, 1e-300)
+                                             << 0.0 << QSize(628, 1) << 1 << QSize();
+        QTest::newRow("extremely-tall-page") << LinkPreviewMode::Large << window << screen << QSizeF(1e-300, 1e300)
+                                             << 0.0 << QSize(1, 4096) << 312 << QSize();
         QTest::newRow("invalid-page") << LinkPreviewMode::Large << window << screen << QSizeF(0, 900) << 0.0 << QSize()
-                                      << 0;
-        QTest::newRow("non-finite-page") << LinkPreviewMode::AutoSize << window << screen
-                                         << QSizeF(std::numeric_limits<double>::infinity(), 900) << 11.0 << QSize()
-                                         << 0;
-        QTest::newRow("invalid-font") << LinkPreviewMode::AutoSize << window << screen << page
-                                      << std::numeric_limits<double>::quiet_NaN() << QSize(550, 825) << 440;
-        QTest::newRow("no-window") << LinkPreviewMode::AutoSize << QSize() << screen << page << 11.0 << QSize() << 0;
-        QTest::newRow("no-screen") << LinkPreviewMode::Large << window << QSize() << page << 0.0 << QSize() << 0;
+                                      << 0 << QSize();
+        QTest::newRow("non-finite-page") << LinkPreviewMode::AdaptiveSize << window << screen
+                                         << QSizeF(std::numeric_limits<double>::infinity(), 900) << 11.0 << QSize() << 0
+                                         << QSize();
+        QTest::newRow("invalid-scale") << LinkPreviewMode::AdaptiveSize << window << screen << page
+                                       << std::numeric_limits<double>::quiet_NaN() << QSize(550, 825) << 440 << QSize();
+        QTest::newRow("infinite-scale") << LinkPreviewMode::AdaptiveSize << window << screen << page
+                                        << std::numeric_limits<double>::infinity() << QSize(550, 825) << 440 << QSize();
+        QTest::newRow("negative-scale") << LinkPreviewMode::AdaptiveSize << window << screen << page << -1.0
+                                        << QSize(550, 825) << 440 << QSize();
+        QTest::newRow("auto-screen-bound") << LinkPreviewMode::AdaptiveSize << window << QSize(320, 240) << page << 2.0
+                                           << QSize(148, 222) << 72 << QSize();
+        QTest::newRow("auto-screen-height-bound") << LinkPreviewMode::AdaptiveSize << window << QSize(1920, 600) << page
+                                                  << 2.0 << QSize(700, 1050) << 252 << QSize();
+        QTest::newRow("auto-scaled-screen-bound") << LinkPreviewMode::AdaptiveSize << window << QSize(960, 540) << page
+                                                  << 2.0 << QSize(468, 702) << 222 << QSize();
+        QTest::newRow("auto-render-bound")
+            << LinkPreviewMode::AdaptiveSize << QSize(10000, 10000) << QSize(10000, 10000) << QSizeF(600, 600) << 10.0
+            << QSize(4096, 4096) << 4096 << QSize();
+        const double tiny = std::numeric_limits<double>::denorm_min();
+        QTest::newRow("subnormal-page") << LinkPreviewMode::AdaptiveSize << window << screen << QSizeF(tiny, tiny)
+                                        << 0.0 << QSize(1, 1) << 1 << QSize();
+        QTest::newRow("no-window") << LinkPreviewMode::AdaptiveSize << QSize() << screen << page << 11.0 << QSize() << 0
+                                   << QSize();
+        QTest::newRow("no-screen") << LinkPreviewMode::Large << window << QSize() << page << 0.0 << QSize() << 0
+                                   << QSize();
         QTest::newRow("invalid-mode") << static_cast<LinkPreviewMode>(99) << window << screen << page << 0.0 << QSize()
-                                      << 0;
+                                      << 0 << QSize();
+        QTest::newRow("large-on-larger-monitor") << LinkPreviewMode::Large << QSize() << QSize(3840, 2160) << page
+                                                 << 0.0 << QSize(628, 942) << 312 << QSize(1920, 1080);
+        QTest::newRow("small-from-larger-monitor") << LinkPreviewMode::Small << QSize() << screen << page << 0.0
+                                                   << QSize(948, 1422) << 492 << QSize(3840, 2160);
+        QTest::newRow("fit-small-monitor")
+            << LinkPreviewMode::Small << QSize() << QSize(320, 240) << page << 0.0 << QSize(272, 408) << 192 << screen;
     }
 
     void sizesPreview()
@@ -188,10 +249,11 @@ private slots:
         QFETCH(QSize, window);
         QFETCH(QSize, screen);
         QFETCH(QSizeF, page);
-        QFETCH(double, font);
+        QFETCH(double, scale);
         QFETCH(QSize, render);
         QFETCH(int, height);
-        const auto size = Generator::sizeLinkPreview(mode, window, screen, { page, font });
+        QFETCH(QSize, sessionScreen);
+        const auto size = Generator::sizeLinkPreview(mode, window, screen, { page }, scale, sessionScreen);
         QCOMPARE(size.render, render);
         QCOMPARE(size.visibleHeight, height);
     }
@@ -213,6 +275,193 @@ private slots:
         QVERIFY(!previewWindow());
         QCOMPARE(pageQueries, 0);
         QCOMPARE(renders.load(), 0);
+    }
+
+    void presetsIgnoreZoomAndWindowSize_data()
+    {
+        QTest::addColumn<LinkPreviewMode>("mode");
+        QTest::newRow("small") << LinkPreviewMode::Small;
+        QTest::newRow("large") << LinkPreviewMode::Large;
+    }
+
+    void presetsIgnoreZoomAndWindowSize()
+    {
+        QFETCH(LinkPreviewMode, mode);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(600, 900)));
+        previews.setMode(mode);
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(!previewImage().isNull());
+        const QSize imageSize = previewImage().size();
+        const QSize popupSize = previewWindow()->size();
+        const int divisor = mode == LinkPreviewMode::Small ? 4 : 3;
+        QCOMPARE(popupSize.width(), m_host.screen()->geometry().width() / divisor);
+        QVERIFY(popupSize.height() <= m_host.screen()->geometry().height() / divisor);
+        QTest::keyClick(&m_host, Qt::Key_Escape);
+        m_host.resize(500, 400);
+        previews.observeRender(&m_host, 0, (QSizeF(120, 180) * m_host.devicePixelRatioF()).toSize());
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            QVERIFY(previews.showPreview(destination()));
+            QTRY_COMPARE(previewImage().size(), imageSize);
+            QCOMPARE(previewWindow()->size(), popupSize);
+            previews.setMode(LinkPreviewMode::Off);
+            previews.reset();
+            previews.setMode(mode);
+        }
+    }
+
+    void autoUsesHoveredViewScale()
+    {
+        QWidget content(&m_host), thumbnail;
+        content.setGeometry(0, 0, 200, 200);
+        content.show();
+        QTest::mouseMove(&content, QPoint(40, 40));
+        QTRY_COMPARE(QApplication::widgetAt(QCursor::pos()), &content);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(600, 900)));
+        // Track while Off; enabling the setting must retain the view's scale.
+        previews.observeRender(&m_host, 0, (QSizeF(300, 450) * m_host.devicePixelRatioF()).toSize());
+        previews.observeRender(&thumbnail, 0, QSize(60, 90));
+        previews.observeRender(nullptr, 0, QSize(100, 150));
+        previews.observeRender(&m_host, -1, QSize(100, 150));
+        previews.observeRender(&m_host, 0, QSize());
+        previews.setMode(LinkPreviewMode::AdaptiveSize);
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_COMPARE(previewImage().size(), QSize(210, 315));
+        QTest::keyClick(&content, Qt::Key_Escape);
+        // A subsequent main-view render updates the next preview.
+        previews.observeRender(&m_host, 0, (QSizeF(400, 600) * m_host.devicePixelRatioF()).toSize());
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_COMPARE(previewImage().size(), QSize(280, 420));
+        previews.reset();
+        QVERIFY(previews.showPreview(destination()));
+        // A new document must not inherit the old document's reading scale.
+        QTRY_COMPARE(previewImage().width(),
+                     std::min(qRound(m_host.width() * 0.55), m_host.screen()->geometry().width() / 2 - 12));
+    }
+
+    void autoUsesSourcePageScale_data()
+    {
+        QTest::addColumn<int>("sourcePage");
+        QTest::addColumn<int>("expectedWidth");
+        QTest::newRow("updated-page") << 0 << 126;
+        QTest::newRow("other-page") << 1 << 168;
+        QTest::newRow("latest-without-source") << -1 << 126;
+    }
+
+    void autoUsesSourcePageScale()
+    {
+        QFETCH(int, sourcePage);
+        QFETCH(int, expectedWidth);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        pageRange(2, QSizeF(600, 900)));
+        for (const auto& [page, width] : { std::pair { 0, 120 }, { 1, 240 }, { 0, 180 } })
+            previews.observeRender(&m_host, page, (QSizeF(width, width * 1.5) * m_host.devicePixelRatioF()).toSize());
+        previews.setMode(LinkPreviewMode::AdaptiveSize);
+        QVERIFY(previews.showPreview(destination(), sourcePage));
+        QTRY_COMPARE(previewImage().width(), expectedWidth);
+    }
+
+    void destroyedViewDiscardsScale()
+    {
+        // Reuse the same address deterministically to detect stale pointer keys.
+        std::optional<QWidget> view;
+        view.emplace(&m_host);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(600, 900)));
+        previews.observeRender(&*view, 0, (QSizeF(120, 180) * view->devicePixelRatioF()).toSize());
+        view.reset();
+        view.emplace(&m_host);
+        view->setGeometry(0, 0, 200, 200);
+        view->show();
+        QTest::mouseMove(&*view, QPoint(40, 40));
+        QTRY_COMPARE(QApplication::widgetAt(QCursor::pos()), &*view);
+        previews.setMode(LinkPreviewMode::AdaptiveSize);
+        QVERIFY(previews.showPreview(destination(), 0));
+        QTRY_COMPARE(previewImage().width(),
+                     std::min(qRound(m_host.width() * 0.55), m_host.screen()->geometry().width() / 2 - 12));
+        QTest::keyClick(&*view, Qt::Key_Escape);
+        previews.observeRender(&*view, 0, (QSizeF(120, 180) * view->devicePixelRatioF()).toSize());
+        QVERIFY(previews.showPreview(destination(), 0));
+        QTRY_COMPARE(previewImage().width(), 84);
+    }
+
+    void autoSharesScaleWithNeighbors()
+    {
+        Generator::LinkPreview previews(
+            [](int, QSize size, const auto&) { return solidPage(size); },
+            [](int page) {
+                return LinkPreviewPage { page == 0 ? QSizeF(600, 900) : page == 1 ? QSizeF(1200, 900) : QSizeF { } };
+            });
+        previews.observeRender(&m_host, 0, (QSizeF(600, 900) * m_host.devicePixelRatioF()).toSize());
+        previews.setMode(LinkPreviewMode::AdaptiveSize);
+        QVERIFY(previews.showPreview(destination()));
+        const int maxWidth = std::min(qRound(m_host.width() * 0.70), m_host.screen()->geometry().width() / 2 - 12);
+        QTRY_COMPARE(previewImage().size(), QSize(qRound(maxWidth / 2.0), qRound(maxWidth * 0.75)));
+        auto* neighbor = previewWindow()->findChild<QLabel*>(QStringLiteral("previewPage"));
+        QVERIFY(neighbor);
+        QCOMPARE(neighbor->size(), QSize(maxWidth, qRound(maxWidth * 0.75)));
+    }
+
+    void autoShrinksContainerAfterZoomOut_data()
+    {
+        QTest::addColumn<bool>("dismissFirst");
+        QTest::newRow("visible-popup") << false;
+        QTest::newRow("reopened-popup") << true;
+    }
+
+    void autoShrinksContainerAfterZoomOut()
+    {
+        QFETCH(bool, dismissFirst);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(600, 900)));
+        previews.setMode(LinkPreviewMode::AdaptiveSize);
+        previews.observeRender(&m_host, 0, (QSizeF(1200, 1800) * m_host.devicePixelRatioF()).toSize());
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(!previewImage().isNull());
+        const int previousWidth = previewWindow()->width();
+        if (dismissFirst)
+            QTest::keyClick(&m_host, Qt::Key_Escape);
+        previews.observeRender(&m_host, 0, (QSizeF(240, 360) * m_host.devicePixelRatioF()).toSize());
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_COMPARE(previewImage().size(), QSize(168, 252));
+        auto* window = previewWindow();
+        auto* scroll = previewScrollArea();
+        QVERIFY(scroll);
+        const auto margins = window->layout()->contentsMargins();
+        QCOMPARE(window->width(), 168 + margins.left() + margins.right());
+        QCOMPARE(scroll->viewport()->width(), 168);
+        QVERIFY(window->width() < previousWidth);
+    }
+
+    void headerRespectsPopupHeight_data()
+    {
+        QTest::addColumn<LinkPreviewMode>("mode");
+        QTest::addColumn<int>("fontSize");
+        QTest::newRow("small") << LinkPreviewMode::Small << 72;
+        QTest::newRow("large") << LinkPreviewMode::Large << 120;
+        QTest::newRow("adaptive") << LinkPreviewMode::AdaptiveSize << 72;
+    }
+
+    void headerRespectsPopupHeight()
+    {
+        QFETCH(LinkPreviewMode, mode);
+        QFETCH(int, fontSize);
+        const QFont original = QApplication::font();
+        const auto restoreFont = qScopeGuard([&] { QApplication::setFont(original); });
+        QFont font = original;
+        font.setPointSize(fontSize);
+        QApplication::setFont(font);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(600, 900)));
+        previews.setMode(mode);
+        previews.observeRender(&m_host, 0, (QSizeF(120, 180) * m_host.devicePixelRatioF()).toSize());
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(!previewImage().isNull());
+        const auto size = Generator::sizeLinkPreview(
+            mode, m_host.size(), m_host.screen()->geometry().size(), { QSizeF(600, 900) }, 0.14);
+        QVERIFY(previewWindow()->height() <= size.visibleHeight + 48);
+        QVERIFY(previewScrollArea()->viewport()->height() > 0);
     }
 
     void modeChangeCancelsRender()
@@ -241,43 +490,51 @@ private slots:
         QVERIFY(!previews.showPreview(destination()));
         previews.setMode(LinkPreviewMode::Small);
         QVERIFY(previews.showPreview(destination()));
-        QTRY_COMPARE(previewImage().size(), QSize(480, 720));
+        QTRY_COMPARE(previewImage().size(), renderSize(QSizeF(600, 900), LinkPreviewMode::Small));
         QCOMPARE(previewImage().pixelColor(100, 100), QColor(Qt::blue));
         QCOMPARE(calls.load(), 2);
     }
 
     void autoFollowsWindowSize_data()
     {
-        QTest::addColumn<double>("font");
-        QTest::newRow("pdf") << 0.0;
-        QTest::newRow("epub-mobi-small-font") << 10.0;
-        QTest::newRow("epub-mobi-large-font") << 20.0;
+        QTest::addColumn<double>("scale");
+        QTest::newRow("before-first-render") << 0.0;
+        QTest::newRow("reading-scale") << 1.0;
+        QTest::newRow("zoomed-in") << 2.0;
     }
 
     void autoFollowsWindowSize()
     {
-        QFETCH(double, font);
+        QFETCH(double, scale);
         std::atomic_int calls = 0;
-        const LinkPreviewPage page { QSizeF(560, 840), font };
+        const LinkPreviewPage page { QSizeF(560, 840) };
         Generator::LinkPreview previews(
             [&](int, QSize size, const auto&) {
                 ++calls;
                 return solidPage(size);
             },
             [page](int index) { return index == 0 ? page : LinkPreviewPage { }; });
-        previews.setMode(LinkPreviewMode::AutoSize);
-        const auto screen = m_host.screen()->availableGeometry().size();
+        if (scale > 0)
+            previews.observeRender(&m_host, 0, (page.size * (scale * m_host.devicePixelRatioF())).toSize());
+        previews.setMode(LinkPreviewMode::AdaptiveSize);
+        const auto screen = m_host.screen()->geometry().size();
         QVERIFY(previews.showPreview(destination()));
-        const auto initial = Generator::sizeLinkPreview(LinkPreviewMode::AutoSize, m_host.size(), screen, page);
+        const auto initial =
+            Generator::sizeLinkPreview(LinkPreviewMode::AdaptiveSize, m_host.size(), screen, page, scale * 0.70);
         QTRY_COMPARE(previewImage().size(), initial.render);
         QVERIFY(previewWindow()->height() <= initial.visibleHeight + 48);
-        m_host.resize(600, 460);
+        QVERIFY(previewWindow()->width() <= screen.width() / 2);
+        QVERIFY(previewWindow()->height() <= screen.height() / 2);
+        m_host.resize(500, 400);
         QTest::mouseMove(&m_host, QPoint(40, 40));
         QVERIFY(previews.showPreview(destination()));
-        const auto resized = Generator::sizeLinkPreview(LinkPreviewMode::AutoSize, m_host.size(), screen, page);
+        const auto resized =
+            Generator::sizeLinkPreview(LinkPreviewMode::AdaptiveSize, m_host.size(), screen, page, scale * 0.70);
         QVERIFY(initial.render != resized.render);
         QTRY_COMPARE(previewImage().size(), resized.render);
         QVERIFY(previewWindow()->height() <= resized.visibleHeight + 48);
+        QVERIFY(previewWindow()->width() <= screen.width() / 2);
+        QVERIFY(previewWindow()->height() <= screen.height() / 2);
         QCOMPARE(calls.load(), 2);
         QVERIFY(previews.showPreview(destination(0.25)));
         QCOMPARE(calls.load(), 2); // Same render size reuses the cache.
@@ -289,7 +546,7 @@ private slots:
         QTest::addColumn<bool>("hasY");
         QTest::addColumn<int>("top");
         QTest::newRow("page-start") << 0.0 << true << 0;
-        QTest::newRow("middle") << 0.5 << true << 456;
+        QTest::newRow("middle") << 0.5 << true << -2;
         QTest::newRow("page-end") << 1.0 << true << -1;
         QTest::newRow("clamped") << 2.0 << true << -1;
         QTest::newRow("unspecified") << 0.5 << false << 0;
@@ -314,11 +571,14 @@ private slots:
             viewport.coordinateMask = 0;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
-        QCOMPARE(previewImage().size(), QSize(640, 960));
+        QCOMPARE(previewImage().size(), renderSize());
         QCOMPARE(previewImage().pixelColor(100, 100), QColor(Qt::red));
-        auto* scroll = previewWindow()->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         QTRY_VERIFY(scroll->verticalScrollBar()->maximum() > 0);
-        QCOMPARE(scroll->verticalScrollBar()->value(), top < 0 ? scroll->verticalScrollBar()->maximum() : top);
+        QCOMPARE(scroll->verticalScrollBar()->value(),
+                 top == -1       ? scroll->verticalScrollBar()->maximum()
+                     : top == -2 ? std::min(previewImage().height() / 2 - 24, scroll->verticalScrollBar()->maximum())
+                                 : top);
         // References on the same page reuse its render, regardless of destination.
         QVERIFY(previews.showPreview(destination(0.25)));
         QCOMPARE(calls.load(), 1);
@@ -351,29 +611,28 @@ private slots:
                 return LinkPreviewPage { page >= 0 && page < pageCount ? QSizeF(640, 960 + page * 160) : QSizeF { } };
             });
         previews.setMode(LinkPreviewMode::Large);
-        auto viewport = destination(0.5);
+        auto viewport = destination(0.25);
         viewport.page = target;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
         QCOMPARE(renderedPages, QList<int> { target }); // Destination first; offscreen neighbors are placeholders.
-        auto* scroll = previewWindow()->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         auto* bar = scroll->verticalScrollBar();
         int top = 0;
         for (int page : expectedPages) {
             auto* label = previewPage(page);
             QVERIFY(label);
-            QCOMPARE(label->geometry(), QRect(0, top, 640, 960 + page * 160));
+            QCOMPARE(label->geometry(), QRect(QPoint(0, top), renderSize(QSizeF(640, 960 + page * 160))));
             if (page != target)
                 QVERIFY(pageImage(page).isNull());
             top += label->height() + 8;
         }
-        QCOMPARE(scroll->widget()->size(), QSize(640, top - 8));
+        QCOMPARE(scroll->widget()->size(), QSize(renderSize().width(), top - 8));
         QCOMPARE(bar->value(),
-                 std::clamp(previewPage(target)->y() + previewPage(target)->height() / 2 - 24, 0, bar->maximum()));
+                 std::clamp(previewPage(target)->y() + previewPage(target)->height() / 4 - 24, 0, bar->maximum()));
         const int maximum = bar->maximum();
         for (int page : expectedPages) {
-            const int position = std::min(previewPage(page)->y(), maximum);
-            bar->setValue(position);
+            const int position = scrollToPage(page);
             QTRY_COMPARE(pageImage(page).size(), previewPage(page)->size());
             QCOMPARE(pageImage(page).pixelColor(100, 100), colors[page]);
             QCOMPARE(bar->value(), position); // Loading a page must not move the viewport.
@@ -403,7 +662,7 @@ private slots:
                     return page == 2 ? solidPage(QSize(1, 1)) : QImage { };
                 return solidPage(size, page == 1 ? Qt::green : Qt::red);
             },
-            [](int page) { return LinkPreviewPage { page >= 0 && page < 3 ? QSizeF(640, 960) : QSizeF { } }; });
+            pageRange(3));
         previews.setMode(LinkPreviewMode::Large);
         auto viewport = destination(0.5);
         viewport.page = 1;
@@ -413,14 +672,13 @@ private slots:
             QTRY_COMPARE(status->text(), QStringLiteral("Preview unavailable"));
             QVERIFY(previewImage().isNull());
         } else {
-            QTRY_COMPARE(previewImage().size(), QSize(640, 960));
-            auto* scroll = previewWindow()->findChild<QScrollArea*>();
+            QTRY_COMPARE(previewImage().size(), renderSize());
+            auto* scroll = previewScrollArea();
             auto* label = previewPage(failedPage);
             const int maximum = scroll->verticalScrollBar()->maximum();
-            const int position = std::min(label->y(), maximum);
-            scroll->verticalScrollBar()->setValue(position);
+            const int position = scrollToPage(failedPage);
             QTRY_COMPARE(label->text(), QStringLiteral("Preview unavailable"));
-            QCOMPARE(label->size(), QSize(640, 960)); // Keep the reserved space, even on failure.
+            QCOMPARE(label->size(), renderSize()); // Keep the reserved space, even on failure.
             QCOMPARE(previewImage().pixelColor(100, 100), QColor(Qt::green));
             QCOMPARE(scroll->verticalScrollBar()->value(), position);
             QCOMPARE(scroll->verticalScrollBar()->maximum(), maximum);
@@ -428,9 +686,8 @@ private slots:
         QTest::keyClick(&m_host, Qt::Key_Escape);
         QTRY_VERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
-        auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
-        bar->setValue(std::min(previewPage(failedPage)->y(), bar->maximum()));
-        QTRY_COMPARE(pageImage(failedPage).size(), QSize(640, 960)); // A later hover can retry a transient failure.
+        scrollToPage(failedPage);
+        QTRY_COMPARE(pageImage(failedPage).size(), renderSize()); // A later hover can retry a transient failure.
     }
 
     void dismissCancelsLazyRender_data()
@@ -457,15 +714,14 @@ private slots:
                 }
                 return solidPage(size, Qt::blue);
             },
-            [](int page) { return LinkPreviewPage { page >= 0 && page < 3 ? QSizeF(640, 960) : QSizeF { } }; });
+            pageRange(3));
         previews.setMode(LinkPreviewMode::Large);
-        auto viewport = destination(0.5);
+        auto viewport = destination(0.25);
         viewport.page = 1;
         QVERIFY(previews.showPreview(viewport));
         if (blockedPage != 1) {
             QTRY_VERIFY(!previewImage().isNull());
-            auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
-            bar->setValue(std::min(previewPage(blockedPage)->y(), bar->maximum()));
+            scrollToPage(blockedPage);
         }
         QTRY_VERIFY(blocked.load());
         QTest::keyClick(&m_host, Qt::Key_Escape);
@@ -474,10 +730,9 @@ private slots:
         const int before = blockedPage == 1 ? 1 : 2;
         QCOMPARE(calls.load(), before);
         QTRY_VERIFY(previews.showPreview(viewport));
-        QTRY_COMPARE(previewImage().size(), QSize(640, 960));
+        QTRY_COMPARE(previewImage().size(), renderSize());
         if (blockedPage != 1) {
-            auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
-            bar->setValue(std::min(previewPage(blockedPage)->y(), bar->maximum()));
+            scrollToPage(blockedPage);
         }
         QTRY_VERIFY(!pageImage(blockedPage).isNull());
         QCOMPARE(pageImage(blockedPage).pixelColor(100, 100), QColor(Qt::blue));
@@ -499,13 +754,13 @@ private slots:
                 }
                 return solidPage(size);
             },
-            [](int page) { return LinkPreviewPage { page >= 0 && page < 3 ? QSizeF(640, 960) : QSizeF { } }; });
+            pageRange(3));
         previews.setMode(LinkPreviewMode::Large);
         auto viewport = destination(0.5);
         viewport.page = 1;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(targetStarted.load());
-        auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
+        auto* bar = previewScrollArea()->verticalScrollBar();
         bar->setValue(0);
         QCoreApplication::processEvents();
         bar->setValue(bar->maximum());
@@ -524,9 +779,9 @@ private slots:
                 ++calls;
                 return solidPage(size);
             },
-            [](int page) { return LinkPreviewPage { page >= 0 && page < 3 ? QSizeF(640, 960) : QSizeF { } }; });
+            pageRange(3));
         previews.setMode(LinkPreviewMode::Large);
-        auto viewport = destination(0.5);
+        auto viewport = destination(0.25);
         viewport.page = 1;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
@@ -534,7 +789,7 @@ private slots:
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
         QCOMPARE(calls.load(), 2);
-        auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
+        auto* bar = previewScrollArea()->verticalScrollBar();
         bar->setValue(0);
         QTRY_VERIFY(!pageImage(1).isNull());
         QCOMPARE(calls.load(), 2); // The old destination is now a cached neighbor.
@@ -553,14 +808,14 @@ private slots:
                 }
                 return solidPage(size);
             },
-            [](int page) { return LinkPreviewPage { page >= 0 && page < 3 ? QSizeF(640, 960) : QSizeF { } }; });
+            pageRange(3));
         previews.setMode(LinkPreviewMode::Large);
-        auto viewport = destination(0.5);
+        auto viewport = destination(0.25);
         viewport.page = 1;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         QTest::mouseMove(scroll->viewport(), scroll->viewport()->rect().center());
         auto* bar = scroll->verticalScrollBar();
         auto* scroller = QScroller::scroller(scroll->viewport());
@@ -587,7 +842,7 @@ private slots:
         QVERIFY(previews.showPreview(destination()));
         QTRY_VERIFY(!previewImage().isNull());
         QPointer<QWidget> window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         QCOMPARE(scroll->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
         QCOMPARE(scroll->horizontalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
         QVERIFY(!scroll->verticalScrollBar()->isVisible());
@@ -640,7 +895,7 @@ private slots:
         QVERIFY(previews.showPreview(destination(0.5)));
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         const int initial = scroll->verticalScrollBar()->value();
         const QPoint start =
             window->mapFromGlobal(scroll->viewport()->mapToGlobal(scroll->viewport()->rect().center()));
@@ -687,7 +942,7 @@ private slots:
         QVERIFY(previews.showPreview(destination(0.5)));
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         auto* bar = scroll->verticalScrollBar();
         auto* scroller = QScroller::scroller(scroll->viewport());
         const QPoint viewportPosition = scroll->viewport()->pos();
@@ -730,7 +985,7 @@ private slots:
         QVERIFY(previews.showPreview(destination(0.5)));
         QTRY_VERIFY(!previewImage().isNull());
         QPointer<QWidget> window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         QPointer<QScroller> scroller = QScroller::scroller(scroll->viewport());
         flickPreview(window, -1);
         QCOMPARE(scroller->state(), QScroller::Scrolling);
@@ -789,7 +1044,7 @@ private slots:
         QVERIFY(previews.showPreview(destination()));
         QTRY_VERIFY(!previewImage().isNull());
         QPointer<QWidget> window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         const QPoint start =
             window->mapFromGlobal(scroll->viewport()->mapToGlobal(scroll->viewport()->rect().center()));
         const QPoint outside(window->width() + 10, start.y());
@@ -833,7 +1088,7 @@ private slots:
         QVERIFY(previews.showPreview(destination(0.5)));
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
-        auto* scroll = window->findChild<QScrollArea*>();
+        auto* scroll = previewScrollArea();
         const QPoint start =
             window->mapFromGlobal(scroll->viewport()->mapToGlobal(scroll->viewport()->rect().center()));
         QTest::mousePress(window->windowHandle(), Qt::LeftButton, Qt::NoModifier, start);
@@ -950,14 +1205,13 @@ private slots:
         viewport.page = 1;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
-        auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
-        bar->setValue(std::min(previewPage(neighbor)->y(), bar->maximum()));
+        scrollToPage(neighbor);
         QTRY_VERIFY(started.load());
         previews.reset();
         QVERIFY(cancelled.load());
         reopened = true; // The old neighbor index now belongs to a different/smaller layout.
         QVERIFY(previews.showPreview(viewport));
-        QTRY_COMPARE(previewImage().size(), QSize(640, 960));
+        QTRY_COMPARE(previewImage().size(), renderSize());
         QCOMPARE(previewImage().pixelColor(100, 100), QColor(Qt::blue));
         QVERIFY(!previewPage(neighbor));
         QCOMPARE(previewPage(1)->y(), 0);
@@ -994,7 +1248,7 @@ private slots:
         QTRY_VERIFY(cancelled.load());
         QTest::mouseMove(&m_host, QPoint(40, 40));
         QTRY_VERIFY(previews.showPreview(destination()));
-        QTRY_COMPARE(previewImage().size(), QSize(640, 960));
+        QTRY_COMPARE(previewImage().size(), renderSize());
         QCOMPARE(previewImage().pixelColor(100, 100), QColor(Qt::blue));
         QCOMPARE(calls.load(), 2);
     }
@@ -1024,15 +1278,14 @@ private slots:
                     },
                     frame);
             },
-            [](int page) { return LinkPreviewPage { page >= 0 && page < 3 ? QSizeF(640, 960) : QSizeF { } }; });
+            pageRange(3));
         previews.setMode(LinkPreviewMode::Large);
         auto viewport = destination(0.5);
         viewport.page = 1;
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
-        auto* bar = previewWindow()->findChild<QScrollArea*>()->verticalScrollBar();
         for (int page : { 0, 2 }) {
-            bar->setValue(std::min(previewPage(page)->y(), bar->maximum()));
+            scrollToPage(page);
             QTRY_VERIFY(!pageImage(page).isNull());
         }
         // All pages remain cached/displayed, but every transport lease is free.
@@ -1078,16 +1331,15 @@ private slots:
     void boundsUnusualGeometry_data()
     {
         QTest::addColumn<QSizeF>("geometry");
-        QTest::addColumn<QSize>("expected");
-        QTest::newRow("wide") << QSizeF(1120, 560) << QSize(640, 320);
-        QTest::newRow("extremely-wide") << QSizeF(1e300, 1e-300) << QSize(640, 1);
-        QTest::newRow("extremely-tall") << QSizeF(1e-300, 1e300) << QSize(1, 4096);
+        QTest::newRow("wide") << QSizeF(1120, 560);
+        QTest::newRow("extremely-wide") << QSizeF(1e300, 1e-300);
+        QTest::newRow("extremely-tall") << QSizeF(1e-300, 1e300);
     }
 
     void boundsUnusualGeometry()
     {
         QFETCH(QSizeF, geometry);
-        QFETCH(QSize, expected);
+        const QSize expected = renderSize(geometry);
         Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
                                         singlePage(geometry));
         previews.setMode(LinkPreviewMode::Large);
@@ -1158,7 +1410,7 @@ private slots:
         previews.setMode(LinkPreviewMode::Large);
         QVERIFY(previews.showPreview(destination(0.5)));
         QTRY_VERIFY_WITH_TIMEOUT(!previewImage().isNull(), 10000);
-        QVERIFY(previewImage().width() <= 640);
+        QVERIFY(previewWindow()->width() <= m_host.screen()->geometry().width() / 3);
         QVERIFY(previewImage().height() <= 4096);
     }
 };

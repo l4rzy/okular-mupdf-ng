@@ -143,8 +143,8 @@ protected:
 
 private:
     void notifyVisibleRectsChanged() override;
-#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     void generatePixmap(Okular::PixmapRequest* request) override;
+#if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     void notifyPageChanged(int page, int flags) override;
     void notifyContentsCleared(int flags) override;
 #endif
@@ -198,6 +198,7 @@ private:
     // ready (not stopped, recovering, or failed) and no placeholder withholds
     // the document.
     [[nodiscard]] bool workerReady() const;
+    void closeWorkerDocument();
     // Loads a single synthetic placeholder page while Strict enforcement
     // withholds the real document from the worker.
     Okular::Document::OpenResult loadBlockedPlaceholderDocument(QVector<Okular::Page*>& pages);

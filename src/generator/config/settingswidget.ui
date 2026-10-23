@@ -50,7 +50,7 @@
             <item>
              <widget class="QLabel" name="labelLinkPreview">
               <property name="text">
-               <string>Link preview on hover</string>
+               <string>Display link preview on hover</string>
               </property>
               <property name="buddy">
                <cstring>kcfg_LinkPreviewMode</cstring>

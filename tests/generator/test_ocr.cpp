@@ -11,10 +11,12 @@
 #include <KXMLGUIFactory>
 #include <QAction>
 #include <QComboBox>
+#include <QCursor>
 #include <QDateTime>
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QImage>
+#include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMenuBar>
@@ -24,9 +26,11 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QScreen>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <okular/core/action.h>
 #include <okular/core/document.h>
 #include <okular/core/generator.h>
 #include <okular/core/observer.h>
@@ -76,6 +80,45 @@ class TestGeneratorOcr : public QObject {
 
 private:
     QTemporaryDir m_root;
+
+    static bool writePdfObjects(const QString& path, const QList<QByteArray>& objects)
+    {
+        QByteArray pdf("%PDF-1.4\n");
+        QList<qsizetype> offsets { 0 };
+        for (qsizetype i = 0; i < objects.size(); ++i) {
+            offsets.append(pdf.size());
+            pdf += QByteArray::number(i + 1) + " 0 obj\n" + objects[i] + "\nendobj\n";
+        }
+        const qsizetype xref = pdf.size();
+        const QByteArray count = QByteArray::number(objects.size() + 1);
+        pdf += "xref\n0 " + count + "\n0000000000 65535 f \n";
+        for (qsizetype i = 1; i < offsets.size(); ++i)
+            pdf += QByteArray::number(offsets[i]).rightJustified(10, '0') + " 00000 n \n";
+        pdf += "trailer\n<< /Size " + count + " /Root 1 0 R >>\nstartxref\n" + QByteArray::number(xref) + "\n%%EOF\n";
+        QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write(pdf) == pdf.size();
+    }
+
+    static bool writePreviewPdf(const QString& path)
+    {
+        // A minimal valid PDF with an internal link, without depending on text
+        // extraction or generated outlines to supply an action.
+        const QList<QByteArray> objects {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 900] /Resources << >> /Annots [4 0 R] >>",
+            "<< /Type /Annot /Subtype /Link /Rect [10 10 100 100] /Dest [3 0 R /XYZ 0 450 null] >>"
+        };
+        return writePdfObjects(path, objects);
+    }
+
+    static QWidget* previewWindow()
+    {
+        for (auto* window : QApplication::topLevelWidgets())
+            if (window->objectName() == QStringLiteral("mupdfLinkPreview") && window->isVisible())
+                return window;
+        return nullptr;
+    }
 
 private slots:
 
@@ -392,6 +435,224 @@ private slots:
     }
 
 #endif
+
+    void linkPreviewSettingsApplyToOpenDocuments()
+    {
+        const QString path = m_root.filePath(QStringLiteral("preview-link.pdf"));
+        QVERIFY(writePreviewPdf(path));
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("LinkPreviewMode", "Off");
+        config->sync();
+
+        QWidget host;
+
+        host.setGeometry(20, 20, 760, 560);
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        Okular::Document first(nullptr), second(nullptr);
+        for (auto* document : { &first, &second }) {
+            QCOMPARE(document->openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                     Okular::Document::OpenSuccess);
+            document->reparseConfig();
+            QTRY_VERIFY(!document->page(0)->objectRects().isEmpty());
+        }
+        const auto* theme = first.guiClient()->actionCollection()->action(QStringLiteral("mupdf_theme"));
+        QVERIFY(theme);
+        auto* settings = qobject_cast<Okular::ConfigInterface*>(theme->parent());
+        QVERIFY(settings);
+        const QStringList labels { "Off", "Adaptive Size", "Small", "Large" };
+        const QStringList values { "Off", "AutoSize", "Small", "Large" };
+        for (int mode : { 1, 2, 3, 0 }) {
+            {
+                KConfigSkeleton hostSettings;
+                KConfigDialog dialog(nullptr, QStringLiteral("link-preview-test"), &hostSettings);
+                settings->addPages(&dialog);
+                auto* combo = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_LinkPreviewMode"));
+                QVERIFY(combo);
+                QCOMPARE(combo->count(), labels.size());
+                for (int i = 0; i < labels.size(); ++i)
+                    QCOMPARE(combo->itemText(i), labels[i]);
+                auto* buttons = dialog.findChild<QDialogButtonBox*>();
+                QVERIFY(buttons);
+                auto* ok = buttons->button(QDialogButtonBox::Ok);
+                QVERIFY(ok);
+                dialog.show();
+                combo->setCurrentIndex(mode);
+                ok->click();
+            }
+            // Only the first document receives Okular's explicit reparse call.
+            // The shared preference must also update the second open document.
+            first.reparseConfig();
+            QCOMPARE(general.readEntry("LinkPreviewMode", QStringLiteral("Off")), values[mode]);
+            for (auto* document : { &first, &second }) {
+                QTest::mouseMove(&host, QPoint(40, 40));
+                QTRY_COMPARE(QApplication::widgetAt(QCursor::pos()), &host);
+                const auto* link =
+                    static_cast<const Okular::Action*>(document->page(0)->objectRects().front()->object());
+                QCOMPARE(link->actionTip().isEmpty(), mode != 0);
+                if (mode != 0) {
+                    QTRY_VERIFY(previewWindow());
+                    QTRY_VERIFY(
+                        !previewWindow()->findChild<QLabel*>(QStringLiteral("previewImage"))->pixmap().isNull());
+                    QTest::keyClick(&host, Qt::Key_Escape);
+                }
+                QVERIFY(!previewWindow());
+            }
+        }
+    }
+
+    void linkPreviewUsesViewRenderScale_data()
+    {
+        QTest::addColumn<bool>("tiled");
+        QTest::addColumn<bool>("rotated");
+        QTest::newRow("page") << false << false;
+        QTest::newRow("tile") << true << false;
+        QTest::newRow("rotated-page") << false << true;
+        QTest::newRow("rotated-tile") << true << true;
+    }
+
+    void linkPreviewUsesViewRenderScale()
+    {
+        QFETCH(bool, tiled);
+        QFETCH(bool, rotated);
+        const QString path = m_root.filePath(QStringLiteral("preview-scale.pdf"));
+        QVERIFY(writePreviewPdf(path));
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("LinkPreviewMode", "Off");
+        config->sync();
+        const auto restore = qScopeGuard([&] {
+            general.writeEntry("LinkPreviewMode", "Off");
+            config->sync();
+        });
+
+        struct View final : QWidget, Okular::DocumentObserver {
+        } host, thumbnail;
+
+        host.setGeometry(20, 20, 760, 560);
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        QTRY_VERIFY(!document.page(0)->objectRects().isEmpty());
+        document.addObserver(&host);
+        document.addObserver(&thumbnail);
+        const auto removeObservers = qScopeGuard([&] {
+            document.removeObserver(&host);
+            document.removeObserver(&thumbnail);
+        });
+        if (rotated)
+            document.setRotation(Okular::Rotation90);
+        // Use full-page dimensions even for tiles; a later thumbnail must not
+        // replace the scale belonging to the hovered view.
+        for (auto* view : { &host, &thumbnail }) {
+            const int width = view == &host ? (tiled ? 6000 : 300) : 60;
+            const int height = view == &host ? (tiled ? 9000 : 450) : 90;
+            const QSize size = rotated ? QSize(height, width) : QSize(width, height);
+            const auto region = tiled && view == &host ? Okular::NormalizedRect(0.10, 0.10, 0.11, 0.11)
+                                                       : Okular::NormalizedRect(0, 0, 1, 1);
+            auto* request = new Okular::PixmapRequest(view,
+                                                      0,
+                                                      size.width(),
+                                                      size.height(),
+                                                      view->devicePixelRatioF(),
+                                                      0,
+                                                      Okular::PixmapRequest::Asynchronous);
+            if (tiled && view == &host)
+                request->setNormalizedRect(region);
+            document.requestPixmaps({ request });
+            const auto pixels = (QSizeF(size) * view->devicePixelRatioF()).toSize();
+            QTRY_VERIFY_WITH_TIMEOUT(document.page(0)->hasPixmap(view, pixels.width(), pixels.height(), region), 10000);
+            if (tiled && view == &host)
+                QVERIFY(document.page(0)->hasTilesManager(view));
+        }
+        // Enabling previews must retain scales from pages rendered while Off.
+        general.writeEntry("LinkPreviewMode", "AutoSize");
+        config->sync();
+        document.reparseConfig();
+        QTest::mouseMove(&host, QPoint(40, 40));
+        QTRY_COMPARE(QApplication::widgetAt(QCursor::pos()), &host);
+        const auto* link = static_cast<const Okular::Action*>(document.page(0)->objectRects().front()->object());
+        QVERIFY(link->actionTip().isEmpty());
+        QTRY_VERIFY(previewWindow());
+        auto* image = previewWindow()->findChild<QLabel*>(QStringLiteral("previewImage"));
+        QVERIFY(image);
+        const int width =
+            tiled ? std::min(qRound(host.width() * 0.70), host.screen()->geometry().width() / 2 - 12) : 210;
+        QTRY_COMPARE(image->pixmap().size(), QSize(width, qRound(width * 1.5)));
+        QTest::keyClick(&host, Qt::Key_Escape);
+        QVERIFY(!previewWindow());
+    }
+
+    void linkPreviewUsesCachedSourceScale_data()
+    {
+        QTest::addColumn<bool>("preload");
+        QTest::newRow("rendered-source") << false;
+        QTest::newRow("preloaded-source") << true;
+    }
+
+    void linkPreviewUsesCachedSourceScale()
+    {
+        QFETCH(bool, preload);
+        const QString path = m_root.filePath(QStringLiteral("preview-cached-source.pdf"));
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R >>",
+              "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 900] /Resources << >> /Annots [4 0 R] >>",
+              "<< /Type /Annot /Subtype /Link /Rect [10 10 100 100] /Dest [5 0 R /XYZ 0 450 null] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 900] /Resources << >> >>" }));
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("LinkPreviewMode", "AutoSize");
+        config->sync();
+        const auto restore = qScopeGuard([&] {
+            general.writeEntry("LinkPreviewMode", "Off");
+            config->sync();
+        });
+
+        struct View final : QWidget, Okular::DocumentObserver {
+        } view;
+
+        view.setGeometry(20, 20, 760, 560);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        document.addObserver(&view);
+        const auto remove = qScopeGuard([&] { document.removeObserver(&view); });
+        for (int page : { 0, 1 }) {
+            const int width = page == 0 ? 300 : 600;
+            auto features = Okular::PixmapRequest::PixmapRequestFeatures(Okular::PixmapRequest::Asynchronous);
+            if (page == 0 && preload)
+                features |= Okular::PixmapRequest::Preload;
+            document.requestPixmaps({ new Okular::PixmapRequest(
+                &view, page, width, width * 3 / 2, view.devicePixelRatioF(), 0, features) });
+            const auto pixels = (QSizeF(width, width * 1.5) * view.devicePixelRatioF()).toSize();
+            QTRY_VERIFY_WITH_TIMEOUT(document.page(page)->hasPixmap(&view, pixels.width(), pixels.height()), 10000);
+        }
+        // Returning to page zero is a cache hit: the generator sees no new render.
+        document.requestPixmaps({ new Okular::PixmapRequest(
+            &view, 0, 300, 450, view.devicePixelRatioF(), 0, Okular::PixmapRequest::Asynchronous) });
+        QTRY_VERIFY(!document.page(0)->objectRects().isEmpty());
+        QTest::mouseMove(&view, QPoint(40, 40));
+        QTRY_COMPARE(QApplication::widgetAt(QCursor::pos()), &view);
+        const auto* link = static_cast<const Okular::Action*>(document.page(0)->objectRects().front()->object());
+        QVERIFY(link->actionTip().isEmpty());
+        QTRY_VERIFY(previewWindow());
+        auto* image = previewWindow()->findChild<QLabel*>(QStringLiteral("previewImage"));
+        QVERIFY(image);
+        const int width = std::min(210, view.screen()->geometry().width() / 2 - 12);
+        QTRY_COMPARE(image->pixmap().size(), QSize(width, qRound(width * 1.5)));
+    }
 
     void documentThemeMenu_data()
     {

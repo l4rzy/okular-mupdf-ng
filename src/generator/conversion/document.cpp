@@ -99,32 +99,34 @@ namespace {
 
 class PreviewGotoAction final : public Okular::GotoAction {
 public:
-    PreviewGotoAction(const Model::Viewport& destination, LinkPreview* previews)
+    PreviewGotoAction(const Model::Viewport& destination, LinkPreview* previews, int sourcePage)
         : GotoAction(QString(), viewportFromModel(destination))
         , m_destination(destination)
         , m_previews(previews)
+        , m_sourcePage(sourcePage)
     {
     }
 
     QString actionTip() const override
     {
-        return m_previews && m_previews->showPreview(m_destination) ? QString() : GotoAction::actionTip();
+        return m_previews && m_previews->showPreview(m_destination, m_sourcePage) ? QString() : GotoAction::actionTip();
     }
 
 private:
     Model::Viewport m_destination;
     QPointer<LinkPreview> m_previews;
+    int m_sourcePage;
 };
 
 } // namespace
 
-Okular::ObjectRect* objectRect(const Model::Link& link, LinkPreview* previews)
+Okular::ObjectRect* objectRect(const Model::Link& link, LinkPreview* previews, int sourcePage)
 {
     std::unique_ptr<Okular::Action> action;
     if (link.target.external && isAllowedExternalUri(QString::fromStdString(link.target.uri))) {
         action = std::make_unique<Okular::BrowseAction>(QUrl(QString::fromStdString(link.target.uri)));
     } else if (link.target.valid && link.target.viewport.page >= 0) {
-        action = std::make_unique<PreviewGotoAction>(link.target.viewport, previews);
+        action = std::make_unique<PreviewGotoAction>(link.target.viewport, previews, sourcePage);
     }
     if (!action)
         return nullptr;
@@ -132,12 +134,12 @@ Okular::ObjectRect* objectRect(const Model::Link& link, LinkPreview* previews)
         link.left, link.top, link.right, link.bottom, false, Okular::ObjectRect::Action, action.release());
 }
 
-QList<Okular::ObjectRect*> objectRects(const std::vector<Model::Link>& links, LinkPreview* previews)
+QList<Okular::ObjectRect*> objectRects(const std::vector<Model::Link>& links, LinkPreview* previews, int sourcePage)
 {
     QList<Okular::ObjectRect*> result;
     result.reserve(static_cast<qsizetype>(links.size()));
     for (const auto& link : links) {
-        if (auto* rect = objectRect(link, previews))
+        if (auto* rect = objectRect(link, previews, sourcePage))
             result.append(rect);
     }
     return result;

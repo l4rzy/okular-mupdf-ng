@@ -51,7 +51,7 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
 
     auto* linkPreview = m_mupdfsw->kcfg_LinkPreviewMode;
     linkPreview->addItem(i18n("Off"), MuPDFNGSettings::EnumLinkPreviewMode::Off);
-    linkPreview->addItem(i18n("Auto size"), MuPDFNGSettings::EnumLinkPreviewMode::AutoSize);
+    linkPreview->addItem(i18n("Adaptive Size"), MuPDFNGSettings::EnumLinkPreviewMode::AutoSize);
     linkPreview->addItem(i18n("Small"), MuPDFNGSettings::EnumLinkPreviewMode::Small);
     linkPreview->addItem(i18n("Large"), MuPDFNGSettings::EnumLinkPreviewMode::Large);
 
@@ -321,8 +321,8 @@ void MuPDFNGSettingsWidget::setupToolTips()
     setToolTip({ m_mupdfsw->kcfg_NotifyDegradedSandbox },
                i18n("Show a notification when the worker sandbox cannot provide its full protection."));
     setToolTip({ m_mupdfsw->kcfg_LinkPreviewMode, m_mupdfsw->labelLinkPreview },
-               i18n("Preview internal link destinations on hover. Auto size adapts to the Okular window "
-                    "and the configured EPUB or MOBI font size."));
+               i18n("Preview internal link destinations on hover. Adaptive Size adapts to the Okular window "
+                    "and the current page rendering scale."));
     setToolTip({ m_mupdfsw->kcfg_HeuristicSynopsisEnabled },
                i18n("Infer a table of contents from document headings when an embedded table of contents is absent. "
                     "Generation may delay "

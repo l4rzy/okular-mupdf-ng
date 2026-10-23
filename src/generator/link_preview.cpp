@@ -8,6 +8,7 @@
 #include <QCursor>
 #include <QEvent>
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
@@ -21,6 +22,7 @@
 #include <QVBoxLayout>
 #include <QVariant>
 #include <QWindow>
+#include <okular/core/page.h>
 
 #include <algorithm>
 #include <cmath>
@@ -138,11 +140,22 @@ public:
         setAttribute(Qt::WA_TranslucentBackground);
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(6, 6, 6, 6);
-        m_status = new QLabel(this);
+        m_header = new QWidget(this);
+        auto* headerLayout = new QHBoxLayout(m_header);
+        headerLayout->setContentsMargins(0, 0, 0, 0);
+        m_status = new QLabel(m_header);
         m_status->setWordWrap(true);
         m_status->setForegroundRole(QPalette::WindowText);
-        layout->addWidget(m_status);
+        headerLayout->addWidget(m_status, 1, Qt::AlignTop);
+        auto* hint = new QLabel(i18n("Press Esc to cancel"), m_header);
+        hint->setWordWrap(true);
+        hint->setAlignment(Qt::AlignRight | Qt::AlignTop);
+        hint->setForegroundRole(QPalette::WindowText);
+        headerLayout->addWidget(hint, 1, Qt::AlignTop);
+        layout->addWidget(m_header);
         m_scroll = new PreviewScrollArea(this);
+        // Let the viewport shrink below its size hint when the header wraps.
+        m_scroll->setMinimumHeight(1);
         m_scroll->setFrameShape(QFrame::NoFrame);
         m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -165,7 +178,10 @@ public:
         m_status->setText(loading ? i18n("Page %1 — Loading preview…", static_cast<qint64>(page) + 1)
                                   : i18n("Page %1", static_cast<qint64>(page) + 1));
         m_scroll->setFixedWidth(size.render.width());
+        m_header->setFixedWidth(size.render.width());
         ensurePolished();
+        // Apply the new minimum size before resize() can clamp to the old width.
+        layout()->activate();
         resize(std::min(available.width(), sizeHint().width()), std::min(available.height(), size.visibleHeight + 48));
         const int x = anchor.x() + 12 + width() <= available.right() + 1 ? anchor.x() + 12 : anchor.x() - width() - 12;
         const int y =
@@ -181,6 +197,7 @@ public:
         m_scroll->stopScrolling();
         m_labels.clear();
         auto* content = new QWidget;
+        content->setBackgroundRole(QPalette::Dark);
         content->setFixedSize(size);
         m_scroll->setWidget(content);
     }
@@ -192,6 +209,7 @@ public:
         label->setAlignment(Qt::AlignCenter);
         label->setForegroundRole(QPalette::WindowText);
         label->setBackgroundRole(QPalette::Window);
+        label->setAutoFillBackground(true);
         label->setObjectName(target ? QStringLiteral("previewImage") : QStringLiteral("previewPage"));
         label->setProperty("pageNumber", number);
         label->show();
@@ -245,6 +263,7 @@ protected:
     }
 
 private:
+    QWidget* m_header;
     QLabel* m_status;
     PreviewScrollArea* m_scroll;
     std::vector<QLabel*> m_labels;
@@ -268,6 +287,14 @@ LinkPreview::~LinkPreview()
     reset();
 }
 
+LinkPreviewPage LinkPreview::describePage(const Okular::Page* page)
+{
+    if (!page)
+        return { };
+    const bool sideways = page->rotation() == Okular::Rotation90 || page->rotation() == Okular::Rotation270;
+    return { sideways ? QSizeF(page->height(), page->width()) : QSizeF(page->width(), page->height()) };
+}
+
 void LinkPreview::dismiss()
 {
     m_closeTimer.stop();
@@ -280,6 +307,14 @@ void LinkPreview::dismiss()
 }
 
 void LinkPreview::reset()
+{
+    clearPreview();
+    for (const auto& scales : std::as_const(m_renderScales))
+        disconnect(scales.destroyed);
+    m_renderScales.clear();
+}
+
+void LinkPreview::clearPreview()
 {
     dismiss();
     ++m_generation;
@@ -295,11 +330,30 @@ void LinkPreview::setMode(LinkPreviewMode mode)
 {
     if (m_mode == mode)
         return;
-    reset();
+    clearPreview();
     m_mode = mode;
 }
 
-bool LinkPreview::showPreview(const Model::Viewport& destination)
+void LinkPreview::observeRender(QWidget* view, int page, QSize renderSize)
+{
+    if (!view || renderSize.isEmpty())
+        return;
+    const double pageWidth = m_pageInfo(page).size.width();
+    if (!std::isfinite(pageWidth) || pageWidth <= 0)
+        return;
+    const double scale = renderSize.width() / view->devicePixelRatioF() / pageWidth;
+    if (!std::isfinite(scale) || scale <= 0)
+        return;
+    auto entry = m_renderScales.find(view);
+    if (entry == m_renderScales.end()) {
+        entry = m_renderScales.insert(view, ViewRenderScales { });
+        entry->destroyed = connect(view, &QObject::destroyed, this, [this, view] { m_renderScales.remove(view); });
+    }
+    entry->pages.insert(page, scale);
+    entry->latest = scale;
+}
+
+bool LinkPreview::showPreview(const Model::Viewport& destination, int sourcePage)
 {
     if (m_mode == LinkPreviewMode::Off || destination.page < 0)
         return false;
@@ -313,13 +367,33 @@ bool LinkPreview::showPreview(const Model::Viewport& destination)
         screen = source->screen();
     if (!screen)
         return false;
+    // Presets stay stable across zoom, window resizing, mode changes and resets.
+    if (m_sessionScreen.isEmpty())
+        m_sessionScreen = screen->geometry().size();
     const QRect available = screen->availableGeometry();
-    const auto sizeForPage = [&](int page) {
-        return sizeLinkPreview(m_mode, source->window()->size(), available.size(), m_pageInfo(page));
+    double previewScale = 0;
+    // A cached source page may have a different scale from the last rendered page.
+    for (auto* widget = source; widget; widget = widget->parentWidget()) {
+        const auto entry = m_renderScales.constFind(widget);
+        if (entry == m_renderScales.cend())
+            continue;
+        const double scale = sourcePage < 0 ? entry->latest : entry->pages.value(sourcePage);
+        if (scale > 0) {
+            // Cap the preview to 70% of the current logical page render.
+            previewScale = scale * 0.70;
+            break;
+        }
+    }
+    const auto sizeForPage = [&](int page, double scale) {
+        // QScreen geometry is in logical pixels: half of it is also half the
+        // native pixel resolution after accounting for display scaling.
+        const QSize bounds = m_mode == LinkPreviewMode::AdaptiveSize ? screen->geometry().size() : available.size();
+        return sizeLinkPreview(m_mode, source->window()->size(), bounds, m_pageInfo(page), scale, m_sessionScreen);
     };
-    LinkPreviewSize previewSize = sizeForPage(destination.page);
+    LinkPreviewSize previewSize = sizeForPage(destination.page, previewScale);
     if (previewSize.render.isEmpty())
         return false;
+    double commonScale = previewSize.scale;
     std::vector<RenderPage> pages;
     QString key = QString::number(destination.page);
     for (int offset : { -1, 0, 1 }) {
@@ -327,15 +401,23 @@ bool LinkPreview::showPreview(const Model::Viewport& destination)
             || (offset > 0 && destination.page == std::numeric_limits<int>::max()))
             continue;
         const int page = destination.page + offset;
-        const QSize size = offset == 0 ? previewSize.render : sizeForPage(page).render;
-        if (size.isEmpty())
+        const auto size = offset == 0 ? previewSize : sizeForPage(page, previewSize.scale);
+        if (size.render.isEmpty())
             continue;
-        pages.push_back({ page, QRect(QPoint(), size) });
-        key += QStringLiteral(":%1:%2:%3").arg(page).arg(size.width()).arg(size.height());
+        commonScale = std::min(commonScale, size.scale);
+        pages.push_back({ page, QRect(QPoint(), size.render) });
+    }
+    if (m_mode == LinkPreviewMode::AdaptiveSize) {
+        // Fit all three pages at one scale, including wide/tall neighbors.
+        previewSize = sizeForPage(destination.page, commonScale);
+        for (auto& page : pages)
+            page.rect.setSize(sizeForPage(page.number, commonScale).render);
     }
     // Neighbors can have different page dimensions. Fit the widest page.
-    for (const auto& page : pages)
+    for (const auto& page : pages) {
         previewSize.render.setWidth(std::max(previewSize.render.width(), page.rect.width()));
+        key += QStringLiteral(":%1:%2:%3").arg(page.number).arg(page.rect.width()).arg(page.rect.height());
+    }
     if (m_cancelled && (key != m_key || m_cancelled->load())) {
         dismiss();
         return false; // Keep at most one render in flight; never queue hover jobs.

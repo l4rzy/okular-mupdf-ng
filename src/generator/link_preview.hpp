@@ -8,6 +8,7 @@
 #include "shared/model/types.hpp"
 
 #include <QCache>
+#include <QHash>
 #include <QImage>
 #include <QObject>
 #include <QPointer>
@@ -21,6 +22,12 @@
 #include <vector>
 
 class QWidget;
+
+namespace Okular {
+
+class Page;
+
+}
 
 namespace Mu::Generator {
 
@@ -37,16 +44,28 @@ public:
     LinkPreview(Renderer render, PageInfo pageInfo);
     ~LinkPreview() override;
 
+    // Undo the view rotation to describe the worker's page geometry; null is unavailable.
+    static LinkPreviewPage describePage(const Okular::Page* page);
+
     // Called by the link's tooltip hook; true suppresses Okular's text tooltip.
-    bool showPreview(const Model::Viewport& destination);
+    bool showPreview(const Model::Viewport& destination, int sourcePage = -1);
     // Cancel and join before changing the worker document or destroying it.
     void reset();
     void setMode(LinkPreviewMode mode);
+    // GUI thread; full-page physical dimensions, including for tiled requests.
+    void observeRender(QWidget* view, int page, QSize renderSize);
 
 private:
     bool eventFilter(QObject* watched, QEvent* event) override;
     bool isHovered() const;
     void dismiss();
+    void clearPreview();
+
+    struct ViewRenderScales {
+        QHash<int, double> pages;
+        double latest = 0;
+        QMetaObject::Connection destroyed;
+    };
 
     enum class PageState { Pending, Ready, Failed };
 
@@ -63,6 +82,7 @@ private:
     Renderer m_render;
     PageInfo m_pageInfo;
     LinkPreviewMode m_mode = LinkPreviewMode::Off;
+    QSize m_sessionScreen;
     QThreadPool m_pool;
     QCache<QString, QImage> m_cache { 16 * 1024 }; // KiB, excluding the displayed pixmap.
     std::shared_ptr<std::atomic_bool> m_cancelled;
@@ -72,6 +92,7 @@ private:
     QPoint m_anchor;
     QString m_key;
     std::vector<RenderPage> m_pages;
+    QHash<QWidget*, ViewRenderScales> m_renderScales;
     std::size_t m_targetIndex = 0;
     QTimer m_closeTimer;
 };

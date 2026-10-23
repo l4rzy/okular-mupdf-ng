@@ -9,24 +9,30 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace Mu::Generator {
 
-enum class LinkPreviewMode { Off, AutoSize, Small, Large };
+enum class LinkPreviewMode { Off, AdaptiveSize, Small, Large };
 
 struct LinkPreviewPage {
     QSizeF size;
-    double fontSize = 0; // Active EPUB/MOBI layout font in points; zero for fixed-layout documents.
 };
 
 struct LinkPreviewSize {
     QSize render;
     int visibleHeight = 0;
+    double scale = 0;
 };
 
 // All UI dimensions are logical pixels. Scale the existing page without reflowing
 // it so link destinations and pagination remain valid.
-inline LinkPreviewSize sizeLinkPreview(LinkPreviewMode mode, QSize window, QSize screen, const LinkPreviewPage& page)
+inline LinkPreviewSize sizeLinkPreview(LinkPreviewMode mode,
+                                       QSize window,
+                                       QSize screen,
+                                       const LinkPreviewPage& page,
+                                       double previewScale = 0,
+                                       QSize sessionScreen = { })
 {
     if (mode == LinkPreviewMode::Off || screen.isEmpty() || !std::isfinite(page.size.width())
         || !std::isfinite(page.size.height()) || page.size.width() <= 0 || page.size.height() <= 0)
@@ -34,37 +40,40 @@ inline LinkPreviewSize sizeLinkPreview(LinkPreviewMode mode, QSize window, QSize
 
     int width;
     int height;
+    const QSize presetScreen = sessionScreen.isEmpty() ? screen : sessionScreen;
     switch (mode) {
     case LinkPreviewMode::Small:
-        width = 480;
-        height = 300;
+    case LinkPreviewMode::Large: {
+        // Keep the whole popup, including its heading and margins, in the fraction.
+        const int divisor = mode == LinkPreviewMode::Small ? 4 : 3;
+        width = std::max(1, presetScreen.width() / divisor - 12);
+        height = std::max(1, presetScreen.height() / divisor - 48);
         break;
-    case LinkPreviewMode::Large:
-        width = 640;
-        height = 400;
-        break;
-    case LinkPreviewMode::AutoSize:
+    }
+    case LinkPreviewMode::AdaptiveSize:
         if (window.isEmpty())
             return { };
-        width = std::min(800, std::max(1, qRound(window.width() * 0.55)));
-        height = std::min(560, std::max(1, qRound(window.height() * 0.55)));
-        if (std::isfinite(page.fontSize) && page.fontSize > 0) {
-            // Aim for a readable 16px base font. Embedded CSS may override it.
-            width = qRound(std::clamp(page.size.width() * (16.0 / page.fontSize), 360.0, 800.0));
-            width = std::min(width, std::max(1, qRound(window.width() * 0.70)));
-        }
+        width = std::max(1, qRound(window.width() * 0.70));
+        height = std::max(1, qRound(window.height() * 0.55));
+        // Reserve the popup's border, margins and heading inside the screen cap.
+        width = std::min(width, std::max(1, screen.width() / 2 - 12));
+        height = std::min(height, std::max(1, screen.height() / 2 - 48));
+        if (!std::isfinite(previewScale) || previewScale <= 0)
+            previewScale = window.width() * 0.55 / page.size.width();
         break;
     default:
         return { };
     }
-    width = std::min(width, std::max(1, screen.width() - 48));
+    width = std::min({ width, 4096, std::max(1, screen.width() - 48) });
     height = std::min(height, std::max(1, screen.height() - 48));
     // Bound allocations even for unusually tall/wide document pages.
-    const double aspect = page.size.width() / page.size.height();
-    const QSize render = aspect >= static_cast<double>(width) / 4096.0
-        ? QSize(width, std::max(1, qRound(width / aspect)))
-        : QSize(std::max(1, qRound(4096.0 * aspect)), 4096);
-    return { render, std::min(height, render.height()) };
+    double scale =
+        std::min({ width / page.size.width(), 4096.0 / page.size.height(), std::numeric_limits<double>::max() });
+    if (mode == LinkPreviewMode::AdaptiveSize)
+        scale = std::min(scale, previewScale);
+    const QSize render(std::clamp(qRound(page.size.width() * scale), 1, width),
+                       std::clamp(qRound(page.size.height() * scale), 1, 4096));
+    return { render, std::min(height, render.height()), scale };
 }
 
 } // namespace Mu::Generator

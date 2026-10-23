@@ -59,7 +59,7 @@ private slots:
         QTest::addColumn<int>("stored");
         QTest::addColumn<Mode>("expected");
         QTest::newRow("off") << int(MuPDFNGSettings::EnumLinkPreviewMode::Off) << Mode::Off;
-        QTest::newRow("auto") << int(MuPDFNGSettings::EnumLinkPreviewMode::AutoSize) << Mode::AutoSize;
+        QTest::newRow("auto") << int(MuPDFNGSettings::EnumLinkPreviewMode::AutoSize) << Mode::AdaptiveSize;
         QTest::newRow("small") << int(MuPDFNGSettings::EnumLinkPreviewMode::Small) << Mode::Small;
         QTest::newRow("large") << int(MuPDFNGSettings::EnumLinkPreviewMode::Large) << Mode::Large;
     }

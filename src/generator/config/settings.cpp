@@ -138,7 +138,7 @@ LinkPreviewMode readLinkPreviewMode()
 {
     switch (MuPDFNGSettings::linkPreviewMode()) {
     case MuPDFNGSettings::EnumLinkPreviewMode::AutoSize:
-        return LinkPreviewMode::AutoSize;
+        return LinkPreviewMode::AdaptiveSize;
     case MuPDFNGSettings::EnumLinkPreviewMode::Small:
         return LinkPreviewMode::Small;
     case MuPDFNGSettings::EnumLinkPreviewMode::Large:
