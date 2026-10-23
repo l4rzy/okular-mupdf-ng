@@ -347,10 +347,12 @@ QString helpTextFor(Command::Kind kind)
                           "run 'mupdfng-cli <command> --help' for command options.\n");
 }
 
-QString versionText(const QString& mupdfVersion, const QString& source)
+QString versionText(const QString& mupdfVersion, const QString& source, std::optional<bool> systemMuPdf)
 {
-    const QString engine = source.isEmpty() ? QStringLiteral("MuPDF %1").arg(mupdfVersion)
-                                            : QStringLiteral("%1: MuPDF %2").arg(source, mupdfVersion);
+    QString engine = source.isEmpty() ? QStringLiteral("MuPDF %1").arg(mupdfVersion)
+                                      : QStringLiteral("%1: MuPDF %2").arg(source, mupdfVersion);
+    if (systemMuPdf.has_value())
+        engine += *systemMuPdf ? QStringLiteral(" (system library)") : QStringLiteral(" (bundled, patched)");
     return QStringLiteral("mupdfng-cli %1\n%2\n")
         .arg(QString::fromUtf8(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size())), engine);
 }

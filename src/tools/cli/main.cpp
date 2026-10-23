@@ -119,23 +119,25 @@ QString buildTimeMupdfVersion()
     return QString::fromUtf8(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()));
 }
 
-/// Queries the worker handshake for the runtime MuPDF engine version. Returns an
-/// empty string when the worker cannot be started.
-QString workerEngineVersion()
+/// Formats runtime version and library origin from the same worker handshake.
+/// Returns an empty string when runtime engine information is unavailable.
+QString workerVersionText()
 {
     Mu::Plugin::WorkerClient client;
     if (!client.start(QString()))
         return { };
     const QString version = QString::fromStdString(client.engineVersion());
+    const QString text =
+        version.isEmpty() ? QString() : versionText(version, QStringLiteral("Worker"), client.usesSystemMuPdf());
     client.stop();
-    return version;
+    return text;
 }
 
 int runVersion()
 {
-    const QString version = workerEngineVersion();
-    if (!version.isEmpty()) {
-        out() << versionText(version, QStringLiteral("Worker"));
+    const QString text = workerVersionText();
+    if (!text.isEmpty()) {
+        out() << text;
         out().flush();
         return ExitOk;
     }

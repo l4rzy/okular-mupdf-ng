@@ -223,6 +223,29 @@ private slots:
         QVERIFY(text.contains(engineVersion));
     }
 
+    void versionLibraryOrigin_data()
+    {
+        QTest::addColumn<int>("systemMuPdf");
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QString>("engineLine");
+        QTest::newRow("bundled-worker") << 0 << QStringLiteral("Worker")
+                                        << QStringLiteral("Worker: MuPDF 1.2.3 (bundled, patched)");
+        QTest::newRow("system-worker") << 1 << QStringLiteral("Worker")
+                                       << QStringLiteral("Worker: MuPDF 1.2.3 (system library)");
+        QTest::newRow("build-time-fallback") << -1 << QString() << QStringLiteral("MuPDF 1.2.3");
+    }
+
+    void versionLibraryOrigin()
+    {
+        QFETCH(int, systemMuPdf);
+        QFETCH(QString, source);
+        QFETCH(QString, engineLine);
+        const std::optional<bool> origin = systemMuPdf < 0 ? std::nullopt : std::optional<bool>(systemMuPdf != 0);
+        const QString expected =
+            QStringLiteral("mupdfng-cli %1\n%2\n").arg(QString::fromUtf8(::Mu::IPC::COMPAT.data()), engineLine);
+        QCOMPARE(Cli::versionText(QStringLiteral("1.2.3"), source, origin), expected);
+    }
+
     void parsesPageLists()
     {
         std::vector<int> pages;
