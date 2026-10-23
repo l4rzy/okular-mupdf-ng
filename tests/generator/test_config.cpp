@@ -47,6 +47,37 @@ private slots:
         KLocalizedString::setApplicationDomain("okular_mupdfng");
     }
 
+    void defaultsLinkPreviewToOff()
+    {
+        QCOMPARE(MuPDFNGSettings::linkPreviewMode(), MuPDFNGSettings::EnumLinkPreviewMode::Off);
+        QCOMPARE(::Mu::Generator::Config::readLinkPreviewMode(), ::Mu::Generator::LinkPreviewMode::Off);
+    }
+
+    void readsLinkPreviewMode_data()
+    {
+        using Mode = ::Mu::Generator::LinkPreviewMode;
+        QTest::addColumn<int>("stored");
+        QTest::addColumn<Mode>("expected");
+        QTest::newRow("off") << int(MuPDFNGSettings::EnumLinkPreviewMode::Off) << Mode::Off;
+        QTest::newRow("auto") << int(MuPDFNGSettings::EnumLinkPreviewMode::AutoSize) << Mode::AutoSize;
+        QTest::newRow("small") << int(MuPDFNGSettings::EnumLinkPreviewMode::Small) << Mode::Small;
+        QTest::newRow("large") << int(MuPDFNGSettings::EnumLinkPreviewMode::Large) << Mode::Large;
+    }
+
+    void readsLinkPreviewMode()
+    {
+        QFETCH(int, stored);
+        QFETCH(::Mu::Generator::LinkPreviewMode, expected);
+        const int original = MuPDFNGSettings::linkPreviewMode();
+        MuPDFNGSettings::setLinkPreviewMode(stored);
+        MuPDFNGSettings::self()->save();
+        ::Mu::Generator::Config::reloadSettings();
+        const auto mode = ::Mu::Generator::Config::readLinkPreviewMode();
+        MuPDFNGSettings::setLinkPreviewMode(original);
+        MuPDFNGSettings::self()->save();
+        QCOMPARE(mode, expected);
+    }
+
     void certificateManagerSeparatesSigningAndPeople()
     {
         namespace Database = ::Mu::Plugin::Crypto::CertificateDatabase;

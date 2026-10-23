@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -131,18 +132,17 @@ public:
 
     bool isDragging() const { return m_scroll->isDragging(); }
 
-    void prepare(int page, QSize size, bool loading, const QRect& available, QPoint anchor)
+    void prepare(int page, LinkPreviewSize size, bool loading, const QRect& available, QPoint anchor)
     {
         m_status->setText(loading ? i18n("Page %1 — Loading preview…", static_cast<qint64>(page) + 1)
                                   : i18n("Page %1", static_cast<qint64>(page) + 1));
         if (loading) {
             m_image->clear();
-            m_image->resize(size.width(), std::min(size.height(), 400));
+            m_image->resize(size.render.width(), size.visibleHeight);
         }
-        m_scroll->setFixedWidth(size.width());
+        m_scroll->setFixedWidth(size.render.width());
         ensurePolished();
-        resize(std::min(available.width(), sizeHint().width()),
-               std::min(available.height(), std::min(size.height(), 400) + 48));
+        resize(std::min(available.width(), sizeHint().width()), std::min(available.height(), size.visibleHeight + 48));
         const int x = anchor.x() + 12 + width() <= available.right() + 1 ? anchor.x() + 12 : anchor.x() - width() - 12;
         const int y =
             anchor.y() + 20 + height() <= available.bottom() + 1 ? anchor.y() + 20 : anchor.y() - height() - 12;
@@ -152,13 +152,15 @@ public:
 
     void showUnavailable() { m_status->setText(i18n("Preview unavailable")); }
 
-    void setPage(int pageNumber, const QImage& page, double targetY)
+    void setPages(int pageNumber, const QImage& pages, const QRect& target, double targetY)
     {
         m_status->setText(i18n("Page %1", static_cast<qint64>(pageNumber) + 1));
-        m_image->setPixmap(QPixmap::fromImage(page));
-        m_image->resize(page.size());
+        m_image->setPixmap(QPixmap::fromImage(pages));
+        m_image->resize(pages.size());
         m_scroll->verticalScrollBar()->setValue(
-            std::clamp(static_cast<int>(targetY * page.height()) - 24, 0, m_scroll->verticalScrollBar()->maximum()));
+            std::clamp(target.top() + static_cast<int>(targetY * target.height()) - 24,
+                       0,
+                       m_scroll->verticalScrollBar()->maximum()));
     }
 
 protected:
@@ -182,9 +184,9 @@ private:
     QLabel* m_image;
 };
 
-LinkPreview::LinkPreview(Renderer render, PageSize pageSize)
+LinkPreview::LinkPreview(Renderer render, PageInfo pageInfo)
     : m_render(std::move(render))
-    , m_pageSize(std::move(pageSize))
+    , m_pageInfo(std::move(pageInfo))
 {
     m_pool.setMaxThreadCount(1);
     m_closeTimer.setSingleShot(true);
@@ -221,31 +223,51 @@ void LinkPreview::reset()
     delete m_window.data();
 }
 
+void LinkPreview::setMode(LinkPreviewMode mode)
+{
+    if (m_mode == mode)
+        return;
+    reset();
+    m_mode = mode;
+}
+
 bool LinkPreview::showPreview(const Model::Viewport& destination)
 {
-    if (destination.page < 0)
+    if (m_mode == LinkPreviewMode::Off || destination.page < 0)
         return false;
     auto* source = QApplication::widgetAt(QCursor::pos());
     if (!source)
         return false;
     if (m_window && (source == m_window.data() || m_window->isAncestorOf(source)))
         return true; // A delayed source tooltip must not replace the open preview.
-    const QSizeF pageSize = m_pageSize(destination.page);
-    if (!std::isfinite(pageSize.width()) || !std::isfinite(pageSize.height()) || pageSize.width() <= 0
-        || pageSize.height() <= 0)
-        return false;
-
     auto* screen = QGuiApplication::screenAt(QCursor::pos());
     if (!screen)
         screen = source->screen();
+    if (!screen)
+        return false;
     const QRect available = screen->availableGeometry();
-    const int width = std::clamp(available.width() - 48, 1, 640);
-    // Bound the full-page render even for unusually tall/wide documents.
-    const double aspect = pageSize.width() / pageSize.height();
-    const QSize size = aspect >= static_cast<double>(width) / 4096.0
-        ? QSize(width, std::max(1, qRound(width / aspect)))
-        : QSize(std::max(1, qRound(4096.0 * aspect)), 4096);
-    const QString key = QStringLiteral("%1:%2:%3").arg(destination.page).arg(size.width()).arg(size.height());
+    const auto sizeForPage = [&](int page) {
+        return sizeLinkPreview(m_mode, source->window()->size(), available.size(), m_pageInfo(page));
+    };
+    LinkPreviewSize previewSize = sizeForPage(destination.page);
+    if (previewSize.render.isEmpty())
+        return false;
+    std::vector<RenderPage> pages;
+    QString key = QString::number(destination.page);
+    for (int offset : { -1, 0, 1 }) {
+        if ((offset < 0 && destination.page == 0)
+            || (offset > 0 && destination.page == std::numeric_limits<int>::max()))
+            continue;
+        const int page = destination.page + offset;
+        const QSize size = offset == 0 ? previewSize.render : sizeForPage(page).render;
+        if (size.isEmpty())
+            continue;
+        pages.push_back({ page, size });
+        key += QStringLiteral(":%1:%2:%3").arg(page).arg(size.width()).arg(size.height());
+    }
+    // Neighbors can have different page dimensions. Fit the widest page.
+    for (const auto& page : pages)
+        previewSize.render.setWidth(std::max(previewSize.render.width(), page.size.width()));
     const auto* cached = m_cache.object(key);
     if (!cached && m_cancelled && (key != m_key || m_cancelled->load())) {
         dismiss();
@@ -264,47 +286,80 @@ bool LinkPreview::showPreview(const Model::Viewport& destination)
     if (!m_window)
         m_window = new LinkPreviewWindow(source->window());
     m_window->setScreen(screen);
-    m_window->prepare(destination.page, size, !cached, available, m_anchor);
+    m_window->prepare(destination.page, previewSize, !cached, available, m_anchor);
     m_closeTimer.stop();
     QToolTip::hideText();
     qApp->installEventFilter(this);
     m_window->show();
     if (cached) {
-        m_window->setPage(destination.page, *cached, m_targetY);
+        m_window->setPages(destination.page, cached->image, cached->target, m_targetY);
         return true;
     }
     if (m_cancelled)
         return true;
 
-    startRender(destination.page, size, key);
+    startRender(destination.page, std::move(pages), key);
     return true;
 }
 
-void LinkPreview::startRender(int page, QSize size, const QString& key)
+void LinkPreview::startRender(int page, std::vector<RenderPage> pages, const QString& key)
 {
     m_cancelled = std::make_shared<std::atomic_bool>(false);
     const auto cancelled = m_cancelled;
     const auto generation = m_generation;
     const auto render = m_render;
-    m_pool.start([this, render, cancelled, generation, key, page, size] {
-        QImage image = render(page, size, [cancelled] { return cancelled->load(); });
-        // Worker images lease shared frame slots. Retain owned pixels so the
-        // preview/cache cannot exhaust the renderer's frame pool.
-        image = !cancelled->load() && image.size() == size ? image.copy() : QImage { };
-        QMetaObject::invokeMethod(this, [this, cancelled, generation, key, page, image = std::move(image)] {
+    m_pool.start([this, render, cancelled, generation, key, page, pages = std::move(pages)] {
+        constexpr int PageGap = 8;
+        std::vector<QImage> images;
+        int width = 0;
+        int height = 0;
+        bool hasTarget = false;
+        for (const auto& request : pages) {
+            if (cancelled->load())
+                break;
+            QImage image = render(request.number, request.size, [cancelled] { return cancelled->load(); });
+            // Worker images lease shared frame slots. Copy before requesting
+            // the next page so this strip cannot exhaust the frame pool.
+            image = !cancelled->load() && image.size() == request.size ? image.copy() : QImage { };
+            if (!image.isNull()) {
+                width = std::max(width, image.width());
+                height += image.height() + PageGap;
+                hasTarget |= request.number == page;
+            }
+            images.push_back(std::move(image));
+        }
+        RenderedPages result;
+        if (hasTarget && !cancelled->load()) {
+            result.image = QImage(width, height - PageGap, QImage::Format_ARGB32_Premultiplied);
+            result.image.fill(Qt::transparent); // Page gaps inherit the preview's theme.
+            QPainter painter(&result.image);
+            int top = 0;
+            for (std::size_t i = 0; i < images.size(); ++i) {
+                const QImage& image = images[i];
+                if (image.isNull())
+                    continue; // An unavailable neighbor must not hide the destination.
+                const QRect rect(QPoint((width - image.width()) / 2, top), image.size());
+                painter.drawImage(rect.topLeft(), image);
+                if (pages[i].number == page)
+                    result.target = rect;
+                top += image.height() + PageGap;
+            }
+        }
+        QMetaObject::invokeMethod(this, [this, cancelled, generation, key, page, result = std::move(result)] {
             if (generation != m_generation)
                 return;
             m_cancelled.reset();
             if (cancelled->load())
                 return;
-            if (image.isNull()) {
+            if (result.image.isNull()) {
                 if (m_window && key == m_key)
                     m_window->showUnavailable();
                 return;
             }
-            m_cache.insert(key, new QImage(image), static_cast<int>((image.sizeInBytes() + 1023) / 1024));
+            m_cache.insert(
+                key, new RenderedPages(result), static_cast<int>((result.image.sizeInBytes() + 1023) / 1024));
             if (m_window && m_window->isVisible() && key == m_key)
-                m_window->setPage(page, image, m_targetY);
+                m_window->setPages(page, result.image, result.target, m_targetY);
         });
     });
 }

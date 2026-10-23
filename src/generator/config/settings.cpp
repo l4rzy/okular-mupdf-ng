@@ -134,6 +134,21 @@ bool readHeuristicSynopsisEnabled()
     return MuPDFNGSettings::heuristicSynopsisEnabled();
 }
 
+LinkPreviewMode readLinkPreviewMode()
+{
+    switch (MuPDFNGSettings::linkPreviewMode()) {
+    case MuPDFNGSettings::EnumLinkPreviewMode::AutoSize:
+        return LinkPreviewMode::AutoSize;
+    case MuPDFNGSettings::EnumLinkPreviewMode::Small:
+        return LinkPreviewMode::Small;
+    case MuPDFNGSettings::EnumLinkPreviewMode::Large:
+        return LinkPreviewMode::Large;
+    case MuPDFNGSettings::EnumLinkPreviewMode::Off:
+    default:
+        return LinkPreviewMode::Off;
+    }
+}
+
 bool readRenderCancellationEnabled()
 {
     return MuPDFNGSettings::cancelObsoleteRenders();

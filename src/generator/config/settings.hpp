@@ -5,6 +5,7 @@
 #define MU_GENERATOR_CONFIG_SETTINGS_HPP
 
 #include "generator/config/signature_emblem_type.hpp"
+#include "generator/link_preview_policy.hpp"
 #include <QByteArray>
 
 #include <QDateTime>
@@ -166,6 +167,7 @@ ocrConfigFor(const OcrTarget& target, int pageCount, double dpiX, double dpiY, c
 void reloadSettings();
 bool readRenderCancellationEnabled();
 bool readHeuristicSynopsisEnabled();
+LinkPreviewMode readLinkPreviewMode();
 EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();

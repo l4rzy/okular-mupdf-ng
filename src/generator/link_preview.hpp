@@ -4,19 +4,21 @@
 #ifndef MU_GENERATOR_LINK_PREVIEW_HPP
 #define MU_GENERATOR_LINK_PREVIEW_HPP
 
+#include "generator/link_preview_policy.hpp"
 #include "shared/model/types.hpp"
 
 #include <QCache>
 #include <QImage>
 #include <QObject>
 #include <QPointer>
-#include <QSizeF>
+#include <QRect>
 #include <QThreadPool>
 #include <QTimer>
 
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <vector>
 
 class QWidget;
 
@@ -29,26 +31,40 @@ class LinkPreview final : public QObject {
 public:
     using Cancelled = std::function<bool()>;
     using Renderer = std::function<QImage(int, QSize, const Cancelled&)>;
-    using PageSize = std::function<QSizeF(int)>;
+    // Return empty geometry for pages outside the current document.
+    using PageInfo = std::function<LinkPreviewPage(int)>;
 
-    LinkPreview(Renderer render, PageSize pageSize);
+    LinkPreview(Renderer render, PageInfo pageInfo);
     ~LinkPreview() override;
 
     // Called by the link's tooltip hook; true suppresses Okular's text tooltip.
     bool showPreview(const Model::Viewport& destination);
     // Cancel and join before changing the worker document or destroying it.
     void reset();
+    void setMode(LinkPreviewMode mode);
 
 private:
     bool eventFilter(QObject* watched, QEvent* event) override;
     bool isHovered() const;
     void dismiss();
-    void startRender(int page, QSize size, const QString& key);
+
+    struct RenderPage {
+        int number;
+        QSize size;
+    };
+
+    struct RenderedPages {
+        QImage image;
+        QRect target;
+    };
+
+    void startRender(int page, std::vector<RenderPage> pages, const QString& key);
 
     Renderer m_render;
-    PageSize m_pageSize;
+    PageInfo m_pageInfo;
+    LinkPreviewMode m_mode = LinkPreviewMode::Off;
     QThreadPool m_pool;
-    QCache<QString, QImage> m_cache { 16 * 1024 }; // KiB, excluding the displayed pixmap.
+    QCache<QString, RenderedPages> m_cache { 16 * 1024 }; // KiB, excluding the displayed pixmap.
     std::shared_ptr<std::atomic_bool> m_cancelled;
     std::uint64_t m_generation = 0;
     QPointer<LinkPreviewWindow> m_window;

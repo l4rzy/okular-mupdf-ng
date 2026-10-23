@@ -15,6 +15,15 @@
         <choice name="Dark" />
       </choices>
     </entry>
+    <entry key="LinkPreviewMode" type="Enum">
+      <default>Off</default>
+      <choices>
+        <choice name="Off" />
+        <choice name="AutoSize" />
+        <choice name="Small" />
+        <choice name="Large" />
+      </choices>
+    </entry>
     <entry key="HeuristicSynopsisEnabled" type="Bool">
       <default>true</default>
     </entry>

@@ -100,13 +100,20 @@ Main::Main(QObject* parent, const QVariantList& args)
           [this](int page, QSize size, const LinkPreview::Cancelled& cancelled) {
               return m_worker.render(page, size.width(), size.height(), { }, cancelled);
           },
-          [this](int page) -> QSizeF {
+          [this](int page) -> LinkPreviewPage {
               if (!workerReady() || page < 0 || page >= m_okularPages.size())
                   return { };
               const auto* target = m_okularPages.at(page);
               const bool sideways =
                   target->rotation() == Okular::Rotation90 || target->rotation() == Okular::Rotation270;
-              return sideways ? QSizeF(target->height(), target->width()) : QSizeF(target->width(), target->height());
+              const QSizeF size =
+                  sideways ? QSizeF(target->height(), target->width()) : QSizeF(target->width(), target->height());
+              const bool reflowable = Model::isReflowableDocument(m_document.type);
+              return { size,
+                       reflowable
+                           ? static_cast<double>(std::clamp(
+                                 m_settings.startupEpub.fontSize, Limit::MinEpubFontSize, Limit::MaxEpubFontSize))
+                           : 0.0 };
           })
     , m_annotationProxy(&m_worker,
                         [this](int page) {
@@ -130,6 +137,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     setFeature(PrintToFile);
     setFeature(TiledRendering);
     setFeature(SwapBackingFile);
+    m_linkPreview.setMode(Config::readLinkPreviewMode());
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
 
@@ -368,6 +376,7 @@ bool Main::reparseConfig()
 {
     Config::reloadSettings();
     syncOcrActions();
+    m_linkPreview.setMode(Config::readLinkPreviewMode());
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
     const Config::WorkerSettings settings = Config::readWorkerSettings();
