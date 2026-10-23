@@ -171,6 +171,7 @@ private slots:
             for (QAction* registered : client->actionCollection()->actions())
                 QCOMPARE(registered->isEnabled(),
                          registered->objectName() == QStringLiteral("mupdf_manage_certificates")
+                             || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
                              || registered->objectName().startsWith(QStringLiteral("mupdf_theme"))
                              || (expected && (registered == action || hasModels)));
             document.reparseConfig();
@@ -435,6 +436,50 @@ private slots:
     }
 
 #endif
+
+    void linkPreviewShortcut_data()
+    {
+        QTest::addColumn<QString>("initial");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("off") << QStringLiteral("Off") << QStringLiteral("AutoSize");
+        QTest::newRow("adaptive") << QStringLiteral("AutoSize") << QStringLiteral("Off");
+        QTest::newRow("small") << QStringLiteral("Small") << QStringLiteral("Off");
+        QTest::newRow("large") << QStringLiteral("Large") << QStringLiteral("Off");
+    }
+
+    void linkPreviewShortcut()
+    {
+        QFETCH(QString, initial);
+        QFETCH(QString, expected);
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        general.writeEntry("LinkPreviewMode", initial);
+        config->sync();
+        const auto restore = qScopeGuard([&] {
+            general.writeEntry("LinkPreviewMode", "Off");
+            config->sync();
+        });
+        Okular::Document document(nullptr);
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        document.reparseConfig();
+        auto* action = document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_link_preview_toggle"));
+        QVERIFY(action && action->isEnabled());
+        QCOMPARE(action->text(), QStringLiteral("Toggle Page Link Preview"));
+        QVERIFY(KActionCollection::isShortcutsConfigurable(action));
+        QVERIFY(action->shortcut().isEmpty());
+        action->trigger();
+        config->reparseConfiguration();
+        QCOMPARE(general.readEntry("LinkPreviewMode", QStringLiteral("Off")), expected);
+        action->trigger();
+        config->reparseConfiguration();
+        QCOMPARE(general.readEntry("LinkPreviewMode", QStringLiteral("Off")),
+                 expected == QStringLiteral("Off") ? QStringLiteral("AutoSize") : QStringLiteral("Off"));
+        document.closeDocument();
+        QVERIFY(!action->isEnabled());
+    }
 
     void linkPreviewSettingsApplyToOpenDocuments()
     {
@@ -882,13 +927,14 @@ private slots:
                 if (action->isVisible())
                     visible.append(action);
             }
-            QCOMPARE(visible.size(), hasModels ? 3 : 1);
+            QCOMPARE(visible.size(), hasModels ? 3 : 2);
             QCOMPARE(actions->action(QStringLiteral("mupdf_ocr_toggle"))->isEnabled(), hasModels);
             for (QAction* action : visible)
                 QCOMPARE(action->isEnabled(), hasModels);
-            if (!hasModels)
-                QCOMPARE(visible.front()->text(),
-                         QStringLiteral("No OCR models available. Please install a Tesseract language model."));
+            if (!hasModels) {
+                QCOMPARE(visible.at(0)->text(), QStringLiteral("No OCR models available."));
+                QCOMPARE(visible.at(1)->text(), QStringLiteral("Please install a Tesseract language model."));
+            }
         }
     }
 
@@ -1261,12 +1307,14 @@ private slots:
         auto* menu = tools->actions().at(2)->menu();
         QVERIFY(menu);
         QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
-        QCOMPARE(menu->actions().size(), 4);
-        QVERIFY(!menu->actions().back()->isVisible());
-        QCOMPARE(client->actionCollection()->actions().count(), 14);
+        QCOMPARE(menu->actions().size(), 5);
+        QVERIFY(!menu->actions().at(3)->isVisible());
+        QVERIFY(!menu->actions().at(4)->isVisible());
+        QCOMPARE(client->actionCollection()->actions().count(), 15);
         for (QAction* registered : presentation->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle")
+                         || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
                          || registered->objectName().startsWith(QStringLiteral("mupdf_theme_toggle_")));
         QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Automatic"));
         const QStringList modes { "Never", "Five", "Always" };

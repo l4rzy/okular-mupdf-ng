@@ -24,18 +24,18 @@
 #include <utility>
 
 #include "generator/config/settings.hpp"
-#include "generator/layers_model.hpp"
-#include "generator/link_preview.hpp"
 #include "generator/okular_compat.hpp"
+#include "generator/ui/layers_model.hpp"
+#include "generator/ui/link_preview.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/placeholder.hpp"
 #endif
 #include "generator/page/error.hpp"
-#include "generator/printing.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/certificate_store.hpp"
 #include "generator/proxy/form/coordinator.hpp"
 #include "generator/proxy/form/signature.hpp"
+#include "generator/ui/printing.hpp"
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/worker_client.hpp"
 
@@ -154,8 +154,9 @@ private:
     // Updates OCR scheduling from the pages currently visible in Okular.
     void observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nativeText = std::nullopt);
     void setupActions();
+    void setupOcrActions();
     void setupThemeActions();
-    void updatePagePlaceholder(Model::DocumentTheme theme);
+    void syncActions();
     void syncThemeActions();
     void syncOcrActions();
     // Reopens the retained source after a worker restart and verifies that it
@@ -164,6 +165,7 @@ private:
     bool reopenWorkerDocument(bool markFormChangesDirty = false);
     // Permanently disables the active document after an unrecoverable worker failure.
     void failClosed(const QString& message);
+    void updatePagePlaceholder(Model::DocumentTheme theme);
     // Clears transient Okular display state without removing document data.
     void clearPageDisplayState(int page);
     void clearPageTextState(int page);
@@ -243,7 +245,7 @@ private:
     std::unique_ptr<MenuRegistration> m_menuRegistration;
     QActionGroup* m_ocrActions = nullptr;
     QActionGroup* m_themeActions = nullptr;
-    QAction* m_ocrUnavailableAction = nullptr;
+    QActionGroup* m_ocrUnavailableActions = nullptr;
     bool m_observingVisiblePages = false;
 
     std::unique_ptr<LayersModel> m_layersModel;

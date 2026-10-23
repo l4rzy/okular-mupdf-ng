@@ -23,7 +23,6 @@
 #include "shared/protocol/limits.hpp"
 
 #include "generator/conversion/text.hpp"
-#include "generator/printing.hpp"
 #include "generator/proxy/embedded_file.hpp"
 #include "generator/proxy/form/checkbox.hpp"
 #include "generator/proxy/form/choice.hpp"
@@ -33,6 +32,7 @@
 #include "generator/proxy/form/radio_grouping.hpp"
 #include "generator/proxy/form/signature.hpp"
 #include "generator/proxy/form/text.hpp"
+#include "generator/ui/printing.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"

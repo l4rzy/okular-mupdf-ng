@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "generator/window_menus.hpp"
+#include "generator/ui/window_menus.hpp"
 #include "mupdfngsettings.h"
 
 #include <KActionCollection>
@@ -84,7 +84,7 @@ public:
                     if (!action) {
                         action = new QAction(child->text(), this);
                         action->setEnabled(child->isEnabled());
-                        m_unavailable = action;
+                        m_unavailable.append(action);
                     }
                     menu->addAction(action);
                 }
@@ -157,10 +157,9 @@ private:
             } else
                 action->setEnabled(false);
         }
-        if (m_unavailable) {
-            auto* mode = actionCollection()->action(QStringLiteral("mupdf_ocr_off"));
-            m_unavailable->setVisible(mode && !mode->isVisible());
-        }
+        auto* mode = actionCollection()->action(QStringLiteral("mupdf_ocr_off"));
+        for (QAction* action : m_unavailable)
+            action->setVisible(mode && !mode->isVisible());
     }
 
     struct Client {
@@ -171,7 +170,7 @@ private:
     };
 
     QList<Client> m_clients;
-    QAction* m_unavailable = nullptr;
+    QList<QAction*> m_unavailable;
     bool m_rebuildPending = false;
     std::optional<int> m_previousOcrMode;
 };

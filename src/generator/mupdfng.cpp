@@ -3,29 +3,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/mupdfng.hpp"
-#include "generator/window_menus.hpp"
+#include "generator/ui/window_menus.hpp"
 #include "shared/model/theme_colors.hpp"
 
 #include <okular/core/fileprinter.h>
 #include <okular/core/page.h>
 #include <okular/core/textpage.h>
 
-#include <KActionCollection>
-#include <KActionMenu>
 #include <KConfigDialog>
 #include <KLocalizedString>
 #include <KPluginFactory>
-#include <QActionGroup>
-#include <QApplication>
 #include <QBuffer>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
-#include <QIcon>
 #include <QImage>
 #include <QLocale>
-#include <QMenu>
 #include <QMessageBox>
 #include <QMimeDatabase>
 #include <QMimeType>
@@ -44,7 +38,6 @@
 #include <functional>
 #include <unordered_map>
 
-#include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/config/settingswidget.hpp"
 #include "generator/conversion/annotation.hpp"
@@ -364,7 +357,7 @@ void Main::refreshPaperColor()
 bool Main::reparseConfig()
 {
     Config::reloadSettings();
-    syncOcrActions();
+    syncActions();
     m_linkPreview.setMode(Config::readLinkPreviewMode());
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
@@ -458,192 +451,8 @@ void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
 }
 
 // =============================================================================
-// Actions & Settings Pages
+// Settings Pages
 // =============================================================================
-
-void Main::setupActions()
-{
-    setComponentName(QStringLiteral("okular_mupdfng"), i18n("MuPDF"));
-    auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("document-scan")), i18n("MuPDF OCR"), this);
-    actionCollection()->addAction(QStringLiteral("mupdf_ocr"), menu);
-    KActionCollection::setShortcutsConfigurable(menu, false);
-    m_ocrActions = new QActionGroup(this);
-    const auto addMode = [&](const QString& name, const QString& text, int mode) {
-        auto* action = new QAction(text, m_ocrActions);
-        action->setCheckable(true);
-        action->setData(mode);
-        KActionCollection::setShortcutsConfigurable(action, false);
-        actionCollection()->addAction(name, action);
-        menu->addAction(action);
-    };
-    using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
-    addMode(QStringLiteral("mupdf_ocr_off"), i18n("Off"), Mode::Never);
-    addMode(QStringLiteral("mupdf_ocr_auto"), i18n("Automatic"), Mode::Five);
-    addMode(QStringLiteral("mupdf_ocr_on"), i18n("On"), Mode::Always);
-    m_ocrUnavailableAction =
-        menu->menu()->addAction(i18n("No OCR models available. Please install a Tesseract language model."));
-    m_ocrUnavailableAction->setEnabled(false);
-    const auto setMode = [this](int mode) {
-        MuPDFNGSettings::setOcrTriggerMode(mode);
-        MuPDFNGSettings::self()->save();
-        const int menuMode = mode == Mode::Twenty ? Mode::Five : mode;
-        for (QAction* action : m_ocrActions->actions()) {
-            if (action->data().toInt() == menuMode) {
-                Q_EMIT notice(i18n("MuPDF OCR: %1", KLocalizedString::removeAcceleratorMarker(action->text())),
-                              ShortNoticeMs);
-                break;
-            }
-        }
-    };
-    auto* toggle = new QAction(menu->icon(), i18n("Toggle MuPDF OCR"), this);
-    actionCollection()->addAction(QStringLiteral("mupdf_ocr_toggle"), toggle);
-    connect(toggle, &QAction::triggered, this, [this, setMode] {
-        setMode(m_menuRegistration->nextOcrMode(MuPDFNGSettings::ocrTriggerMode()));
-    });
-    connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncOcrActions);
-    connect(
-        m_ocrActions, &QActionGroup::triggered, this, [setMode](QAction* action) { setMode(action->data().toInt()); });
-    connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
-        syncOcrActions();
-        observeOcrFocus();
-    });
-    auto* certificates =
-        new QAction(QIcon::fromTheme(QStringLiteral("view-certificate")), i18n("Manage Certificates…"), this);
-    actionCollection()->addAction(QStringLiteral("mupdf_manage_certificates"), certificates);
-    KActionCollection::setShortcutsConfigurable(certificates, false);
-    connect(certificates, &QAction::triggered, this, [] {
-        CertificateManagerDialog dialog(Plugin::Crypto::activeNssDatabasePath(), QApplication::activeWindow());
-        dialog.exec();
-    });
-    setupThemeActions();
-    // Both action groups are complete before their initial state is applied.
-    syncOcrActions();
-    // A separate client presents one set of actions per window, even when
-    // Okular leaves inactive tabs' generator clients in the GUI factory.
-    setXML(QStringLiteral("<gui name=\"okular_mupdfng_document\"/>"));
-    m_menuRegistration = std::make_unique<MenuRegistration>(guiClient());
-}
-
-KActionCollection* Main::actionCollection() const
-{
-    if (m_menuRegistration)
-        m_menuRegistration->schedule();
-    return KXMLGUIClient::actionCollection();
-}
-
-void Main::updatePagePlaceholder(Model::DocumentTheme theme)
-{
-    const bool enabled = theme != Model::DocumentTheme::Default;
-    if (!enabled && !m_hasPagePlaceholder)
-        return;
-    // A themed-to-Default transition clears existing previews once. Fresh
-    // unthemed pages use Okular's normal background without visiting this code.
-    m_hasPagePlaceholder = enabled;
-#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-    const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
-    for (auto* page : m_okularPages)
-        page->setPlaceholderColor(color);
-#else
-    m_hasUsedPagePlaceholder |= enabled;
-    m_pagePlaceholder.setTheme(theme);
-    for (auto* page : m_okularPages)
-        m_pagePlaceholder.seed(*page);
-#endif
-}
-
-void Main::setupThemeActions()
-{
-    auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("color-management")), i18n("Document Theme"), this);
-    actionCollection()->addAction(QStringLiteral("mupdf_theme"), menu);
-    KActionCollection::setShortcutsConfigurable(menu, false);
-    m_themeActions = new QActionGroup(this);
-    const auto addTheme = [&](const QString& name, const QString& label, Model::DocumentTheme theme) {
-        auto* action = new QAction(label, m_themeActions);
-        action->setCheckable(true);
-        action->setData(static_cast<int>(theme));
-        KActionCollection::setShortcutsConfigurable(action, false);
-        actionCollection()->addAction(name, action);
-        menu->addAction(action);
-    };
-    addTheme(QStringLiteral("mupdf_theme_default"), i18n("Default"), Model::DocumentTheme::Default);
-    addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::DocumentTheme::Twilight);
-    addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::DocumentTheme::Dusk);
-    addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::DocumentTheme::Dark);
-    const auto setTheme = [](Model::DocumentTheme theme) {
-        MuPDFNGSettings::setDocumentTheme(static_cast<int>(theme));
-        MuPDFNGSettings::self()->save();
-    };
-    connect(m_themeActions, &QActionGroup::triggered, this, [setTheme](QAction* action) {
-        setTheme(static_cast<Model::DocumentTheme>(action->data().toInt()));
-    });
-    const auto addToggle =
-        [this, setTheme](const QString& name, const QString& label, const QString& icon, Model::DocumentTheme theme) {
-            auto* action = new QAction(QIcon::fromTheme(icon), label, this);
-            actionCollection()->addAction(name, action);
-            connect(action, &QAction::triggered, this, [setTheme, theme] {
-                setTheme(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()) == theme
-                             ? Model::DocumentTheme::Default
-                             : theme);
-            });
-        };
-    addToggle(QStringLiteral("mupdf_theme_toggle_dusk"),
-              i18n("Toggle Dusk Mode"),
-              QStringLiteral("draw-halfcircle1"),
-              Model::DocumentTheme::Dusk);
-    addToggle(QStringLiteral("mupdf_theme_toggle_dark"),
-              i18n("Toggle Dark Mode"),
-              QStringLiteral("lighttable"),
-              Model::DocumentTheme::Dark);
-    addToggle(QStringLiteral("mupdf_theme_toggle_twilight"),
-              i18n("Toggle Twilight Mode"),
-              QStringLiteral("draw-halfcircle2"),
-              Model::DocumentTheme::Twilight);
-    // Settings are shared by every open document. Refresh each worker after
-    // the save completes, without re-entering the settings notification.
-    connect(
-        MuPDFNGSettings::self(),
-        &KCoreConfigSkeleton::configChanged,
-        this,
-        [this] {
-            if (const auto* currentDocument = document(); currentDocument
-                && m_settings.rendering.documentTheme
-                    != static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()))
-                const_cast<Okular::Document*>(currentDocument)->reparseConfig();
-        },
-        Qt::QueuedConnection);
-    connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncThemeActions);
-}
-
-void Main::syncThemeActions()
-{
-    const bool enabled = !m_okularPages.isEmpty() && !m_pageError.isActive();
-    actionCollection()->action(QStringLiteral("mupdf_theme"))->setEnabled(enabled);
-    actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dusk"))->setEnabled(enabled);
-    actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
-    actionCollection()->action(QStringLiteral("mupdf_theme_toggle_twilight"))->setEnabled(enabled);
-    m_themeActions->setEnabled(enabled);
-    const auto theme = static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme());
-    for (QAction* action : m_themeActions->actions())
-        action->setChecked(action->data().toInt() == static_cast<int>(theme));
-}
-
-void Main::syncOcrActions()
-{
-    syncThemeActions();
-    const bool enabled =
-        m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_pageError.isActive();
-    const bool hasModels = !Config::installedOcrModels().isEmpty();
-    actionCollection()->action(QStringLiteral("mupdf_ocr"))->setEnabled(enabled);
-    actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->setEnabled(enabled && hasModels);
-    m_ocrActions->setEnabled(enabled && hasModels);
-    m_ocrActions->setVisible(hasModels);
-    m_ocrUnavailableAction->setVisible(!hasModels);
-    using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
-    const int configuredMode = MuPDFNGSettings::ocrTriggerMode();
-    const int menuMode = configuredMode == Mode::Twenty ? Mode::Five : configuredMode;
-    for (QAction* action : m_ocrActions->actions())
-        action->setChecked(action->data().toInt() == menuMode);
-}
 
 // Okular Generator Func: adds the generator settings page to Okular.
 void Main::addPages(KConfigDialog* dialog)
@@ -813,7 +622,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
     updatePagePlaceholder(m_settings.rendering.documentTheme);
-    syncOcrActions();
+    syncActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
@@ -1081,7 +890,7 @@ void Main::clearWorkerDerivedState()
 void Main::clearPageErrorDerivedState()
 {
     updatePagePlaceholder(Model::DocumentTheme::Default);
-    syncOcrActions();
+    syncActions();
     m_document.hasXfaForm = false;
     m_ocrController->reset();
     m_formsDirty = false;
@@ -1385,7 +1194,7 @@ bool Main::doCloseDocument()
 
     // Step 3: Reset local identity before asking the worker to discard its copy.
     m_document = { };
-    syncOcrActions();
+    syncActions();
     // Closing is best effort: an unavailable worker has already lost its copy.
     closeWorkerDocument();
 
@@ -1526,6 +1335,26 @@ Okular::FontInfo::List Main::fontsForPage(int page)
 // =============================================================================
 // Page Rendering
 // =============================================================================
+
+void Main::updatePagePlaceholder(Model::DocumentTheme theme)
+{
+    const bool enabled = theme != Model::DocumentTheme::Default;
+    if (!enabled && !m_hasPagePlaceholder)
+        return;
+    // A themed-to-Default transition clears existing previews once. Fresh
+    // unthemed pages use Okular's normal background without visiting this code.
+    m_hasPagePlaceholder = enabled;
+#if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
+    const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
+    for (auto* page : m_okularPages)
+        page->setPlaceholderColor(color);
+#else
+    m_hasUsedPagePlaceholder |= enabled;
+    m_pagePlaceholder.setTheme(theme);
+    for (auto* page : m_okularPages)
+        m_pagePlaceholder.seed(*page);
+#endif
+}
 
 void Main::clearPageDisplayState(int page)
 {

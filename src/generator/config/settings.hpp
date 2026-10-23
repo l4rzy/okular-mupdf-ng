@@ -5,7 +5,7 @@
 #define MU_GENERATOR_CONFIG_SETTINGS_HPP
 
 #include "generator/config/signature_emblem_type.hpp"
-#include "generator/link_preview_policy.hpp"
+#include "generator/ui/link_preview_policy.hpp"
 #include <QByteArray>
 
 #include <QDateTime>

@@ -4,7 +4,7 @@
 #ifndef MU_GENERATOR_LINK_PREVIEW_HPP
 #define MU_GENERATOR_LINK_PREVIEW_HPP
 
-#include "generator/link_preview_policy.hpp"
+#include "generator/ui/link_preview_policy.hpp"
 #include "shared/model/types.hpp"
 
 #include <QCache>

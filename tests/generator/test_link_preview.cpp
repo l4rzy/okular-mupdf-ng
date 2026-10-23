@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/conversion/document.hpp"
-#include "generator/link_preview.hpp"
+#include "generator/ui/link_preview.hpp"
 #include "plugin/worker_client.hpp"
 
 #include <QApplication>

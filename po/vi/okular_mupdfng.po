@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 15:34-0500\n"
+"POT-Creation-Date: 2026-10-23 17:40-0500\n"
 "PO-Revision-Date: 2026-10-23 12:49-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
@@ -26,7 +26,7 @@ msgstr ""
 "Hỗ trợ JavaScript cho biểu mẫu PDF đã bị tắt khi biên dịch ứng dụng này."
 
 #: src/generator/config/settingswidget.cpp:53
-#: src/generator/config/settingswidget.cpp:89 src/generator/mupdfng.cpp:482
+#: src/generator/config/settingswidget.cpp:89 src/generator/ui/actions.cpp:77
 msgid "Off"
 msgstr "Tắt"
 
@@ -128,7 +128,7 @@ msgstr "B5 (176 × 250 mm)"
 msgid "Letter (216 × 279 mm)"
 msgstr "Letter (216 × 279 mm)"
 
-#: src/generator/config/settingswidget.cpp:108 src/generator/mupdfng.cpp:570
+#: src/generator/config/settingswidget.cpp:108 src/generator/ui/actions.cpp:127
 #: rc.cpp:10
 msgid "Default"
 msgstr "Mặc định"
@@ -185,8 +185,8 @@ msgstr "Đơn giản"
 msgid "None"
 msgstr "Không"
 
-#: src/generator/config/settingswidget.cpp:182 src/generator/mupdfng.cpp:468
-#: src/generator/window_menus.cpp:27
+#: src/generator/config/settingswidget.cpp:182
+#: src/generator/ui/window_menus.cpp:27 src/generator/ui/actions.cpp:31
 msgid "MuPDF"
 msgstr "MuPDF"
 
@@ -324,11 +324,11 @@ msgstr "Hiện thông báo khi hộp cát của worker không thể bảo vệ �
 
 #: src/generator/config/settingswidget.cpp:324
 msgid ""
-"Preview internal link destinations on hover. Adaptive Size adapts to the Okular "
-"window and the current page rendering scale."
+"Preview internal link destinations on hover. Adaptive Size adapts to the "
+"Okular window and the current page rendering scale."
 msgstr ""
-"Xem trước trang đích của liên kết nội bộ khi di chuột. Chế độ kích thước thích "
-"ứng điều chỉnh theo cửa sổ Okular và tỷ lệ kết xuất trang hiện tại."
+"Xem trước trang đích của liên kết nội bộ khi di chuột. Chế độ kích thước "
+"thích ứng điều chỉnh theo cửa sổ Okular và tỷ lệ kết xuất trang hiện tại."
 
 #: src/generator/config/settingswidget.cpp:327
 msgid ""
@@ -462,7 +462,7 @@ msgstr "Quản lý chứng chỉ - %1"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:45
 #: src/generator/config/certmanager/manager_dialog.cpp:162
-#: src/generator/mupdfng.cpp:972 src/generator/mupdfng.cpp:1033
+#: src/generator/mupdfng.cpp:779 src/generator/mupdfng.cpp:840
 msgid "Unknown"
 msgstr "Không xác định"
 
@@ -747,11 +747,11 @@ msgstr ""
 msgid "Create"
 msgstr "Tạo"
 
-#: src/generator/mupdfng.cpp:141
+#: src/generator/mupdfng.cpp:132
 msgid "Document operation failed: %1"
 msgstr "Thao tác với tài liệu không thành công: %1"
 
-#: src/generator/mupdfng.cpp:197
+#: src/generator/mupdfng.cpp:188
 msgid ""
 "The document renderer stopped while unsaved form and annotation changes were "
 "present. Those changes were lost."
@@ -759,7 +759,7 @@ msgstr ""
 "Bộ kết xuất tài liệu đã dừng khi còn thay đổi biểu mẫu và chú thích chưa "
 "lưu. Các thay đổi đó đã bị mất."
 
-#: src/generator/mupdfng.cpp:201
+#: src/generator/mupdfng.cpp:192
 msgid ""
 "The document renderer stopped while unsaved form changes were present. Those "
 "changes were lost."
@@ -767,7 +767,7 @@ msgstr ""
 "Bộ kết xuất tài liệu đã dừng khi còn thay đổi biểu mẫu chưa lưu. Các thay "
 "đổi đó đã bị mất."
 
-#: src/generator/mupdfng.cpp:202
+#: src/generator/mupdfng.cpp:193
 msgid ""
 "The document renderer stopped while unsaved annotation changes were present. "
 "Those changes were lost."
@@ -775,7 +775,7 @@ msgstr ""
 "Bộ kết xuất tài liệu đã dừng khi còn thay đổi chú thích chưa lưu. Các thay "
 "đổi đó đã bị mất."
 
-#: src/generator/mupdfng.cpp:236
+#: src/generator/mupdfng.cpp:227
 msgid ""
 "The document renderer restarted but the document could not be reopened. "
 "Restart Okular to try again."
@@ -783,29 +783,29 @@ msgstr ""
 "Bộ kết xuất tài liệu đã khởi động lại nhưng không thể mở lại tài liệu. Hãy "
 "khởi động lại Okular để thử lại."
 
-#: src/generator/mupdfng.cpp:247
+#: src/generator/mupdfng.cpp:238
 msgid "The document renderer stopped responding. Restart Okular to try again."
 msgstr ""
 "Bộ kết xuất tài liệu đã ngừng phản hồi. Hãy khởi động lại Okular để thử lại."
 
-#: src/generator/mupdfng.cpp:282
+#: src/generator/mupdfng.cpp:273
 msgid "Export to PDF failed: %1"
 msgstr "Xuất PDF không thành công: %1"
 
-#: src/generator/mupdfng.cpp:285
+#: src/generator/mupdfng.cpp:276
 msgid "Export to PDF finished."
 msgstr "Đã xuất PDF xong."
 
-#: src/generator/mupdfng.cpp:302
+#: src/generator/mupdfng.cpp:293
 msgid "OCR failed for page %1"
 msgstr "OCR không thành công trên trang %1"
 
-#: src/generator/mupdfng.cpp:395
+#: src/generator/mupdfng.cpp:386
 msgid ""
 "PDF JavaScript will be enabled or disabled when this document is next opened."
 msgstr "JavaScript trong PDF sẽ được bật hoặc tắt khi bạn mở lại tài liệu này."
 
-#: src/generator/mupdfng.cpp:416
+#: src/generator/mupdfng.cpp:407
 msgid ""
 "The PDF could not be refreshed after changing its JavaScript setting. "
 "Restart Okular."
@@ -813,7 +813,7 @@ msgstr ""
 "Không thể tải lại PDF sau khi đổi cài đặt JavaScript. Hãy khởi động lại "
 "Okular."
 
-#: src/generator/mupdfng.cpp:435
+#: src/generator/mupdfng.cpp:426
 msgid ""
 "Strict sandbox enforcement cannot be enabled while unsaved changes are "
 "present. Restart Okular after saving or discarding those changes."
@@ -821,79 +821,23 @@ msgstr ""
 "Không thể bật chế độ thực thi hộp cát nghiêm ngặt khi còn thay đổi chưa lưu. "
 "Hãy lưu hoặc hủy các thay đổi đó rồi khởi động lại Okular."
 
-#: src/generator/mupdfng.cpp:469
-msgid "MuPDF OCR"
-msgstr "OCR MuPDF"
-
-#: src/generator/mupdfng.cpp:483
-msgid "Automatic"
-msgstr "Tự động"
-
-#: src/generator/mupdfng.cpp:484
-msgid "On"
-msgstr "Bật"
-
-#: src/generator/mupdfng.cpp:486
-msgid "No OCR models available. Please install a Tesseract language model."
-msgstr "Chưa có mô hình OCR. Vui lòng cài đặt một mô hình ngôn ngữ Tesseract."
-
-#: src/generator/mupdfng.cpp:494
-msgid "MuPDF OCR: %1"
-msgstr "OCR MuPDF: %1"
-
-#: src/generator/mupdfng.cpp:500
-msgid "Toggle MuPDF OCR"
-msgstr "Bật/tắt OCR MuPDF"
-
-#: src/generator/mupdfng.cpp:513
-msgid "Manage Certificates…"
-msgstr "Quản lý chứng chỉ…"
-
-#: src/generator/mupdfng.cpp:558 rc.cpp:9
-msgid "Document Theme"
-msgstr "Theme tài liệu"
-
-#: src/generator/mupdfng.cpp:571 rc.cpp:11
-msgid "Twilight"
-msgstr "Nhá nhem"
-
-#: src/generator/mupdfng.cpp:572 rc.cpp:12
-msgid "Dusk"
-msgstr "Chạng vạng"
-
-#: src/generator/mupdfng.cpp:573 rc.cpp:13
-msgid "Dark"
-msgstr "Tối"
-
-#: src/generator/mupdfng.cpp:592
-msgid "Toggle Dusk Mode"
-msgstr "Bật/tắt chế độ chạng vạng"
-
-#: src/generator/mupdfng.cpp:596
-msgid "Toggle Dark Mode"
-msgstr "Bật/tắt chế độ tối"
-
-#: src/generator/mupdfng.cpp:600
-msgid "Toggle Twilight Mode"
-msgstr "Bật/tắt chế độ nhá nhem"
-
-#: src/generator/mupdfng.cpp:656
+#: src/generator/mupdfng.cpp:463
 msgid "MuPDF-NG"
 msgstr "MuPDF-NG"
 
-#: src/generator/mupdfng.cpp:658
+#: src/generator/mupdfng.cpp:465
 msgid "MuPDF-NG Configuration"
 msgstr "Cấu hình MuPDF-NG"
 
-#: src/generator/mupdfng.cpp:664
+#: src/generator/mupdfng.cpp:471
 msgid "Restart needed"
 msgstr "Cần khởi động lại"
 
-#: src/generator/mupdfng.cpp:664
+#: src/generator/mupdfng.cpp:471
 msgid "You need to restart Okular to apply this change."
 msgstr "Bạn cần khởi động lại Okular để áp dụng thay đổi này."
 
-#: src/generator/mupdfng.cpp:944
+#: src/generator/mupdfng.cpp:751
 msgid ""
 "Some errors were found in the document, Okular might not be able to show the "
 "content correctly"
@@ -901,7 +845,7 @@ msgstr ""
 "Đã phát hiện một số lỗi trong tài liệu; Okular có thể không hiển thị nội "
 "dung chính xác"
 
-#: src/generator/mupdfng.cpp:957
+#: src/generator/mupdfng.cpp:764
 msgid ""
 "[WARN] The MuPDF worker is partially hardened: Okular's protection is "
 "limited."
@@ -909,7 +853,7 @@ msgstr ""
 "[CẢNH BÁO] Worker MuPDF chỉ được gia cố một phần: khả năng bảo vệ của Okular "
 "bị hạn chế."
 
-#: src/generator/mupdfng.cpp:959
+#: src/generator/mupdfng.cpp:766
 msgid ""
 "[CRIT] The MuPDF worker is unconfined: Okular will not be able to protect "
 "you from malicious documents."
@@ -917,39 +861,39 @@ msgstr ""
 "[NGHIÊM TRỌNG] Worker MuPDF không bị giới hạn: Okular không thể bảo vệ bạn "
 "khỏi tài liệu độc hại."
 
-#: src/generator/mupdfng.cpp:979
+#: src/generator/mupdfng.cpp:786
 msgid "MuPDF: %1 (system library)"
 msgstr "MuPDF: %1 (thư viện hệ thống)"
 
-#: src/generator/mupdfng.cpp:980
+#: src/generator/mupdfng.cpp:787
 msgid "MuPDF: %1 (bundled, patched)"
 msgstr "MuPDF: %1 (đi kèm, đã vá lỗi)"
 
-#: src/generator/mupdfng.cpp:984
+#: src/generator/mupdfng.cpp:791
 msgid "Sandbox: Fully hardened [OK]"
 msgstr "Hộp cát: Được gia cố đầy đủ [OK]"
 
-#: src/generator/mupdfng.cpp:986
+#: src/generator/mupdfng.cpp:793
 msgid "Sandbox: Partially hardened [WARN]"
 msgstr "Hộp cát: Được gia cố một phần [CẢNH BÁO]"
 
-#: src/generator/mupdfng.cpp:988
+#: src/generator/mupdfng.cpp:795
 msgid "Sandbox: Unconfined [CRIT]"
 msgstr "Hộp cát: Không bị giới hạn [NGHIÊM TRỌNG]"
 
-#: src/generator/mupdfng.cpp:994
+#: src/generator/mupdfng.cpp:801
 msgid "unknown"
 msgstr "không xác định"
 
-#: src/generator/mupdfng.cpp:995
+#: src/generator/mupdfng.cpp:802
 msgid "Worker memory: %1"
 msgstr "Bộ nhớ worker: %1"
 
-#: src/generator/mupdfng.cpp:998
+#: src/generator/mupdfng.cpp:805
 msgid "Worker restarts: %1"
 msgstr "Số lần khởi động lại worker: %1"
 
-#: src/generator/mupdfng.cpp:1030
+#: src/generator/mupdfng.cpp:837
 msgid ""
 "The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
 "To open this document, switch Sandbox Enforcement to Relaxed. This will "
@@ -962,56 +906,56 @@ msgstr ""
 "tác này sẽ giảm mức bảo vệ.\n"
 "Lỗi: %1"
 
-#: src/generator/mupdfng.cpp:1126
+#: src/generator/mupdfng.cpp:933
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 "Đã chuyển sang chế độ thực thi Nới lỏng. Vui lòng mở lại tài liệu theo cách "
 "thủ công."
 
-#: src/generator/mupdfng.cpp:1160
+#: src/generator/mupdfng.cpp:967
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 "Không thể tải lại tài liệu sau khi lưu. Hãy khởi động lại Okular để tiếp tục."
 
-#: src/generator/mupdfng.cpp:1244
+#: src/generator/mupdfng.cpp:1051
 msgid "OCR completed for page %1"
 msgstr "Đã hoàn tất OCR cho trang %1"
 
-#: src/generator/mupdfng.cpp:1456
+#: src/generator/mupdfng.cpp:1263
 msgid "Format"
 msgstr "Định dạng"
 
-#: src/generator/mupdfng.cpp:1459 rc.cpp:20
+#: src/generator/mupdfng.cpp:1266 rc.cpp:20
 msgid "Security"
 msgstr "Bảo mật"
 
-#: src/generator/mupdfng.cpp:1461
+#: src/generator/mupdfng.cpp:1268
 msgid "Yes"
 msgstr "Có"
 
-#: src/generator/mupdfng.cpp:1461
+#: src/generator/mupdfng.cpp:1268
 msgid "No"
 msgstr "Không"
 
-#: src/generator/mupdfng.cpp:1462
+#: src/generator/mupdfng.cpp:1269
 msgid "Optimized"
 msgstr "Đã tối ưu hóa"
 
-#: src/generator/mupdfng.cpp:1465
+#: src/generator/mupdfng.cpp:1272
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] "Đã ký (%1 chữ ký)"
 
-#: src/generator/mupdfng.cpp:1465
+#: src/generator/mupdfng.cpp:1272
 msgid "Not Signed"
 msgstr "Chưa ký"
 
-#: src/generator/mupdfng.cpp:1466
+#: src/generator/mupdfng.cpp:1273
 msgid "Digital Signatures"
 msgstr "Chữ ký số"
 
-#: src/generator/mupdfng.cpp:1503
+#: src/generator/mupdfng.cpp:1310
 msgid ""
 "This document has no embedded table of contents. A generated table of "
 "contents is being used."
@@ -1019,77 +963,165 @@ msgstr ""
 "Tài liệu này không có mục lục nhúng. Một mục lục được tạo tự động đang được "
 "sử dụng."
 
-#: src/generator/mupdfng.cpp:1686 src/generator/mupdfng.cpp:1710
+#: src/generator/mupdfng.cpp:1513 src/generator/mupdfng.cpp:1537
 msgid "The PDF layers could not be loaded."
 msgstr "Không thể tải các lớp PDF."
 
-#: src/generator/mupdfng.cpp:1698
+#: src/generator/mupdfng.cpp:1525
 msgid "The PDF layer visibility could not be changed."
 msgstr "Không thể thay đổi trạng thái hiển thị của lớp PDF."
 
-#: src/generator/mupdfng.cpp:1891
+#: src/generator/mupdfng.cpp:1718
 msgid "Strict sandbox enforcement blocks this document."
 msgstr "Chế độ thực thi hộp cát nghiêm ngặt đã chặn tài liệu này."
 
-#: src/generator/mupdfng.cpp:1892 src/generator/mupdfng.cpp:1903
+#: src/generator/mupdfng.cpp:1719 src/generator/mupdfng.cpp:1730
 msgid "MuPDF worker is unavailable."
 msgstr "Worker MuPDF không khả dụng."
 
-#: src/generator/mupdfng.cpp:1899
+#: src/generator/mupdfng.cpp:1726
 msgid "Failed to save PDF document."
 msgstr "Không thể lưu tài liệu PDF."
 
-#: src/generator/mupdfng.cpp:1916
+#: src/generator/mupdfng.cpp:1743
 msgid "Flattened PDF"
 msgstr "PDF đã làm phẳng"
 
-#: src/generator/mupdfng.cpp:1922
+#: src/generator/mupdfng.cpp:1749
 msgid "Annotation File (XFDF)"
 msgstr "Tệp chú thích (XFDF)"
 
-#: src/generator/mupdfng.cpp:1936
+#: src/generator/mupdfng.cpp:1763
 msgid "Export to flattened PDF finished."
 msgstr "Đã xuất PDF làm phẳng xong."
 
-#: src/generator/mupdfng.cpp:1947
+#: src/generator/mupdfng.cpp:1774
 msgid "Starting to export to PDF."
 msgstr "Đang bắt đầu xuất PDF."
 
-#: src/generator/mupdfng.cpp:1961
+#: src/generator/mupdfng.cpp:1788
 msgid "XFDF export does not support rotated PDF pages."
 msgstr "Xuất XFDF không hỗ trợ các trang PDF được xoay."
 
-#: src/generator/mupdfng.cpp:1962
+#: src/generator/mupdfng.cpp:1789
 msgid "Could not check PDF page rotation for XFDF export."
 msgstr "Không thể kiểm tra góc xoay trang PDF để xuất XFDF."
 
-#: src/generator/mupdfng.cpp:1973
+#: src/generator/mupdfng.cpp:1800
 msgid "Export to XFDF finished."
 msgstr "Đã xuất XFDF xong."
 
-#: src/generator/printing.cpp:16
+#: src/generator/ui/printing.cpp:16
 msgid "MuPDF-NG Options"
 msgstr "Tùy chọn MuPDF-NG"
 
-#: src/generator/printing.cpp:24
+#: src/generator/ui/printing.cpp:24
 msgid "Fit to printable area"
 msgstr "Vừa vùng in"
 
-#: src/generator/printing.cpp:27
+#: src/generator/ui/printing.cpp:27
 msgid "Fit to full page"
 msgstr "Vừa toàn trang"
 
-#: src/generator/printing.cpp:30
+#: src/generator/ui/printing.cpp:30
 msgid "None; print original size"
 msgstr "Không; in theo kích thước gốc"
 
-#: src/generator/printing.cpp:32
+#: src/generator/ui/printing.cpp:32
 msgid "Scaling mode for the printed pages"
 msgstr "Chế độ co giãn trang in"
 
-#: src/generator/printing.cpp:33
+#: src/generator/ui/printing.cpp:33
 msgid "Scale mode:"
 msgstr "Chế độ co giãn:"
+
+#: src/generator/ui/link_preview.cpp:134
+msgid "Link preview"
+msgstr "Xem trước liên kết"
+
+#: src/generator/ui/link_preview.cpp:150
+msgid "Press Esc to cancel"
+msgstr "Nhấn Esc để hủy"
+
+#: src/generator/ui/link_preview.cpp:178
+msgid "Page %1 — Loading preview…"
+msgstr "Trang %1 — Đang tải bản xem trước…"
+
+#: src/generator/ui/link_preview.cpp:179 src/generator/ui/link_preview.cpp:230
+msgid "Page %1"
+msgstr "Trang %1"
+
+#: src/generator/ui/link_preview.cpp:193 src/generator/ui/link_preview.cpp:223
+msgid "Preview unavailable"
+msgstr "Bản xem trước không khả dụng"
+
+#: src/generator/ui/link_preview.cpp:207
+msgid "Loading preview…"
+msgstr "Đang tải bản xem trước…"
+
+#: src/generator/ui/actions.cpp:33
+msgid "Toggle Page Link Preview"
+msgstr "Bật/tắt xem trước liên kết trang"
+
+#: src/generator/ui/actions.cpp:46
+msgid "Manage Certificates…"
+msgstr "Quản lý chứng chỉ…"
+
+#: src/generator/ui/actions.cpp:64
+msgid "MuPDF OCR"
+msgstr "OCR MuPDF"
+
+#: src/generator/ui/actions.cpp:78
+msgid "Automatic"
+msgstr "Tự động"
+
+#: src/generator/ui/actions.cpp:79
+msgid "On"
+msgstr "Bật"
+
+#: src/generator/ui/actions.cpp:81
+msgid "No OCR models available."
+msgstr "Chưa có mô hình OCR."
+
+#: src/generator/ui/actions.cpp:81
+msgid "Please install a Tesseract language model."
+msgstr "Vui lòng cài đặt một mô hình ngôn ngữ Tesseract."
+
+#: src/generator/ui/actions.cpp:90
+msgid "MuPDF OCR: %1"
+msgstr "OCR MuPDF: %1"
+
+#: src/generator/ui/actions.cpp:96
+msgid "Toggle MuPDF OCR"
+msgstr "Bật/tắt OCR MuPDF"
+
+#: src/generator/ui/actions.cpp:115 rc.cpp:9
+msgid "Document Theme"
+msgstr "Theme tài liệu"
+
+#: src/generator/ui/actions.cpp:128 rc.cpp:11
+msgid "Twilight"
+msgstr "Nhá nhem"
+
+#: src/generator/ui/actions.cpp:129 rc.cpp:12
+msgid "Dusk"
+msgstr "Chạng vạng"
+
+#: src/generator/ui/actions.cpp:130 rc.cpp:13
+msgid "Dark"
+msgstr "Tối"
+
+#: src/generator/ui/actions.cpp:149
+msgid "Toggle Dusk Mode"
+msgstr "Bật/tắt chế độ chạng vạng"
+
+#: src/generator/ui/actions.cpp:153
+msgid "Toggle Dark Mode"
+msgstr "Bật/tắt chế độ tối"
+
+#: src/generator/ui/actions.cpp:157
+msgid "Toggle Twilight Mode"
+msgstr "Bật/tắt chế độ nhá nhem"
 
 #: src/generator/proxy/form/text.cpp:44
 msgid "Expected format: %1"
@@ -1102,30 +1134,6 @@ msgid ""
 msgstr ""
 "Vị trí\n"
 "chữ ký"
-
-#: src/generator/link_preview.cpp:134
-msgid "Link preview"
-msgstr "Xem trước liên kết"
-
-#: src/generator/link_preview.cpp:150
-msgid "Press Esc to cancel"
-msgstr "Nhấn Esc để hủy"
-
-#: src/generator/link_preview.cpp:176
-msgid "Page %1 — Loading preview…"
-msgstr "Trang %1 — Đang tải bản xem trước…"
-
-#: src/generator/link_preview.cpp:177 src/generator/link_preview.cpp:226
-msgid "Page %1"
-msgstr "Trang %1"
-
-#: src/generator/link_preview.cpp:191 src/generator/link_preview.cpp:219
-msgid "Preview unavailable"
-msgstr "Bản xem trước không khả dụng"
-
-#: src/generator/link_preview.cpp:204
-msgid "Loading preview…"
-msgstr "Đang tải bản xem trước…"
 
 #: rc.cpp:1
 msgid "General"

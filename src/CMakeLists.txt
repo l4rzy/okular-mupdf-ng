@@ -193,7 +193,7 @@ target_include_directories(mupdf_generator_page_error PUBLIC ${CMAKE_CURRENT_SOU
 target_link_libraries(mupdf_generator_page_error PUBLIC Okular::Core Qt6::Core KF6::I18n)
 
 add_library(mupdf_generator_adapters STATIC
-  generator/link_preview.cpp
+  generator/ui/link_preview.cpp
   generator/conversion/annotation.cpp
   generator/conversion/certificate.cpp
   generator/conversion/document.cpp
@@ -208,8 +208,8 @@ add_library(mupdf_generator_adapters STATIC
   generator/proxy/form/choice.cpp
   generator/proxy/form/coordinator.cpp
   generator/proxy/certificate_store.cpp
-  generator/printing.cpp
-  generator/layers_model.cpp
+  generator/ui/printing.cpp
+  generator/ui/layers_model.cpp
 )
 target_include_directories(mupdf_generator_adapters PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -270,7 +270,8 @@ endif()
 
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
-  generator/window_menus.cpp
+  generator/ui/actions.cpp
+  generator/ui/window_menus.cpp
   generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp
   generator/config/csseditor/highlighter.cpp
@@ -320,8 +321,8 @@ kcoreaddons_add_plugin(okularGenerator_mupdfng
 )
 qt_add_resources(okularGenerator_mupdfng "mupdfng_xmlgui"
     PREFIX "/kxmlgui5/okular_mupdfng"
-    BASE "generator"
-    FILES generator/mupdfngui.rc)
+    BASE "generator/ui"
+    FILES generator/ui/mupdfngui.rc)
 
 if(MU_DEBUG_BUILD)
     target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_DEBUG_ENABLED)

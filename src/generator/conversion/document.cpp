@@ -3,9 +3,9 @@
 
 #include "generator/conversion/document.hpp"
 
-#include "generator/link_preview.hpp"
 #include "generator/okular_compat.hpp"
 #include "generator/proxy/embedded_file.hpp"
+#include "generator/ui/link_preview.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
