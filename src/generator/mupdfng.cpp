@@ -97,8 +97,8 @@ constexpr int LongWarningMs = 10000;
 Main::Main(QObject* parent, const QVariantList& args)
     : Generator(parent, args)
     , m_linkPreview(
-          [this](int page, QSize size, QRect region, const LinkPreview::Cancelled& cancelled) {
-              return m_worker.render(page, size.width(), size.height(), region, cancelled);
+          [this](int page, QSize size, const LinkPreview::Cancelled& cancelled) {
+              return m_worker.render(page, size.width(), size.height(), { }, cancelled);
           },
           [this](int page) -> QSizeF {
               if (!workerReady() || page < 0 || page >= m_okularPages.size())

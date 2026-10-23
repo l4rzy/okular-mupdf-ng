@@ -106,7 +106,10 @@ public:
     {
     }
 
-    QString actionTip() const override { return m_previews ? m_previews->tip(m_destination) : GotoAction::actionTip(); }
+    QString actionTip() const override
+    {
+        return m_previews && m_previews->showPreview(m_destination) ? QString() : GotoAction::actionTip();
+    }
 
 private:
     Model::Viewport m_destination;

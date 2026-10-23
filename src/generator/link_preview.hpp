@@ -9,38 +9,54 @@
 #include <QCache>
 #include <QImage>
 #include <QObject>
-#include <QRect>
+#include <QPointer>
 #include <QSizeF>
 #include <QThreadPool>
+#include <QTimer>
 
 #include <atomic>
 #include <functional>
 #include <memory>
 
+class QWidget;
+
 namespace Mu::Generator {
 
-/// GUI-thread owner of document-scoped, static internal-link tooltips.
+class LinkPreviewWindow;
+
+/// GUI-thread owner of document-scoped, scrollable internal-link previews.
 class LinkPreview final : public QObject {
 public:
     using Cancelled = std::function<bool()>;
-    using Renderer = std::function<QImage(int, QSize, QRect, const Cancelled&)>;
+    using Renderer = std::function<QImage(int, QSize, const Cancelled&)>;
     using PageSize = std::function<QSizeF(int)>;
 
     LinkPreview(Renderer render, PageSize pageSize);
     ~LinkPreview() override;
 
-    QString tip(const Model::Viewport& destination);
+    // Called by the link's tooltip hook; true suppresses Okular's text tooltip.
+    bool showPreview(const Model::Viewport& destination);
     // Cancel and join before changing the worker document or destroying it.
     void reset();
 
 private:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    bool isHovered() const;
+    void dismiss();
+    void startRender(int page, QSize size, const QString& key);
+
     Renderer m_render;
     PageSize m_pageSize;
     QThreadPool m_pool;
-    QCache<QString, QString> m_cache { 4 * 1024 * 1024 };
+    QCache<QString, QImage> m_cache { 16 * 1024 }; // KiB, excluding the displayed pixmap.
     std::shared_ptr<std::atomic_bool> m_cancelled;
     std::uint64_t m_generation = 0;
-    QString m_lastTip;
+    QPointer<LinkPreviewWindow> m_window;
+    QPointer<QWidget> m_source;
+    QPoint m_anchor;
+    QString m_key;
+    double m_targetY = 0;
+    QTimer m_closeTimer;
 };
 
 } // namespace Mu::Generator
