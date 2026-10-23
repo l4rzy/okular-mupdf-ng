@@ -388,7 +388,7 @@ private slots:
         QVERIFY(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds) == 0);
         ::Mu::IPC::CtrlChannel writer(fds[0]);
         ::Mu::IPC::CtrlChannel reader(fds[1]);
-        const std::vector<std::byte> expected(payloadSize, std::byte(0x7f));
+        const std::vector<std::byte> expected(static_cast<std::size_t>(payloadSize), std::byte(0x7f));
         std::vector<std::byte> encoded { std::byte((payloadSize >> 24) & 0xff),
                                          std::byte((payloadSize >> 16) & 0xff),
                                          std::byte((payloadSize >> 8) & 0xff),

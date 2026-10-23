@@ -34,13 +34,6 @@ Controller::Controller(WorkerClient* backend, QObject* parent)
             &Controller::cacheLoadFinished);
 }
 
-bool Controller::shouldTrigger(bool force, bool autoTrigger, unsigned threshold, std::size_t existingTextBoxCount)
-{
-    if (force)
-        return true;
-    return autoTrigger && existingTextBoxCount < threshold;
-}
-
 void Controller::observeVisiblePages(const QList<VisiblePage>& visiblePages,
                                      const Config& config,
                                      std::optional<NativeTextObservation> nativeText)
@@ -140,7 +133,7 @@ void Controller::deliver(int page, QVector<Caching::OCR::CacheItem> boxes, Compl
     Q_EMIT completed(page, std::move(boxes), source);
 }
 
-bool Controller::shouldRun(int page)
+bool Controller::shouldSchedulePage(int page)
 {
     // Recovering workers have no document yet; only a committed session may
     // receive OCR work.
@@ -151,13 +144,15 @@ bool Controller::shouldRun(int page)
     if (!m_config.autoTrigger)
         return false;
 
-    if (const auto it = m_nativeTextBoxCounts.constFind(page); it != m_nativeTextBoxCounts.cend())
-        return shouldTrigger(m_config.force, m_config.autoTrigger, m_config.triggerThreshold, *it);
-
-    const auto existingBoxes = m_backend->getTextBoxesForPage(page, m_config.dpiX, m_config.dpiY, /*skipAnnots=*/true);
-    const auto count = existingBoxes.size();
-    m_nativeTextBoxCounts.insert(page, count);
-    return shouldTrigger(m_config.force, m_config.autoTrigger, m_config.triggerThreshold, count);
+    auto count = m_nativeTextBoxCounts.find(page);
+    if (count == m_nativeTextBoxCounts.end()) {
+        // Only focus justifies a native-text RPC; neighbours are cache hints.
+        if (page != m_focus.focus())
+            return false;
+        const auto boxes = m_backend->getTextBoxesForPage(page, m_config.dpiX, m_config.dpiY, /*skipAnnots=*/true);
+        count = m_nativeTextBoxCounts.insert(page, boxes.size());
+    }
+    return count.value() < m_config.triggerThreshold;
 }
 
 void Controller::settle()
@@ -171,7 +166,7 @@ void Controller::settle()
 
     QList<int> wanted;
     for (int page : candidates) {
-        if (shouldRun(page))
+        if (shouldSchedulePage(page))
             wanted.append(page);
     }
     m_queue.refresh(m_focus.focus(), wanted, Constant::STALE_RADIUS, Constant::MAX_QUEUED_PAGES);
@@ -180,8 +175,8 @@ void Controller::settle()
 
 void Controller::startNext()
 {
-    // One operation at a time keeps ordering deterministic and, because worker
-    // OCR cannot be interrupted, prevents a stale page from holding the worker.
+    // Serialize cache probes and recognition. Focus changes update the queue
+    // without cancelling the active job; reset/configuration changes cancel it.
     if (m_activeJob || m_pendingCache || m_cacheWatcher.isRunning())
         return;
 
@@ -219,26 +214,18 @@ void Controller::cacheLoadFinished()
     if (cached.present) {
         m_retry.clear(pending.page);
         deliver(pending.page, cached.items, CompletionSource::CacheLoaded);
-        startNext();
+    } else if (pending.page == m_focus.focus()) {
+        // Neighbours only probe the cache. A miss starts recognition only if
+        // this page is still focused when the asynchronous lookup completes.
+        if (const auto job = m_backend->startOcrPage(pending.page, pending.key.language, pending.key.dpi)) {
+            m_activeJob = ActiveJob { *job, pending.page, pending.key };
+            Q_EMIT started(pending.page);
+        } else {
+            handleFailure(pending.page);
+        }
         return;
     }
-
-    // A cache miss only justifies worker OCR for the current focus page. A
-    // prefetched neighbour is dropped and reconsidered if the user moves there.
-    if (pending.page != m_focus.focus()) {
-        startNext();
-        return;
-    }
-
-    if (const auto job = m_backend->startOcrPage(pending.page, pending.key.language, pending.key.dpi)) {
-        m_activeJob = ActiveJob { *job, pending.page, pending.key };
-        Q_EMIT started(pending.page);
-        return;
-    }
-
-    // The worker did not accept the job; retry on a later timer while the page
-    // is still the focus, otherwise report the failure.
-    handleFailure(pending.page);
+    startNext();
 }
 
 void Controller::finish(quint64 jobId, int page)

@@ -52,7 +52,7 @@ inline int dominantPage(const QList<VisiblePage>& pages, int previousPage = -1)
 
 // Tracks the settled focus page and the scrolling direction that produced it.
 // The prefetch window is a cache hint only: worker OCR is limited to focus(),
-// because a worker job cannot be interrupted once it starts.
+// while active recognition is allowed to finish when focus changes.
 class FocusPolicy {
 public:
     // Records the latest dominant page. Returns false when nothing changed so
@@ -97,13 +97,18 @@ private:
 // Ordered set of pages awaiting cache probing or worker OCR. Ordering is by
 // distance to the focus so the page the user is looking at is dispatched first.
 // Pages that drift beyond the staleness radius are dropped rather than
-// cancelled, since an in-flight worker job cannot be interrupted.
+// cancelled. Active recognition continues across focus changes.
 class PageQueue {
 public:
     // Rebuilds the queue from the current candidates, retaining relevant queued
     // work behind them, then orders nearest-first and trims to the bounds.
     void refresh(int focus, const QList<int>& candidates, int radius, int maxPages)
     {
+        if (focus < 0) {
+            m_queue.clear();
+            return;
+        }
+
         QList<int> merged;
         for (int page : candidates) {
             if (!merged.contains(page))
@@ -114,9 +119,6 @@ public:
                 merged.append(page);
         }
 
-        m_queue.clear();
-        if (focus < 0)
-            return;
         m_queue = merged;
         dropStale(focus, radius);
         std::stable_sort(m_queue.begin(), m_queue.end(), [focus](int a, int b) {
@@ -185,8 +187,7 @@ public:
     // Records a failure; returns true when another attempt is permitted.
     bool onFailure(int page)
     {
-        const int attempts = m_attempts.value(page, 0) + 1;
-        m_attempts.insert(page, attempts);
+        const int attempts = ++m_attempts[page];
         return attempts < m_maxAttempts;
     }
 

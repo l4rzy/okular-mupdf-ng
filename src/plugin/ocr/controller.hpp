@@ -27,9 +27,9 @@ struct NativeTextObservation {
 };
 
 // Owns the OCR scheduling state for one document. Worker OCR is dispatched
-// only for the settled focus page: a worker job cannot be interrupted, so a
-// page the user has left must never be allowed to occupy the single worker
-// slot. Neighbouring pages are cache-probed only.
+// only for the settled focus page; neighbours are cache-probed only. Scrolling
+// preserves active recognition. Document/configuration changes request
+// cooperative cancellation and discard abandoned results.
 class Controller final : public QObject {
     Q_OBJECT
 
@@ -50,8 +50,6 @@ public:
     [[nodiscard]] std::optional<QVector<Caching::OCR::CacheItem>> takeReady(int page);
     void reset();
 
-    static bool shouldTrigger(bool force, bool autoTrigger, unsigned threshold, std::size_t existingTextBoxCount);
-
 signals:
     void started(int page);
     void completed(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source);
@@ -62,7 +60,8 @@ signals:
 private:
     // Scheduling, cache loading, and worker calls all run on this QObject's
     // thread. The future only performs filesystem/decompression work off it.
-    bool shouldRun(int page);
+    // Eligibility for the OCR queue; neighbours only load cached results.
+    bool shouldSchedulePage(int page);
     void settle();
     void startNext();
     void cacheLoadFinished();

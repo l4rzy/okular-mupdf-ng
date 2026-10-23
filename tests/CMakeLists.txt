@@ -25,6 +25,7 @@ add_executable(test_render_worker support/render_worker.cpp ../src/worker/runtim
 set_target_properties(test_render_worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(test_render_worker PRIVATE ../src ../src/worker ${MU_GENERATED_INCLUDE_DIR})
 target_link_libraries(test_render_worker PRIVATE mupdf_worker_core MuPDF::Engine)
+target_link_options(test_render_worker PRIVATE "LINKER:--wrap=fz_new_draw_device")
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_render_worker PRIVATE MU_DEBUG_ENABLED)
     target_link_libraries(test_render_worker PRIVATE mupdf_ipc_debug)

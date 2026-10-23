@@ -10,9 +10,8 @@ namespace Mu::Plugin::OCR::Constant {
 // design: pages the user only scrolls through must not consume resources.
 constexpr int DEBOUNCE_MS = 250;
 
-// Worker OCR runs only for the settled focus page because a running worker job
-// cannot be cancelled. A queued page farther than this from the focus is
-// dropped instead of wasting the single worker slot.
+// Worker OCR starts only for the settled focus page. Scrolling keeps active
+// recognition running, but drops queued pages farther than this from focus.
 constexpr int STALE_RADIUS = 2;
 
 // Cap on the cache-prefetch window (focus plus immediate neighbours).

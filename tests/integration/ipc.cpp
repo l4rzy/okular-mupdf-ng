@@ -1267,16 +1267,16 @@ private slots:
     {
         QFETCH(bool, epub);
         QFETCH(bool, tiled);
+        QVERIFY(m_client.start(QStringLiteral(RENDER_WORKER_BUILD_PATH)));
         const QString path =
-            m_fixtureRoot.filePath(epub ? QStringLiteral("expensive.epub") : QStringLiteral("expensive.pdf"));
+            m_fixtureRoot.filePath(epub ? QStringLiteral("cancellation.epub") : QStringLiteral("cancellation.pdf"));
         QByteArray contents;
         fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
         QVERIFY(context);
         if (epub) {
+            contents = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body style=\"font-size:1px;line-height:1px\">";
             contents.append(
-                "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body style=\"font-size:1px;line-height:1px\">");
-            contents.append(
-                QByteArray("<span style=\"color:blue\">i</span><span style=\"color:red\">i</span>").repeated(20000));
+                QByteArray("<span style=\"color:blue\">i</span><span style=\"color:red\">i</span>").repeated(100));
             contents.append("</body></html>");
             fz_archive* archive = fz_open_zip_archive(context, QFile::encodeName(m_epub).constData());
             fz_zip_writer* zip = fz_new_zip_writer(context, QFile::encodeName(path).constData());
@@ -1294,7 +1294,9 @@ private slots:
             fz_drop_zip_writer(context, zip);
             fz_drop_archive(context, archive);
         } else {
-            contents = QByteArray("0 0 612 792 re f\n").repeated(20000);
+            contents = QByteArray("0 0 1 rg BT /F1 12 Tf 10 780 Td (a) Tj ET\n"
+                                  "1 0 0 rg BT /F1 12 Tf 10 780 Td (b) Tj ET\n")
+                           .repeated(100);
             createTextPDF(context, path, contents.constData());
         }
         fz_drop_context(context);
@@ -1305,46 +1307,55 @@ private slots:
         const QImage expected = m_client.render(0, 32, 32);
         QVERIFY(!expected.isNull());
 
+        pid_t workerPid = -1;
+        QVERIFY(workerControlSocket(workerPid) >= 0);
+        // Arm the test-only drawing device, after the baseline render.
+        QCOMPARE(::kill(workerPid, SIGUSR1), 0);
+        const auto resumeOnExit = qScopeGuard([&] { ::kill(workerPid, SIGCONT); });
         Mu::Worker::Sys::Mapping cookie;
-        bool sawProgress = false;
+        bool pausedDuringDrawing = false;
         const auto started = std::chrono::steady_clock::now();
         const auto shouldAbort = [&] {
-            if (!cookie) {
-                // The caller keeps this job's cookie FD alive while checking
-                // cancellation. Observe MuPDF's documented progress field to
-                // ensure cancellation happens during real page execution.
-                for (const auto& name :
-                     QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
-                    if (!QFileInfo(QStringLiteral("/proc/self/fd/") + name)
-                             .symLinkTarget()
-                             .contains(QStringLiteral("memfd:mupdf-render-cancel")))
-                        continue;
-                    cookie = Mu::Worker::Sys::Mapping(
-                        ::mmap(
-                            nullptr, Mu::IPC::RenderCookieBytes, PROT_READ | PROT_WRITE, MAP_SHARED, name.toInt(), 0),
-                        Mu::IPC::RenderCookieBytes);
-                    break;
-                }
+            int status = 0;
+            const pid_t result = ::waitpid(workerPid, &status, WUNTRACED | WNOHANG);
+            if (result == workerPid) {
+                pausedDuringDrawing = WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP;
+                return true;
             }
-            if (cookie) {
-                // Once queued, wait for the renderer here rather than relying
-                // on the 10 ms client poll to catch a short replay window.
-                while (std::chrono::steady_clock::now() - started < std::chrono::seconds(3)) {
-                    if (static_cast<volatile fz_cookie*>(cookie.data())->progress > 0) {
-                        sawProgress = true;
-                        return true;
-                    }
-                    std::this_thread::yield();
-                }
-            }
-            return std::chrono::steady_clock::now() - started > std::chrono::seconds(3);
+            return result < 0 || std::chrono::steady_clock::now() - started > std::chrono::seconds(5);
         };
         const QRect tile = tiled ? QRect(0, 0, 1024, 1024) : QRect { };
         QVERIFY(m_client.render(0, 2048, 2048, tile, shouldAbort).isNull());
-        QVERIFY(sawProgress);
+        QVERIFY(pausedDuringDrawing);
+        // The paused transport still owns this render's cancellation FD.
+        for (const auto& name :
+             QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
+            if (QFileInfo(QStringLiteral("/proc/self/fd/") + name)
+                    .symLinkTarget()
+                    .contains(QStringLiteral("memfd:mupdf-render-cancel"))) {
+                cookie = Mu::Worker::Sys::Mapping(
+                    ::mmap(nullptr, Mu::IPC::RenderCookieBytes, PROT_READ | PROT_WRITE, MAP_SHARED, name.toInt(), 0),
+                    Mu::IPC::RenderCookieBytes);
+                break;
+            }
+        }
+        QVERIFY(cookie);
+        const auto* activeCookie = static_cast<volatile fz_cookie*>(cookie.data());
+        const long pausedProgress = activeCookie->progress;
+        QVERIFY(pausedProgress > 0);
+        QCOMPARE(static_cast<int>(activeCookie->abort), 1);
+        QCOMPARE(::kill(workerPid, SIGCONT), 0);
         auto drained = std::async(std::launch::async, [&] { return m_client.isConnected(); });
         QVERIFY(drained.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
         QVERIFY(drained.get());
+        const auto* finalCookie = static_cast<volatile fz_cookie*>(cookie.data());
+        if (epub) {
+            // Display-list progress includes the current command when returning.
+            // It must stop short of the complete list, even though drawing began.
+            QVERIFY(static_cast<std::size_t>(finalCookie->progress) < finalCookie->progress_max);
+        } else {
+            QCOMPARE(static_cast<long>(finalCookie->progress), pausedProgress);
+        }
 
         // A late write to the old cookie must never abort the next render.
         const QImage next = m_client.render(0, 32, 32, { }, [&] {
@@ -1353,7 +1364,8 @@ private slots:
         });
         QVERIFY(!next.isNull());
         QCOMPARE(next, expected);
-        // The interrupted render published no frame and required no lease release.
+        // Cancellation was established while execution was paused, so there
+        // must be no published frame and no discarded-frame lease release.
         QCOMPARE(frameRequestId(next), frameRequestId(expected) + 2);
         QVERIFY(m_client.close());
     }

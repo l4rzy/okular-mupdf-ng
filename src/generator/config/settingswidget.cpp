@@ -143,13 +143,13 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     // only changes the display: Cancel still writes nothing, Accept persists
     // the visible choice through the existing currentText binding.
     QTimer::singleShot(0, this, [this, models] {
-        auto* ocrLang = m_mupdfsw->kcfg_OcrLanguage;
+        auto* languageCombo = m_mupdfsw->kcfg_OcrLanguage;
         const QString stored = MuPDFNGSettings::ocrLanguage();
-        if (!stored.isEmpty() && stored != QStringLiteral("-") && ocrLang->findData(stored) >= 0)
+        if (!stored.isEmpty() && stored != QStringLiteral("-") && languageCombo->findData(stored) >= 0)
             return;
-        const int index = ocrLang->findData(Config::autoSelectOcrModel(models));
+        const int index = languageCombo->findData(Config::autoSelectOcrModel(models));
         if (index >= 0)
-            ocrLang->setCurrentIndex(index);
+            languageCombo->setCurrentIndex(index);
     });
     auto* ocrQuality = m_mupdfsw->kcfg_OcrQuality;
     ocrQuality->clear();

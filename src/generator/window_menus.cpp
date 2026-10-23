@@ -90,8 +90,8 @@ public:
                 }
                 connect(menu, &QMenu::aboutToShow, this, [this, name = source->objectName()] {
                     const QPointer<WindowMenus> guard(this);
-                    if (auto* source = selectAction(name))
-                        QMetaObject::invokeMethod(source->menu(), "aboutToShow", Qt::DirectConnection);
+                    if (auto* target = selectAction(name))
+                        QMetaObject::invokeMethod(target->menu(), "aboutToShow", Qt::DirectConnection);
                     if (guard)
                         guard->refreshActions();
                 });

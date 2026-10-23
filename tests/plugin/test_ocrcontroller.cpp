@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QPainter>
+#include <QPdfWriter>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -10,6 +12,7 @@
 
 #include "plugin/ocr/controller.hpp"
 #include "plugin/ocr/policy.hpp"
+#include "shared/transport/frame_buffer.hpp"
 
 using Mu::Plugin::OCR::Controller;
 using Mu::Plugin::OCR::VisiblePage;
@@ -18,6 +21,100 @@ class TestPluginOcrController : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    void schedulingAvoidsUnnecessaryTextRequests_data()
+    {
+        QTest::addColumn<bool>("force");
+        QTest::addColumn<bool>("automatic");
+        QTest::addColumn<int>("nativeCount");
+        QTest::addColumn<unsigned>("threshold");
+        QTest::addColumn<bool>("knownNeighbour");
+        QTest::addColumn<int>("expectedNativeReads");
+        QTest::addColumn<int>("expectedCompletions");
+        QTest::newRow("unknown-focus") << false << true << -1 << 10000u << false << 1 << 1;
+        QTest::newRow("observed-focus") << false << true << 0 << 20u << false << 0 << 1;
+        QTest::newRow("observed-neighbour") << false << true << 0 << 20u << true << 0 << 2;
+        QTest::newRow("below-threshold") << false << true << 19 << 20u << false << 0 << 1;
+        QTest::newRow("at-threshold") << false << true << 20 << 20u << false << 0 << 0;
+        QTest::newRow("above-threshold") << false << true << 21 << 20u << false << 0 << 0;
+        QTest::newRow("zero-threshold") << false << true << 0 << 0u << false << 0 << 0;
+        QTest::newRow("forced") << true << false << -1 << 20u << false << 0 << 3;
+        QTest::newRow("forced-with-native-text") << true << true << 100 << 20u << false << 0 << 3;
+        QTest::newRow("disabled") << false << false << -1 << 20u << false << 0 << 0;
+    }
+
+    void schedulingAvoidsUnnecessaryTextRequests()
+    {
+        QFETCH(bool, force);
+        QFETCH(bool, automatic);
+        QFETCH(int, nativeCount);
+        QFETCH(unsigned, threshold);
+        QFETCH(bool, knownNeighbour);
+        QFETCH(int, expectedNativeReads);
+        QFETCH(int, expectedCompletions);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        Mu::Plugin::Caching::setRootForTesting(root.path());
+        const auto restoreCacheRoot = qScopeGuard([] { Mu::Plugin::Caching::clearRootForTesting(); });
+        const QString path = root.filePath(QStringLiteral("native.pdf"));
+        {
+            QPdfWriter writer(path);
+            QPainter painter(&writer);
+            for (int page = 0; page < 3; ++page) {
+                if (page)
+                    QVERIFY(writer.newPage());
+                painter.drawText(QPoint(100, 100), QStringLiteral("Native text"));
+            }
+        }
+        Mu::Plugin::WorkerClient backend;
+        QVERIFY(backend.start(QStringLiteral(WORKER_BUILD_PATH)));
+        QList<Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(backend.open(path, { }, pages), Mu::Model::OpenStatus::Success);
+        QCOMPARE(pages.size(), 3);
+        backend.commitSessionReady();
+        Mu::Plugin::OCR::Config config;
+        config.documentHash = QStringLiteral("scheduling");
+        config.language = QStringLiteral("eng");
+        config.pageCount = 3;
+        config.force = force;
+        config.autoTrigger = automatic;
+        config.triggerThreshold = threshold;
+        config.debounceMs = 5;
+        for (int page = 0; page < 3; ++page)
+            QVERIFY(Mu::Plugin::Caching::OCR::Cache::save(
+                config.documentHash, page, config.language, config.dpi, { { QString::number(page), 0, 0, 1, 1 } }));
+
+        Controller controller(&backend);
+        QSignalSpy completed(&controller, &Controller::completed);
+        QSignalSpy started(&controller, &Controller::started);
+        QSignalSpy failed(&controller, &Controller::failed);
+        const QImage before = backend.render(0, 64, 64);
+        QVERIFY(!before.isNull());
+        const auto requestId = [](const QImage& image) {
+            return reinterpret_cast<const Mu::IPC::FrameBufferHeader*>(image.constBits()
+                                                                       - sizeof(Mu::IPC::FrameBufferHeader))
+                ->requestId;
+        };
+
+        std::optional<Mu::Plugin::OCR::NativeTextObservation> nativeText;
+        if (nativeCount >= 0)
+            nativeText = Mu::Plugin::OCR::NativeTextObservation { 1, static_cast<std::size_t>(nativeCount) };
+        controller.observe(1, config, nativeText);
+        if (knownNeighbour)
+            controller.observe(1, config, Mu::Plugin::OCR::NativeTextObservation { 0, 0 });
+        QTRY_COMPARE(completed.count(), expectedCompletions);
+        QTest::qWait(50);
+        QCOMPARE(completed.count(), expectedCompletions);
+        // Cached results require no worker RPCs. Only an unknown focus may
+        // extract native text; the final render adds one request.
+        const QImage after = backend.render(0, 64, 64);
+        QVERIFY(!after.isNull());
+        QCOMPARE(requestId(after), requestId(before) + 1 + static_cast<quint64>(expectedNativeReads));
+        QCOMPARE(started.count(), 0);
+        QCOMPARE(failed.count(), 0);
+        for (const auto& completion : completed)
+            QCOMPARE(completion.at(2).value<Controller::CompletionSource>(), Controller::CompletionSource::CacheLoaded);
+    }
 
     void ignoresInvalidVisibilityAndDiscardedObservations_data()
     {
@@ -126,6 +223,10 @@ private Q_SLOTS:
         QVERIFY(!queue.contains(50));
         QVERIFY(queue.contains(54));
         QVERIFY(queue.contains(56));
+
+        // Losing focus clears retained work and rejects new candidates.
+        queue.refresh(-1, { 55, 56, 54 }, 2, 5);
+        QVERIFY(queue.isEmpty());
     }
 
     void pageQueueTakeNextRevalidatesAgainstFocus()
@@ -198,28 +299,6 @@ private Q_SLOTS:
 
         for (const auto& testCase : cases)
             QCOMPARE(Mu::Plugin::OCR::dominantPage(testCase.pages, testCase.previousPage), testCase.expected);
-    }
-
-    void shouldTriggerTable()
-    {
-        const struct {
-            bool force;
-            bool autoTrigger;
-            unsigned threshold;
-            std::size_t existingTextBoxCount;
-            bool expected;
-        } cases[] = {
-            { false, false, 20, 0, false },
-            { false, true, 20, 19, true },
-            { false, true, 20, 20, false },
-            { true, false, 20, 100, true },
-        };
-
-        for (const auto& testCase : cases) {
-            QCOMPARE(Controller::shouldTrigger(
-                         testCase.force, testCase.autoTrigger, testCase.threshold, testCase.existingTextBoxCount),
-                     testCase.expected);
-        }
     }
 
     void debounceDelayDoesNotInvalidateConfig()
