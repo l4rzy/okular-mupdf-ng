@@ -11,7 +11,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.4.9
+Version:        0.5.0
 Release:        0%{?dist}
 Summary:        MuPDF backend for Okular with an isolated document worker
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1

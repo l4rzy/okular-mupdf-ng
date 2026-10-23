@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.4.9
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        MuPDF backend for Okular with an isolated document worker
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -106,6 +106,10 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Thu Oct 22 2026 l4rzy <me@23ro.org> - 0.5.0-1
+- Update to version 0.5.0.
+- Improve OCR scheduling, render cancellation tests, and export lifecycle handling.
+
 * Wed Oct 21 2026 l4rzy <me@23ro.org> - 0.4.9-1
 - Update to version 0.4.9.
 - Refactor for readability.

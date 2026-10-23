@@ -4,7 +4,7 @@ pkgname=okular-mupdf-ng-git
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.5
-pkgver=0.2.12.r1.gea10c5c
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="MuPDF backend generator plugin for KDE Okular (Next Generation) - git"
 arch=('x86_64')

@@ -1,3 +1,11 @@
+okular-mupdf-ng (0.5.0-1) unstable; urgency=medium
+
+  * Update to version 0.5.0.
+  * Improve OCR scheduling and export lifecycle handling.
+  * Use GCC and resolve Debian unstable build dependencies.
+
+ -- l4rzy <me@23ro.org>  Thu, 22 Oct 2026 22:16:57 -0500
+
 okular-mupdf-ng (0.4.9-1) unstable; urgency=medium
 
   * Update to version 0.4.9.

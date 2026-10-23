@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Fri Oct 23 03:16:57 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.0.
+- Improve OCR scheduling, render cancellation tests, and export lifecycle handling.
+- Fix GCC linking and Debian/Ubuntu OBS build dependencies.
+
+-------------------------------------------------------------------
 Wed Oct 21 12:00:00 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.4.9.
