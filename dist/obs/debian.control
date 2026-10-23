@@ -42,7 +42,7 @@ Package: okular-mupdf-ng
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, okular
 Recommends: tesseract-ocr-eng
-Description: MuPDF backend for Okular with an isolated document worker
+Description: A MuPDF-based secure and fast backend for Okular
  A backend for Okular that supports PDF, EPUB, and legacy MOBI documents.
  Document parsing, rendering, and OCR run in a separate sandboxed worker.
  The package includes mupdfng-cli and a statically linked, pinned MuPDF engine

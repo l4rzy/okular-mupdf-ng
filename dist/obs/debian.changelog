@@ -1,3 +1,11 @@
+okular-mupdf-ng (0.5.2-1) unstable; urgency=medium
+
+  * Update to version 0.5.2.
+  * Add configurable link previews with scrolling, dragging, and flick gestures.
+  * Add theme and link-preview status notifications.
+
+ -- l4rzy <me@23ro.org>  Fri, 23 Oct 2026 18:39:03 -0500
+
 okular-mupdf-ng (0.5.0-1) unstable; urgency=medium
 
   * Update to version 0.5.0.

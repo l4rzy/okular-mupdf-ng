@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Fri Oct 23 23:39:03 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.2.
+- Add configurable link previews with scrolling, dragging, and flick gestures.
+- Add theme and link-preview status notifications.
+
+-------------------------------------------------------------------
 Fri Oct 23 03:16:57 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.0.

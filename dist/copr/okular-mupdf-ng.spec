@@ -9,9 +9,9 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.0
+Version:        0.5.2
 Release:        1%{?dist}
-Summary:        MuPDF backend for Okular with an isolated document worker
+Summary:        A MuPDF-based secure and fast backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
 URL:            https://github.com/l4rzy/okular-mupdf-ng
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -106,6 +106,11 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Fri Oct 23 2026 l4rzy <me@23ro.org> - 0.5.2-1
+- Update to version 0.5.2.
+- Add configurable link previews with scrolling, dragging, and flick gestures.
+- Add theme and link-preview status notifications.
+
 * Thu Oct 22 2026 l4rzy <me@23ro.org> - 0.5.0-1
 - Update to version 0.5.0.
 - Improve OCR scheduling, render cancellation tests, and export lifecycle handling.
