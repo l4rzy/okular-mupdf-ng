@@ -111,7 +111,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
         if (inspectPage && request.cookie)
             list = fz_new_display_list_from_page(m_context, page);
         const auto pageTheme =
-            inspectPage ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo {};
+            inspectPage ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo { };
         const auto themePlan = planThemeRendering(m_settings, pageTheme);
         const auto paperColor = themePlan.paperColor;
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,

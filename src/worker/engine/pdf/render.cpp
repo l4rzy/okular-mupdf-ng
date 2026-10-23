@@ -113,7 +113,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         const auto theme = m_settings.documentTheme;
         const bool inspectPage = shouldInspectThemePage(theme);
         const auto pageTheme =
-            inspectPage ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie) : ThemePageInfo {};
+            inspectPage ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie) : ThemePageInfo { };
         const auto themePlan = planThemeRendering(m_settings, pageTheme);
         const auto paperColor = themePlan.paperColor;
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,

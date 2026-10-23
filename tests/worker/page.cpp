@@ -188,11 +188,11 @@ private slots:
             ThemePageInfo page;
             ThemeRenderPlan expected;
         } cases[] {
-            { DocumentTheme::Default, {}, { false, false, 0x123456 } },
-            { DocumentTheme::Twilight, {}, { false, false, DefaultBackground } },
-            { DocumentTheme::Dusk, {}, { true, true, DuskBackground } },
+            { DocumentTheme::Default, { }, { false, false, 0x123456 } },
+            { DocumentTheme::Twilight, { }, { false, false, DefaultBackground } },
+            { DocumentTheme::Dusk, { }, { true, true, DuskBackground } },
             { DocumentTheme::Dusk, { true, false }, { true, false, DefaultBackground } },
-            { DocumentTheme::Dark, {}, { true, true, DarkBackground } },
+            { DocumentTheme::Dark, { }, { true, true, DarkBackground } },
             { DocumentTheme::Dark, { false, true }, { false, true, DefaultBackground } },
             { DocumentTheme::Dark, { true, true }, { true, false, DefaultBackground } },
         };

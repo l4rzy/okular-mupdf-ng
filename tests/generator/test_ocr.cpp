@@ -470,13 +470,24 @@ private slots:
         QCOMPARE(action->text(), QStringLiteral("Toggle Page Link Preview"));
         QVERIFY(KActionCollection::isShortcutsConfigurable(action));
         QVERIFY(action->shortcut().isEmpty());
+        QSignalSpy notices(&document, &Okular::Document::notice);
         action->trigger();
         config->reparseConfiguration();
         QCOMPARE(general.readEntry("LinkPreviewMode", QStringLiteral("Off")), expected);
+        QCOMPARE(notices.count(), 1);
+        QCOMPARE(notices.back().at(0).toString(),
+                 expected == QStringLiteral("Off") ? QStringLiteral("Page link preview: Off")
+                                                   : QStringLiteral("Page link preview: Adaptive Size"));
+        QCOMPARE(notices.back().at(1).toInt(), 1500);
         action->trigger();
         config->reparseConfiguration();
         QCOMPARE(general.readEntry("LinkPreviewMode", QStringLiteral("Off")),
                  expected == QStringLiteral("Off") ? QStringLiteral("AutoSize") : QStringLiteral("Off"));
+        QCOMPARE(notices.count(), 2);
+        QCOMPARE(notices.back().at(0).toString(),
+                 expected == QStringLiteral("Off") ? QStringLiteral("Page link preview: Adaptive Size")
+                                                   : QStringLiteral("Page link preview: Off"));
+        QCOMPARE(notices.back().at(1).toInt(), 1500);
         document.closeDocument();
         QVERIFY(!action->isEnabled());
     }
@@ -744,15 +755,22 @@ private slots:
         QCOMPARE(menuItems.size(), menuOrder.size());
         for (int i = 0; i < menuOrder.size(); ++i)
             QCOMPARE(menuItems.at(i), actions->action(QStringLiteral("mupdf_theme_") + menuOrder.at(i).toLower()));
+        QSignalSpy notices(&document, &Okular::Document::notice);
+        QSignalSpy otherNotices(&other, &Okular::Document::notice);
         const auto pageCount = document.pages();
         for (const auto* name :
              { "mupdf_theme_dusk", "mupdf_theme_dark", "mupdf_theme_twilight", "mupdf_theme_default" }) {
             auto* action = actions->action(QString::fromLatin1(name));
             QVERIFY(action && action->isEnabled() && action->isCheckable());
             const int previousRefreshes = observer.refreshes;
+            const auto previousNotices = notices.count();
             action->trigger();
             QTRY_VERIFY(observer.refreshes > previousRefreshes);
             QVERIFY(action->isChecked());
+            QCOMPARE(notices.count(), previousNotices + 1);
+            QCOMPARE(notices.back().at(0).toString(), QStringLiteral("Document theme: %1").arg(action->text()));
+            QCOMPARE(notices.back().at(1).toInt(), 1500);
+            QCOMPARE(otherNotices.count(), 0);
             QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), action->text());
             QCOMPARE(document.pages(), pageCount);
             QVERIFY(document.isHistoryClean());
@@ -778,9 +796,14 @@ private slots:
             QVERIFY(KActionCollection::isShortcutsConfigurable(toggle));
             QVERIFY(toggle->shortcut().isEmpty());
             const int previousRefreshes = observer.refreshes;
+            const auto previousNotices = notices.count();
             toggle->trigger();
             QTRY_VERIFY(observer.refreshes > previousRefreshes);
             QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), expected.at(i));
+            QCOMPARE(notices.count(), previousNotices + 1);
+            QCOMPARE(notices.back().at(0).toString(), QStringLiteral("Document theme: %1").arg(expected.at(i)));
+            QCOMPARE(notices.back().at(1).toInt(), 1500);
+            QCOMPARE(otherNotices.count(), 0);
             QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + expected.at(i).toLower())->isChecked());
             QVERIFY(document.isHistoryClean());
         }
@@ -810,12 +833,15 @@ private slots:
             dialog.show();
             QCOMPARE(theme->currentIndex(), previousMode);
             const int previousRefreshes = observer.refreshes;
+            const auto previousNotices = notices.count();
             theme->setCurrentIndex(mode);
             ok->click();
             QTRY_VERIFY(observer.refreshes > previousRefreshes);
             QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + themes.at(mode).toLower())->isChecked());
             QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), themes.at(mode));
             QVERIFY(document.isHistoryClean());
+            QCOMPARE(notices.count(), previousNotices);
+            QCOMPARE(otherNotices.count(), 0);
             previousMode = mode;
         }
         const int previousRefreshes = observer.refreshes;

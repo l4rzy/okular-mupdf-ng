@@ -471,7 +471,7 @@ ReadStatus CtrlChannel::receiveFrameBytes(std::vector<std::byte>* payload, std::
 {
     // Read in bounded chunks so an adversarial frame cannot force one oversized
     // temporary allocation before its declared length has been validated.
-    std::array<std::byte, FrameReadChunkBytes> chunk {};
+    std::array<std::byte, FrameReadChunkBytes> chunk { };
     for (;;) {
         const std::size_t bufferedBytes = m_rxBuffer.size();
         const std::size_t requiredBytes = m_rxFrameLength ? static_cast<std::size_t>(*m_rxFrameLength) - bufferedBytes
