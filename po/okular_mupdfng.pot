@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 17:40-0500\n"
+"POT-Creation-Date: 2026-10-23 17:52-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -28,11 +28,12 @@ msgid ""
 msgstr ""
 
 #: src/generator/config/settingswidget.cpp:53
-#: src/generator/config/settingswidget.cpp:89 src/generator/ui/actions.cpp:77
+#: src/generator/config/settingswidget.cpp:89 src/generator/ui/actions.cpp:41
+#: src/generator/ui/actions.cpp:79
 msgid "Off"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:54
+#: src/generator/config/settingswidget.cpp:54 src/generator/ui/actions.cpp:41
 msgid "Adaptive Size"
 msgstr ""
 
@@ -130,7 +131,7 @@ msgstr ""
 msgid "Letter (216 × 279 mm)"
 msgstr ""
 
-#: src/generator/config/settingswidget.cpp:108 src/generator/ui/actions.cpp:127
+#: src/generator/config/settingswidget.cpp:108 src/generator/ui/actions.cpp:129
 #: rc.cpp:10
 msgid "Default"
 msgstr ""
@@ -990,67 +991,75 @@ msgstr ""
 msgid "Loading preview…"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:33
+#: src/generator/ui/actions.cpp:34
 msgid "Toggle Page Link Preview"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:46
+#: src/generator/ui/actions.cpp:41
+msgid "Page link preview: %1"
+msgstr ""
+
+#: src/generator/ui/actions.cpp:48
 msgid "Manage Certificates…"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:64
+#: src/generator/ui/actions.cpp:66
 msgid "MuPDF OCR"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:78
+#: src/generator/ui/actions.cpp:80
 msgid "Automatic"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:79
+#: src/generator/ui/actions.cpp:81
 msgid "On"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:81
+#: src/generator/ui/actions.cpp:83
 msgid "No OCR models available."
 msgstr ""
 
-#: src/generator/ui/actions.cpp:81
+#: src/generator/ui/actions.cpp:83
 msgid "Please install a Tesseract language model."
 msgstr ""
 
-#: src/generator/ui/actions.cpp:90
+#: src/generator/ui/actions.cpp:92
 msgid "MuPDF OCR: %1"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:96
+#: src/generator/ui/actions.cpp:98
 msgid "Toggle MuPDF OCR"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:115 rc.cpp:9
+#: src/generator/ui/actions.cpp:117 rc.cpp:9
 msgid "Document Theme"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:128 rc.cpp:11
+#: src/generator/ui/actions.cpp:130 rc.cpp:11
 msgid "Twilight"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:129 rc.cpp:12
+#: src/generator/ui/actions.cpp:131 rc.cpp:12
 msgid "Dusk"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:130 rc.cpp:13
+#: src/generator/ui/actions.cpp:132 rc.cpp:13
 msgid "Dark"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:149
+#: src/generator/ui/actions.cpp:138
+msgid "Document theme: %1"
+msgstr ""
+
+#: src/generator/ui/actions.cpp:158
 msgid "Toggle Dusk Mode"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:153
+#: src/generator/ui/actions.cpp:162
 msgid "Toggle Dark Mode"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:157
+#: src/generator/ui/actions.cpp:166
 msgid "Toggle Twilight Mode"
 msgstr ""
 

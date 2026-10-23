@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 17:40-0500\n"
+"POT-Creation-Date: 2026-10-23 17:52-0500\n"
 "PO-Revision-Date: 2026-10-23 12:49-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
@@ -26,11 +26,12 @@ msgstr ""
 "Hỗ trợ JavaScript cho biểu mẫu PDF đã bị tắt khi biên dịch ứng dụng này."
 
 #: src/generator/config/settingswidget.cpp:53
-#: src/generator/config/settingswidget.cpp:89 src/generator/ui/actions.cpp:77
+#: src/generator/config/settingswidget.cpp:89 src/generator/ui/actions.cpp:41
+#: src/generator/ui/actions.cpp:79
 msgid "Off"
 msgstr "Tắt"
 
-#: src/generator/config/settingswidget.cpp:54
+#: src/generator/config/settingswidget.cpp:54 src/generator/ui/actions.cpp:41
 msgid "Adaptive Size"
 msgstr "Kích thước thích ứng"
 
@@ -128,7 +129,7 @@ msgstr "B5 (176 × 250 mm)"
 msgid "Letter (216 × 279 mm)"
 msgstr "Letter (216 × 279 mm)"
 
-#: src/generator/config/settingswidget.cpp:108 src/generator/ui/actions.cpp:127
+#: src/generator/config/settingswidget.cpp:108 src/generator/ui/actions.cpp:129
 #: rc.cpp:10
 msgid "Default"
 msgstr "Mặc định"
@@ -1059,67 +1060,75 @@ msgstr "Bản xem trước không khả dụng"
 msgid "Loading preview…"
 msgstr "Đang tải bản xem trước…"
 
-#: src/generator/ui/actions.cpp:33
+#: src/generator/ui/actions.cpp:34
 msgid "Toggle Page Link Preview"
 msgstr "Bật/tắt xem trước liên kết trang"
 
-#: src/generator/ui/actions.cpp:46
+#: src/generator/ui/actions.cpp:41
+msgid "Page link preview: %1"
+msgstr "Xem trước liên kết trang: %1"
+
+#: src/generator/ui/actions.cpp:48
 msgid "Manage Certificates…"
 msgstr "Quản lý chứng chỉ…"
 
-#: src/generator/ui/actions.cpp:64
+#: src/generator/ui/actions.cpp:66
 msgid "MuPDF OCR"
 msgstr "OCR MuPDF"
 
-#: src/generator/ui/actions.cpp:78
+#: src/generator/ui/actions.cpp:80
 msgid "Automatic"
 msgstr "Tự động"
 
-#: src/generator/ui/actions.cpp:79
+#: src/generator/ui/actions.cpp:81
 msgid "On"
 msgstr "Bật"
 
-#: src/generator/ui/actions.cpp:81
+#: src/generator/ui/actions.cpp:83
 msgid "No OCR models available."
 msgstr "Chưa có mô hình OCR."
 
-#: src/generator/ui/actions.cpp:81
+#: src/generator/ui/actions.cpp:83
 msgid "Please install a Tesseract language model."
 msgstr "Vui lòng cài đặt một mô hình ngôn ngữ Tesseract."
 
-#: src/generator/ui/actions.cpp:90
+#: src/generator/ui/actions.cpp:92
 msgid "MuPDF OCR: %1"
 msgstr "OCR MuPDF: %1"
 
-#: src/generator/ui/actions.cpp:96
+#: src/generator/ui/actions.cpp:98
 msgid "Toggle MuPDF OCR"
 msgstr "Bật/tắt OCR MuPDF"
 
-#: src/generator/ui/actions.cpp:115 rc.cpp:9
+#: src/generator/ui/actions.cpp:117 rc.cpp:9
 msgid "Document Theme"
 msgstr "Theme tài liệu"
 
-#: src/generator/ui/actions.cpp:128 rc.cpp:11
+#: src/generator/ui/actions.cpp:130 rc.cpp:11
 msgid "Twilight"
 msgstr "Nhá nhem"
 
-#: src/generator/ui/actions.cpp:129 rc.cpp:12
+#: src/generator/ui/actions.cpp:131 rc.cpp:12
 msgid "Dusk"
 msgstr "Chạng vạng"
 
-#: src/generator/ui/actions.cpp:130 rc.cpp:13
+#: src/generator/ui/actions.cpp:132 rc.cpp:13
 msgid "Dark"
 msgstr "Tối"
 
-#: src/generator/ui/actions.cpp:149
+#: src/generator/ui/actions.cpp:138
+msgid "Document theme: %1"
+msgstr "Theme tài liệu: %1"
+
+#: src/generator/ui/actions.cpp:158
 msgid "Toggle Dusk Mode"
 msgstr "Bật/tắt chế độ chạng vạng"
 
-#: src/generator/ui/actions.cpp:153
+#: src/generator/ui/actions.cpp:162
 msgid "Toggle Dark Mode"
 msgstr "Bật/tắt chế độ tối"
 
-#: src/generator/ui/actions.cpp:157
+#: src/generator/ui/actions.cpp:166
 msgid "Toggle Twilight Mode"
 msgstr "Bật/tắt chế độ nhá nhem"
 

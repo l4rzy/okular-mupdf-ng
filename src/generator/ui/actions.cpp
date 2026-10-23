@@ -30,13 +30,15 @@ void Main::setupActions()
 {
     setComponentName(QStringLiteral("okular_mupdfng"), i18n("MuPDF"));
     setupOcrActions();
-    auto* previewToggle = new QAction(i18n("Toggle Page Link Preview"), this);
+    auto* previewToggle =
+        new QAction(QIcon::fromTheme(QStringLiteral("view-preview")), i18n("Toggle Page Link Preview"), this);
     actionCollection()->addAction(QStringLiteral("mupdf_link_preview_toggle"), previewToggle);
-    connect(previewToggle, &QAction::triggered, this, [] {
+    connect(previewToggle, &QAction::triggered, this, [this] {
         using PreviewMode = MuPDFNGSettings::EnumLinkPreviewMode;
-        MuPDFNGSettings::setLinkPreviewMode(
-            MuPDFNGSettings::linkPreviewMode() == PreviewMode::Off ? PreviewMode::AutoSize : PreviewMode::Off);
+        const bool enabled = MuPDFNGSettings::linkPreviewMode() == PreviewMode::Off;
+        MuPDFNGSettings::setLinkPreviewMode(enabled ? PreviewMode::AutoSize : PreviewMode::Off);
         MuPDFNGSettings::self()->save();
+        Q_EMIT notice(i18n("Page link preview: %1", enabled ? i18n("Adaptive Size") : i18n("Off")), ShortNoticeMs);
     });
     connect(MuPDFNGSettings::self(), &KCoreConfigSkeleton::configChanged, this, [this] {
         syncActions();
@@ -128,9 +130,16 @@ void Main::setupThemeActions()
     addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::DocumentTheme::Twilight);
     addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::DocumentTheme::Dusk);
     addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::DocumentTheme::Dark);
-    const auto setTheme = [](Model::DocumentTheme theme) {
+    const auto setTheme = [this](Model::DocumentTheme theme) {
         MuPDFNGSettings::setDocumentTheme(static_cast<int>(theme));
         MuPDFNGSettings::self()->save();
+        for (QAction* action : m_themeActions->actions()) {
+            if (action->data().toInt() == static_cast<int>(theme)) {
+                Q_EMIT notice(i18n("Document theme: %1", KLocalizedString::removeAcceleratorMarker(action->text())),
+                              ShortNoticeMs);
+                break;
+            }
+        }
     };
     connect(m_themeActions, &QActionGroup::triggered, this, [setTheme](QAction* action) {
         setTheme(static_cast<Model::DocumentTheme>(action->data().toInt()));
