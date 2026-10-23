@@ -1,11 +1,11 @@
-name: Build Ubuntu 26.04 Package (Clang)
+name: Build Ubuntu 26.04 Package (Clang, None)
 
 on:
   workflow_call:
 
 jobs:
   package-deb:
-    name: Build Ubuntu 26.04 Package (Clang)
+    name: Build Ubuntu 26.04 Package (Clang, None)
     runs-on: ubuntu-26.04
     container:
       image: ubuntu:26.04
@@ -61,7 +61,7 @@ jobs:
       - name: Configure CMake
         run: |
           cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=None \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_INSTALL_PREFIX=/usr \
@@ -69,7 +69,7 @@ jobs:
             -DCMAKE_LINKER_TYPE=MOLD \
             -DUSE_SYSTEM_MUPDF=OFF \
             -DBUILD_TESTING=ON \
-            -DENABLE_MU_DEBUG=OFF \
+            -DENABLE_MU_DEBUG=ON \
             -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
 
       - name: Build Debian package
@@ -105,10 +105,3 @@ jobs:
           dpkg-deb --contents "$package" | grep -q '/share/okular-mupdf-ng/Allura-Regular\.ttf$'
           dpkg-deb --contents "$package" | grep -q '/doc/okular-mupdf-ng/Allura-OFL\.txt$'
           dpkg-deb --info "$package"
-
-      - name: Upload Debian package
-        uses: actions/upload-artifact@v7
-        with:
-          name: debian-package
-          path: build/packages/*.deb
-          if-no-files-found: error

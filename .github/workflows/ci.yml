@@ -73,7 +73,7 @@ jobs:
   release:
     name: Publish Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [sanitizer, package-pacman, package-deb-ubuntu, package-deb-debian]
+    needs: [sanitizer, package-pacman]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -122,7 +122,6 @@ jobs:
         with:
           files: |
             release-assets/okular-mupdf-ng-[0-9]*.pkg.tar.zst
-            release-assets/*.deb
           body_path: release-notes.md
           generate_release_notes: false
         env:
