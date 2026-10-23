@@ -193,6 +193,7 @@ target_include_directories(mupdf_generator_page_error PUBLIC ${CMAKE_CURRENT_SOU
 target_link_libraries(mupdf_generator_page_error PUBLIC Okular::Core Qt6::Core KF6::I18n)
 
 add_library(mupdf_generator_adapters STATIC
+  generator/link_preview.cpp
   generator/conversion/annotation.cpp
   generator/conversion/certificate.cpp
   generator/conversion/document.cpp

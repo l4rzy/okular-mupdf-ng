@@ -25,6 +25,7 @@
 
 #include "generator/config/settings.hpp"
 #include "generator/layers_model.hpp"
+#include "generator/link_preview.hpp"
 #include "generator/okular_compat.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/placeholder.hpp"
@@ -234,6 +235,7 @@ private:
     // and keeps MuPDF outside the Okular process.
     // -----------------------------------------------------------------------
     Plugin::WorkerClient m_worker;
+    LinkPreview m_linkPreview;
     // Owns asynchronous OCR scheduling, focus tracking, and result retention;
     // Okular-facing glue (TextPage building, notifications) lives here.
     std::unique_ptr<Plugin::OCR::Controller> m_ocrController;

@@ -96,8 +96,21 @@ constexpr int LongWarningMs = 10000;
 // Okular Generator Func: creates the generator and initializes worker services.
 Main::Main(QObject* parent, const QVariantList& args)
     : Generator(parent, args)
+    , m_linkPreview(
+          [this](int page, QSize size, QRect region, const LinkPreview::Cancelled& cancelled) {
+              return m_worker.render(page, size.width(), size.height(), region, cancelled);
+          },
+          [this](int page) -> QSizeF {
+              if (!workerReady() || page < 0 || page >= m_okularPages.size())
+                  return { };
+              const auto* target = m_okularPages.at(page);
+              const bool sideways =
+                  target->rotation() == Okular::Rotation90 || target->rotation() == Okular::Rotation270;
+              return sideways ? QSizeF(target->height(), target->width()) : QSizeF(target->width(), target->height());
+          })
     , m_annotationProxy(&m_worker,
                         [this](int page) {
+                            m_linkPreview.reset();
                             m_annotationsDirty = true;
                             const Okular::Document* currentDocument = document();
                             if (!currentDocument || page < 0 || page >= m_okularPages.size())
@@ -142,6 +155,8 @@ Main::Main(QObject* parent, const QVariantList& args)
     m_formCoordinator = std::make_unique<Proxy::Form::Coordinator>(
         &m_worker,
         [this](const std::vector<Okular::FormField*>& fields, const std::vector<int>& affectedPages, bool changed) {
+            if (changed)
+                m_linkPreview.reset();
             // Recovery applies clean values while the coordinator is
             // unavailable; those must not re-dirty the document. Accepted but
             // unchanged responses refresh their widget without dirtying it.
@@ -173,6 +188,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     }
     // Step 4: Invalidate asynchronous UI state before handling worker failure.
     connect(&m_worker, &Plugin::WorkerClient::workerDied, this, [this](int code) {
+        m_linkPreview.reset();
         MU_LOG(warning, "Mu::Generator::Main", std::string("mupdfng-worker died with code ") + std::to_string(code));
         m_ocrController->reset();
         m_annotationProxy.setAvailable(false);
@@ -239,7 +255,8 @@ Main::Main(QObject* parent, const QVariantList& args)
         [this](quint64, std::vector<Model::PageLinks> pages, bool resourceLimited, QString error) {
             for (const auto& pageLinks : pages) {
                 if (pageLinks.page >= 0 && pageLinks.page < m_okularPages.size())
-                    m_okularPages.at(pageLinks.page)->setObjectRects(Conversion::objectRects(pageLinks.links));
+                    m_okularPages.at(pageLinks.page)
+                        ->setObjectRects(Conversion::objectRects(pageLinks.links, &m_linkPreview));
             }
             if (!error.isEmpty()) {
                 MU_LOG(warning,
@@ -292,6 +309,7 @@ Main::Main(QObject* parent, const QVariantList& args)
 // Okular Generator Func: stops worker activity and releases generator resources.
 Main::~Main()
 {
+    m_linkPreview.reset();
     m_menuRegistration.reset();
     if (m_observingVisiblePages && document())
         const_cast<Okular::Document*>(document())->removeObserver(this);
@@ -360,6 +378,8 @@ bool Main::reparseConfig()
     const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
     const bool changed = Config::renderingOutputChanged(m_settings.rendering, settings.rendering) || paperColorChanged;
     const bool renderingSettingsChanged = settings.rendering != m_settings.rendering || paperColorChanged;
+    if (renderingSettingsChanged)
+        m_linkPreview.reset();
     const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
     const bool pendingJavaScriptChanged =
         !m_pendingFormJavaScriptEnabled || *m_pendingFormJavaScriptEnabled != settings.formJavaScriptEnabled;
@@ -770,7 +790,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
             }
         }
 
-        okularPage->setObjectRects(Conversion::objectRects(pageInfo.links));
+        okularPage->setObjectRects(Conversion::objectRects(pageInfo.links, &m_linkPreview));
         if (!formFields.isEmpty()) {
             okularPage->setFormFields(formFields);
         }
@@ -1038,6 +1058,7 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
 // from the worker document.
 void Main::clearWorkerDerivedState()
 {
+    m_linkPreview.reset();
     m_synopsis.reset();
     m_layersModel.reset();
     ++m_layerRevision;
@@ -1222,6 +1243,7 @@ void Main::applyOcrResult(int page,
 
 bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 {
+    m_linkPreview.reset();
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
     if (sandboxGated())
@@ -1654,6 +1676,7 @@ void Main::loadLayers()
     m_layersModel = std::make_unique<LayersModel>([this](const Model::SetLayerRequest& request) {
         if (!workerReady())
             return std::optional<Model::LayersResponse> { };
+        m_linkPreview.reset();
         return m_worker.setLayer(request);
     });
     connect(m_layersModel.get(), &LayersModel::changeFailed, this, [this] {

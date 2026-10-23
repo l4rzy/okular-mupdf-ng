@@ -335,6 +335,13 @@ target_link_libraries(test_generator_proxies PRIVATE
     KF6::I18n
 )
 
+add_layer_test(test_generator_linkpreview generator/test_link_preview.cpp "generator;integration")
+target_link_libraries(test_generator_linkpreview PRIVATE mupdf_generator_adapters mupdf_plugin_worker)
+target_compile_definitions(test_generator_linkpreview PRIVATE
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
+    TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
+add_dependencies(test_generator_linkpreview mupdfng-worker)
+
 add_layer_test(test_generator_signingconversion generator/test_signing_conversion.cpp generator)
 target_include_directories(test_generator_signingconversion PRIVATE ../src)
 target_link_libraries(test_generator_signingconversion PRIVATE mupdf_generator_adapters KF6::I18n)

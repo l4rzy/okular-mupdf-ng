@@ -3,11 +3,13 @@
 
 #include "generator/conversion/document.hpp"
 
+#include "generator/link_preview.hpp"
 #include "generator/okular_compat.hpp"
 #include "generator/proxy/embedded_file.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QPointer>
 #include <QTimeZone>
 #include <QUrl>
 
@@ -93,13 +95,33 @@ Okular::DocumentViewport viewportFromModel(const Model::Viewport& modelViewport)
     return viewport;
 }
 
-Okular::ObjectRect* objectRect(const Model::Link& link)
+namespace {
+
+class PreviewGotoAction final : public Okular::GotoAction {
+public:
+    PreviewGotoAction(const Model::Viewport& destination, LinkPreview* previews)
+        : GotoAction(QString(), viewportFromModel(destination))
+        , m_destination(destination)
+        , m_previews(previews)
+    {
+    }
+
+    QString actionTip() const override { return m_previews ? m_previews->tip(m_destination) : GotoAction::actionTip(); }
+
+private:
+    Model::Viewport m_destination;
+    QPointer<LinkPreview> m_previews;
+};
+
+} // namespace
+
+Okular::ObjectRect* objectRect(const Model::Link& link, LinkPreview* previews)
 {
     std::unique_ptr<Okular::Action> action;
     if (link.target.external && isAllowedExternalUri(QString::fromStdString(link.target.uri))) {
         action = std::make_unique<Okular::BrowseAction>(QUrl(QString::fromStdString(link.target.uri)));
     } else if (link.target.valid && link.target.viewport.page >= 0) {
-        action = std::make_unique<Okular::GotoAction>(QString(), viewportFromModel(link.target.viewport));
+        action = std::make_unique<PreviewGotoAction>(link.target.viewport, previews);
     }
     if (!action)
         return nullptr;
@@ -107,12 +129,12 @@ Okular::ObjectRect* objectRect(const Model::Link& link)
         link.left, link.top, link.right, link.bottom, false, Okular::ObjectRect::Action, action.release());
 }
 
-QList<Okular::ObjectRect*> objectRects(const std::vector<Model::Link>& links)
+QList<Okular::ObjectRect*> objectRects(const std::vector<Model::Link>& links, LinkPreview* previews)
 {
     QList<Okular::ObjectRect*> result;
     result.reserve(static_cast<qsizetype>(links.size()));
     for (const auto& link : links) {
-        if (auto* rect = objectRect(link))
+        if (auto* rect = objectRect(link, previews))
             result.append(rect);
     }
     return result;
