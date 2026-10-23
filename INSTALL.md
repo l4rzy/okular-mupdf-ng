@@ -5,7 +5,7 @@
 Prebuilt packages for supported distros are attached to each
 [GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). Repository
 installations receive updates through your package manager. The commands
-below install v0.4.9.
+below install v0.5.0.
 
 Installing this plugin will override the default backend for PDF and ePUB. You
 can select the backend of your choice every time you open a document by enabling
@@ -14,8 +14,8 @@ the "Show backend selection dialog" option in Okular.
 ### Arch Linux
 
 ```bash
-wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng-0.4.9-1-x86_64.archlinux.pkg.tar.zst
-yay -U okular-mupdf-ng-0.4.9-1-x86_64.archlinux.pkg.tar.zst
+wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.0/okular-mupdf-ng-0.5.0-1-x86_64.archlinux.pkg.tar.zst
+yay -U okular-mupdf-ng-0.5.0-1-x86_64.archlinux.pkg.tar.zst
 ```
 
 Arch Linux updates to Okular, KDE Frameworks 6 (KF6), Qt, or other dependencies
@@ -26,8 +26,8 @@ using [dist/PKGBUILD](dist/PKGBUILD) so it matches your installed libraries.
 ### Manjaro Linux
 
 ```bash
-wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng-0.4.9-1-x86_64.manjaro.pkg.tar.zst
-yay -U okular-mupdf-ng-0.4.9-1-x86_64.manjaro.pkg.tar.zst
+wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.0/okular-mupdf-ng-0.5.0-1-x86_64.manjaro.pkg.tar.zst
+yay -U okular-mupdf-ng-0.5.0-1-x86_64.manjaro.pkg.tar.zst
 ```
 
 ### Fedora
@@ -63,15 +63,15 @@ sudo zypper install okular-mupdf-ng
 ### Debian 13
 
 ```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng_0.4.9-1_amd64_debian-13.deb
-sudo apt install ./okular-mupdf-ng_0.4.9-1_amd64_debian-13.deb
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.0/okular-mupdf-ng_0.5.0-1_amd64_debian-13.deb
+sudo apt install ./okular-mupdf-ng_0.5.0-1_amd64_debian-13.deb
 ```
 
 ### Ubuntu 26.04
 
 ```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.4.9/okular-mupdf-ng_0.4.9-1_amd64_ubuntu-26.04.deb
-sudo apt install ./okular-mupdf-ng_0.4.9-1_amd64_ubuntu-26.04.deb
+curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.0/okular-mupdf-ng_0.5.0-1_amd64_ubuntu-26.04.deb
+sudo apt install ./okular-mupdf-ng_0.5.0-1_amd64_ubuntu-26.04.deb
 ```
 
 ### Any other distro
