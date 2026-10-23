@@ -85,26 +85,30 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Build tag-to-tag changelog
-        id: changelog
+      - name: Prepare release notes
         run: |
           set -eu
           new_tag="${GITHUB_REF_NAME}"
-          # Newest-first version sort; the line after the current tag is the previous release.
-          prev_tag=$(git tag --sort=-v:refname | awk -v current="$new_tag" '$0 == current { getline; print; exit }')
-          if [ -n "$prev_tag" ]; then
-            range="${prev_tag}..${new_tag}"
-            header="Changes ${prev_tag} → ${new_tag}"
+          if [[ "$new_tag" =~ ^v[0-9]+\.[0-9]+\.0$ ]]; then
+            test -s CHANGELOG.md
+            cp CHANGELOG.md release-notes.md
           else
-            range="$new_tag"
-            header="Changes in ${new_tag} (first release)"
+            # Newest-first version sort; the line after the current tag is the previous release.
+            prev_tag=$(git tag --sort=-v:refname | awk -v current="$new_tag" '$0 == current { getline; print; exit }')
+            if [ -n "$prev_tag" ]; then
+              range="${prev_tag}..${new_tag}"
+              header="Changes ${prev_tag} → ${new_tag}"
+            else
+              range="$new_tag"
+              header="Changes in ${new_tag} (first release)"
+            fi
+            {
+              echo "## ${header}"
+              echo
+              git log --no-merges --pretty='- %h %s (%an)' "$range"
+            } > release-notes.md
           fi
-          {
-            echo "## ${header}"
-            echo
-            git log --no-merges --pretty='- %h %s (%an)' "$range"
-          } > changelog.md
-          cat changelog.md
+          cat release-notes.md
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8
@@ -119,7 +123,7 @@ jobs:
           files: |
             release-assets/okular-mupdf-ng-[0-9]*.pkg.tar.zst
             release-assets/*.deb
-          body_path: changelog.md
+          body_path: release-notes.md
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
