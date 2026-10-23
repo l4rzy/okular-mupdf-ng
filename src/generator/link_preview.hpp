@@ -48,30 +48,31 @@ private:
     bool isHovered() const;
     void dismiss();
 
+    enum class PageState { Pending, Ready, Failed };
+
     struct RenderPage {
         int number;
-        QSize size;
+        QRect rect;
+        PageState state = PageState::Pending;
     };
 
-    struct RenderedPages {
-        QImage image;
-        QRect target;
-    };
-
-    void startRender(int page, std::vector<RenderPage> pages, const QString& key);
+    void renderVisiblePages();
+    void startRender(std::size_t index);
+    static QString pageKey(const RenderPage& page);
 
     Renderer m_render;
     PageInfo m_pageInfo;
     LinkPreviewMode m_mode = LinkPreviewMode::Off;
     QThreadPool m_pool;
-    QCache<QString, RenderedPages> m_cache { 16 * 1024 }; // KiB, excluding the displayed pixmap.
+    QCache<QString, QImage> m_cache { 16 * 1024 }; // KiB, excluding the displayed pixmap.
     std::shared_ptr<std::atomic_bool> m_cancelled;
     std::uint64_t m_generation = 0;
     QPointer<LinkPreviewWindow> m_window;
     QPointer<QWidget> m_source;
     QPoint m_anchor;
     QString m_key;
-    double m_targetY = 0;
+    std::vector<RenderPage> m_pages;
+    std::size_t m_targetIndex = 0;
     QTimer m_closeTimer;
 };
 
