@@ -43,36 +43,14 @@ sudo dnf install okular-mupdf-ng
 
 ### openSUSE Tumbleweed & Slowroll
 
-Add the [OBS repository](https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng)
-and install the package:
+Open the [OBS download page](https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng),
+select your distribution, and follow the installation instructions there.
 
-For Tumbleweed:
-```bash
-sudo zypper addrepo https://download.opensuse.org/repositories/home:/23ro/openSUSE_Tumbleweed/home:23ro.repo
-sudo zypper refresh
-sudo zypper install okular-mupdf-ng
-```
+### Debian and Ubuntu
 
-For Slowroll:
-```bash
-sudo zypper addrepo https://download.opensuse.org/repositories/home:/23ro/openSUSE_Slowroll/home:23ro.repo
-sudo zypper refresh
-sudo zypper install okular-mupdf-ng
-```
-
-### Debian 13
-
-```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.0/okular-mupdf-ng_0.5.0-1_amd64_debian-13.deb
-sudo apt install ./okular-mupdf-ng_0.5.0-1_amd64_debian-13.deb
-```
-
-### Ubuntu 26.04
-
-```bash
-curl -LO https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.0/okular-mupdf-ng_0.5.0-1_amd64_ubuntu-26.04.deb
-sudo apt install ./okular-mupdf-ng_0.5.0-1_amd64_ubuntu-26.04.deb
-```
+Open the [OBS download page](https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng),
+select your distribution and version, and follow the instructions there to add
+the repository and install `okular-mupdf-ng`.
 
 ### Any other distro
 
