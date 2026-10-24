@@ -814,8 +814,6 @@ private slots:
             QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
             const auto job = m_client.startPdfExport(outputPath, { });
             QVERIFY(job);
-            // Exercise the live document while its background reader seeks.
-            QCOMPARE(imageHash(m_client.render(0, 200, 200)), imageHash(originalImage));
             QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
             QCOMPARE(spy.first().at(0).toULongLong(), *job);
             QVERIFY2(spy.first().at(1).toBool(), qPrintable(spy.first().at(2).toString()));
@@ -829,7 +827,6 @@ private slots:
             QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::ocrDone);
             const auto job = m_client.startOcrPage(0, QStringLiteral("eng"), 225);
             QVERIFY(job);
-            QCOMPARE(imageHash(m_client.render(0, 200, 200)), imageHash(originalImage));
             QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
             QCOMPARE(spy.first().at(0).toULongLong(), *job);
             // The original text-only page has no images: OCR succeeds without
@@ -837,6 +834,13 @@ private slots:
             // if the background job accidentally follows the pathname.
             QCOMPARE(m_client.ocrResult(*job).status, ::Mu::Model::OcrStatus::Success);
         }
+        // Completion establishes a deterministic boundary: both the background
+        // reader and the live document must still use the opened source after
+        // its pathname changes. Concurrent rendering needs a separate test with
+        // controlled overlap, rather than relying on thread scheduling here.
+        const auto afterJobImage = m_client.render(0, 200, 200);
+        QVERIFY2(!afterJobImage.isNull(), "live document render failed after background job completion");
+        QCOMPARE(imageHash(afterJobImage), imageHash(originalImage));
         QVERIFY(m_client.close());
     }
 
