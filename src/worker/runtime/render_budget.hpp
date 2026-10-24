@@ -4,6 +4,7 @@
 #ifndef MU_WORKER_RUNTIME_RENDER_BUDGET_HPP
 #define MU_WORKER_RUNTIME_RENDER_BUDGET_HPP
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <utility>
@@ -43,7 +44,7 @@ inline int scaledCoordinate(int coordinate, long double scale) noexcept
 
 } // namespace Detail
 
-/// Fits a validated page or tile render to the shared-memory frame budget.
+/// Fits a validated page or tile render to the engine canvas and frame limits.
 ///
 /// The frame header consumes part of the segment limit. Oversized regions use
 /// one uniform scale factor; tiles scale their virtual canvas and rectangle so
@@ -55,7 +56,10 @@ inline int scaledCoordinate(int coordinate, long double scale) noexcept
     const int sourceHeight = tile ? tile->height : request.height;
     constexpr std::uint64_t maxFrameDataBytes = Limit::MaxSharedFrameBytes - sizeof(IPC::FrameBufferHeader);
     const std::uint64_t sourceDataBytes = Detail::rgbaDataBytes(sourceWidth, sourceHeight);
-    if (sourceDataBytes <= maxFrameDataBytes) {
+    const int canvasLimit = tile ? Limit::MaxTiledRenderDimension : Limit::MaxRenderDimension;
+    const long double canvasScale =
+        std::min(1.0L, static_cast<long double>(canvasLimit) / std::max(request.width, request.height));
+    if (sourceDataBytes <= maxFrameDataBytes && canvasScale == 1.0L) {
         return { request,
                  static_cast<std::uint32_t>(sourceWidth),
                  static_cast<std::uint32_t>(sourceHeight),
@@ -65,7 +69,7 @@ inline int scaledCoordinate(int coordinate, long double scale) noexcept
 
     constexpr long double maxPixels = static_cast<long double>(maxFrameDataBytes / 4U);
     const long double sourcePixels = static_cast<long double>(sourceWidth) * static_cast<long double>(sourceHeight);
-    const long double scale = std::sqrt(maxPixels / sourcePixels);
+    const long double scale = std::min(canvasScale, std::sqrt(maxPixels / sourcePixels));
     int frameWidth = Detail::scaledDimension(sourceWidth, scale);
     int frameHeight = Detail::scaledDimension(sourceHeight, scale);
     // Avoid floating point edge cases
@@ -78,10 +82,11 @@ inline int scaledCoordinate(int coordinate, long double scale) noexcept
 
     Model::RenderRequest fitted = request;
     if (tile) {
-        const int tileX = Detail::scaledCoordinate(tile->x, scale);
-        const int tileY = Detail::scaledCoordinate(tile->y, scale);
         fitted.width = Detail::scaledDimension(request.width, scale);
         fitted.height = Detail::scaledDimension(request.height, scale);
+        // A subpixel edge tile must retain at least one pixel inside the canvas.
+        const int tileX = std::min(Detail::scaledCoordinate(tile->x, scale), fitted.width - 1);
+        const int tileY = std::min(Detail::scaledCoordinate(tile->y, scale), fitted.height - 1);
         fitted.tile = Model::RenderTile { tileX, tileY, frameWidth, frameHeight };
     } else {
         fitted.width = frameWidth;

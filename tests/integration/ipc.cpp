@@ -522,6 +522,29 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void oversizedTiledCanvasRenders_data()
+    {
+        QTest::addColumn<bool>("epub");
+        QTest::newRow("pdf") << false;
+        QTest::newRow("epub") << true;
+    }
+
+    void oversizedTiledCanvasRenders()
+    {
+        QFETCH(bool, epub);
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        const auto type = epub ? ::Mu::Model::DocumentType::Epub : ::Mu::Model::DocumentType::Pdf;
+        QCOMPARE(m_client.open(epub ? m_epub : m_pdf, { }, pages, type), ::Mu::Model::OpenStatus::Success);
+        // Regression: the virtual canvas exceeds 64K, but the visible tile is small.
+        const QImage image = m_client.render(0, 94832, 18633, QRect(53343, 11645, 2964, 1166));
+        QVERIFY(!image.isNull());
+        QVERIFY(image.width() > 0 && image.width() < 2964);
+        QVERIFY(image.height() > 0 && image.height() < 1166);
+        const QImage corner = m_client.render(0, 94832, 18633, QRect(94831, 18632, 2, 2));
+        QCOMPARE(corner.size(), QSize(1, 1));
+        QVERIFY(m_client.close());
+    }
+
     void repairedDocumentStateFlowsThroughIpc()
     {
         QTemporaryDir dir;

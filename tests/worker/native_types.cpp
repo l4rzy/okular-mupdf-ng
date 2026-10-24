@@ -906,6 +906,54 @@ private slots:
                  valid);
     }
 
+    void oversizedTiledCanvases_data()
+    {
+        QTest::addColumn<QSize>("canvas");
+        QTest::addColumn<QRect>("tile");
+        QTest::addColumn<bool>("valid");
+        QTest::newRow("reported") << QSize(94832, 18633) << QRect(53343, 11645, 2964, 1166) << true;
+        QTest::newRow("tall") << QSize(18633, 94832) << QRect(11645, 53343, 1166, 2964) << true;
+        QTest::newRow("inclusive-corner") << QSize(94832, 18633) << QRect(94831, 18632, 2, 2) << true;
+        constexpr int maximum = std::numeric_limits<int>::max();
+        QTest::newRow("maximum-width") << QSize(maximum - 1, 1) << QRect(maximum - 2, 0, 2, 1) << true;
+        QTest::newRow("maximum-height") << QSize(1, maximum - 1) << QRect(0, maximum - 2, 1, 2) << true;
+        QTest::newRow("overflow-width") << QSize(maximum, 100) << QRect(0, 0, 1, 1) << false;
+        QTest::newRow("overflow-height") << QSize(100, maximum) << QRect(0, 0, 1, 1) << false;
+        QTest::newRow("zero") << QSize(0, 100) << QRect(0, 0, 1, 1) << false;
+        QTest::newRow("negative") << QSize(-1, 100) << QRect(0, 0, 1, 1) << false;
+        QTest::newRow("outside") << QSize(94832, 18633) << QRect(94832, 0, 1, 1) << false;
+    }
+
+    void oversizedTiledCanvases()
+    {
+        QFETCH(QSize, canvas);
+        QFETCH(QRect, tile);
+        QFETCH(bool, valid);
+        using namespace ::Mu;
+        const Model::RenderRequest request {
+            0, canvas.width(), canvas.height(), Model::RenderTile { tile.x(), tile.y(), tile.width(), tile.height() }
+        };
+        QCOMPARE(Model::isValidRenderRequest(request), valid);
+        if (!valid)
+            return;
+
+        const auto fitted = Worker::Runtime::fitRenderRequestToFrameBudget(request);
+        QVERIFY(Model::isValidRenderDimensions(fitted.request.width, fitted.request.height, true));
+        QVERIFY(Model::isValidRenderRequest(fitted.request));
+        QVERIFY(fitted.request.tile);
+        const auto& scaled = *fitted.request.tile;
+        QCOMPARE(scaled.width, static_cast<int>(fitted.frameWidth));
+        QCOMPARE(scaled.height, static_cast<int>(fitted.frameHeight));
+        QVERIFY(sizeof(IPC::FrameBufferHeader) + fitted.frameDataBytes <= Limit::MaxSharedFrameBytes);
+        // Rounding, including a subpixel edge tile, may move the origin by a pixel.
+        QVERIFY(std::abs(static_cast<long double>(scaled.x) / fitted.request.width
+                         - static_cast<long double>(tile.x()) / canvas.width())
+                <= 2.0L / fitted.request.width);
+        QVERIFY(std::abs(static_cast<long double>(scaled.y) / fitted.request.height
+                         - static_cast<long double>(tile.y()) / canvas.height())
+                <= 2.0L / fitted.request.height);
+    }
+
     void renderRequestsFitSharedFrameBudget()
     {
         using namespace ::Mu;

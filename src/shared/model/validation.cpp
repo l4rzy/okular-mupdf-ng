@@ -252,7 +252,12 @@ bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason
 {
     if (request.page < 0)
         return failWith("render page index is negative", reason);
-    if (!isValidRenderDimensions(request.width, request.height, request.tile.has_value()))
+    // Tiled canvases are fitted to the engine limit before rendering. Leave
+    // room for the inclusive edge below; only the tile becomes an allocation.
+    const bool validDimensions = request.tile ? request.width > 0 && request.height > 0
+            && request.width < std::numeric_limits<int>::max() && request.height < std::numeric_limits<int>::max()
+                                              : isValidRenderDimensions(request.width, request.height, false);
+    if (!validDimensions)
         return failWith("render dimensions are invalid", reason);
     if (request.tile) {
         const auto& tile = *request.tile;
