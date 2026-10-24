@@ -1,11 +1,11 @@
-name: Build Pacman Packages (GCC)
+name: Build Pacman Packages (Clang and GCC)
 
 on:
   workflow_call:
 
 jobs:
   package-pacman:
-    name: Build ${{ matrix.name }} Package (GCC)
+    name: Build ${{ matrix.name }} Package (${{ matrix.compiler }})
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
@@ -14,16 +14,22 @@ jobs:
           - distro: archlinux
             name: Arch Linux
             image: archlinux:latest
+            compiler: Clang
+            cc: clang
+            cxx: clang++
           - distro: manjaro
             name: Manjaro Linux
             image: manjarolinux/base:latest
+            compiler: GCC
+            cc: gcc
+            cxx: g++
     container:
       image: ${{ matrix.image }}
       options: --privileged
 
     env:
-      CC: gcc
-      CXX: g++
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
       DISTRO: ${{ matrix.distro }}
 
     steps:
@@ -69,7 +75,7 @@ jobs:
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
           cd dist
-          sudo -u builder CC=gcc CXX=g++ makepkg -sf --noconfirm
+          sudo -u builder CC="$CC" CXX="$CXX" makepkg -sf --noconfirm
 
       - name: Label package for distribution
         run: |

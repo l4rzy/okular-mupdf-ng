@@ -1,20 +1,33 @@
-name: Build openSUSE Tumbleweed RPM (Clang, None)
+name: Build openSUSE Tumbleweed RPM (GCC and Clang)
 
 on:
   workflow_call:
 
 jobs:
   package-rpm-tumbleweed:
-    name: Build openSUSE Tumbleweed RPM (Clang, None)
+    name: Build openSUSE Tumbleweed RPM (${{ matrix.compiler }}, None)
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: GCC
+            cc: gcc
+            cxx: g++
+          - compiler: Clang
+            cc: clang
+            cxx: clang++
     container:
       image: opensuse/tumbleweed:latest
 
     env:
-      CC: clang
-      CXX: clang++
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
 
     steps:
+      - name: Verify native architecture
+        run: test "$(uname -m)" = x86_64
+
       - name: Install build dependencies
         run: |
           zypper --non-interactive refresh
@@ -76,8 +89,8 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=None \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
             -DCMAKE_LINKER_TYPE=MOLD \
