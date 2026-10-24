@@ -9,7 +9,7 @@ pkgrel=1
 pkgdesc="A MuPDF-based secure and fast backend for Okular"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
-license=('GPL-3.0-or-later')
+license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
 # nss is required at configure time via pkg_check_modules(NSS REQUIRED); mupdf
 # provides the headers and pkg-config file for the dynamic variant; mold links
 # the two large static archives much faster than lld and is a hard requirement
