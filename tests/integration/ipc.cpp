@@ -1197,6 +1197,49 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void inclusiveTileFrames_data()
+    {
+        QTest::addColumn<bool>("epub");
+        QTest::addColumn<QRect>("tile");
+        for (const bool epub : { false, true }) {
+            const QByteArray prefix = epub ? "epub-" : "pdf-";
+            QTest::newRow((prefix + "right").constData()) << epub << QRect(30, 20, 32, 40);
+            QTest::newRow((prefix + "bottom").constData()) << epub << QRect(10, 40, 30, 44);
+            QTest::newRow((prefix + "corner").constData()) << epub << QRect(30, 40, 32, 44);
+        }
+    }
+
+    void inclusiveTileFrames()
+    {
+        QFETCH(bool, epub);
+        QFETCH(QRect, tile);
+        using namespace Mu::Model;
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(epub ? m_epub : m_pdf, { }, pages, epub ? DocumentType::Epub : DocumentType::Pdf),
+                 OpenStatus::Success);
+        const QRect clipped = tile.intersected(QRect(0, 0, 61, 83));
+        const QImage expected = m_client.render(0, 61, 83, clipped);
+        QVERIFY(!expected.isNull());
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            // Dirty a reusable frame of the same size before requesting padding.
+            const uchar* dirtyPixels;
+            {
+                const QImage dirty = m_client.render(0, 61, 83, QRect(QPoint(0, 0), tile.size()));
+                QVERIFY(!dirty.isNull());
+                dirtyPixels = dirty.constBits();
+            }
+            const QImage actual = m_client.render(0, 61, 83, tile);
+            QCOMPARE(actual.size(), tile.size());
+            QCOMPARE(actual.constBits(), dirtyPixels);
+            QCOMPARE(actual.copy(QRect(QPoint(0, 0), clipped.size())), expected);
+            for (int y = 0; y < actual.height(); ++y)
+                for (int x = 0; x < actual.width(); ++x)
+                    if (x >= clipped.width() || y >= clipped.height())
+                        QCOMPARE(actual.pixel(x, y), QRgb(0));
+        }
+        QVERIFY(m_client.close());
+    }
+
     void pooledFramesStayAvailableAtSlotLimit()
     {
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;

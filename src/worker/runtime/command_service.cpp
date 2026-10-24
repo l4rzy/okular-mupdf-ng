@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <fcntl.h>
 #include <limits>
 #include <mupdf/fitz/version.h>
@@ -587,7 +588,9 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     std::optional<DocumentBase::RenderTile> tile;
     if (fitted.request.tile) {
         const auto& t = *fitted.request.tile;
-        tile = DocumentBase::RenderTile { t.x, t.y, t.width, t.height };
+        tile = DocumentBase::RenderTile {
+            t.x, t.y, std::min(t.width, fitted.request.width - t.x), std::min(t.height, fitted.request.height - t.y)
+        };
     }
 
     const auto rw = fitted.frameWidth;
@@ -616,6 +619,21 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
         if (cookie && cookie->abort)
             return failure(request.id, ErrorCode::Cancelled, "render", "render cancelled");
         return failure(request.id, ErrorCode::Internal, "render", error.empty() ? "MuPDF returned no image" : error);
+    }
+
+    // Pooled frames can contain old pixels. Clear only the inclusive edge
+    // padding, retaining the requested frame size and zero-copy host mapping.
+    if (tile) {
+        auto* pixels = static_cast<std::uint8_t*>(IPC::framePixelData(address));
+        const auto rowBytes = static_cast<std::size_t>(tile->width) * 4;
+        if (rowBytes < outputStride)
+            for (int row = 0; row < tile->height; ++row)
+                std::memset(
+                    pixels + static_cast<std::size_t>(row) * outputStride + rowBytes, 0, outputStride - rowBytes);
+        if (static_cast<std::uint32_t>(tile->height) < rh)
+            std::memset(pixels + static_cast<std::size_t>(tile->height) * outputStride,
+                        0,
+                        (static_cast<std::size_t>(rh) - static_cast<std::size_t>(tile->height)) * outputStride);
     }
 
     std::uint64_t transferId = 0;

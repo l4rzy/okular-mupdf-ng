@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include "engine/constants.hpp"
 #include "engine/mupdf_helpers.hpp"
@@ -47,6 +48,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
     const std::size_t minRowBytes = static_cast<std::size_t>(targetWidth) * 4;
     if (dstStride < minRowBytes)
         return fail(error, "destination stride is too small");
+    const bool directBuffer = dstStride <= static_cast<std::size_t>(std::numeric_limits<int>::max());
 
     fz_rect bounds { };
     fz_page* page = loadPageWithBounds(request.page, &bounds, error);
@@ -84,24 +86,18 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
             bbox.y1 = request.tile->y + request.tile->height;
         }
 
-        const bool tiled = request.tile.has_value();
-        // Render directly into the caller's buffer whenever its stride is
-        // tight. This covers both full pages and tiles; padded strides retain
-        // the temporary-pixmap fallback below.
-        if (dstStride == minRowBytes) {
-            if (tiled) {
-                pix = fz_new_pixmap_with_bbox_and_data(
-                    m_context, fz_device_rgb(m_context), bbox, nullptr, 1, static_cast<unsigned char*>(dstPixels));
-            } else {
-                pix = fz_new_pixmap_with_data(m_context,
-                                              fz_device_rgb(m_context),
-                                              request.width,
-                                              request.height,
-                                              nullptr,
-                                              1,
-                                              static_cast<int>(dstStride),
-                                              static_cast<unsigned char*>(dstPixels));
-            }
+        // Preserve direct rendering with inclusive-edge padding in the stride.
+        if (directBuffer) {
+            pix = fz_new_pixmap_with_data(m_context,
+                                          fz_device_rgb(m_context),
+                                          targetWidth,
+                                          targetHeight,
+                                          nullptr,
+                                          1,
+                                          static_cast<int>(dstStride),
+                                          static_cast<unsigned char*>(dstPixels));
+            pix->x = bbox.x0;
+            pix->y = bbox.y0;
         } else {
             pix = fz_new_pixmap_with_bbox(m_context, fz_device_rgb(m_context), bbox, nullptr, 1);
         }
@@ -149,7 +145,7 @@ bool EpubDocument::renderToBuffer(const RenderRequest& request,
 
         // Blit only when the temporary-pixmap fallback was required. The pixmap
         // is always created as opaque RGB (RGBA8888, 4 bytes per pixel).
-        if (dstStride != minRowBytes) {
+        if (!directBuffer) {
             const int pWidth = fz_pixmap_width(m_context, pix);
             const int pHeight = fz_pixmap_height(m_context, pix);
             const int pStride = fz_pixmap_stride(m_context, pix);

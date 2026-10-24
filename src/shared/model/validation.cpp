@@ -256,7 +256,10 @@ bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason
         return failWith("render dimensions are invalid", reason);
     if (request.tile) {
         const auto& tile = *request.tile;
-        if (!isValidRenderTile(request.width, request.height, tile.x, tile.y, tile.width, tile.height))
+        // Inclusive UI rectangles may include one pixel beyond the page edge.
+        // Engine tiles remain strictly in bounds; the command adapter clips them.
+        if (tile.x >= request.width || tile.y >= request.height
+            || !isValidRenderTile(request.width + 1, request.height + 1, tile.x, tile.y, tile.width, tile.height))
             return failWith("render tile is outside the image", reason);
     }
     return true;

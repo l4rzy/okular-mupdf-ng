@@ -878,6 +878,34 @@ private slots:
         }
     }
 
+    void inclusiveRenderTiles_data()
+    {
+        QTest::addColumn<QRect>("tile");
+        QTest::addColumn<bool>("valid");
+        QTest::newRow("interior") << QRect(10, 20, 30, 40) << true;
+        QTest::newRow("right") << QRect(90, 20, 11, 40) << true;
+        QTest::newRow("bottom") << QRect(10, 90, 30, 11) << true;
+        QTest::newRow("corner") << QRect(90, 90, 11, 11) << true;
+        QTest::newRow("excess-right") << QRect(90, 20, 12, 40) << false;
+        QTest::newRow("excess-bottom") << QRect(10, 90, 30, 12) << false;
+        QTest::newRow("outside") << QRect(100, 20, 1, 40) << false;
+        QTest::newRow("outside-bottom") << QRect(20, 100, 40, 1) << false;
+        QTest::newRow("negative") << QRect(-1, 20, 30, 40) << false;
+        QTest::newRow("negative-top") << QRect(20, -1, 40, 30) << false;
+        QTest::newRow("empty") << QRect(10, 20, 0, 40) << false;
+        QTest::newRow("overflow-width") << QRect(0, 0, std::numeric_limits<int>::max(), 40) << false;
+        QTest::newRow("overflow-height") << QRect(0, 0, 40, std::numeric_limits<int>::max()) << false;
+    }
+
+    void inclusiveRenderTiles()
+    {
+        QFETCH(QRect, tile);
+        QFETCH(bool, valid);
+        using namespace ::Mu::Model;
+        QCOMPARE(isValidRenderRequest({ 0, 100, 100, RenderTile { tile.x(), tile.y(), tile.width(), tile.height() } }),
+                 valid);
+    }
+
     void renderRequestsFitSharedFrameBudget()
     {
         using namespace ::Mu;
@@ -929,6 +957,13 @@ private slots:
         const auto extremeFallback = Worker::Runtime::fitRenderRequestToFrameBudget(extremeTile);
         QVERIFY(extremeFallback.frameWidth < static_cast<std::uint32_t>(extremeTile.tile->width));
         QVERIFY(sizeof(IPC::FrameBufferHeader) + extremeFallback.frameDataBytes <= Limit::MaxSharedFrameBytes);
+
+        const Model::RenderRequest inclusive {
+            0, 60'000, 60'000, Model::RenderTile { 30'000, 30'000, 30'001, 30'001 }
+        };
+        const auto inclusiveFallback = Worker::Runtime::fitRenderRequestToFrameBudget(inclusive);
+        QVERIFY(Model::isValidRenderRequest(inclusiveFallback.request));
+        QVERIFY(sizeof(IPC::FrameBufferHeader) + inclusiveFallback.frameDataBytes <= Limit::MaxSharedFrameBytes);
     }
 
     void sharedEditableAnnotationWhitelistIsStable()
