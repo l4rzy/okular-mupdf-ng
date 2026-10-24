@@ -29,6 +29,7 @@ promise that every input or workflow has been tested.
 | Unencrypted legacy MOBI support | 🟡 Partial | Synthetic corpus; detection, header rejection, descriptor cleanup, file/memory IPC, reopen, TOC, and PDF export tests; generator open/search tests |
 | OCR for scanned PDF pages | 🟡 Partial | Worker and plugin integration tests |
 | Outlines, links, and navigation | 🟡 Partial | Worker tests; EPUB link and outline tests 
+| Link preview on hover | 🟡 Partial | Generator sizing, hover/dismissal, scrolling/dragging, cancellation/cache, navigation, and worker rendering integration tests |
 | PDF layers (optional content) | 🟡 Partial | Worker visibility and text tests; Qt model, IPC, and plugin response validation tests |
 | PDF annotations | 🟡 Partial | Generator proxy and worker tests |
 | Printing and document export | 🟡 Partial | Export integration; print-output appearance, visibility, geometry and source-isolation tests; printer submission untested |

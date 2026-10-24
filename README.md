@@ -51,20 +51,21 @@ and the source-tree layout.
 | Feature Category | Capabilities | okular-mupdf-ng | Okular official backends |
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
-| **Formats** | PDF, ePUB, MOBI | ✓ | ✓ |
+| **Smart Document Theming** | Default, Twilight, Dusk, and Dark viewing themes for all supported formats | ✓ | ✗ (Accessibility color modes) |
 | **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
-| **Document Theming** | Default, Twilight, Dusk, and Dark viewing themes for all supported formats | ✓ | Accessibility color modes |
-| **ePUB/MOBI customisation** | Custom CSS, Pagesize | ✓ | ✗ |
-| **ePUB/MOBI export** | Export ePUB/MOBI to PDF | ✓ (via MuPDF rendering) | ✓ (basic, via document print) |
-| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
-| **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
-| **Signatures** | Verification and creation (NSS crypto) | ✓ | ✓ (plus GPG) |
-| **Cert Manager** | NSS certificate manager; generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ |
-| **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
+| **ePUB/MOBI customisation** | Custom CSS, Page size, Font size, Font family | ✓ | ✗ (Font size only) |
+| **Certificate Manager** | NSS certificate manager; manage trust and generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ (Cert listing only) |
+| **Link Preview** | Preview internal link destinations on hover | ✓ | ✗ |
 | **Annotation export** | Export PDF annotations to XFDF | ✓ | ✗ |
 | **Flattened PDF export** | Bake annotations and form fields into PDF page content | ✓ | ✗ |
-| **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
 | **PDF Heuristic Outline** | Outline generation for PDFs that don't have embedded outline | ✓ | ✗ |
+| **ePUB/MOBI export** | Export ePUB/MOBI to PDF, preserving links and TOC | ✓ (via MuPDF rendering) | ✗ (document print) |
+| **Signature Profiles** | PDF Signature profiles and customisations | ✓ | ✗ |
+| **Formats** | PDF, ePUB, MOBI | ✓ | ✓ |
+| **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
+| **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
+| **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
+| **Document Tools** | Text search, outline/TOC, links, fonts, metadata, embedded files | ✓ | ✓ |
 | **Printing & Exporting** | Print & Export | ✓ | ✓ |
 | **PDF layers** | Toggle optional content in the Layers sidebar | ✓ | ✓ |
 

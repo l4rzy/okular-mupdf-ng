@@ -39,6 +39,7 @@
           <li><a href="#epub-customisation">ePUB customisation</a></li>
           <li><a href="#document-themes">Document Theming</a></li>
           <li><a href="#keyboard-shortcuts">Keyboard shortcuts</a></li>
+          <li><a href="#link-preview">Link Preview</a></li>
           <li><a href="#pdf-heuristic-outline">PDF Heuristic Outline</a></li>
           <li><a href="#annotations-forms">Annotations &amp; Forms</a></li>
           <li><a href="#pdf-export">PDF Export</a></li>
@@ -259,6 +260,27 @@ sudo apt install tesseract-ocr-eng</code></pre>
         switches between On and the previous OCR mode. <strong>Toggle Twilight Mode</strong>,
         <strong>Toggle Dusk Mode</strong>, and <strong>Toggle Dark Mode</strong> switch
         between the selected theme and Default.</p>
+    </section>
+
+    <section id="link-preview">
+      <h2>Link Preview</h2>
+      <p>Introduced in <strong>v0.5.2</strong>, link preview shows an internal
+        link&rsquo;s destination when you hover over it, without leaving the
+        current page. Use it to check references and other linked locations
+        within the document.</p>
+      <p>In the MuPDF-NG backend configuration, open
+        <strong>General → Behavior → Display link preview on hover</strong>
+        and choose:</p>
+      <ul>
+        <li><strong>Off</strong> (default): disable link previews.</li>
+        <li><strong>Adaptive Size</strong>: adapt the preview to the Okular
+          window and current page rendering scale.</li>
+        <li><strong>Small</strong> or <strong>Large</strong>: choose a preview size.</li>
+      </ul>
+      <p>Move the pointer into the preview to keep it open. Scroll or drag
+        within it to read around the destination, including neighboring pages.
+        Press <kbd>Esc</kbd> or move the pointer away to dismiss it. Clicking
+        the original link still navigates to its destination.</p>
     </section>
 
     <section id="pdf-heuristic-outline">

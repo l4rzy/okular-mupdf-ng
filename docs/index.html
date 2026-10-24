@@ -87,8 +87,8 @@
           <a href="https://github.com/l4rzy/okular-mupdf-ng/releases" rel="noopener"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Latest release"></a>
         </p>
         <p class="cta">
-          <a class="btn btn-primary" href="https://github.com/l4rzy/okular-mupdf-ng/releases" rel="noopener">Get Releases</a>
-          <a class="btn" href="guide.html">How to use</a>
+          <a class="btn btn-primary" href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/INSTALL.md" rel="noopener">How To Install</a>
+          <a class="btn" href="guide.html">User's Guide</a>
         </p>
       </div>
     </section>
@@ -175,110 +175,110 @@
             <tr>
               <td><a href="guide.html#safety-isolation">Safety &amp; Isolation</a></td>
               <td>Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits)</td>
-              <td class="yes">Yes</td>
-              <td class="no">No (in-process execution)</td>
+              <td class="yes">✓</td>
+              <td class="no">✗ (in-process execution)</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#document-themes">Smart Document Theming</a></td>
+              <td>Default, Twilight, Dusk, and Dark viewing themes for all supported formats</td>
+              <td class="yes">✓</td>
+              <td class="no">✗ (Accessibility color modes)</td>
             </tr>
             <tr>
               <td><a href="guide.html#ocr">OCR</a></td>
               <td>Built-in Tesseract page OCR engine</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td class="yes">✓</td>
+              <td class="no">✗</td>
             </tr>
             <tr>
-              <td>Formats</td>
-              <td>PDF, ePUB, MOBI</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes</td>
+              <td><a href="guide.html#epub-customisation">ePUB/MOBI customisation</a></td>
+              <td>Custom CSS, Page size, Font size, Font family</td>
+              <td class="yes">✓</td>
+              <td class="no">✗ (Font size only)</td>
             </tr>
             <tr>
-              <td><a href="guide.html#epub-customisation">ePUB customisation</a></td>
-              <td>Custom CSS, Pagesizes</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td><a href="guide.html#certificate-manager">Certificate Manager</a></td>
+              <td>NSS certificate manager; manage trust and generate RSA and ECDSA P-256 signing certificates</td>
+              <td class="yes">✓</td>
+              <td class="no">✗ (Cert listing only)</td>
             </tr>
             <tr>
-              <td><a href="guide.html#document-themes">Document Theming</a></td>
-              <td>Default, Twilight, Dusk, and Dark viewing themes for all supported formats</td>
-              <td class="yes">Yes</td>
-              <td>Accessibility color modes</td>
+              <td><a href="guide.html#link-preview">Link Preview</a></td>
+              <td>Preview internal link destinations on hover</td>
+              <td class="yes">✓</td>
+              <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#pdf-heuristic-outline">PDF Heuristic Outline</a></td>
-              <td>Generation for PDFs that don&#x27;t have embedded outline</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
-            </tr>
-            <tr>
-              <td>Document Tools</td>
-              <td>Text search, outline/TOC, links, fonts, metadata, embedded files</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes</td>
-            </tr>
-            <tr>
-              <td><a href="guide.html#annotations">Annotations</a></td>
-              <td>Text, highlight, line, shape, ink, stamp, caret</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes (plus sound, movie &amp; file-attachment annotations)</td>
-            </tr>
-            <tr>
-              <td><a href="guide.html#pdf-forms">PDF Forms</a></td>
-              <td>AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons</td>
-              <td class="yes">Yes (AcroForm; XFA detected only)</td>
-              <td class="yes">Yes (AcroForm; XFA detected only)</td>
-            </tr>
-            <tr>
-              <td>PDF layers</td>
-              <td>Toggle optional content in the Layers sidebar</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes</td>
-            </tr>
-            <tr>
-              <td><a href="guide.html#pdf-export">PDF Export</a></td>
-              <td>Print &amp; Export</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes</td>
-            </tr>
-            <tr>
-              <td><a href="guide.html#epub-mobi-export">ePUB/MOBI export</a></td>
-              <td>Export ePUB/MOBI to PDF</td>
-              <td class="yes">Yes (via MuPDF rendering)</td>
-              <td class="yes">Yes (basic, via document print)</td>
+              <td><a href="guide.html#pdf-export">Annotation export</a></td>
+              <td>Export PDF annotations to XFDF</td>
+              <td class="yes">✓</td>
+              <td class="no">✗</td>
             </tr>
             <tr>
               <td><a href="guide.html#pdf-export">Flattened PDF export</a></td>
               <td>Bake annotations and form fields into PDF page content</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td class="yes">✓</td>
+              <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#pdf-export">Annotations export</a></td>
-              <td>Export PDF annotations to XFDF</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td><a href="guide.html#pdf-heuristic-outline">PDF Heuristic Outline</a></td>
+              <td>Outline generation for PDFs that don&#x27;t have embedded outline</td>
+              <td class="yes">✓</td>
+              <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#signatures">Signatures</a></td>
-              <td>Verification and creation (NSS crypto)</td>
-              <td class="yes">Yes</td>
-              <td class="yes">Yes (plus GPG)</td>
+              <td><a href="guide.html#epub-mobi-export">ePUB/MOBI export</a></td>
+              <td>Export ePUB/MOBI to PDF, preserving links and TOC</td>
+              <td class="yes">✓ (via MuPDF rendering)</td>
+              <td class="no">✗ (document print)</td>
             </tr>
             <tr>
-              <td><a href="guide.html#certificate-manager">Cert Manager</a></td>
-              <td>NSS certificate manager; generate RSA and ECDSA P-256 signing certificates</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td><a href="guide.html#signatures">Signature Profiles</a></td>
+              <td>PDF Signature profiles and customisations</td>
+              <td class="yes">✓</td>
+              <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#pdf-javascript">PDF JavaScript</a></td>
+              <td>Formats</td>
+              <td>PDF, ePUB, MOBI</td>
+              <td class="yes">✓</td>
+              <td class="yes">✓</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#pdf-forms">PDF Forms</a></td>
+              <td>AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons</td>
+              <td class="yes">✓ (AcroForm; XFA detected only)</td>
+              <td class="yes">✓ (AcroForm; XFA detected only)</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#pdf-javascript">PDF form JavaScript</a></td>
               <td>Calculations and button/field-event actions</td>
-              <td class="yes">Yes (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in)</td>
-              <td class="yes">Yes (Poppler passes scripts to Okular, which executes them in QJSEngine)</td>
+              <td class="yes">✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in)</td>
+              <td class="yes">✓ (Poppler passes scripts to Okular, which executes them in QJSEngine)</td>
             </tr>
             <tr>
-              <td><a href="guide.html#caching">Caching</a></td>
-              <td>ePUB &amp; OCR &amp; PDF cachings</td>
-              <td class="yes">Yes</td>
-              <td class="no">No</td>
+              <td><a href="guide.html#annotations">Annotations</a></td>
+              <td>Text, highlight, line, shape, ink, stamp, caret</td>
+              <td class="yes">✓</td>
+              <td class="yes">✓ (plus sound, movie &amp; file-attachment annotations)</td>
+            </tr>
+            <tr>
+              <td>Document Tools</td>
+              <td>Text search, outline/TOC, links, fonts, metadata, embedded files</td>
+              <td class="yes">✓</td>
+              <td class="yes">✓</td>
+            </tr>
+            <tr>
+              <td><a href="guide.html#pdf-export">Printing &amp; Exporting</a></td>
+              <td>Print &amp; Export</td>
+              <td class="yes">✓</td>
+              <td class="yes">✓</td>
+            </tr>
+            <tr>
+              <td>PDF layers</td>
+              <td>Toggle optional content in the Layers sidebar</td>
+              <td class="yes">✓</td>
+              <td class="yes">✓</td>
             </tr>
           </tbody>
         </table>
@@ -290,10 +290,6 @@
       <p>
         See <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> for prebuilt packages,
         build requirements, and instructions for building from source.
-      </p>
-      <p class="cta">
-        <a class="btn btn-primary" href="https://github.com/l4rzy/okular-mupdf-ng/releases" rel="noopener">Download prebuilt packages</a>
-        <a class="btn" href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/INSTALL.md#building-and-testing" rel="noopener">Build from source</a>
       </p>
     </section>
   </main>
