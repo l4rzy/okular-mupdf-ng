@@ -36,7 +36,6 @@
 #include <okular/core/observer.h>
 #include <okular/core/page.h>
 #include <okular/core/settings_core.h>
-#include <okular/core/tile.h>
 #include <okular/interfaces/configinterface.h>
 
 #include <algorithm>
@@ -190,16 +189,19 @@ private slots:
         QTest::addColumn<bool>("rotated");
         QTest::addColumn<bool>("asynchronous");
         QTest::addColumn<bool>("themed");
-        QTest::newRow("page") << 300 << 400 << false << false << true << true;
-        QTest::newRow("zoom") << 900 << 1200 << false << false << true << true;
-        QTest::newRow("tiles") << 6000 << 8000 << true << false << true << true;
-        QTest::newRow("rotated") << 400 << 300 << false << true << true << true;
-        QTest::newRow("rotated-tiles") << 8000 << 6000 << true << true << true << true;
-        QTest::newRow("synchronous") << 300 << 400 << false << false << false << true;
-        QTest::newRow("default") << 300 << 400 << false << false << true << false;
-        QTest::newRow("default-rotated") << 400 << 300 << false << true << true << false;
-        QTest::newRow("default-tiles") << 6000 << 8000 << true << false << true << false;
-        QTest::newRow("default-synchronous") << 300 << 400 << false << false << false << false;
+        QTest::addColumn<bool>("cancelObsolete");
+        QTest::newRow("page") << 300 << 400 << false << false << true << true << false;
+        QTest::newRow("zoom") << 900 << 1200 << false << false << true << true << false;
+        QTest::newRow("tiles") << 6000 << 8000 << true << false << true << true << false;
+        QTest::newRow("rotated") << 400 << 300 << false << true << true << true << false;
+        QTest::newRow("rotated-tiles") << 8000 << 6000 << true << true << true << true << false;
+        QTest::newRow("synchronous") << 300 << 400 << false << false << false << true << false;
+        QTest::newRow("default") << 300 << 400 << false << false << true << false << false;
+        QTest::newRow("default-rotated") << 400 << 300 << false << true << true << false << false;
+        QTest::newRow("default-tiles") << 6000 << 8000 << true << false << true << false << false;
+        QTest::newRow("default-synchronous") << 300 << 400 << false << false << false << false << false;
+        QTest::newRow("tiles-cancelling") << 6000 << 8000 << true << false << true << true << true;
+        QTest::newRow("rotated-tiles-cancelling") << 8000 << 6000 << true << true << true << true << true;
     }
 
     void loadingPixmapsRemainIncomplete()
@@ -210,13 +212,16 @@ private slots:
         QFETCH(bool, rotated);
         QFETCH(bool, asynchronous);
         QFETCH(bool, themed);
+        QFETCH(bool, cancelObsolete);
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
         KConfigGroup general(config, QStringLiteral("General"));
         general.writeEntry("SandboxEnforcement", "Relaxed");
         general.writeEntry("ReadingTheme", themed ? "Dark" : "Default");
+        general.writeEntry("CancelObsoleteRenders", cancelObsolete);
         config->sync();
         const auto restore = qScopeGuard([&] {
             general.writeEntry("ReadingTheme", "Default");
+            general.writeEntry("CancelObsoleteRenders", false);
             config->sync();
         });
         Okular::Document document(nullptr);
@@ -237,8 +242,6 @@ private slots:
             bool sawIncomplete = false;
             bool sawLoadingPixmap = false;
             int completed = 0;
-            bool sawColoredTiles = false;
-            bool invalidPreviewPixels = false;
 
             void notifyPageChanged(int pageNumber, int flags) override
             {
@@ -249,16 +252,6 @@ private slots:
                 else {
                     sawIncomplete = true;
                     sawLoadingPixmap |= page->hasPixmap(this);
-                    if (completed == 0 && page->hasTilesManager(this)) {
-                        for (const auto& tile : page->tilesAt(this, { 0, 0, 1, 1 })) {
-                            if (!tile.pixmap() || tile.pixmap()->isNull())
-                                continue;
-                            sawColoredTiles = true;
-                            const QImage image = tile.pixmap()->toImage();
-                            invalidPreviewPixels |= image.pixelColor(0, 0) != QColor(32, 33, 36)
-                                || image.pixelColor(image.width() - 1, image.height() - 1) != QColor(32, 33, 36);
-                        }
-                    }
                 }
             }
         } observer;
@@ -289,17 +282,17 @@ private slots:
             observer.sawIncomplete = false;
             observer.sawLoadingPixmap = false;
             request();
+            // Partial notifications are synchronous; final async renders and
+            // rotation jobs complete only after returning to the event loop.
+            // Cache previews seeded by Okular itself do not consume its guard.
+            if (tiled)
+                QVERIFY(!observer.sawIncomplete);
             QTRY_VERIFY_WITH_TIMEOUT(observer.page->hasPixmap(&observer, width, height, region), 10000);
-            if (asynchronous && themed)
+            if (asynchronous && themed && !tiled)
                 QVERIFY(observer.sawIncomplete);
-            if (!themed)
+            if (!themed || tiled)
                 QVERIFY(!observer.sawLoadingPixmap);
             QCOMPARE(observer.page->hasTilesManager(&observer), tiled);
-            if (tiled && !rotated && themed)
-                QVERIFY(observer.sawColoredTiles);
-            if (!themed)
-                QVERIFY(!observer.sawColoredTiles);
-            QVERIFY(!observer.invalidPreviewPixels);
             if (attempt == 0) {
                 const int previousCompletions = observer.completed;
                 document.refreshPixmaps(0);

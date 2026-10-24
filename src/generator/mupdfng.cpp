@@ -1379,11 +1379,11 @@ void Main::generatePixmap(Okular::PixmapRequest* request)
         return;
     }
     m_pagePlaceholder.seed(*request->page());
-    const bool publishPlaceholder =
-        request->asynchronous() && request->partialUpdatesWanted() && !request->page()->hasPixmap(request->observer());
-    const QSize size = request->isTile()
-        ? request->normalizedRect().geometry(request->width(), request->height()).size()
-        : QSize(request->width(), request->height());
+    // Partial tile updates clear Okular's pending-request guard. A final image
+    // from an old zoom can then be cached using the new canvas dimensions.
+    const bool publishPlaceholder = !request->isTile() && request->asynchronous() && request->partialUpdatesWanted()
+        && !request->page()->hasPixmap(request->observer());
+    const QSize size(request->width(), request->height());
     // Start the normal generator first, making it busy before notifying the view.
     // Async completion is queued to this thread, keeping request alive here.
     Okular::Generator::generatePixmap(request);
