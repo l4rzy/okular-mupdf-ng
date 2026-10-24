@@ -201,6 +201,7 @@ add_library(mupdf_generator_adapters STATIC
   generator/conversion/text.cpp
   generator/conversion/xfdf.cpp
   generator/proxy/annotation.cpp
+  generator/proxy/preview_goto_action.cpp
   generator/proxy/form/text.cpp
   generator/proxy/form/checkbox.cpp
   generator/proxy/form/radio_button.cpp

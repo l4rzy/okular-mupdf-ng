@@ -5,11 +5,10 @@
 
 #include "generator/okular_compat.hpp"
 #include "generator/proxy/embedded_file.hpp"
-#include "generator/ui/link_preview.hpp"
+#include "generator/proxy/preview_goto_action.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
-#include <QPointer>
 #include <QTimeZone>
 #include <QUrl>
 
@@ -95,38 +94,13 @@ Okular::DocumentViewport viewportFromModel(const Model::Viewport& modelViewport)
     return viewport;
 }
 
-namespace {
-
-class PreviewGotoAction final : public Okular::GotoAction {
-public:
-    PreviewGotoAction(const Model::Viewport& destination, LinkPreview* previews, int sourcePage)
-        : GotoAction(QString(), viewportFromModel(destination))
-        , m_destination(destination)
-        , m_previews(previews)
-        , m_sourcePage(sourcePage)
-    {
-    }
-
-    QString actionTip() const override
-    {
-        return m_previews && m_previews->showPreview(m_destination, m_sourcePage) ? QString() : GotoAction::actionTip();
-    }
-
-private:
-    Model::Viewport m_destination;
-    QPointer<LinkPreview> m_previews;
-    int m_sourcePage;
-};
-
-} // namespace
-
 Okular::ObjectRect* objectRect(const Model::Link& link, LinkPreview* previews, int sourcePage)
 {
     std::unique_ptr<Okular::Action> action;
     if (link.target.external && isAllowedExternalUri(QString::fromStdString(link.target.uri))) {
         action = std::make_unique<Okular::BrowseAction>(QUrl(QString::fromStdString(link.target.uri)));
     } else if (link.target.valid && link.target.viewport.page >= 0) {
-        action = std::make_unique<PreviewGotoAction>(link.target.viewport, previews, sourcePage);
+        action = std::make_unique<Proxy::PreviewGotoAction>(link.target.viewport, previews, sourcePage);
     }
     if (!action)
         return nullptr;

@@ -646,8 +646,8 @@ private slots:
         QVERIFY(std::equal(flattened.constBits(),
                            flattened.constBits() + flattened.sizeInBytes(),
                            edited.constBits(),
-                           [](auto actual, auto expected) {
-                               return std::abs(static_cast<int>(actual) - static_cast<int>(expected)) <= 2;
+                           [](auto actualByte, auto expectedByte) {
+                               return std::abs(static_cast<int>(actualByte) - static_cast<int>(expectedByte)) <= 2;
                            }));
         QVERIFY(m_client.close());
     }

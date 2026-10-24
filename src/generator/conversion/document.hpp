@@ -25,6 +25,7 @@ namespace Mu::Generator::Conversion {
 
 Okular::FontInfo fromModel(const Model::Font& font);
 std::unique_ptr<Okular::EmbeddedFile> embeddedFile(const Model::EmbeddedFile& file);
+Okular::DocumentViewport viewportFromModel(const Model::Viewport& viewport);
 QList<Okular::ObjectRect*>
 objectRects(const std::vector<Model::Link>& links, LinkPreview* previews = nullptr, int sourcePage = -1);
 std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Model::OutlineNode>& nodes);
