@@ -2,33 +2,31 @@
 
 ## Prebuilt packages
 
-Prebuilt packages for supported distros are attached to each
-[GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases). Repository
-installations receive updates through your package manager. The commands
-below install v0.5.2.
+Download Arch Linux and Manjaro packages from the
+[latest GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases/latest).
+For other supported distributions, use the repositories below to receive
+updates through your package manager.
 
 Installing this plugin will override the default backend for PDF and ePUB. You
 can select the backend of your choice every time you open a document by enabling
 the "Show backend selection dialog" option in Okular.
 
-### Arch Linux
+### Arch Linux and Manjaro
+
+Download the package matching your distribution from the
+[latest release](https://github.com/l4rzy/okular-mupdf-ng/releases/latest):
+`.archlinux.pkg.tar.zst` for Arch Linux or `.manjaro.pkg.tar.zst` for Manjaro.
+Install it using the path to the downloaded file:
 
 ```bash
-wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.2/okular-mupdf-ng-0.5.2-1-x86_64.archlinux.pkg.tar.zst
-yay -U okular-mupdf-ng-0.5.2-1-x86_64.archlinux.pkg.tar.zst
+sudo pacman -U /path/to/downloaded-package.pkg.tar.zst
 ```
 
-Arch Linux updates to Okular, KDE Frameworks 6 (KF6), Qt, or other dependencies
-may change the ABI and make prebuilt packages incompatible with your system.
-If a prebuilt package does not work after an update, build the package locally
-using [dist/PKGBUILD](dist/PKGBUILD) so it matches your installed libraries.
-
-### Manjaro Linux
-
-```bash
-wget https://github.com/l4rzy/okular-mupdf-ng/releases/download/v0.5.2/okular-mupdf-ng-0.5.2-1-x86_64.manjaro.pkg.tar.zst
-yay -U okular-mupdf-ng-0.5.2-1-x86_64.manjaro.pkg.tar.zst
-```
+On both distributions, updates to Okular, KDE Frameworks 6 (KF6), Qt, or other
+dependencies may change the ABI and make prebuilt packages incompatible with
+your system. If a prebuilt package does not work after an update, build the
+package locally using [dist/PKGBUILD](dist/PKGBUILD) so it matches your installed
+libraries.
 
 ### Fedora
 
