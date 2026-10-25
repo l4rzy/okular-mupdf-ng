@@ -10,10 +10,12 @@
   <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
   <br>
   <a href="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/"> <img src="https://img.shields.io/badge/Fedora_COPR-okular--mupdf--ng-3c6eb4?logo=fedora&logoColor=white" alt="Fedora COPR - okular-mupdf-ng"/></a>
-  <a href="https://build.opensuse.org/package/show/home:23ro/okular-mupdf-ng"> <img src="https://img.shields.io/badge/openSUSE_OBS-okular--mupdf--ng-73ba25?logo=opensuse&logoColor=white" alt="openSUSE OBS - okular-mupdf-ng"/></a>
   <br>
-  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"> <img src="https://img.shields.io/badge/Debian_OBS-okular--mupdf--ng-A81D33?logo=debian&logoColor=white" alt="Debian OBS - okular-mupdf-ng"/></a>
-  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"> <img src="https://img.shields.io/badge/Ubuntu_OBS-okular--mupdf--ng-E95420?logo=ubuntu&logoColor=white" alt="Ubuntu OBS - okular-mupdf-ng"/></a>
+  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://build.opensuse.org/projects/home:23ro/packages/okular-mupdf-ng/badge.svg" alt="OBS packages - okular-mupdf-ng"/></a>
+  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/opensuse/73BA25" width="20" height="20" alt="openSUSE" title="openSUSE Tumbleweed and Slowroll"/></a>
+  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/archlinux/1793D1" width="20" height="20" alt="Arch Linux" title="Arch Linux"/></a>
+  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/debian/A81D33" width="20" height="20" alt="Debian" title="Debian Stable & Testing"/></a>
+  <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/ubuntu/E95420" width="20" height="20" alt="Ubuntu" title="Ubuntu"/></a>
 </p>
 
 A MuPDF-based **secure**[^security] and **fast**[^speed] backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.

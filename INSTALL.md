@@ -2,10 +2,9 @@
 
 ## Prebuilt packages
 
-Download Arch Linux and Manjaro packages from the
+Use the repositories below to receive updates through your package manager.
+Standalone Arch Linux and Manjaro packages are also available from the
 [latest GitHub release](https://github.com/l4rzy/okular-mupdf-ng/releases/latest).
-For other supported distributions, use the repositories below to receive
-updates through your package manager.
 
 Installing this plugin will override the default backend for PDF and ePUB. You
 can select the backend of your choice every time you open a document by enabling
@@ -13,7 +12,13 @@ the "Show backend selection dialog" option in Okular.
 
 ### Arch Linux and Manjaro
 
-Download the package matching your distribution from the
+On Arch Linux, open the
+[OBS download page](https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng),
+select **Arch Linux**, and follow the instructions to add the repository and
+install `okular-mupdf-ng`. This repo can only be used for Arch Linux.
+
+For a standalone Arch Linux or Manjaro package, download the file matching your
+distribution from the
 [latest release](https://github.com/l4rzy/okular-mupdf-ng/releases/latest):
 `.archlinux.pkg.tar.zst` for Arch Linux or `.manjaro.pkg.tar.zst` for Manjaro.
 Install it using the path to the downloaded file:
