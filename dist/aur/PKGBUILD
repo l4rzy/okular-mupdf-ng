@@ -10,8 +10,13 @@ pkgdesc="A MuPDF-based secure and fast backend for Okular"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
-depends=('kcoreaddons' 'ki18n' 'okular' 'nss' 'libseccomp' 'libjpeg-turbo' 'brotli' 'freetype2' 'zlib')
-makedepends=('cmake' 'extra-cmake-modules' 'git' 'openssl' 'ninja' 'patch' 'qt6-tools')
+# Direct ELF dependencies of the installed CLI, worker, and generator (lddtree).
+depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
+         'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
+         'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
+makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext' 'git'
+             'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools')
+checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
 provides=('okular-mupdf-ng')
 conflicts=('okular-mupdf-ng')
 source=("$_pkgname::git+$url.git"
@@ -28,22 +33,27 @@ pkgver() {
 }
 
 build() {
-  cmake -B "build" -S "$srcdir/$_pkgname" -G Ninja \
+  cmake -B "$srcdir/build" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DUSE_SYSTEM_MUPDF=OFF \
     -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
-    -DBUILD_TESTING=ON
-  cmake --build "build"
+    -DBUILD_TESTING=ON \
+    -DENABLE_BUILD_TREE_WORKER=OFF \
+    -DENABLE_MU_DEBUG=OFF \
+    -DDISABLE_WORKER_SANDBOX=OFF \
+    -DTESSDATA_DIR=/usr/share/tessdata
+  cmake --build "$srcdir/build"
 }
 
 check() {
-  ctest --test-dir "build" --output-on-failure
+  QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
 }
 
 package() {
-  DESTDIR="$pkgdir" cmake --install "build"
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
   # The signature appearance depends on the bundled font; fail the package
   # rather than silently shipping a build whose install rule dropped it.
   test -f "$pkgdir/usr/share/okular-mupdf-ng/Allura-Regular.ttf"

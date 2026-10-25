@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Maintainer: rzy <me@23ro.org>
+
+pkgname=okular-mupdf-ng
+pkgver=0.5.3
+pkgrel=1
+pkgdesc="A MuPDF-based secure and fast backend for Okular"
+arch=('x86_64')
+url="https://github.com/l4rzy/okular-mupdf-ng"
+license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
+# Direct ELF dependencies of the installed CLI, worker, and generator (lddtree).
+depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
+         'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
+         'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
+makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext'
+             'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools')
+checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
+optdepends=('tesseract-data-eng: English OCR language data; install other tesseract-data packages for additional languages')
+conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
+
+# Keep the MuPDF version and checksum in sync with cmake/mupdf.version and _service.
+_mupdfver=1.28.5
+source=("$pkgname-$pkgver.tar.gz"
+        "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
+# OBS generates the project archive from Git through tar_scm; its compressed
+# bytes are service-generated. The downloaded MuPDF archive is checksum-pinned.
+sha256sums=('SKIP'
+            '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934')
+
+prepare() {
+  cd "$srcdir/$pkgname-$pkgver"
+  test "$(sed -n '1p' cmake/mupdf.version)" = "$_mupdfver"
+  test "$(sed -n '2p' cmake/mupdf.version)" = "${sha256sums[1]}"
+  local manifest_version
+  manifest_version=$(python -c 'import json; print(json.load(open("src/generator/manifest.json"))["KPlugin"]["Version"])')
+  test "$manifest_version" = "$pkgver"
+}
+
+build() {
+  cmake -B "$srcdir/build" -S "$srcdir/$pkgname-$pkgver" -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+    -DUSE_SYSTEM_MUPDF=OFF \
+    -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
+    -DBUILD_TESTING=ON \
+    -DENABLE_BUILD_TREE_WORKER=OFF \
+    -DENABLE_MU_DEBUG=OFF \
+    -DDISABLE_WORKER_SANDBOX=OFF \
+    -DTESSDATA_DIR=/usr/share/tessdata
+  cmake --build "$srcdir/build"
+}
+
+check() {
+  QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}

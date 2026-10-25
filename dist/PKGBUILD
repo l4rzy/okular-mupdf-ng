@@ -20,12 +20,13 @@ makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
              'patch' 'qt6-tools')
 # The static package still links system FreeType, JPEG, Brotli, and zlib;
 # JBIG2, OpenJPEG, and the other bundled libraries add no runtime dependencies.
-# Global depends serves the pre-build dependency check; each package function
-# overrides depends for its own link variant.
+# Global depends describes the published static package and serves the pre-build
+# dependency check. The unpublished dynamic package overrides it below.
 _common_depends=('okular' 'qt6-base' 'nss' 'libseccomp')
-depends=("${_common_depends[@]}"
-         'brotli' 'freetype2'
-         'libjpeg-turbo' 'zlib')
+# Direct ELF dependencies of the installed CLI, worker, and generator (lddtree).
+depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
+         'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
+         'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
 conflicts=(okular-mupdf-ng-dynamic okular-mupdf-ng-git)
 # Replace the local Git URL with git+$url.git when the PKGBUILD is standalone.
 source=("$_pkgname::git+file://$startdir/.."
