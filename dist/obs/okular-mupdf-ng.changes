@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Sun Oct 25 20:37:30 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.4.
+- Add XFDF/XML annotation import from the Edit menu with undo/redo support.
+- Refine direct runtime dependencies.
+
+-------------------------------------------------------------------
 Sun Oct 25 00:23:39 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.3.
