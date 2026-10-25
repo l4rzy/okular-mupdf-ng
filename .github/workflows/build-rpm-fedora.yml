@@ -15,7 +15,7 @@ jobs:
             arch: x86_64
             runner: ubuntu-26.04
             elf-arch: x86-64
-          - version: '43'
+          - version: '44'
             arch: aarch64
             runner: ubuntu-26.04-arm
             elf-arch: ARM aarch64
