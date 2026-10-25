@@ -12,14 +12,19 @@
 
 namespace Mu::Plugin::Util {
 
-std::optional<std::vector<std::uint8_t>> prepareStampImage(const QString& symbol)
+bool isNativeStamp(const QString& symbol)
 {
     static const QStringList nativeStamps {
         "Approved", "AsIs",     "Confidential", "Departmental",     "Draft",       "Experimental",
         "Expired",  "Final",    "ForComment",   "ForPublicRelease", "NotApproved", "NotForPublicRelease",
         "Sold",     "TopSecret"
     };
-    if (symbol.isEmpty() || nativeStamps.contains(symbol))
+    return symbol.isEmpty() || nativeStamps.contains(symbol);
+}
+
+std::optional<std::vector<std::uint8_t>> prepareStampImage(const QString& symbol)
+{
+    if (isNativeStamp(symbol))
         return std::vector<std::uint8_t> { };
 
     const int dimension = static_cast<int>(Limit::MaxStampImageDimension);

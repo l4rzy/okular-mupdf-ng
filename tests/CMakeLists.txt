@@ -348,7 +348,7 @@ target_link_libraries(test_generator_signingconversion PRIVATE mupdf_generator_a
 
 add_layer_test(test_generator_xfdf generator/test_xfdf.cpp generator)
 target_include_directories(test_generator_xfdf PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
-target_link_libraries(test_generator_xfdf PRIVATE mupdf_generator_adapters KF6::I18n)
+target_link_libraries(test_generator_xfdf PRIVATE mupdf_generator_adapters KF6::I18n KF6::XmlGui)
 target_compile_definitions(test_generator_xfdf PRIVATE
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")

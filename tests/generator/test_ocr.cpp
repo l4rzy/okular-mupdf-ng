@@ -172,7 +172,9 @@ private slots:
                          registered->objectName() == QStringLiteral("mupdf_manage_certificates")
                              || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
                              || registered->objectName().startsWith(QStringLiteral("mupdf_theme"))
-                             || (expected && (registered == action || hasModels)));
+                             || (expected
+                                 && (registered == action
+                                     || registered->objectName() == QStringLiteral("mupdf_import_xfdf") || hasModels)));
             document.reparseConfig();
             QCOMPARE(action->isEnabled(), expected);
             document.closeDocument();
@@ -1329,10 +1331,11 @@ private slots:
         QCOMPARE(menu->actions().size(), 5);
         QVERIFY(!menu->actions().at(3)->isVisible());
         QVERIFY(!menu->actions().at(4)->isVisible());
-        QCOMPARE(client->actionCollection()->actions().count(), 15);
+        QCOMPARE(client->actionCollection()->actions().count(), 16);
         for (QAction* registered : presentation->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle")
+                         || registered->objectName() == QStringLiteral("mupdf_import_xfdf")
                          || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
                          || registered->objectName().startsWith(QStringLiteral("mupdf_theme_toggle_")));
         QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Automatic"));

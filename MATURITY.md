@@ -39,7 +39,7 @@ promise that every input or workflow has been tested.
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |
-| XFDF import and export | 🟣 Experimental | Parser and generator tests; CLI integration |
+| XFDF import and export | 🟣 Experimental | Parser, Edit-menu import, undo/redo, save/reopen, view rotation, and CLI integration tests |
 | PDF JS support | 🟣 Experimental | Worker calculation and control-event tests; loaded-generator validation, cross-page dependent updates, undo/redo, and save/reopen tests |
 | Generated PDF TOC (printed contents and typography; persistent cache) | 🟣 Experimental | Heading/hierarchy, wrapped titles, contents columns/page mapping, and cache tests; rotated worker fixtures and IPC reopen/precedence tests |
 

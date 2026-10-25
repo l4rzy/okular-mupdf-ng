@@ -10,6 +10,10 @@
 
 #include <okular/core/page.h>
 
+#include "plugin/xfdf/import.hpp"
+
+#include <memory>
+
 namespace Mu::Generator::Conversion {
 
 /// Serializes every annotation on the given pages to a single XFDF document.
@@ -22,6 +26,15 @@ namespace Mu::Generator::Conversion {
 /// The export entry point must reject PDFs containing rotated pages before
 /// calling this adapter (see Plugin::Xfdf::Page).
 [[nodiscard]] QString annotationsToXfdf(const QVector<Okular::Page*>& pages, const QSizeF& dpi);
+
+/// Parses against the live page sizes and remaining annotation capacity.
+[[nodiscard]] Plugin::Xfdf::XfdfParseResult
+annotationsFromXfdf(const QByteArray& xml, const QVector<Okular::Page*>& pages, const QSizeF& dpi, QString* error);
+
+/// Prepares fresh, view-rotated geometry for Document::addPageAnnotation(),
+/// which transforms it back into the page's unrotated coordinate space.
+[[nodiscard]] std::unique_ptr<Okular::Annotation> annotationFromXfdf(Model::Annotation annotation,
+                                                                     Okular::Rotation rotation);
 
 } // namespace Mu::Generator::Conversion
 

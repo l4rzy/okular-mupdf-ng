@@ -183,6 +183,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         m_ocrController->reset();
         m_annotationProxy.setAvailable(false);
         m_formCoordinator->setAvailable(false);
+        syncActions();
         if (m_formsDirty || m_annotationsDirty) {
             const QString message = m_formsDirty && m_annotationsDirty
                 ? i18n("The document renderer stopped while unsaved form and annotation changes were present. "
@@ -211,6 +212,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                     return;
                 if (reopenWorkerDocument()) {
                     m_worker.commitSessionReady();
+                    syncActions();
                     return;
                 }
                 if (sandboxGated()) {
@@ -622,7 +624,6 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
     updatePagePlaceholder(m_settings.rendering.documentTheme);
-    syncActions();
     m_formsDirty = false;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
@@ -630,6 +631,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     // A fully constructed document session is the only point where worker
     // operations may resume after a restart.
     m_worker.commitSessionReady();
+    syncActions();
     if (!m_observingVisiblePages && document()) {
         const_cast<Okular::Document*>(document())->addObserver(this);
         m_observingVisiblePages = true;

@@ -11,6 +11,9 @@
 
 namespace Mu::Plugin::Util {
 
+// Native symbols never interpret their names as local files or theme icons.
+[[nodiscard]] bool isNativeStamp(const QString& symbol);
+
 // Empty bytes select a native PDF stamp; nullopt means an icon/file could not be loaded.
 std::optional<std::vector<std::uint8_t>> prepareStampImage(const QString& symbol);
 

@@ -53,6 +53,10 @@ void Main::setupActions()
         dialog.exec();
     });
     setupThemeActions();
+    auto* import =
+        new QAction(QIcon::fromTheme(QStringLiteral("document-import")), i18n("Import Annotations from XFDF…"), this);
+    actionCollection()->addAction(QStringLiteral("mupdf_import_xfdf"), import);
+    connect(import, &QAction::triggered, this, &Main::importXfdf);
     // All actions exist before their initial state and shortcut registration.
     syncActions();
     // A separate client presents one set of actions per window, even when
@@ -216,9 +220,16 @@ void Main::syncActions()
 {
     syncThemeActions();
     syncOcrActions();
+    actionCollection()->action(QStringLiteral("mupdf_import_xfdf"))->setEnabled(canImportXfdf());
     actionCollection()
         ->action(QStringLiteral("mupdf_link_preview_toggle"))
         ->setEnabled(!m_okularPages.isEmpty() && !m_pageError.isActive());
+}
+
+void Main::notifySetup(const QList<Okular::Page*>&, int)
+{
+    // Okular notifies observers when annotation editing permission changes.
+    syncActions();
 }
 
 } // namespace Mu::Generator

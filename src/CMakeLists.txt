@@ -272,6 +272,7 @@ endif()
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
   generator/ui/actions.cpp
+  generator/ui/xfdf_import.cpp
   generator/ui/window_menus.cpp
   generator/config/settingswidget.cpp
   generator/config/csseditor/editor.cpp

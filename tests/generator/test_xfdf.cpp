@@ -2,18 +2,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../support/xfdf_fixture.hpp"
+#include "generator/conversion/annotation.hpp"
 #include "generator/conversion/xfdf.hpp"
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
 
+#include <KActionCollection>
 #include <KConfigGroup>
 #include <KSharedConfig>
+#include <KXMLGUIBuilder>
+#include <KXMLGUIClient>
+#include <KXMLGUIFactory>
+#include <QAction>
+#include <QApplication>
 #include <QDateTime>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFont>
+#include <QLineEdit>
+#include <QMainWindow>
+#include <QMenu>
 #include <QMimeDatabase>
+#include <QScopeGuard>
+#include <QSet>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>
+#include <QTimer>
 #include <QUrl>
 #include <QXmlStreamReader>
 
@@ -24,8 +40,11 @@
 #include <okular/core/settings_core.h>
 
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <string>
+#include <sys/stat.h>
+#include <vector>
 
 using Mu::Generator::Conversion::annotationsToXfdf;
 using Mu::Plugin::Xfdf::normalizedRectToUserSpace;
@@ -73,10 +92,56 @@ class TestGeneratorXfdf : public QObject {
 
     QTemporaryDir m_root;
 
+    static bool importFile(Okular::Document& document,
+                           const QString& path,
+                           const std::function<void(QFileDialog*)>& choose = { },
+                           QAction* menuAction = nullptr)
+    {
+        auto* action = menuAction
+            ? menuAction
+            : document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_import_xfdf"));
+        if (!action || !action->isEnabled())
+            return false;
+        bool selected = false;
+        bool accepted = path.isEmpty();
+        QTimer timer;
+        timer.setInterval(10);
+        connect(&timer, &QTimer::timeout, &timer, [&] {
+            auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            timer.stop();
+            selected = true;
+            connect(dialog, &QFileDialog::accepted, &timer, [&] { accepted = true; });
+            if (choose)
+                choose(dialog);
+            if (path.isEmpty())
+                dialog->reject();
+            else {
+                dialog->setDirectory(QFileInfo(path).absolutePath());
+                // QFileSystemModel populates a newly selected directory asynchronously.
+                QTimer::singleShot(100, dialog, [dialog, path] {
+                    auto* input = dialog->findChild<QLineEdit*>(QStringLiteral("fileNameEdit"));
+                    if (!input) {
+                        dialog->reject();
+                        return;
+                    }
+                    input->setText(path);
+                    QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+                });
+                QTimer::singleShot(3000, dialog, &QFileDialog::reject);
+            }
+        });
+        timer.start();
+        action->trigger();
+        return selected && accepted;
+    }
+
 private slots:
 
     void initTestCase()
     {
+        QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         QVERIFY(m_root.isValid());
         qputenv("XDG_CONFIG_HOME", m_root.filePath("config").toUtf8());
         qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
@@ -88,6 +153,373 @@ private slots:
         KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
         KConfigGroup(config, QStringLiteral("OCR")).writeEntry("OcrTriggerMode", "Never");
         config->sync();
+    }
+
+    void importsAnnotations_data()
+    {
+        QTest::addColumn<QByteArray>("xml");
+        QTest::addColumn<int>("added");
+        QTest::addColumn<bool>("fatal");
+        const QByteArray note = "<text page=\"0\" rect=\"20,30,40,50\"><contents>imported</contents></text>";
+        QTest::newRow("valid") << "<xfdf><annots>" + note + "</annots></xfdf>" << 1 << false;
+        QTest::newRow("multi-page") << "<xfdf><annots>" + note
+                + "<text page=\"1\" rect=\"20,30,40,50\"/></annots></xfdf>"
+                                    << 2 << false;
+        QTest::newRow("skipped-entry") << "<xfdf><annots>" + note + "<unknown/></annots></xfdf>" << 1 << false;
+        QTest::newRow("native-stamp") << QByteArray(
+            "<xfdf><annots><stamp page=\"0\" rect=\"20,30,40,50\" icon=\"Approved\"/></annots></xfdf>")
+                                      << 1 << false;
+        QTest::newRow("stamp-file-path") << "<xfdf><annots>" + note
+                + "<stamp page=\"0\" rect=\"20,30,40,50\" icon=\"/tmp/untrusted-stamp.svg\"/></annots></xfdf>"
+                                         << 1 << false;
+        QTest::newRow("invalid-page") << QByteArray(
+            "<xfdf><annots><text page=\"99\" rect=\"0,0,10,10\"/></annots></xfdf>")
+                                      << 0 << false;
+        QTest::newRow("unsupported-only") << QByteArray("<xfdf><annots><unknown/></annots></xfdf>") << 0 << false;
+        QTest::newRow("empty-input") << QByteArray() << 0 << true;
+        QTest::newRow("malformed-after-note") << "<xfdf><annots>" + note << 0 << true;
+        QTest::newRow("doctype") << QByteArray("<!DOCTYPE xfdf><xfdf><annots/></xfdf>") << 0 << true;
+        QTest::newRow("too-large") << QByteArray(Xfdf::MaxXfdfBytes + 1, ' ') << 0 << true;
+    }
+
+    void importsAnnotations()
+    {
+        QFETCH(QByteArray, xml);
+        QFETCH(int, added);
+        QFETCH(bool, fatal);
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        const QString path = directory.filePath("notes.xfdf");
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::WriteOnly));
+        QCOMPARE(input.write(xml), xml.size());
+        input.close();
+        Okular::Document document(nullptr);
+        QCOMPARE(
+            document.openDocument(pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+            Okular::Document::OpenSuccess);
+        QSignalSpy errors(&document, &Okular::Document::error);
+        QSignalSpy notices(&document, &Okular::Document::notice);
+        QVERIFY(importFile(document, path));
+        QCOMPARE(document.page(0)->annotations().size() + document.page(1)->annotations().size(), 1 + added);
+        QCOMPARE(errors.count(), fatal ? 1 : 0);
+        QCOMPARE(notices.count(), added ? 1 : 0);
+        QCOMPARE(document.canUndo(), added > 0);
+        for (int i = 0; i < added; ++i)
+            document.undo();
+        QCOMPARE(document.page(0)->annotations().size(), 1);
+        QCOMPARE(document.page(1)->annotations().size(), 0);
+        for (int i = 0; i < added; ++i)
+            document.redo();
+        QCOMPARE(document.page(0)->annotations().size() + document.page(1)->annotations().size(), 1 + added);
+        if (added) {
+            const QString saved = directory.filePath("saved.pdf");
+            QString error;
+            QVERIFY2(document.saveChanges(saved, &error), qPrintable(error));
+            Okular::Document reopened(nullptr);
+            QCOMPARE(reopened.openDocument(
+                         saved, QUrl::fromLocalFile(saved), QMimeDatabase().mimeTypeForName("application/pdf")),
+                     Okular::Document::OpenSuccess);
+            QCOMPARE(reopened.page(0)->annotations().size() + reopened.page(1)->annotations().size(), 1 + added);
+        }
+    }
+
+    void importsWithViewRotation_data()
+    {
+        QTest::addColumn<int>("rotation");
+        QTest::addColumn<bool>("changeDuringImport");
+        for (int rotation = 0; rotation < 4; ++rotation)
+            QTest::newRow(qPrintable(QString::number(rotation))) << rotation << false;
+        QTest::newRow("rotation-changes-during-import") << 0 << true;
+    }
+
+    void importsWithViewRotation()
+    {
+        QFETCH(int, rotation);
+        QFETCH(bool, changeDuringImport);
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        const QByteArray xml = R"(<xfdf><annots>
+          <text page="0" rect="30,50,90,150" name="duplicate"><contents>note</contents></text>
+          <line page="0" rect="30,50,90,150" start="30,50" end="90,150"/>
+          <highlight page="0" rect="30,50,90,150" coords="30,150,90,150,30,50,90,50"/>
+          <ink page="0" rect="30,50,90,150"><inklist><gesture>30,50;90,150</gesture></inklist></ink>
+          <freetext page="0" rect="30,50,90,150" callout="30,50,60,100,90,150" intent="FreeTextCallout"/>
+        </annots></xfdf>)";
+        const QString path = directory.filePath("notes.xml");
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::WriteOnly));
+        QCOMPARE(input.write(xml), xml.size());
+        input.close();
+        Okular::Document document(nullptr);
+        QCOMPARE(
+            document.openDocument(pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+            Okular::Document::OpenSuccess);
+        document.setRotation(rotation);
+        bool rotated = false;
+        connect(&document, &Okular::Document::canUndoChanged, &document, [&](bool available) {
+            if (changeDuringImport && available && !rotated) {
+                rotated = true;
+                document.setRotation((rotation + 1) % 4);
+            }
+        });
+        QString error;
+        const auto expected = Xfdf::xfdfToAnnotations(xml, { QSizeF(300, 500), QSizeF(300, 500) }, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(expected.applied, 5);
+        for (int repeat = 0; repeat < 2; ++repeat) {
+            QVERIFY(importFile(document, path));
+            const auto annotations = document.page(0)->annotations();
+            QCOMPARE(annotations.size(), 1 + (repeat + 1) * 5);
+            for (int i = 0; i < 5; ++i) {
+                const auto* annotation = annotations.at(1 + repeat * 5 + i);
+                QVERIFY(!annotation->nativeId().toString().isEmpty());
+                QVERIFY(annotation->uniqueName() != "duplicate");
+                const auto actual = Mu::Generator::Conversion::toModel(annotation);
+                QVERIFY(actual);
+                const auto& source = expected.pages.at(0).annotations.at(i);
+                QCOMPARE(actual->subtype, source.subtype);
+                QCOMPARE(actual->x0, source.x0);
+                QCOMPARE(actual->y0, source.y0);
+                QCOMPARE(actual->x1, source.x1);
+                QCOMPARE(actual->y1, source.y1);
+                const auto checkPoints = [](const auto& actualPoints, const auto& expectedPoints) {
+                    QCOMPARE(actualPoints.size(), expectedPoints.size());
+                    for (std::size_t j = 0; j < actualPoints.size(); ++j) {
+                        QCOMPARE(actualPoints[j].x, expectedPoints[j].x);
+                        QCOMPARE(actualPoints[j].y, expectedPoints[j].y);
+                    }
+                };
+                checkPoints(actual->extras.points, source.extras.points);
+                checkPoints(actual->extras.callout, source.extras.callout);
+                QCOMPARE(actual->extras.inkPaths.size(), source.extras.inkPaths.size());
+                for (std::size_t j = 0; j < actual->extras.inkPaths.size(); ++j)
+                    checkPoints(actual->extras.inkPaths[j], source.extras.inkPaths[j]);
+                QCOMPARE(actual->extras.quads.size(), source.extras.quads.size());
+                for (std::size_t j = 0; j < actual->extras.quads.size(); ++j) {
+                    const auto& a = actual->extras.quads[j];
+                    const auto& b = source.extras.quads[j];
+                    checkPoints(std::vector { a.lowerLeft, a.lowerRight, a.upperRight, a.upperLeft },
+                                std::vector { b.lowerLeft, b.lowerRight, b.upperRight, b.upperLeft });
+                }
+            }
+        }
+        QSet<QString> names;
+        for (const auto* annotation : document.page(0)->annotations())
+            names.insert(annotation->uniqueName());
+        QCOMPARE(names.size(), 11);
+    }
+
+    void rejectsRotatedImport_data() { addXfdfRotationRows(); }
+
+    void rejectsRotatedImport()
+    {
+        QFETCH(int, rotation);
+        QFETCH(bool, inherited);
+        QFETCH(bool, accepted);
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, rotation, inherited));
+        const QString path = directory.filePath("notes.xfdf");
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::WriteOnly));
+        input.write("<xfdf><annots><text page=\"0\" rect=\"20,30,40,50\"/></annots></xfdf>");
+        input.close();
+        Okular::Document document(nullptr);
+        QCOMPARE(
+            document.openDocument(pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+            Okular::Document::OpenSuccess);
+        QVERIFY(importFile(document, path));
+        QCOMPARE(document.page(0)->annotations().size(), accepted ? 2 : 1);
+        QCOMPARE(document.canUndo(), accepted);
+    }
+
+    void cancelsImport_data()
+    {
+        QTest::addColumn<int>("change");
+        QTest::newRow("cancel-dialog") << 0;
+        QTest::newRow("close-document-before-accept") << 1;
+        QTest::newRow("disable-annotations-before-accept") << 2;
+    }
+
+    void cancelsImport()
+    {
+        QFETCH(int, change);
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        const QString path = directory.filePath("notes.xfdf");
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::WriteOnly));
+        input.write("<xfdf><annots><text page=\"0\" rect=\"20,30,40,50\"/></annots></xfdf>");
+        input.close();
+        Okular::Document document(nullptr);
+        QCOMPARE(
+            document.openDocument(pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+            Okular::Document::OpenSuccess);
+        QSignalSpy notices(&document, &Okular::Document::notice);
+        QVERIFY(importFile(document, change == 0 ? QString() : path, [&](QFileDialog*) {
+            if (change == 1)
+                document.closeDocument();
+            else if (change == 2)
+                document.setAnnotationEditingEnabled(false);
+        }));
+        QCOMPARE(notices.count(), 0);
+        QVERIFY(!document.canUndo());
+        if (change != 1)
+            QCOMPARE(document.page(0)->annotations().size(), 1);
+    }
+
+    void validatesInputFile_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::newRow("fifo") << 0;
+        QTest::newRow("symlink-to-fifo") << 1;
+        QTest::newRow("device") << 2;
+        QTest::newRow("symlink-to-regular-file") << 3;
+    }
+
+    void validatesInputFile()
+    {
+        QFETCH(int, kind);
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        const QString source = directory.filePath("source.xfdf");
+        const QString path = directory.filePath("notes.xml");
+        if (kind < 2) {
+            QCOMPARE(::mkfifo(QFile::encodeName(source).constData(), 0600), 0);
+            if (kind == 1)
+                QVERIFY(QFile::link(source, path));
+        } else if (kind == 2) {
+            QVERIFY(QFile::link(QStringLiteral("/dev/zero"), path));
+        } else {
+            QFile input(source);
+            QVERIFY(input.open(QIODevice::WriteOnly));
+            input.write("<xfdf><annots><text page=\"0\" rect=\"20,30,40,50\"/></annots></xfdf>");
+            input.close();
+            QVERIFY(QFile::link(source, path));
+        }
+        Okular::Document document(nullptr);
+        QCOMPARE(
+            document.openDocument(pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+            Okular::Document::OpenSuccess);
+        QSignalSpy errors(&document, &Okular::Document::error);
+        QVERIFY(importFile(document, kind == 0 ? source : path));
+        QCOMPARE(errors.count(), kind == 3 ? 0 : 1);
+        QCOMPARE(document.page(0)->annotations().size(), kind == 3 ? 2 : 1);
+        QCOMPARE(document.canUndo(), kind == 3);
+    }
+
+    void respectsAnnotationPermission()
+    {
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        Okular::Document document(nullptr);
+        QCOMPARE(
+            document.openDocument(pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+            Okular::Document::OpenSuccess);
+        const auto action = [&] {
+            return document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_import_xfdf"));
+        };
+        QVERIFY(action());
+        QVERIFY(action()->isEnabled());
+        document.setAnnotationEditingEnabled(false);
+        QVERIFY(!action()->isEnabled());
+        document.setAnnotationEditingEnabled(true);
+        QVERIFY(action()->isEnabled());
+    }
+
+    void checksRemainingCapacity()
+    {
+        std::unique_ptr<Okular::Page> page(makePage());
+        for (std::size_t i = 0; i < Mu::Limit::MaxAnnotationsPerPage; ++i)
+            page->addAnnotation(new Okular::TextAnnotation());
+        QString error;
+        const auto result = Mu::Generator::Conversion::annotationsFromXfdf(
+            "<xfdf><annots><text page=\"0\" rect=\"0,0,10,10\"/></annots></xfdf>",
+            { page.get() },
+            QSizeF(72, 72),
+            &error);
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(result.applied, 0);
+    }
+
+    void restrictsImportedStampNames_data()
+    {
+        QTest::addColumn<QString>("symbol");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("default") << QString() << true;
+        QTest::newRow("native") << QStringLiteral("Approved") << true;
+        QTest::newRow("file-path") << QStringLiteral("/tmp/stamp.png") << false;
+        QTest::newRow("relative-path") << QStringLiteral("../stamp.png") << false;
+        QTest::newRow("theme-icon") << QStringLiteral("document-open") << false;
+    }
+
+    void restrictsImportedStampNames()
+    {
+        QFETCH(QString, symbol);
+        QFETCH(bool, accepted);
+        auto model = baseAnnotation(Mu::Model::AnnotationType::Stamp, 0.1, 0.1, 0.2, 0.2);
+        model.extras.style.appearance = Mu::Model::AnnotationAppearance();
+        model.extras.style.appearance->icon = symbol.toStdString();
+        QCOMPARE(bool(Mu::Generator::Conversion::annotationFromXfdf(model, Okular::Rotation0)), accepted);
+    }
+
+    void sharesEditMenu()
+    {
+        QTemporaryDir directory;
+        const QString pdf = directory.filePath("source.pdf");
+        QVERIFY(writeXfdfRotationPdf(pdf, 0, false));
+        const QString path = directory.filePath("notes.xfdf");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("<xfdf><annots><text page=\"0\" rect=\"20,30,40,50\"/></annots></xfdf>");
+        file.close();
+        QMainWindow window;
+        KXMLGUIBuilder builder(&window);
+        KXMLGUIFactory factory(&builder);
+
+        struct MenuClient : KXMLGUIClient {
+            using KXMLGUIClient::setXML;
+        } host;
+
+        host.actionCollection()->addAction(QStringLiteral("existing"),
+                                           new QAction(QStringLiteral("Existing"), &window));
+        host.setXML(QStringLiteral("<gui name=\"test\"><MenuBar><Menu name=\"edit\"><text>Edit</text>"
+                                   "<Action name=\"existing\"/></Menu></MenuBar></gui>"));
+        factory.addClient(&host);
+        Okular::Document first(nullptr), second(nullptr);
+        auto cleanup = qScopeGuard([&] {
+            for (auto* document : { &first, &second })
+                if (auto* client = document->guiClient(); client && client->factory())
+                    factory.removeClient(client);
+            factory.removeClient(&host);
+        });
+        for (auto* document : { &first, &second }) {
+            QCOMPARE(document->openDocument(
+                         pdf, QUrl::fromLocalFile(pdf), QMimeDatabase().mimeTypeForName("application/pdf")),
+                     Okular::Document::OpenSuccess);
+            factory.addClient(document->guiClient());
+        }
+        const auto menu = [&] {
+            return qobject_cast<QMenu*>(factory.container(QStringLiteral("edit"), &host));
+        };
+        QTRY_VERIFY(menu() && menu()->actions().size() == 3);
+        QVERIFY(menu()->actions().at(1)->isSeparator());
+        QCOMPARE(menu()->actions().at(2)->objectName(), QStringLiteral("mupdf_import_xfdf"));
+        QVERIFY(importFile(first, path, { }, menu()->actions().at(2)));
+        QCOMPARE(first.page(0)->annotations().size(), 2);
+        QCOMPARE(second.page(0)->annotations().size(), 1);
+        factory.removeClient(first.guiClient());
+        QTRY_VERIFY(menu() && menu()->actions().size() == 3);
+        QVERIFY(menu()->actions().at(1)->isSeparator());
+        QVERIFY(importFile(second, path, { }, menu()->actions().at(2)));
+        QCOMPARE(first.page(0)->annotations().size(), 2);
+        QCOMPARE(second.page(0)->annotations().size(), 2);
     }
 
     void checksPdfRotation_data() { addXfdfRotationRows(); }

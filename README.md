@@ -56,7 +56,7 @@ and the source-tree layout.
 | **ePUB/MOBI customisation** | Custom CSS, Page size, Font size, Font family | ✓ | ✗ (Font size only) |
 | **Certificate Manager** | NSS certificate manager; manage trust and generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ (Cert listing only) |
 | **Link Preview** | Preview internal link destinations on hover | ✓ | ✗ |
-| **Annotation export** | Export PDF annotations to XFDF | ✓ | ✗ |
+| **XFDF annotations** | Import and export PDF annotations | ✓ | ✗ |
 | **Flattened PDF export** | Bake annotations and form fields into PDF page content | ✓ | ✗ |
 | **PDF Heuristic Outline** | Outline generation for PDFs that don't have embedded outline | ✓ | ✗ |
 | **ePUB/MOBI export** | Export ePUB/MOBI to PDF, preserving links and TOC | ✓ (via MuPDF rendering) | ✗ (document print) |

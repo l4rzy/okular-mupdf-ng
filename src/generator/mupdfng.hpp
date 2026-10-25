@@ -142,6 +142,7 @@ protected:
     void addPages(KConfigDialog* dialog) override;
 
 private:
+    void notifySetup(const QList<Okular::Page*>& pages, int setupFlags) override;
     void notifyVisibleRectsChanged() override;
     void generatePixmap(Okular::PixmapRequest* request) override;
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
@@ -156,6 +157,8 @@ private:
     void setupActions();
     void setupOcrActions();
     void setupThemeActions();
+    [[nodiscard]] bool canImportXfdf() const;
+    void importXfdf();
     void syncActions();
     void syncThemeActions();
     void syncOcrActions();
