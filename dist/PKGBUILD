@@ -4,7 +4,7 @@ pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.5
-pkgver=0.5.2
+pkgver=0.5.3
 pkgrel=1
 pkgdesc="A MuPDF-based secure and fast backend for Okular"
 arch=('x86_64')

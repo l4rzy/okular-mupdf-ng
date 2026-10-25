@@ -67,6 +67,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configure package metadata
+        run: |
+          printf '%s\n' 'PACKAGER="l4rzy (github ci) <me@23ro.org>"' >> /etc/makepkg.conf
+
       - name: Build Package
         run: |
           if ! id -u builder > /dev/null 2>&1; then

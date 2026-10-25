@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.2
+Version:        0.5.3
 Release:        1%{?dist}
 Summary:        A MuPDF-based secure and fast backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -106,6 +106,11 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Sat Oct 24 2026 l4rzy <me@23ro.org> - 0.5.3-1
+- Update to version 0.5.3.
+- Fix tile boundary padding and fit oversized tiled render requests.
+- Avoid distorted tiles after zoom changes when render cancellation is disabled.
+
 * Fri Oct 23 2026 l4rzy <me@23ro.org> - 0.5.2-1
 - Update to version 0.5.2.
 - Add configurable link previews with scrolling, dragging, and flick gestures.

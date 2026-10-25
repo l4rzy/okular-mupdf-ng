@@ -1,3 +1,11 @@
+okular-mupdf-ng (0.5.3-1) unstable; urgency=medium
+
+  * Update to version 0.5.3.
+  * Fix tile boundary padding and fit oversized tiled render requests.
+  * Avoid distorted tiles after zoom changes when render cancellation is disabled.
+
+ -- l4rzy <me@23ro.org>  Sat, 24 Oct 2026 19:23:39 -0500
+
 okular-mupdf-ng (0.5.2-1) unstable; urgency=medium
 
   * Update to version 0.5.2.

@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Sun Oct 25 00:23:39 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.3.
+- Fix tile boundary padding and fit oversized tiled render requests.
+- Avoid distorted tiles after zoom changes when render cancellation is disabled.
+
+-------------------------------------------------------------------
 Fri Oct 23 23:39:03 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.2.
