@@ -16,7 +16,7 @@
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"> <img src="https://img.shields.io/badge/Ubuntu_OBS-okular--mupdf--ng-E95420?logo=ubuntu&logoColor=white" alt="Ubuntu OBS - okular-mupdf-ng"/></a>
 </p>
 
-A MuPDF-based **secure** and fast backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.
+A MuPDF-based **secure**[^security] and **fast**[^speed] backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.
 
 [![Screenshot](docs/assets/screenshot.png)](https://l4rzy.github.io/okular-mupdf-ng/#demo)
 
@@ -32,7 +32,7 @@ instructions for building from source.
 ## Motivation
 Okular is an amazing piece of software: it's packed with good features; it's also extendable with a flexible plugin system. However, there are caveats that hold it back. This plugin solves the following issues with the current Okular's backends, with the hope of making it more complete:
  - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined. See Chromium's [Rule of Two.](https://chromium.googlesource.com/chromium/src/+/master/docs/security/rule-of-2.md)
- - PDF backend with Poppler is rich in features, but sluggish on big PDFs. This is a known weakness of Poppler.
+ - PDF backend with Poppler is rich in features, but [sluggish](https://github.com/l4rzy/okular-backends-benchmark) on big PDFs. This is a known weakness of Poppler.
  - Rendering quality of the default ePUB & MOBI backends are terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
 
 ---
@@ -101,6 +101,18 @@ This project learned from amazing projects below
 - [Zathura](https://github.com/pwmt/zathura) - Seccomp rules
 - [Sioyek](https://github.com/ahrm/sioyek) - MuPDF API usage
 
+### Honorable mentions
+
+Earlier research explored isolating document engines from desktop interfaces:
+
+- [Virtics: A System for Privilege Separation of Legacy Desktop Applications](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2010/EECS-2010-70.html)
+  (2010), by Matt Piotrowski and Anthony D. Joseph, demonstrated an Evince-based
+  PDF viewer with document processing and rendering isolated in an unprivileged
+  Linux/KVM virtual machine.
+- [Clean Application Compartmentalization with SOAAP](https://www.cl.cam.ac.uk/techreports/UCAM-CL-TR-873.pdf)
+  (2015), by Khilan Gudka et al., demonstrated an Okular Poppler renderer running
+  in a separate sandbox process, with calls proxied across the generator interface.
+
 ## License
 
 Original project source code is licensed under the
@@ -122,3 +134,6 @@ Third-party components retain their respective licenses and copyright notices:
 Other dependencies and bundled resources, including fonts embedded by MuPDF,
 retain their upstream licenses. This summary does not replace the full license
 texts or component-specific notices.
+
+[^security]: To our knowledge, this is the first backend for a native Linux desktop document reader to isolate document parsing and rendering in a sandboxed worker process.
+[^speed]: In our five-document PDF benchmark, it was at least [twice as fast](https://github.com/l4rzy/okular-backends-benchmark) as Okular's official Poppler backend.
