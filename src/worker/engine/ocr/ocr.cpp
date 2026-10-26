@@ -346,7 +346,7 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
         result.status = ::Mu::Model::OcrStatus::Cancelled;
         return result;
     }
-    fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+    fz_context* context = createContext(FZ_STORE_DEFAULT);
     if (!context) {
         return result;
     }

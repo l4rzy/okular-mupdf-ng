@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "engine/constants.hpp"
+#include "engine/mupdf_helpers.hpp"
 #include "runtime/memory_pressure.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/validation.hpp"
@@ -142,7 +143,7 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
 // =============================================================================
 
 EpubDocument::EpubDocument(std::size_t storeSize)
-    : m_context(fz_new_context(nullptr, nullptr, storeSize))
+    : m_context(createContext(storeSize))
 {
     if (m_context) {
         fz_try(m_context)

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
+#include <mutex>
 #include <string>
 
 extern "C" {
@@ -21,6 +22,19 @@ extern "C" {
 #endif
 
 namespace Mu::Worker::Engine {
+
+/// Independent documents still share MuPDF's process-wide HarfBuzz state.
+/// Every context, including background export and OCR, must use these locks.
+inline fz_context* createContext(std::size_t storeSize)
+{
+    static std::mutex mutexes[FZ_LOCK_MAX];
+    static const fz_locks_context locks { mutexes,
+                                          [](void* user, int index) { static_cast<std::mutex*>(user)[index].lock(); },
+                                          [](void* user, int index) {
+                                              static_cast<std::mutex*>(user)[index].unlock();
+                                          } };
+    return fz_new_context(nullptr, &locks, storeSize);
+}
 
 /// MuPDF consumes FILE* even if output allocation throws. Clear the caller's
 /// owner before entering that constructor so error cleanup cannot close it twice.

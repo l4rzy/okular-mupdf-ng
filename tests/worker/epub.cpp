@@ -20,8 +20,10 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <fcntl.h>
+#include <future>
 #include <iterator>
 #include <poll.h>
 #include <string>
@@ -76,6 +78,37 @@ waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::
 class TestEpub : public QObject {
     Q_OBJECT
 private slots:
+
+    void testIndependentContextsShareLocks_data()
+    {
+        QTest::addColumn<int>("lock");
+        QTest::newRow("allocator") << int(FZ_LOCK_ALLOC);
+        QTest::newRow("freetype-and-harfbuzz") << int(FZ_LOCK_FREETYPE);
+        QTest::newRow("glyph-cache") << int(FZ_LOCK_GLYPHCACHE);
+    }
+
+    void testIndependentContextsShareLocks()
+    {
+        QFETCH(int, lock);
+        ::Mu::Worker::Engine::PdfDocument pdf;
+        ::Mu::Worker::Engine::EpubDocument epub;
+        QVERIFY(pdf.context());
+        QVERIFY(epub.context());
+        fz_lock(pdf.context(), lock);
+        std::promise<void> attempting;
+        auto started = attempting.get_future();
+        auto worker = std::async(std::launch::async, [&] {
+            attempting.set_value();
+            fz_lock(epub.context(), lock);
+            fz_unlock(epub.context(), lock);
+        });
+        started.wait();
+        const auto blocked = worker.wait_for(std::chrono::milliseconds(30));
+        // Always release and join before asserting, including the failure path.
+        fz_unlock(pdf.context(), lock);
+        worker.get();
+        QCOMPARE(blocked, std::future_status::timeout);
+    }
 
     void testStylesheetMedia_data()
     {

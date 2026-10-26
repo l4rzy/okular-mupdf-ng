@@ -616,6 +616,9 @@ private slots:
         QVERIFY(previews.showPreview(viewport));
         QTRY_VERIFY(!previewImage().isNull());
         QCOMPARE(renderedPages, QList<int> { target }); // Destination first; offscreen neighbors are placeholders.
+        // The ready image arrives before Qt relayouts the shorter header text.
+        const auto* header = previewWindow()->findChild<QLabel*>()->parentWidget();
+        QTRY_COMPARE(header->height(), header->heightForWidth(header->width()));
         auto* scroll = previewScrollArea();
         auto* bar = scroll->verticalScrollBar();
         int top = 0;
@@ -673,6 +676,8 @@ private slots:
             QVERIFY(previewImage().isNull());
         } else {
             QTRY_COMPARE(previewImage().size(), renderSize());
+            const auto* header = previewWindow()->findChild<QLabel*>()->parentWidget();
+            QTRY_COMPARE(header->height(), header->heightForWidth(header->width()));
             auto* scroll = previewScrollArea();
             auto* label = previewPage(failedPage);
             const int maximum = scroll->verticalScrollBar()->maximum();
