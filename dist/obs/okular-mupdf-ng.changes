@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Tue Oct 27 21:06:59 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.5.
+- Add experimental DRM-free AZW3 and single-container KFX support via boko.
+- Preserve AZW3 styles, embedded fonts, links, and TOC during rendering and PDF export.
+
+-------------------------------------------------------------------
 Sun Oct 25 20:37:30 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.4.

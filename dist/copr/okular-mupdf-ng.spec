@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.4
+Version:        0.5.5
 Release:        1%{?dist}
 Summary:        A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -60,7 +60,8 @@ Requires:       okular
 Recommends:     tesseract-langpack-eng
 
 %description
-A backend for Okular that supports PDF, EPUB, and MOBI documents using MuPDF.
+A backend for Okular that supports PDF, EPUB, MOBI, AZW3, and KFX documents
+using MuPDF.
 Document parsing, rendering, and OCR run in a separate sandboxed worker.
 The package includes the command-line utility mupdfng-cli and a statically
 linked, pinned MuPDF engine with the project's compatibility fixes.
@@ -110,6 +111,11 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Tue Oct 27 2026 l4rzy <me@23ro.org> - 0.5.5-1
+- Update to version 0.5.5.
+- Add experimental DRM-free AZW3 and single-container KFX support via boko.
+- Preserve AZW3 styles, embedded fonts, links, and TOC during rendering and PDF export.
+
 * Sun Oct 25 2026 l4rzy <me@23ro.org> - 0.5.4-1
 - Update to version 0.5.4.
 - Add XFDF/XML annotation import from the Edit menu with undo/redo support.

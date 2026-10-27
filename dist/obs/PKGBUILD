@@ -2,7 +2,7 @@
 # Maintainer: rzy <me@23ro.org>
 
 pkgname=okular-mupdf-ng
-pkgver=0.5.4
+pkgver=0.5.5
 pkgrel=1
 pkgdesc="A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX"
 arch=('x86_64')
@@ -24,7 +24,7 @@ source=("$pkgname-$pkgver.tar.gz"
         "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz"
         "vendor.tar.gz")
 noextract=('vendor.tar.gz')
-# OBS generates the project and vendor archives through source services.
+# The source services generate the project and vendor archives.
 # The downloaded MuPDF archive is checksum-pinned.
 sha256sums=('SKIP'
             '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934'
@@ -37,7 +37,10 @@ prepare() {
   test "$(sed -n '2p' cmake/mupdf.version)" = "${sha256sums[1]}"
   local manifest_version
   manifest_version=$(python -c 'import json; print(json.load(open("src/generator/manifest.json"))["KPlugin"]["Version"])')
-  test "$manifest_version" = "$pkgver"
+  if [[ "$manifest_version" != "$pkgver" ]]; then
+    error "Source manifest version $manifest_version does not match package version $pkgver."
+    return 1
+  fi
 }
 
 build() {
