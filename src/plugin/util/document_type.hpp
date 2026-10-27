@@ -19,8 +19,8 @@ inline Model::DocumentType documentTypeForMime(const QString& mime)
 
 /**
  * Resolves a document type from a sniffed MIME type and a lowercased file
- * suffix. Definitive content wins; generic ZIP container types (a common
- * result for non-compliant EPUB archives) fall back to the suffix.
+ * suffix. Definitive content wins; generic container types can fall back to
+ * the suffix. The file/data adapters distinguish MOBI and AZW3 by their headers.
  */
 Model::DocumentType resolveDocumentType(const QString& contentMime, const QString& suffixLower) noexcept;
 

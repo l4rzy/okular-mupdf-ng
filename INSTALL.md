@@ -72,6 +72,7 @@ Build from source — see [Building and testing](#building-and-testing).
   JBIG2, OpenJPEG, HarfBuzz, Gumbo, LCMS2, Tesseract, and Leptonica are bundled.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
 - `patch` for applying the bundled MuPDF fixes during CMake configuration.
+- AZW3 and KFX support requires Rust and Cargo 1.91 or newer.
 
 ## Building and testing
 

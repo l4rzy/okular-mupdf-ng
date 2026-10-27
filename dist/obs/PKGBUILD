@@ -4,7 +4,7 @@
 pkgname=okular-mupdf-ng
 pkgver=0.5.4
 pkgrel=1
-pkgdesc="A MuPDF-based secure and fast backend for Okular"
+pkgdesc="A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
@@ -13,7 +13,7 @@ depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
          'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
          'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
 makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext'
-             'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools')
+             'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools' 'rust>=1.91')
 checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
 optdepends=('tesseract-data-eng: English OCR language data; install other tesseract-data packages for additional languages')
 conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
@@ -21,14 +21,18 @@ conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version and _service.
 _mupdfver=1.28.5
 source=("$pkgname-$pkgver.tar.gz"
-        "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
-# OBS generates the project archive from Git through tar_scm; its compressed
-# bytes are service-generated. The downloaded MuPDF archive is checksum-pinned.
+        "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz"
+        "vendor.tar.gz")
+noextract=('vendor.tar.gz')
+# OBS generates the project and vendor archives through source services.
+# The downloaded MuPDF archive is checksum-pinned.
 sha256sums=('SKIP'
-            '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934')
+            '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934'
+            'SKIP')
 
 prepare() {
   cd "$srcdir/$pkgname-$pkgver"
+  tar -xzf "$srcdir/vendor.tar.gz"
   test "$(sed -n '1p' cmake/mupdf.version)" = "$_mupdfver"
   test "$(sed -n '2p' cmake/mupdf.version)" = "${sha256sums[1]}"
   local manifest_version
@@ -49,11 +53,11 @@ build() {
     -DENABLE_MU_DEBUG=OFF \
     -DDISABLE_WORKER_SANDBOX=OFF \
     -DTESSDATA_DIR=/usr/share/tessdata
-  cmake --build "$srcdir/build"
+  CARGO_NET_OFFLINE=true cmake --build "$srcdir/build"
 }
 
 check() {
-  QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
+  CARGO_NET_OFFLINE=true QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
 }
 
 package() {

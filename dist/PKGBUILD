@@ -4,9 +4,9 @@ pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.5
-pkgver=0.5.4
+pkgver=0.5.5
 pkgrel=1
-pkgdesc="A MuPDF-based secure and fast backend for Okular"
+pkgdesc="A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
@@ -14,10 +14,11 @@ license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
 # provides the headers and pkg-config file for the dynamic variant; mold links
 # the two large static archives much faster than lld and is a hard requirement
 # so packaging stays deterministic.
+# Keep cargo unversioned so rustup can provide it; Cargo enforces rust-version.
 makedepends=('brotli' 'cmake' 'extra-cmake-modules' 'freetype2'
              'gcc' 'git' 'jq'
              'libjpeg-turbo' 'mold' 'mupdf' 'nss' 'pkgconf'
-             'patch' 'qt6-tools')
+             'patch' 'qt6-tools' 'cargo')
 # The static package still links system FreeType, JPEG, Brotli, and zlib;
 # JBIG2, OpenJPEG, and the other bundled libraries add no runtime dependencies.
 # Global depends describes the published static package and serves the pre-build
@@ -95,7 +96,6 @@ package_okular-mupdf-ng() {
 }
 
 package_okular-mupdf-ng-dynamic() {
-  pkgdesc="A MuPDF-based secure and fast backend for Okular (system MuPDF)"
   # The system MuPDF pulls its third-party libraries in transitively.
   local mupdf_version
   mupdf_version=$(pkg-config --modversion mupdf)

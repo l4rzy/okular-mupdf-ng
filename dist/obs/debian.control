@@ -5,6 +5,8 @@ Maintainer: l4rzy <me@23ro.org>
 Build-Depends: debhelper-compat (= 13),
  gcc,
  g++,
+ cargo (>= 1.91),
+ rustc (>= 1.91),
  cmake (>= 3.20),
  extra-cmake-modules (>= 6.3.0),
  gettext,
@@ -42,7 +44,7 @@ Package: okular-mupdf-ng
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, okular
 Recommends: tesseract-ocr-eng
-Description: A MuPDF-based secure and fast backend for Okular
+Description: A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
  A backend for Okular that supports PDF, EPUB, and legacy MOBI documents.
  Document parsing, rendering, and OCR run in a separate sandboxed worker.
  The package includes mupdfng-cli and a statically linked, pinned MuPDF engine

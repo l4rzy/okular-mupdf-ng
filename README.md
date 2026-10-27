@@ -18,7 +18,7 @@
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/ubuntu/E95420" width="20" height="20" alt="Ubuntu" title="Ubuntu"/></a>
 </p>
 
-A MuPDF-based **secure**[^security] and **fast**[^speed] backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, and MOBI formats.
+A MuPDF-based **secure**[^security] and **fast**[^speed] backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, legacy MOBI, and DRM-free AZW3 and single-container KFX books.
 
 [![Screenshot](docs/assets/screenshot.png)](https://l4rzy.github.io/okular-mupdf-ng/#demo)
 
@@ -36,6 +36,7 @@ Okular is an amazing piece of software: it's packed with good features; it's als
  - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined. See Chromium's [Rule of Two.](https://chromium.googlesource.com/chromium/src/+/master/docs/security/rule-of-2.md)
  - PDF backend with Poppler is rich in features, but [sluggish](https://github.com/l4rzy/okular-backends-benchmark) on big PDFs. This is a known weakness of Poppler.
  - Rendering quality of the default ePUB & MOBI backends are terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
+ - Okular lacks support for DRM-free Kindle ebooks. This would make Okular closer to the "Universal Document Reader" claim.
 
 ---
 
@@ -54,7 +55,7 @@ and the source-tree layout.
 |---|---|:---:|:---:|
 | **Safety & Isolation** | Sandboxed out-of-process worker (Landlock, Seccomp, namespaces, resource limits) | ✓ | ✗ (in-process execution) |
 | **Smart Document Theming** | Default, Twilight, Dusk, and Dark viewing themes for all supported formats | ✓ | ✗ (Accessibility color modes) |
-| **OCR** | Built-in Tesseract page OCR engine | ✓ | ✗ |
+| **OCR for PDF** | Built-in Tesseract page OCR engine | ✓ | ✗ |
 | **ePUB/MOBI customisation** | Custom CSS, Page size, Font size, Font family | ✓ | ✗ (Font size only) |
 | **Certificate Manager** | NSS certificate manager; manage trust and generate RSA and ECDSA P-256 signing certificates | ✓ | ✗ (Cert listing only) |
 | **Link Preview** | Preview internal link destinations on hover | ✓ | ✗ |
@@ -63,7 +64,7 @@ and the source-tree layout.
 | **PDF Heuristic Outline** | Outline generation for PDFs that don't have embedded outline | ✓ | ✗ |
 | **ePUB/MOBI export** | Export ePUB/MOBI to PDF, preserving links and TOC | ✓ (via MuPDF rendering) | ✗ (document print) |
 | **Signature Profiles** | PDF Signature profiles and customisations | ✓ | ✗ |
-| **Formats** | PDF, ePUB, MOBI | ✓ | ✓ |
+| **Formats** | PDF, ePUB, MOBI, AZW3, KFX | ✓ | ✗ (PDF and basic ePUB/MOBI support)  |
 | **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
 | **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |
@@ -81,6 +82,7 @@ and the source-tree layout.
 - Twilight, Dusk, and Dark prefer Okular's per-page [placeholder color API](https://invent.kde.org/graphics/okular/-/merge_requests/1527) when available.
   Older Okular versions use shared placeholder pixmaps and incomplete loading images. Extreme zoom or
   uncovered tile regions can still show default white placeholder with this fallback.
+- AWZ3 and KFX support relies on [boko](https://github.com/zacharydenton/boko) to convert the formats to ePUB in-memory.
 
 See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and
 automated test coverage.

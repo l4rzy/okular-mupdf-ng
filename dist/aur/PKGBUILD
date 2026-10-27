@@ -4,9 +4,9 @@ pkgname=okular-mupdf-ng-git
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.5
-pkgver=0.5.4.r6.gcb8c65d
+pkgver=0.5.5
 pkgrel=1
-pkgdesc="A MuPDF-based secure and fast backend for Okular"
+pkgdesc="A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
@@ -14,8 +14,9 @@ license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
 depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
          'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
          'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
+# Keep cargo unversioned so rustup can provide it; Cargo enforces rust-version.
 makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext' 'git'
-             'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools')
+             'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools' 'cargo')
 checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
 provides=('okular-mupdf-ng')
 conflicts=('okular-mupdf-ng')

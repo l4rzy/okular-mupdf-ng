@@ -23,3 +23,16 @@ subsequent root entry, preserving both children of the first entry.
 The UTF-8 and Windows-1252 fixtures also exercise every allocation-failure point
 in HTML extraction with a fresh context and a counted allocator, checking that
 all allocations are released. These tests run only with bundled MuPDF.
+
+`sample.azw3` was generated from `tests/epub/sample.epub` with Calibre's
+`ebook-convert` and is used to exercise DRM-free AZW3 opening and export.
+`sample.kfx` was generated from the same EPUB using boko 0.5.0's KFX exporter.
+
+`styled-linked.azw3` exercises CSS flows, the bundled Allura font (OFL-1.1),
+chapter links, and a TOC destination in the middle of a chapter. Its source is
+`tests/epub/styled-linked.epub`; regenerate it with:
+
+```sh
+ebook-convert tests/epub/styled-linked.epub tests/mobi/styled-linked.azw3 \
+    --chapter '//*[false()]' --page-breaks-before '//*[false()]' --chapter-mark none
+```

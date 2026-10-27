@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "engine/epub/document.hpp"
+#include "engine/kindle/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "shared/logging.hpp"
 #include "sys/operation_budget.hpp"
@@ -84,6 +85,8 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                 std::unique_ptr<EpubDocument> document;
                 if (type == Model::DocumentType::Mobi)
                     document = std::make_unique<MobiDocument>(storeSize);
+                else if (type == Model::DocumentType::Kindle)
+                    document = std::make_unique<KindleDocument>(storeSize);
                 else
                     document = std::make_unique<EpubDocument>(storeSize);
                 document->setSettings(settings);

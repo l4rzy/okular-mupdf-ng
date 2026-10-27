@@ -36,6 +36,7 @@ promise that every input or workflow has been tested.
 | Flattened PDF export | 🟡 Partial | Worker appearance/source-isolation tests; IPC and CLI export integration |
 | Basic PDF AcroForm filling | 🟡 Partial | Worker and proxy tests; loaded-generator edit, undo/redo, save/reopen, reset, print-to-PDF, and repeated worker recovery (unsaved edit loss, history clearing, proxy reuse, and post-recovery save/reopen) tests with synthetic and LibreOffice fixtures |
 | Document themes (PDF, ePUB, MOBI) | 🟡 Partial | Worker palette, image dimming/alpha/mask, dark-page/image detection, blend-mode fallback, tile/stride, print isolation, and theme-switching tests; generator menu/settings/shortcuts and native/legacy placeholder tests |
+| DRM-free AZW3 and single-container KFX support | 🟣 Experimental | Worker and IPC integration; format detection, invalid input, rendering, text extraction, PDF export, and AZW3 styling/navigation fixtures |
 | NSS certificate manager | 🟣 Experimental | NSS runtime; RSA/ECDSA creation, signing, PKCS#12 roundtrip, and rejection tests |
 | PDF signature verification and signing | 🟣 Experimental | NSS and OpenSSL signature verification; worker tests |
 | Command-line utility (mupdfng-cli) | 🟣 Experimental | CLI argument-parsing tests; XFDF end-to-end tests |

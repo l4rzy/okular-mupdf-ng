@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/kindle/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
 #include "plugin/util/document_type.hpp"
@@ -76,6 +77,255 @@ class TestMobi : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void detectsDocumentContent_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<Model::DocumentType>("type");
+        QTest::newRow("azw3-extensionless")
+            << QStringLiteral("sample.azw3") << QStringLiteral("book") << Model::DocumentType::Kindle;
+        QTest::newRow("azw3-as-pdf") << QStringLiteral("sample.azw3") << QStringLiteral("book.pdf")
+                                     << Model::DocumentType::Kindle;
+        QTest::newRow("azw3-as-mobi") << QStringLiteral("sample.azw3") << QStringLiteral("book.mobi")
+                                      << Model::DocumentType::Kindle;
+        QTest::newRow("kfx-extensionless")
+            << QStringLiteral("sample.kfx") << QStringLiteral("book") << Model::DocumentType::Kindle;
+        QTest::newRow("kfx-as-pdf") << QStringLiteral("sample.kfx") << QStringLiteral("book.pdf")
+                                    << Model::DocumentType::Kindle;
+        QTest::newRow("legacy-as-azw3") << QStringLiteral("legacy-palmdoc.mobi") << QStringLiteral("book.azw3")
+                                        << Model::DocumentType::Mobi;
+        QTest::newRow("legacy-as-kfx") << QStringLiteral("legacy-uncompressed.mobi") << QStringLiteral("book.kfx")
+                                       << Model::DocumentType::Mobi;
+        QTest::newRow("epub-as-azw3") << QStringLiteral("../epub/sample.epub") << QStringLiteral("book.azw3")
+                                      << Model::DocumentType::Epub;
+    }
+
+    void detectsDocumentContent()
+    {
+        QFETCH(QString, fixture);
+        QFETCH(QString, name);
+        QFETCH(Model::DocumentType, type);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath(name);
+        QVERIFY(QFile::copy(QStringLiteral(TEST_MOBI_DIR "/") + fixture, path));
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        QCOMPARE(Plugin::Util::documentTypeForFile(path), type);
+        QCOMPARE(Plugin::Util::documentTypeForData(input.readAll()), type);
+        QCOMPARE(Model::documentTypeFromMime(Model::documentTypeToMime(type)), type);
+    }
+
+    void resolvesKindleMime_data()
+    {
+        QTest::addColumn<QString>("mime");
+        QTest::addColumn<QString>("suffix");
+        QTest::addColumn<Model::DocumentType>("type");
+        for (const auto* suffix : { "azw3", "kfx" }) {
+            QTest::newRow(suffix) << QStringLiteral("application/octet-stream") << QString::fromLatin1(suffix)
+                                  << Model::DocumentType::Kindle;
+        }
+        QTest::newRow("mime") << QStringLiteral("application/vnd.amazon.mobi8-ebook") << QString()
+                              << Model::DocumentType::Kindle;
+        QTest::newRow("alias") << QStringLiteral("application/x-mobi8-ebook") << QStringLiteral("pdf")
+                               << Model::DocumentType::Kindle;
+        QTest::newRow("pdf") << QStringLiteral("application/pdf") << QStringLiteral("azw3") << Model::DocumentType::Pdf;
+        QTest::newRow("image") << QStringLiteral("image/png") << QStringLiteral("kfx") << Model::DocumentType::Unknown;
+        QTest::newRow("zip") << QStringLiteral("application/zip") << QStringLiteral("azw3")
+                             << Model::DocumentType::Unknown;
+    }
+
+    void resolvesKindleMime()
+    {
+        QFETCH(QString, mime);
+        QFETCH(QString, suffix);
+        QFETCH(Model::DocumentType, type);
+        QCOMPARE(Plugin::Util::resolveDocumentType(mime, suffix), type);
+    }
+
+    void opensKindle_data()
+    {
+        QTest::addColumn<bool>("fromData");
+        QTest::addColumn<QString>("fixture");
+        QTest::newRow("azw3-file") << false << QStringLiteral("sample.azw3");
+        QTest::newRow("azw3-data") << true << QStringLiteral("sample.azw3");
+        QTest::newRow("kfx-file") << false << QStringLiteral("sample.kfx");
+        QTest::newRow("kfx-data") << true << QStringLiteral("sample.kfx");
+    }
+
+    void opensKindle()
+    {
+        QFETCH(bool, fromData);
+        QFETCH(QString, fixture);
+        const QString path = QStringLiteral(TEST_MOBI_DIR "/") + fixture;
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        const auto bytes = input.readAll();
+        QCOMPARE(Plugin::Util::documentTypeForFile(path), Model::DocumentType::Kindle);
+        QCOMPARE(Plugin::Util::documentTypeForData(bytes), Model::DocumentType::Kindle);
+        Plugin::WorkerClient client;
+        QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
+        QList<Plugin::WorkerClient::PageInfo> pages;
+        const auto status = fromData ? client.openData(bytes, { }, pages, Model::DocumentType::Kindle)
+                                     : client.open(path, { }, pages, Model::DocumentType::Kindle);
+        QCOMPARE(status, Model::OpenStatus::Success);
+        QVERIFY(!pages.empty());
+        QCOMPARE(client.getDocumentInfo().mimeType, Model::documentTypeToMime(Model::DocumentType::Kindle));
+        QVERIFY(!client.render(0, 320, 240).isNull());
+        const auto boxes = client.getTextBoxesForPage(0, 72, 72, true);
+        std::string text;
+        for (const auto& box : boxes)
+            text += box.text;
+        QVERIFY2(text.find("Hello") != std::string::npos, text.c_str());
+        QTemporaryDir directory;
+        const auto target = directory.filePath(QStringLiteral("export.pdf"));
+        if (fromData) {
+            QVERIFY(client.savePdfToFile(target, { }, true));
+        } else {
+            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
+            QVERIFY(client.startPdfExport(target, { }));
+            QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
+            QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+        }
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        Worker::Engine::PdfDocument pdf;
+        std::string error;
+        QVERIFY2(pdf.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
+        QCOMPARE(pdf.pageCount(), static_cast<int>(pages.size()));
+        QVERIFY(!pdf.textBoxes(0, 72, 72, 10000, true, &error).empty());
+    }
+
+    void preservesStyledKindleNavigation_data()
+    {
+        QTest::addColumn<bool>("fromData");
+        QTest::addColumn<int>("fontSize");
+        QTest::newRow("file-small-font") << false << 11;
+        QTest::newRow("data-large-font") << true << 18;
+    }
+
+    void preservesStyledKindleNavigation()
+    {
+        QFETCH(bool, fromData);
+        QFETCH(int, fontSize);
+        std::vector<Model::Link> links;
+        Plugin::WorkerClient client;
+        QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
+        connect(&client,
+                &Plugin::WorkerClient::pageLinksReady,
+                &client,
+                [&](quint64, const std::vector<Model::PageLinks>& pages, bool, const QString&) {
+                    for (const auto& page : pages)
+                        links.insert(links.end(), page.links.begin(), page.links.end());
+                });
+        Model::DocumentSettings settings;
+        settings.epub.fontSize = fontSize;
+        QVERIFY(client.setSettings(settings));
+        const QString path = QStringLiteral(TEST_MOBI_DIR "/styled-linked.azw3");
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        QList<Plugin::WorkerClient::PageInfo> pages;
+        const auto status = fromData ? client.openData(input.readAll(), { }, pages, Model::DocumentType::Kindle)
+                                     : client.open(path, { }, pages, Model::DocumentType::Kindle);
+        QCOMPARE(status, Model::OpenStatus::Success);
+        const auto outline = client.synopsis();
+        QVERIFY(outline);
+        QCOMPARE(outline->size(), std::size_t { 2 });
+        const auto& destination = (*outline)[1];
+        QCOMPARE(destination.title, std::string("Middle destination"));
+        QVERIFY(destination.link.valid);
+        QVERIFY(destination.link.viewport.page > 1);
+        std::string text;
+        for (const auto& box : client.getTextBoxesForPage(destination.link.viewport.page, 72, 72, true))
+            text += box.text;
+        QVERIFY2(text.find("Middle") != std::string::npos, text.c_str());
+        QTRY_VERIFY(std::any_of(links.begin(), links.end(), [&](const auto& link) {
+            return link.target.valid && !link.target.external
+                && link.target.viewport.page == destination.link.viewport.page;
+        }));
+
+        const auto image = client.render(0, 800, 1000);
+        QVERIFY(!image.isNull());
+        bool hasStyledText = false;
+        for (int y = 0; y < image.height() && !hasStyledText; ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const auto pixel = image.pixel(x, y);
+                hasStyledText |= qRed(pixel) > qGreen(pixel) + 35 && qRed(pixel) > qBlue(pixel) + 20;
+            }
+        }
+        QVERIFY(hasStyledText);
+
+        QTemporaryDir directory;
+        const auto target = directory.filePath(QStringLiteral("styled.pdf"));
+        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
+        QVERIFY(client.startPdfExport(target, { }));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
+        QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        Worker::Engine::PdfDocument pdf;
+        std::string error;
+        QVERIFY2(pdf.openFd(::dup(output.handle()), "styled.pdf", &error), error.c_str());
+        const auto bookmarks = pdf.outline(&error);
+        QCOMPARE(bookmarks.size(), outline->size());
+        QCOMPARE(bookmarks[1].link.viewport.page, destination.link.viewport.page);
+        text.clear();
+        for (const auto& box : pdf.textBoxes(bookmarks[1].link.viewport.page, 72, 72, 10000, true, &error))
+            text += box.text;
+        QVERIFY2(text.find("Middle") != std::string::npos, text.c_str());
+    }
+
+    void rejectsTruncatedKfx()
+    {
+        Plugin::WorkerClient client;
+        QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
+        const QByteArray bytes("CONT\0\0", 6);
+        QCOMPARE(Plugin::Util::documentTypeForData(bytes), Model::DocumentType::Kindle);
+        QList<Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(client.openData(bytes, { }, pages, Model::DocumentType::Kindle), Model::OpenStatus::Failed);
+        QVERIFY(client.isConnected());
+    }
+
+    void rejectsInvalidAzw3_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::addColumn<bool>("oversized");
+        QTest::newRow("truncated") << QStringLiteral("invalid-truncated.mobi") << false;
+        QTest::newRow("encrypted") << QStringLiteral("invalid-encrypted.mobi") << false;
+        QTest::newRow("oversized") << QStringLiteral("sample.azw3") << true;
+        QTest::newRow("invalid-fd") << QString() << false;
+    }
+
+    void rejectsInvalidAzw3()
+    {
+        QFETCH(QString, fixture);
+        QFETCH(bool, oversized);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(directory.filePath(QStringLiteral("invalid.azw3")));
+        int fd = -1;
+        if (!fixture.isEmpty()) {
+            QVERIFY(QFile::copy(QStringLiteral(TEST_MOBI_DIR "/") + fixture, file.fileName()));
+            QVERIFY(file.open(QIODevice::ReadWrite));
+            if (oversized)
+                QVERIFY(file.resize(128LL * 1024 * 1024 + 1));
+            fd = ::dup(file.handle());
+            QVERIFY(fd >= 0);
+        }
+        Worker::Engine::KindleDocument document;
+        QFile valid(QStringLiteral(TEST_MOBI_DIR "/sample.azw3"));
+        QVERIFY(valid.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY2(document.openFd(::dup(valid.handle()), "valid.azw3", &error), error.c_str());
+        QVERIFY(!document.openFd(fd, "invalid.azw3", &error));
+        QVERIFY(!error.empty());
+        QVERIFY(!document.isOpen());
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+        error.clear();
+        QVERIFY2(document.openFd(::dup(valid.handle()), "valid.azw3", &error), error.c_str());
+        QVERIFY(document.isOpen());
+    }
 
     void allocationFailures_data()
     {

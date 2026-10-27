@@ -766,11 +766,11 @@ struct SignReply {
 };
 
 /// Document formats supported by the worker.
-enum class DocumentType : std::uint8_t { Pdf = 0, Epub = 1, Mobi = 2, Unknown = 255 };
+enum class DocumentType : std::uint8_t { Pdf = 0, Epub = 1, Mobi = 2, Kindle = 3, Unknown = 255 };
 
 inline bool isReflowableDocument(DocumentType type) noexcept
 {
-    return type == DocumentType::Epub || type == DocumentType::Mobi;
+    return type == DocumentType::Epub || type == DocumentType::Mobi || type == DocumentType::Kindle;
 }
 
 /// Converts a document type to its canonical MIME type.
@@ -781,6 +781,8 @@ inline std::string documentTypeToMime(DocumentType type)
         return "application/epub+zip";
     case DocumentType::Mobi:
         return "application/x-mobipocket-ebook";
+    case DocumentType::Kindle:
+        return "application/vnd.amazon.mobi8-ebook";
     case DocumentType::Pdf:
         return "application/pdf";
     default:
@@ -795,6 +797,8 @@ inline DocumentType documentTypeFromMime(const std::string& mime)
         return DocumentType::Epub;
     if (mime == "application/x-mobipocket-ebook")
         return DocumentType::Mobi;
+    if (mime == "application/vnd.amazon.mobi8-ebook" || mime == "application/x-mobi8-ebook")
+        return DocumentType::Kindle;
     if (mime == "application/pdf" || mime == "application/x-pdf")
         return DocumentType::Pdf;
     return DocumentType::Unknown;

@@ -7,6 +7,7 @@ export CC = gcc
 export CXX = g++
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export QT_QPA_PLATFORM = offscreen
+export CARGO_NET_OFFLINE = true
 
 BUILD_DIR = build-debian
 MUPDF_VERSION := $(shell sed -n '1p' cmake/mupdf.version)
@@ -22,6 +23,7 @@ override_dh_auto_configure:
 	printf '%s  %s\n' '$(MUPDF_SHA256)' '$(MUPDF_ARCHIVE)' | sha256sum --check --status
 	mkdir -p '$(MUPDF_SOURCE_DIR)'
 	tar -xzf '$(MUPDF_ARCHIVE)' --strip-components=1 -C '$(MUPDF_SOURCE_DIR)'
+	tar -xzf vendor.tar.gz
 	dh_auto_configure --builddirectory=$(BUILD_DIR) -- \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_C_COMPILER=gcc \
@@ -50,6 +52,6 @@ override_dh_auto_install:
 
 override_dh_clean:
 	dh_clean
-	# Record the binary source archive supplied through Debtransform-Files.
+	# Record the binary source archives supplied through Debtransform-Files.
 	mkdir -p debian/source
-	printf '%s\n' '$(MUPDF_ARCHIVE)' > debian/source/include-binaries
+	printf '%s\n' '$(MUPDF_ARCHIVE)' vendor.tar.gz > debian/source/include-binaries

@@ -13,12 +13,15 @@
 Name:           okular-mupdf-ng
 Version:        0.5.4
 Release:        0%{?dist}
-Summary:        A MuPDF-based secure and fast backend for Okular
+Summary:        A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
 URL:            https://github.com/l4rzy/okular-mupdf-ng
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 Source1:        https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/%{mupdf_version}/mupdf-%{mupdf_version}-source.tar.gz
+Source2:        vendor.tar.gz
 BuildRequires:  cmake >= 3.20
+BuildRequires:  cargo >= 1.91
+BuildRequires:  rust >= 1.91
 BuildRequires:  gcc-c++
 BuildRequires:  make
 BuildRequires:  patch
@@ -67,12 +70,13 @@ linked, pinned MuPDF engine with the project's compatibility fixes.
 
 %prep
 printf '%s  %s\n' '%{mupdf_sha256}' '%{SOURCE1}' | sha256sum --check --status
-%setup -q -a 1
+%setup -q -a 1 -a 2
 test "$(sed -n '1p' cmake/mupdf.version)" = '%{mupdf_version}'
 test "$(sed -n '2p' cmake/mupdf.version)" = '%{mupdf_sha256}'
 sed -i 's/\r$//' thirdparty/allura/OFL.txt
 
 %build
+export CARGO_NET_OFFLINE=true
 %cmake -G Ninja \
     -DKDE_INSTALL_LIBDIR:PATH=%{_lib} \
     -DKDE_INSTALL_USE_QT_SYS_PATHS:BOOL=ON \
@@ -93,6 +97,7 @@ rm -r "%{buildroot}%{_datadir}/doc/%{name}"
 
 %check
 %if %{with tests}
+export CARGO_NET_OFFLINE=true
 ctest --test-dir %{__builddir} --output-on-failure --parallel %{_smp_build_ncpus}
 %endif
 

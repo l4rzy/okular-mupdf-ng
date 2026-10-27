@@ -1,0 +1,19 @@
+[package]
+name = "mupdfng-boko"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+boko = { version = "=0.5.0", path = "../../../../thirdparty/boko", default-features = false }
+
+[dev-dependencies]
+quick-xml = "=0.39.4"
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"] }
+
+[profile.release]
+overflow-checks = true

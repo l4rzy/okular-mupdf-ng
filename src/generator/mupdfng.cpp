@@ -502,6 +502,9 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         m_document.name = title;
     } else if (!m_document.sourcePath.isEmpty()) {
         m_document.name = QFileInfo(m_document.sourcePath).fileName();
+    } else if (m_document.type == Model::DocumentType::Kindle) {
+        m_document.name =
+            m_document.sourceData.startsWith("CONT") ? QStringLiteral("document.kfx") : QStringLiteral("document.azw3");
     } else {
         m_document.name = m_document.type == Model::DocumentType::Mobi ? QStringLiteral("document.mobi")
             : m_document.type == Model::DocumentType::Epub             ? QStringLiteral("document.epub")

@@ -2,6 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Test Xml)
+add_test(NAME test_worker_kindle_conversion
+    COMMAND "${CARGO_EXECUTABLE}" test --locked --release
+        --manifest-path "${PROJECT_SOURCE_DIR}/src/worker/engine/kindle/Cargo.toml"
+        --target-dir "${PROJECT_BINARY_DIR}/src/worker/boko")
+set_tests_properties(test_worker_kindle_conversion PROPERTIES
+    LABELS "worker" TIMEOUT 120
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/src/worker/engine/kindle")
 if(BUILD_OKULAR_GENERATOR)
     find_package(Qt6 REQUIRED COMPONENTS Concurrent Network)
 endif()

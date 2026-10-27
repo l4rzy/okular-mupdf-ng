@@ -8,6 +8,25 @@
 # KF6 library. It is the isolated MuPDF capability process.
 # ---------------------------------------------------------------------------
 
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
+set(BOKO_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/engine/kindle/Cargo.toml")
+set(BOKO_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/boko")
+set(BOKO_LIBRARY "${BOKO_TARGET_DIR}/release/libmupdfng_boko.a")
+file(GLOB_RECURSE BOKO_SOURCES CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/thirdparty/boko/src/*.rs")
+add_custom_command(OUTPUT "${BOKO_LIBRARY}"
+    COMMAND "${CARGO_EXECUTABLE}" build --locked --release
+        --manifest-path "${BOKO_MANIFEST}" --target-dir "${BOKO_TARGET_DIR}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/engine/kindle"
+    DEPENDS "${BOKO_MANIFEST}" "${CMAKE_CURRENT_SOURCE_DIR}/engine/kindle/Cargo.lock"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engine/kindle/src/lib.rs"
+        "${PROJECT_SOURCE_DIR}/thirdparty/boko/Cargo.toml" ${BOKO_SOURCES}
+    VERBATIM)
+add_custom_target(mupdfng_boko_build DEPENDS "${BOKO_LIBRARY}")
+add_library(mupdfng_boko STATIC IMPORTED GLOBAL)
+set_target_properties(mupdfng_boko PROPERTIES IMPORTED_LOCATION "${BOKO_LIBRARY}")
+add_dependencies(mupdfng_boko mupdfng_boko_build)
+
 set(mupdf_worker_core_SRCS
     runtime/command_service.cpp
     runtime/frame_pool.cpp
@@ -37,6 +56,7 @@ set(mupdf_worker_core_SRCS
     engine/epub/save.cpp
     engine/epub/export_jobs.cpp
     engine/mobi/document.cpp
+    engine/kindle/document.cpp
     engine/ocr/ocr.cpp
     engine/ocr/jobs.cpp
     engine/signer.cpp
@@ -58,6 +78,8 @@ target_link_libraries(mupdf_worker_core PRIVATE
 target_link_libraries(mupdf_worker_core PUBLIC
     Threads::Threads
     mupdf_shared
+    mupdfng_boko
+    ${CMAKE_DL_LIBS}
 )
 
 # The bundled MuPDF is built with tesseract enabled, so OCR is always available.

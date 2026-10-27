@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "engine/epub/document.hpp"
+#include "engine/kindle/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
 #include "engine/signer.hpp"
@@ -232,7 +233,8 @@ bool CommandService::openFd(int fd,
                             std::string* error,
                             const std::vector<std::uint8_t>& epubAccelerator)
 {
-    if (type == DocumentType::Unknown) {
+    if (type != DocumentType::Pdf && type != DocumentType::Epub && type != DocumentType::Mobi
+        && type != DocumentType::Kindle) {
         ::close(fd);
         if (error)
             *error = "document type is unknown";
@@ -258,6 +260,8 @@ bool CommandService::openFd(int fd,
         m_document = std::make_unique<Engine::EpubDocument>(storeSize);
     else if (type == DocumentType::Mobi)
         m_document = std::make_unique<Engine::MobiDocument>(storeSize);
+    else if (type == DocumentType::Kindle)
+        m_document = std::make_unique<Engine::KindleDocument>(storeSize);
     else
         m_document = std::make_unique<Engine::PdfDocument>(storeSize);
 
@@ -434,7 +438,9 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
     if (m_exportJobs.eventFd() < 0)
         return failure(r.id, ErrorCode::Internal, "export_pdf_async", "export completion channel is unavailable");
 
-    const auto type = dynamic_cast<Engine::MobiDocument*>(m_document.get()) ? DocumentType::Mobi : DocumentType::Epub;
+    const auto type = dynamic_cast<Engine::MobiDocument*>(m_document.get()) ? DocumentType::Mobi
+        : dynamic_cast<Engine::KindleDocument*>(m_document.get())           ? DocumentType::Kindle
+                                                                            : DocumentType::Epub;
     auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages, type);
     if (!job)
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");

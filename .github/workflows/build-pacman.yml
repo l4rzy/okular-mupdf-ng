@@ -60,6 +60,7 @@ jobs:
             zlib \
             tesseract-data-eng \
             jq \
+            rustup \
             sudo
 
       - name: Checkout Repository
@@ -78,6 +79,10 @@ jobs:
           fi
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
+          sudo -u builder rustup toolchain install stable --profile minimal
+          sudo -u builder rustup default stable
+          sudo -u builder rustc --version
+          sudo -u builder cargo --version
           cd dist
           sudo -u builder CC="$CC" CXX="$CXX" makepkg -sf --noconfirm
 

@@ -1,0 +1,52 @@
+# Native library-only vendoring of boko 0.5.0, GPL-3.0-or-later (see LICENSE).
+# Upstream: https://github.com/zacharydenton/boko
+# Original crates.io archive SHA-256:
+# 2a36bb38ef13f3331c1bb4cd6ccb87f83239dfcbe02bc411d3ee510b42f3fa8c
+# Local fixes preserve AZW3 CSS flows, stylesheet resource URLs, and aid anchors.
+# Regression tests live in src/worker/engine/kindle/src/lib.rs and tests/worker/mobi.cpp.
+# CLI, browser bindings, and standalone test/example/benchmark targets are omitted.
+
+[package]
+name = "boko"
+version = "0.5.0"
+edition = "2024"
+rust-version = "1.91"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/zacharydenton/boko"
+publish = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["rlib"]
+test = false
+doctest = false
+
+[features]
+default = []
+parallel = ["dep:rayon"]
+optimize-images = ["dep:image"]
+
+[dependencies]
+base64 = "0.22"
+bstr = { version = "1.11", default-features = false, features = ["alloc"] }
+cssparser = "0.36"
+encoding_rs = "0.8"
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
+html5ever = "0.39"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"], optional = true }
+memchr = "2.7"
+percent-encoding = "2.3"
+precomputed-hash = "0.1"
+quick-xml = "0.39"
+rayon = { version = "1.10", optional = true }
+rustc-hash = "2.1"
+selectors = "0.35"
+sha1_smol = { version = "1.0", features = ["std"] }
+smallvec = "1.15"
+thiserror = "2"
+xml5ever = "0.39.0"
+zip = { version = "8.1", default-features = false, features = ["deflate-flate2"] }
