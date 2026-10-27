@@ -4,12 +4,20 @@
 #ifndef MU_PLUGIN_UTIL_OCR_OPTIONS_HPP
 #define MU_PLUGIN_UTIL_OCR_OPTIONS_HPP
 
+#include <QLatin1String>
 #include <QString>
 
 namespace Mu::Plugin::Util {
 
 /// Removes the `.traineddata` suffix from a language identifier.
-QString stripLangSuffix(const QString& lang);
+inline QString stripLangSuffix(const QString& lang)
+{
+    constexpr auto suffix = QLatin1String(".traineddata");
+    QString clean = lang;
+    if (clean.endsWith(suffix))
+        clean.chop(suffix.size());
+    return clean;
+}
 
 /// Maps the configured OCR quality level to its target DPI. Unknown values use
 /// the balanced default so they do not accidentally request the slowest mode.

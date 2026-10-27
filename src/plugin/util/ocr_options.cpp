@@ -3,28 +3,11 @@
 
 #include "plugin/util/ocr_options.hpp"
 
-#include <QLatin1String>
-
 #include "plugin/caching/ocr_constants.hpp"
 
 namespace Mu::Plugin::Util {
 
 namespace OcrConstant = ::Mu::Plugin::OCR::Constant;
-
-namespace {
-
-/// Length of the ".traineddata" language suffix stripped from identifiers.
-constexpr qsizetype TraineddataSuffixLength = 12;
-
-} // namespace
-
-QString stripLangSuffix(const QString& lang)
-{
-    QString clean = lang;
-    if (clean.endsWith(QLatin1String(".traineddata")))
-        clean.chop(TraineddataSuffixLength);
-    return clean;
-}
 
 float qualityToDpi(int quality)
 {

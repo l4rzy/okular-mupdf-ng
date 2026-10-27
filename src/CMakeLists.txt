@@ -88,7 +88,6 @@ target_include_directories(mupdf_plugin_cache PUBLIC
     ${MU_GENERATED_INCLUDE_DIR}
 )
 target_link_libraries(mupdf_plugin_cache PUBLIC Qt6::Core mupdf_shared ZLIB::ZLIB)
-target_link_libraries(mupdf_plugin_cache PRIVATE mupdf_plugin_util)
 
 add_library(mupdf_plugin_crypto STATIC
   plugin/crypto/nss.cpp
@@ -118,6 +117,7 @@ target_link_libraries(mupdf_plugin_worker PUBLIC
     mupdf_plugin_crypto
     mupdf_shared
 )
+target_link_libraries(mupdf_plugin_worker PRIVATE mupdf_plugin_util)
 if(MU_DEBUG_BUILD)
     target_link_libraries(mupdf_plugin_worker PUBLIC mupdf_ipc_debug)
 endif()
