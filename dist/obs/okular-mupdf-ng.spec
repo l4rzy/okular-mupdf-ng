@@ -74,6 +74,7 @@ sed -i 's/\r$//' thirdparty/allura/OFL.txt
 
 %build
 %cmake -G Ninja \
+    -DKDE_INSTALL_LIBDIR:PATH=%{_lib} \
     -DKDE_INSTALL_USE_QT_SYS_PATHS:BOOL=ON \
     -DUSE_SYSTEM_MUPDF:BOOL=OFF \
     -DMUPDF_SOURCE_DIR:PATH="%{_builddir}/%{name}-%{version}/mupdf-%{mupdf_version}-source" \

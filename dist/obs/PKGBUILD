@@ -40,7 +40,7 @@ build() {
   cmake -B "$srcdir/build" -S "$srcdir/$pkgname-$pkgver" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DKDE_INSTALL_LIBDIR=lib \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DUSE_SYSTEM_MUPDF=OFF \
     -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \

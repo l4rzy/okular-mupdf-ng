@@ -4,7 +4,7 @@ pkgname=okular-mupdf-ng-git
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.5
-pkgver=0.5.4
+pkgver=0.5.4.r6.gcb8c65d
 pkgrel=1
 pkgdesc="A MuPDF-based secure and fast backend for Okular"
 arch=('x86_64')
@@ -36,7 +36,7 @@ build() {
   cmake -B "$srcdir/build" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DKDE_INSTALL_LIBDIR=lib \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DUSE_SYSTEM_MUPDF=OFF \
     -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
