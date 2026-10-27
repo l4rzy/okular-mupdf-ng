@@ -205,6 +205,7 @@ private:
     static QString findBinary(const QString& hint);
     void finished(int code, QProcess::ExitStatus status);
     void abort();
+    void clearDocumentState();
     void cleanupSession();
 
     QProcess m_process;

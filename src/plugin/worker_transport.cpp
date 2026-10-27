@@ -315,6 +315,22 @@ bool WorkerTransport::start(const QString& binaryPath,
     return true;
 }
 
+void WorkerTransport::clearDocumentState()
+{
+    if (!m_tempPath.isEmpty()) {
+        QFile::remove(m_tempPath);
+        m_tempPath.clear();
+    }
+    m_sourcePath.clear();
+    m_useEpubCache = false;
+    m_sourceFile.reset();
+    m_pdfPageCount = 0;
+    m_pdfSynopsis.reset();
+    m_epubCachePath.reset();
+    m_epubCacheLayoutKey.reset();
+    m_epubCacheSource.clear();
+}
+
 void WorkerTransport::cleanupSession()
 {
     // Cleanup is idempotent because it is used for normal stop, failed start,
@@ -343,18 +359,7 @@ void WorkerTransport::cleanupSession()
         QFile::remove(m_fdSocketPath);
         m_fdSocketPath.clear();
     }
-    if (!m_tempPath.isEmpty()) {
-        QFile::remove(m_tempPath);
-        m_tempPath.clear();
-    }
-    m_sourcePath.clear();
-    m_useEpubCache = false;
-    m_sourceFile.reset();
-    m_pdfPageCount = 0;
-    m_pdfSynopsis.reset();
-    m_epubCachePath.reset();
-    m_epubCacheLayoutKey.reset();
-    m_epubCacheSource.clear();
+    clearDocumentState();
     m_signingAuthorization = { };
     m_activeSignPassword.fill(u'\0');
     m_activeSignPassword.clear();
@@ -539,18 +544,7 @@ bool WorkerTransport::close()
     auto response = call(CloseRequest { });
     if (response && !response->error)
         m_frameSlots.clear();
-    if (!m_tempPath.isEmpty()) {
-        QFile::remove(m_tempPath);
-        m_tempPath.clear();
-    }
-    m_sourcePath.clear();
-    m_useEpubCache = false;
-    m_sourceFile.reset();
-    m_pdfPageCount = 0;
-    m_pdfSynopsis.reset();
-    m_epubCachePath.reset();
-    m_epubCacheLayoutKey.reset();
-    m_epubCacheSource.clear();
+    clearDocumentState();
     m_linkGeneration = 0;
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt.reset();
