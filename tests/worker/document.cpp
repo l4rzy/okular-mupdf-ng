@@ -1,11 +1,13 @@
 #include "engine/pdf/document.hpp"
 #include "engine/constants.hpp"
+#include "engine/epub/document.hpp"
 #include "genpdf.hpp"
 #include "runtime/command_service.hpp"
 #include "shared/model/types.hpp"
 #include <QDateTime>
 #include <QFile>
 #include <QScopeGuard>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
 #include <algorithm>
@@ -4046,6 +4048,66 @@ private slots:
         QCOMPARE(brokenMeta.values.at("repaired"), std::string("true"));
     }
 
+    void metadataSkipsUnrequestedLookups_data()
+    {
+        QTest::addColumn<bool>("epub");
+        QTest::addColumn<QStringList>("keys");
+        QTest::addColumn<bool>("expectLookup");
+        for (const bool epub : { false, true }) {
+            const QByteArray prefix = epub ? "epub-" : "pdf-";
+            QTest::newRow((prefix + "unknown").constData()) << epub << QStringList { "unknown" } << false;
+            QTest::newRow((prefix + "special").constData()) << epub << QStringList { "repaired" } << false;
+            QTest::newRow((prefix + "title").constData()) << epub << QStringList { "title" } << false;
+            QTest::newRow((prefix + "author").constData()) << epub << QStringList { "author" } << true;
+            QTest::newRow((prefix + "hash").constData()) << epub << QStringList { "hash" } << true;
+            QTest::newRow((prefix + "title-and-hash").constData()) << epub << QStringList { "title", "hash" } << true;
+            QTest::newRow((prefix + "all").constData()) << epub << QStringList { } << true;
+        }
+    }
+
+    void metadataSkipsUnrequestedLookups()
+    {
+        QFETCH(bool, epub);
+        QFETCH(QStringList, keys);
+        QFETCH(bool, expectLookup);
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString pdfPath = directory.filePath("metadata.pdf");
+        QVERIFY(writePdfObjects(pdfPath,
+                                { "<< /Type /Catalog /Pages 2 0 R >>",
+                                  "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                  "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] >>" }));
+        QFile file(epub ? QStringLiteral(TEST_EPUB_DIR "/sample.epub") : pdfPath);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument pdfDocument;
+        ::Mu::Worker::Engine::EpubDocument epubDocument;
+        ::Mu::Worker::Engine::DocumentBase& document = epub
+            ? static_cast<::Mu::Worker::Engine::DocumentBase&>(epubDocument)
+            : static_cast<::Mu::Worker::Engine::DocumentBase&>(pdfDocument);
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), epub ? "sample.epub" : "metadata.pdf", &error), error.c_str());
+
+        // A filtered query must survive an unrelated metadata reader failure.
+        fz_document* native = epub ? epubDocument.document() : pdfDocument.document();
+        const auto originalLookup = native->lookup_metadata;
+        const auto restoreLookup = qScopeGuard([&] { native->lookup_metadata = originalLookup; });
+        native->lookup_metadata = [](fz_context* context, fz_document*, const char* key, char*, std::size_t) -> int {
+            if (std::strcmp(key, FZ_META_INFO_AUTHOR) == 0)
+                fz_throw(context, FZ_ERROR_SYSTEM, "injected metadata lookup failure");
+            return -1;
+        };
+        std::vector<std::string> requested;
+        for (const auto& key : keys)
+            requested.push_back(key.toStdString());
+        const auto result = document.metadata(requested, &error);
+        QCOMPARE(!error.empty(), expectLookup);
+        if (!expectLookup) {
+            QCOMPARE(result.pageCount, document.pageCount());
+            QCOMPARE(result.values.size(), keys.contains("repaired") ? std::size_t(1) : std::size_t(0));
+        }
+    }
+
     void metadataReportsDates()
     {
         QTemporaryDir dir;
@@ -4104,6 +4166,11 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(filtered.values.size(), size_t(1));
         QCOMPARE(filtered.values.count("modificationDate"), size_t(0));
+
+        const auto hashOnly = doc.metadata({ "hash" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(hashOnly.values.size(), size_t(1));
+        QCOMPARE(hashOnly.values.at("hash"), all.values.at("hash"));
     }
 };
 

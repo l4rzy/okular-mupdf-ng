@@ -206,6 +206,8 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
     }
 
     for (const auto& [name, mupdfKey] : knownKeys) {
+        if (!wantHash && !wanted(name))
+            continue;
         std::string value;
         bool found = false;
         if (!lookupMetadataValue(m_context, m_document, mupdfKey, value, found, error))
