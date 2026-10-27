@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "engine/epub/document.hpp"
+#include "engine/mupdf_helpers.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,54 +18,6 @@ extern "C" {
 namespace Mu::Worker::Engine {
 
 using namespace ::Mu::Model;
-
-namespace {
-
-// Reads one metadata value through a C-owned buffer: allocation and lookup
-// stay inside the exception boundary, the std::string copy happens after.
-bool lookupMetadataValue(
-    fz_context* context, fz_document* document, const char* key, std::string& value, bool& found, std::string* error)
-{
-    char* volatile buffer = nullptr;
-    volatile int required = 0;
-    // `found` refers to caller storage, so longjmp cannot invalidate it.
-    found = false;
-
-    fz_try(context)
-    {
-        required = fz_lookup_metadata(context, document, key, nullptr, 0);
-        if (required > 1 && required <= 1024 * 1024) {
-            buffer = static_cast<char*>(fz_malloc(context, static_cast<std::size_t>(required)));
-            if (fz_lookup_metadata(context, document, key, buffer, static_cast<std::size_t>(required)) >= required)
-                found = true;
-        }
-    }
-    fz_always(context)
-    {
-        if (!found)
-            fz_free(context, buffer);
-    }
-    fz_catch(context)
-    {
-        if (error)
-            *error = fz_caught_message(context);
-        return false;
-    }
-
-    if (!found)
-        return true;
-
-    try {
-        value.assign(buffer, static_cast<std::size_t>(required - 1));
-    } catch (...) {
-        fz_free(context, buffer);
-        throw;
-    }
-    fz_free(context, buffer);
-    return true;
-}
-
-} // namespace
 
 // =============================================================================
 // Document Metadata Extraction

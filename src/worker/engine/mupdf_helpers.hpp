@@ -23,6 +23,11 @@ extern "C" {
 
 namespace Mu::Worker::Engine {
 
+/// Reads a bounded metadata value through a MuPDF-owned temporary buffer.
+/// Missing, empty, and oversized values succeed with found=false; errors fail.
+bool lookupMetadataValue(
+    fz_context* context, fz_document* document, const char* key, std::string& value, bool& found, std::string* error);
+
 /// Independent documents still share MuPDF's process-wide HarfBuzz state.
 /// Every context, including background export and OCR, must use these locks.
 inline fz_context* createContext(std::size_t storeSize)
