@@ -2,15 +2,15 @@ Format: 3.0 (quilt)
 Source: okular-mupdf-ng
 Binary: okular-mupdf-ng
 Architecture: any
-Version: 0.5.4-1
+Version: 0.5.5-1
 Maintainer: l4rzy <me@23ro.org>
 Homepage: https://github.com/l4rzy/okular-mupdf-ng
 Standards-Version: 4.7.0
 Build-Depends: debhelper-compat (= 13),
  gcc,
  g++,
- cargo (>= 1.91),
- rustc (>= 1.91),
+ cargo-web (>= 1.91) | cargo (>= 1.91),
+ rustc-web (>= 1.91) | rustc (>= 1.91),
  cmake (>= 3.20),
  extra-cmake-modules (>= 6.3.0),
  gettext,

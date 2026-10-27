@@ -20,6 +20,8 @@ BUILD_TESTING = $(if $(filter nocheck,$(DEB_BUILD_OPTIONS) $(DEB_BUILD_PROFILES)
 	dh $@ --buildsystem=cmake+ninja --builddirectory=$(BUILD_DIR)
 
 override_dh_auto_configure:
+	rustc --version
+	cargo --version
 	printf '%s  %s\n' '$(MUPDF_SHA256)' '$(MUPDF_ARCHIVE)' | sha256sum --check --status
 	mkdir -p '$(MUPDF_SOURCE_DIR)'
 	tar -xzf '$(MUPDF_ARCHIVE)' --strip-components=1 -C '$(MUPDF_SOURCE_DIR)'
