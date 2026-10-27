@@ -32,9 +32,9 @@
     <param name="compression">gz</param>
   </service>
 
-  <!-- Fetch the locked Rust dependencies before the offline package build.
-       Match the project archive even when OBS adds a service-name prefix. -->
-  <service name="cargo_vendor" mode="serveronly">
+  <!-- Run locally with obs-service-cargo installed, then upload vendor.tar.gz.
+       The OBS service host does not provide this service. -->
+  <service name="cargo_vendor" mode="manual">
     <param name="src">*okular-mupdf-ng-*.tar.gz</param>
     <param name="cargotoml">src/worker/engine/kindle/Cargo.toml</param>
     <param name="update">false</param>
