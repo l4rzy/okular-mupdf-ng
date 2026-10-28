@@ -64,11 +64,9 @@ Requires:       okular
 Recommends:     %{tessdata_package}
 
 %description
-A backend for Okular that supports PDF, EPUB, MOBI, AZW3, and KFX documents
-using MuPDF.
+Supports PDF, ePUB, legacy MOBI, and DRM-free AZW3 and single-container KFX.
 Document parsing, rendering, and OCR run in a separate sandboxed worker.
-The package includes the command-line utility mupdfng-cli and a statically
-linked, pinned MuPDF engine with the project's compatibility fixes.
+Includes the mupdfng-cli command-line utility.
 
 %prep
 printf '%s  %s\n' '%{mupdf_sha256}' '%{SOURCE1}' | sha256sum --check --status
