@@ -11,7 +11,7 @@
 Name:           okular-mupdf-ng
 Version:        0.5.6
 Release:        1%{?dist}
-Summary:        A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
+Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
 URL:            https://github.com/l4rzy/okular-mupdf-ng
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -77,6 +77,7 @@ sed -i 's/\r$//' thirdparty/allura/OFL.txt
 # Enable Internet access in the COPR project's build options for Cargo.
 %cmake -G Ninja \
     -DKDE_INSTALL_LIBDIR:PATH=%{_lib} \
+    -DKDE_INSTALL_SBINDIR:PATH=%{_sbindir} \
     -DKDE_INSTALL_USE_QT_SYS_PATHS:BOOL=ON \
     -DUSE_SYSTEM_MUPDF:BOOL=OFF \
     -DMUPDF_SOURCE_DIR:PATH="%{_builddir}/%{name}-%{version}/mupdf-%{mupdf_version}-source" \

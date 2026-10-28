@@ -13,13 +13,14 @@
 Name:           okular-mupdf-ng
 Version:        0.5.6
 Release:        0%{?dist}
-Summary:        A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
+Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
 URL:            https://github.com/l4rzy/okular-mupdf-ng
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 Source1:        https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/%{mupdf_version}/mupdf-%{mupdf_version}-source.tar.gz
 Source2:        vendor.tar.gz
 BuildRequires:  cmake >= 3.20
+BuildRequires:  binutils
 BuildRequires:  cargo >= 1.91
 BuildRequires:  rust >= 1.91
 BuildRequires:  gcc-c++
@@ -92,6 +93,13 @@ export CARGO_NET_OFFLINE=true
 
 %install
 %cmake_install
+%if !0%{?_enable_debug_packages}
+# Strip runtime files when OBS debug package generation is disabled.
+%{__strip} --strip-unneeded --preserve-dates \
+    "%{buildroot}%{_bindir}/mupdfng-cli" \
+    "%{buildroot}%{_libdir}/okular-mupdf-ng/mupdfng-worker" \
+    "%{buildroot}%{_libdir}/qt6/plugins/okular_generators/okularGenerator_mupdfng.so"
+%endif
 # RPM installs the canonical license copies separately.
 rm -r "%{buildroot}%{_datadir}/doc/%{name}"
 %find_lang okular_mupdfng
