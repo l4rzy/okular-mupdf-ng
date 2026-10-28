@@ -1,3 +1,11 @@
+okular-mupdf-ng (0.5.7-1) unstable; urgency=medium
+
+  * Update to version 0.5.7.
+  * Add ePUB to AZW3 and Kindle to ePUB export.
+  * Fix oversized block images in ebook layout.
+
+ -- l4rzy <me@23ro.org>  Wed, 28 Oct 2026 13:55:55 -0500
+
 okular-mupdf-ng (0.5.6-1) unstable; urgency=medium
 
   * Update to version 0.5.6.

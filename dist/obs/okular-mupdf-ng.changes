@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Wed Oct 28 18:55:55 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.7.
+- Add ePUB to AZW3 and Kindle to ePUB export.
+- Fix oversized block images in ebook layout.
+
+-------------------------------------------------------------------
 Wed Oct 28 06:04:17 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.6.
