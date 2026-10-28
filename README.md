@@ -36,7 +36,7 @@ Okular is an amazing piece of software: it's packed with good features; it's als
  - PDF is a complex format, it should not be parsed and rendered in Okular's memory space unconfined. See Chromium's [Rule of Two.](https://chromium.googlesource.com/chromium/src/+/master/docs/security/rule-of-2.md)
  - PDF backend with Poppler is rich in features, but [sluggish](https://github.com/l4rzy/okular-backends-benchmark) on big PDFs. This is a known weakness of Poppler.
  - Rendering quality of the default ePUB & MOBI backends are terrible, plus rendering speed is also painstakingly slow even on a high-end CPU.
- - Okular lacks support for DRM-free Kindle ebooks. This would make Okular closer to the "Universal Document Reader" claim.
+ - Okular lacks support for DRM-free Kindle ebooks like AZW3 (KF8) and KFX.
 
 ---
 
