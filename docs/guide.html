@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How to use — okular-mupdf-ng</title>
-  <meta name="description" content="How to use okular-mupdf-ng: document themes, OCR, forms, annotations, signatures, and document export.">
+  <meta name="description" content="How to use okular-mupdf-ng: document themes, OCR, forms, annotations, signatures, Kindle formats, and document export.">
   <link rel="canonical" href="https://l4rzy.github.io/okular-mupdf-ng/guide.html">
   <link rel="icon" type="image/svg+xml" href="assets/mupdfng.svg">
   <link rel="stylesheet" href="styles.css">
@@ -36,14 +36,15 @@
         <ul class="guide-contents">
           <li><a href="#safety-isolation">Safety &amp; Isolation</a></li>
           <li><a href="#ocr">OCR</a></li>
-          <li><a href="#epub-customisation">ePUB customisation</a></li>
+          <li><a href="#kindle-formats">Kindle formats</a></li>
+          <li><a href="#epub-customisation">Ebook customisation</a></li>
           <li><a href="#document-themes">Document Theming</a></li>
           <li><a href="#keyboard-shortcuts">Keyboard shortcuts</a></li>
           <li><a href="#link-preview">Link Preview</a></li>
           <li><a href="#pdf-heuristic-outline">PDF Heuristic Outline</a></li>
           <li><a href="#annotations-forms">Annotations &amp; Forms</a></li>
           <li><a href="#pdf-export">PDF Export</a></li>
-          <li><a href="#epub-mobi-export">ePUB/MOBI export</a></li>
+          <li><a href="#epub-mobi-export">Ebook export</a></li>
           <li><a href="#signatures">Signatures</a></li>
           <li><a href="#certificate-manager">Cert Manager</a></li>
           <li><a href="#pdf-javascript">PDF JavaScript</a></li>
@@ -160,10 +161,21 @@ sudo apt install tesseract-ocr-eng</code></pre>
         to toggle OCR.</p>
     </section>
 
+    <section id="kindle-formats">
+      <h2>Kindle formats</h2>
+      <p>Open DRM-free <strong>AZW3 (KF8)</strong> and <strong>single-container KFX</strong>
+        books directly in Okular. They are converted to ePUB in memory before rendering,
+        so the <a href="#epub-customisation">ePUB layout settings</a> also apply to them.</p>
+      <p>Encrypted books and KFX books split across multiple files are not supported.
+        Legacy MOBI is handled separately; it supports uncompressed and PalmDOC-compressed books.</p>
+      <p>Kindle books can <a href="#epub-mobi-export">export to ePUB, PDF, or plain text</a>.
+        Conversion may change book-specific formatting.</p>
+    </section>
+
     <section id="epub-customisation">
-      <h2>ePUB customisation</h2>
-      <p>MOBI uses the ePUB rendering and layout engine, so the font, page size,
-        and custom CSS settings below apply to both formats.</p>
+      <h2>Ebook customisation</h2>
+      <p>ePUB, legacy MOBI, AZW3, and KFX use the same rendering and layout engine.
+        The font, page size, and custom CSS settings below apply to all four formats.</p>
       <ol>
         <li>Open the <strong>ePUB → Page Layout</strong> settings.</li>
         <li>Set <strong>Font Size</strong>, <strong>Font Family</strong>, and
@@ -182,7 +194,7 @@ sudo apt install tesseract-ocr-eng</code></pre>
       <h2>Document Theming</h2>
       <p>Choose <strong>Tools → Document Theme</strong>, below MuPDF OCR, or use
         <strong>General → Rendering → Document Theme</strong> in the backend settings.
-        The choice is saved and shared across open PDF, ePUB, and MOBI documents.</p>
+        The choice is saved and shared across all supported document formats.</p>
       <figure class="guide-screenshot">
         <img src="assets/guide/doc_theming.png" alt="Okular's Document Theme menu open over a PDF, with Dusk selected" width="822" height="618" loading="lazy">
         <figcaption>Select a document theme from the Tools menu.</figcaption>
@@ -340,8 +352,8 @@ sudo apt install tesseract-ocr-eng</code></pre>
     <section id="pdf-export">
       <h2>PDF Export</h2>
       <p>For PDF documents, use <strong>File → Export As</strong> to create a flattened
-        PDF or an XFDF annotation file. PDF, ePUB, and MOBI documents can also export
-        plain text; ePUB and MOBI can <a href="#epub-mobi-export">export to PDF</a>.</p>
+        PDF or an XFDF annotation file. All supported document formats can export
+        plain text; ePUB, MOBI, AZW3, and KFX can <a href="#epub-mobi-export">export to PDF</a>.</p>
       <figure class="guide-screenshot">
         <img src="assets/guide/pdf_export.png" alt="Okular's PDF Export As menu with Flattened PDF and Annotation File (XFDF) options" width="515" height="173" loading="lazy">
         <figcaption>PDF export options are available from File → Export As.</figcaption>
@@ -363,9 +375,10 @@ sudo apt install tesseract-ocr-eng</code></pre>
     </section>
 
     <section id="epub-mobi-export">
-      <h2>ePUB/MOBI export</h2>
+      <h2>Ebook export</h2>
+      <h3>PDF</h3>
       <ol>
-        <li>Open the ePUB or MOBI document and configure its
+        <li>Open the ePUB, MOBI, AZW3, or KFX document and configure its
           <a href="#epub-customisation">page layout</a>.</li>
         <li>Choose <strong>File → Export As → PDF</strong> and an output filename.</li>
         <li>Wait for the export-complete notification, then open the resulting PDF.</li>
@@ -376,6 +389,14 @@ sudo apt install tesseract-ocr-eng</code></pre>
       </figure>
       <p>The export uses the current reflow layout. Document themes do not change
         its colors. The resulting PDF has fixed pages rather than reflowable text.</p>
+      <h3>ePUB and AZW3 conversion</h3>
+      <ul>
+        <li>For an AZW3 or KFX book, choose <strong>File → Export As → ePUB</strong>.</li>
+        <li>For an ePUB book, choose <strong>File → Export As → Kindle (AZW3)</strong>.</li>
+      </ul>
+      <p>Choose an output filename. These exports produce reflowable books; the current
+        page layout and document theme are not baked into the output. Legacy MOBI
+        supports PDF and plain-text export only.</p>
     </section>
 
     <section id="signatures">
@@ -434,7 +455,7 @@ sudo apt install tesseract-ocr-eng</code></pre>
 
     <section id="caching">
       <h2>Caching</h2>
-      <p>OCR results, generated PDF TOCs, and ePUB/MOBI layout accelerators are
+      <p>OCR results, generated PDF TOCs, and ePUB layout accelerators are
         cached automatically. Reopening a document can reuse compatible results;
         changing relevant OCR or layout settings uses the corresponding cache.</p>
       <p>In <strong>General → Cache Management</strong>, click

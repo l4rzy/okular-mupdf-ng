@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>okular-mupdf-ng — Sandboxed MuPDF Backend for Okular</title>
-  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.">
+  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.">
   <meta name="author" content="l4rzy">
   <meta name="robots" content="index, follow, max-image-preview:large">
   <meta name="theme-color" content="#232629">
@@ -15,14 +15,14 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:url" content="https://l4rzy.github.io/okular-mupdf-ng/">
   <meta property="og:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
-  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.">
+  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.">
   <meta property="og:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <meta property="og:image:alt" content="okular-mupdf-ng screenshot">
   <meta property="og:image:width" content="1665">
   <meta property="og:image:height" content="963">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
-  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.">
+  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.">
   <meta name="twitter:image:alt" content="okular-mupdf-ng document viewer screenshot">
   <meta name="twitter:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <script type="application/ld+json">
@@ -30,7 +30,7 @@
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "okular-mupdf-ng",
-      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB and MOBI processing, document themes, built-in OCR, and digital signatures.",
+      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.",
       "url": "https://l4rzy.github.io/okular-mupdf-ng/",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Linux",
@@ -78,7 +78,7 @@
       <div class="wrap">
         <img class="hero-logo" src="assets/mupdfng.svg" alt="okular-mupdf-ng logo" width="180" height="180">
         <h1>okular-mupdf-ng</h1>
-        <p class="tagline">A MuPDF-based <strong>secure</strong> and fast backend for Okular. Supports PDF, ePUB, and MOBI formats.</p>
+        <p class="tagline">A MuPDF-based <strong>secure</strong> and fast backend for Okular. Supports PDF, ePUB, legacy MOBI, and DRM-free AZW3 and single-container KFX books.</p>
         <p>Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular&rsquo;s desktop integration seamless.</p>
         <p class="badges">
           <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
@@ -143,8 +143,8 @@
           <p>The Poppler backend is feature-rich but sluggish on large documents &mdash; a known weakness of Poppler. MuPDF renders quickly even where Poppler stalls.</p>
         </article>
         <article class="card">
-          <h3>ePUB &amp; MOBI rendering</h3>
-          <p>The default ePUB and MOBI backends render poorly and slowly, even on a high-end CPU. This backend supports custom CSS and page sizes for ePUB, plus ePUB/MOBI-to-PDF export.</p>
+          <h3>ePUB, MOBI &amp; Kindle rendering</h3>
+          <p>The default ePUB and MOBI backends render poorly and slowly, even on a high-end CPU. This backend adds DRM-free AZW3 and single-container KFX support, with shared layout settings and PDF export for all supported ebook formats.</p>
         </article>
       </div>
     </section>
@@ -191,7 +191,7 @@
               <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#epub-customisation">ePUB/MOBI customisation</a></td>
+              <td><a href="guide.html#epub-customisation">Ebook customisation</a></td>
               <td>Custom CSS, Page size, Font size, Font family</td>
               <td class="yes">✓</td>
               <td class="no">✗ (Font size only)</td>
@@ -227,9 +227,9 @@
               <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#epub-mobi-export">ePUB/MOBI export</a></td>
-              <td>Export ePUB/MOBI to PDF, preserving links and TOC</td>
-              <td class="yes">✓ (via MuPDF rendering)</td>
+              <td><a href="guide.html#epub-mobi-export">Ebook export</a></td>
+              <td>Export ebooks to PDF with links and TOC; convert ePUB to AZW3 and Kindle books to ePUB</td>
+              <td class="yes">✓ (PDF via MuPDF rendering)</td>
               <td class="no">✗ (document print)</td>
             </tr>
             <tr>
@@ -240,9 +240,9 @@
             </tr>
             <tr>
               <td>Formats</td>
-              <td>PDF, ePUB, MOBI</td>
+              <td>PDF, ePUB, MOBI, <a href="guide.html#kindle-formats">AZW3, KFX</a></td>
               <td class="yes">✓</td>
-              <td class="yes">✓</td>
+              <td class="no">✗ (PDF and basic ePUB/MOBI support)</td>
             </tr>
             <tr>
               <td><a href="guide.html#pdf-forms">PDF Forms</a></td>
