@@ -34,6 +34,25 @@
 
 namespace {
 
+struct PathBoundsDevice {
+    fz_device super;
+    fz_rect bounds;
+};
+
+void collectPathBounds(fz_context* context,
+                       fz_device* device,
+                       const fz_path* path,
+                       int,
+                       fz_matrix transform,
+                       fz_colorspace*,
+                       const float*,
+                       float,
+                       fz_color_params)
+{
+    auto* collector = reinterpret_cast<PathBoundsDevice*>(device);
+    collector->bounds = fz_union_rect(collector->bounds, fz_bound_path(context, path, nullptr, transform));
+}
+
 void verifyPdfFile(const QString& path)
 {
     QFile pdfFile(path);
@@ -78,6 +97,107 @@ waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::
 class TestEpub : public QObject {
     Q_OBJECT
 private slots:
+
+    void testWideImagesFitPage_data()
+    {
+        QTest::addColumn<QString>("display");
+        QTest::addColumn<QString>("dimensions");
+        QTest::addColumn<bool>("small");
+        for (const auto& display : { QStringLiteral("inline"), QStringLiteral("block") }) {
+            QTest::newRow(qPrintable(display + "-wide"))
+                << display << QStringLiteral("width='902' height='484'") << false;
+            QTest::newRow(qPrintable(display + "-intrinsic")) << display << QString() << false;
+            QTest::newRow(qPrintable(display + "-small"))
+                << display << QStringLiteral("width='90' height='48'") << true;
+        }
+    }
+
+    void testWideImagesFitPage()
+    {
+        QFETCH(QString, display);
+#if TEST_SYSTEM_MUPDF
+        if (display == QStringLiteral("block"))
+            QSKIP("Regression coverage for the bundled MuPDF block image patch");
+#endif
+        QFETCH(QString, dimensions);
+        QFETCH(bool, small);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage image(902, 484, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QFile file(directory.filePath(QStringLiteral("image.html")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const auto html = QStringLiteral("<html><head><style>img { display: %1; width: auto !important; "
+                                         "height: auto !important; max-width: 100%; background: lime; } "
+                                         "p { margin: 0; line-height: 16pt; }</style></head>"
+                                         "<body><ol><li><figure><img %2 "
+                                         "src='data:image/png;base64,%3'/><figcaption><p>Caption</p></figcaption>"
+                                         "</figure></li></ol><p>Following</p></body></html>")
+                              .arg(display, dimensions, QString::fromLatin1(png.toBase64()))
+                              .toUtf8();
+        QCOMPARE(file.write(html), html.size());
+        file.close();
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument doc;
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "image.html", &error), error.c_str());
+        const auto inspection = ::Mu::Test::inspectDocumentText(doc.context(), doc.document());
+        QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+        QCOMPARE(inspection.images.size(), 1);
+        const auto geometry = doc.pageGeometry(0, &error);
+        const auto bounds = inspection.images.front();
+        QVERIFY2(
+            bounds.x1 <= geometry.widthPoints + 0.01,
+            qPrintable(
+                QStringLiteral("Image right edge %1 exceeds page width %2").arg(bounds.x1).arg(geometry.widthPoints)));
+        QVERIFY(bounds.x0 >= 0);
+        const float width = bounds.x1 - bounds.x0;
+        const float height = bounds.y1 - bounds.y0;
+        QVERIFY(std::abs(width / height - (small ? 90.0f / 48.0f : 902.0f / 484.0f)) < 0.01f);
+        if (small)
+            QVERIFY(width < geometry.widthPoints / 2);
+        QCOMPARE(doc.pageCount(), 1);
+        QVERIFY(inspection.lines.contains(QStringLiteral("Caption")));
+        QVERIFY(inspection.lines.contains(QStringLiteral("Following")));
+        const float captionY = inspection.lines.value(QStringLiteral("Caption")).origin.y;
+        QVERIFY(captionY >= bounds.y1);
+        QVERIFY2(captionY - bounds.y1 < 32, qPrintable(QStringLiteral("Caption gap: %1pt").arg(captionY - bounds.y1)));
+        QVERIFY(inspection.lines.value(QStringLiteral("Following")).origin.y > captionY);
+
+        // Inspect drawing commands before clipping so overflowing block backgrounds remain visible to the test.
+        auto* device =
+            reinterpret_cast<PathBoundsDevice*>(fz_new_device_of_size(doc.context(), sizeof(PathBoundsDevice)));
+        device->bounds = fz_empty_rect;
+        device->super.fill_path = collectPathBounds;
+        auto cleanup = qScopeGuard([&] { fz_drop_device(doc.context(), &device->super); });
+        fz_try(doc.context())
+        {
+            fz_page* page = fz_load_page(doc.context(), doc.document(), 0);
+            fz_try(doc.context())
+            {
+                fz_run_page(doc.context(), page, &device->super, fz_identity, nullptr);
+                fz_close_device(doc.context(), &device->super);
+            }
+            fz_always(doc.context())
+            {
+                fz_drop_page(doc.context(), page);
+            }
+            fz_catch(doc.context())
+            {
+                fz_rethrow(doc.context());
+            }
+        }
+        fz_catch(doc.context())
+        {
+            QFAIL(fz_caught_message(doc.context()));
+        }
+        QVERIFY2(device->bounds.x1 <= geometry.widthPoints + 0.01,
+                 qPrintable(QStringLiteral("Block right edge: %1pt").arg(device->bounds.x1)));
+    }
 
     void testIndependentContextsShareLocks_data()
     {

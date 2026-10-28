@@ -58,6 +58,7 @@ else()
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-parent-tree-lifetime.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-layout.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-media.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-image-width.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-form-autosize.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-radio-unison.patch")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_mupdf_patches})
