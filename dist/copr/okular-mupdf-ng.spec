@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.5
+Version:        0.5.6
 Release:        1%{?dist}
 Summary:        A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -111,6 +111,10 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Wed Oct 28 2026 l4rzy <me@23ro.org> - 0.5.6-1
+- Update to version 0.5.6.
+- Fix source package version consistency.
+
 * Tue Oct 27 2026 l4rzy <me@23ro.org> - 0.5.5-1
 - Update to version 0.5.5.
 - Add experimental DRM-free AZW3 and single-container KFX support via boko.

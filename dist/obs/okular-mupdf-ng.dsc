@@ -2,7 +2,7 @@ Format: 3.0 (quilt)
 Source: okular-mupdf-ng
 Binary: okular-mupdf-ng
 Architecture: any
-Version: 0.5.5-1
+Version: 0.5.6-1
 Maintainer: l4rzy <me@23ro.org>
 Homepage: https://github.com/l4rzy/okular-mupdf-ng
 Standards-Version: 4.7.0

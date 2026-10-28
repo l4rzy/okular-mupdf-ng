@@ -11,7 +11,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.5
+Version:        0.5.6
 Release:        0%{?dist}
 Summary:        A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, and KFX
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1

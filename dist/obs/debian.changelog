@@ -1,3 +1,10 @@
+okular-mupdf-ng (0.5.6-1) unstable; urgency=medium
+
+  * Update to version 0.5.6.
+  * Fix source package version consistency.
+
+ -- l4rzy <me@23ro.org>  Wed, 28 Oct 2026 01:04:17 -0500
+
 okular-mupdf-ng (0.5.5-1) unstable; urgency=medium
 
   * Update to version 0.5.5.
