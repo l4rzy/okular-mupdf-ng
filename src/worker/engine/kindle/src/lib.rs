@@ -17,7 +17,7 @@ impl Write for LimitedFile {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let position = self.0.stream_position()?;
         if buf.len() as u64 > MAX_OUTPUT.saturating_sub(position) {
-            return Err(io::Error::other("converted EPUB exceeds size limit"));
+            return Err(io::Error::other("converted book exceeds size limit"));
         }
         self.0.write(buf)
     }
@@ -37,7 +37,7 @@ impl Seek for LimitedFile {
             SeekFrom::Current(n) => i128::from(current) + i128::from(n),
         };
         if target < 0 || target > i128::from(MAX_OUTPUT) {
-            return Err(io::Error::other("converted EPUB exceeds size limit"));
+            return Err(io::Error::other("converted book exceeds size limit"));
         }
         self.0.seek(SeekFrom::Start(target as u64))
     }
@@ -46,6 +46,15 @@ impl Seek for LimitedFile {
 // The caller retains ownership of both descriptors.
 #[unsafe(no_mangle)]
 pub extern "C" fn mupdfng_kindle_convert(input: i32, output: i32) -> i32 {
+    convert(input, output, false)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mupdfng_epub_convert(input: i32, output: i32) -> i32 {
+    convert(input, output, true)
+}
+
+fn convert(input: i32, output: i32, to_azw3: bool) -> i32 {
     if input < 0 || output < 0 {
         return -1;
     }
@@ -56,18 +65,23 @@ pub extern "C" fn mupdfng_kindle_convert(input: i32, output: i32) -> i32 {
         let input = File::from(input);
         let size = input.metadata()?.len();
         if size > MAX_INPUT {
-            return Err("Kindle book exceeds size limit".into());
+            return Err("input book exceeds size limit".into());
         }
         let mut bytes = vec![0; size as usize];
         input.read_exact_at(&mut bytes, 0)?;
-        let format = if bytes.starts_with(b"CONT") {
+        let format = if to_azw3 {
+            Format::Epub
+        } else if bytes.starts_with(b"CONT") {
             Format::Kfx
         } else {
             Format::Azw3
         };
         let book = Book::from_bytes(&bytes, format)?;
         let mut output = LimitedFile(File::from(output));
-        book.export(Format::Epub, &mut output)?;
+        book.export(
+            if to_azw3 { Format::Azw3 } else { Format::Epub },
+            &mut output,
+        )?;
         Ok(())
     });
     if matches!(result, Ok(Ok(()))) { 0 } else { -1 }

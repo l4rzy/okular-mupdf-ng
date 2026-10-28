@@ -195,6 +195,48 @@ private slots:
         QCOMPARE(Plugin::Util::resolveDocumentType(mime, suffix), type);
     }
 
+    void exportsEpubToAzw3_data()
+    {
+        QTest::addColumn<bool>("fromData");
+        QTest::newRow("file") << false;
+        QTest::newRow("data") << true;
+    }
+
+    void exportsEpubToAzw3()
+    {
+        QFETCH(bool, fromData);
+        const QString path = QStringLiteral(TEST_EPUB_DIR "/sample.epub");
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        Plugin::WorkerClient client;
+        QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
+        QList<Plugin::WorkerClient::PageInfo> pages;
+        const auto status = fromData ? client.openData(input.readAll(), { }, pages, Model::DocumentType::Epub)
+                                     : client.open(path, { }, pages, Model::DocumentType::Epub);
+        QCOMPARE(status, Model::OpenStatus::Success);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto rejected = directory.filePath(QStringLiteral("existing.epub"));
+        QFile existing(rejected);
+        QVERIFY(existing.open(QIODevice::WriteOnly));
+        QCOMPARE(existing.write("unchanged"), qint64(9));
+        existing.close();
+        QVERIFY(!client.exportEpubToFile(rejected));
+        QVERIFY(existing.open(QIODevice::ReadOnly));
+        QCOMPARE(existing.readAll(), QByteArray("unchanged"));
+        const auto output = directory.filePath(QStringLiteral("book.azw3"));
+        QVERIFY(client.exportAzw3ToFile(output));
+        QFile result(output);
+        QVERIFY(result.open(QIODevice::ReadOnly));
+        QCOMPARE(Plugin::Util::documentTypeForData(result.readAll()), Model::DocumentType::Kindle);
+        QVERIFY(result.seek(0));
+        Worker::Engine::KindleDocument kindle;
+        std::string error;
+        QVERIFY2(kindle.openFd(::dup(result.handle()), "book.azw3", &error), error.c_str());
+        QVERIFY(kindle.pageCount() > 0);
+        QVERIFY(!kindle.textBoxes(0, 72, 72, 10000, true, &error).empty());
+    }
+
     void opensKindle_data()
     {
         QTest::addColumn<bool>("fromData");
@@ -230,6 +272,28 @@ private slots:
             text += box.text;
         QVERIFY2(text.find("Hello") != std::string::npos, text.c_str());
         QTemporaryDir directory;
+        const auto rejected = directory.filePath(QStringLiteral("existing.azw3"));
+        QFile existing(rejected);
+        QVERIFY(existing.open(QIODevice::WriteOnly));
+        QCOMPARE(existing.write("unchanged"), qint64(9));
+        existing.close();
+        QVERIFY(!client.exportAzw3ToFile(rejected));
+        QVERIFY(existing.open(QIODevice::ReadOnly));
+        QCOMPARE(existing.readAll(), QByteArray("unchanged"));
+        const auto epubTarget = directory.filePath(QStringLiteral("export.epub"));
+        QVERIFY(client.exportEpubToFile(epubTarget));
+        QFile epubFile(epubTarget);
+        QVERIFY(epubFile.open(QIODevice::ReadOnly));
+        QCOMPARE(Plugin::Util::documentTypeForData(epubFile.readAll()), Model::DocumentType::Epub);
+        QVERIFY(epubFile.seek(0));
+        Worker::Engine::EpubDocument epub;
+        std::string epubError;
+        QVERIFY2(epub.openFd(::dup(epubFile.handle()), "export.epub", &epubError), epubError.c_str());
+        QVERIFY(epub.pageCount() > 0);
+        std::string epubText;
+        for (const auto& box : epub.textBoxes(0, 72, 72, 10000, true, &epubError))
+            epubText += box.text;
+        QVERIFY2(epubText.find("Hello") != std::string::npos, epubText.c_str());
         const auto target = directory.filePath(QStringLiteral("export.pdf"));
         if (fromData) {
             QVERIFY(client.savePdfToFile(target, { }, true));

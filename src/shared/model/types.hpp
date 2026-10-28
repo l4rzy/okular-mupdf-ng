@@ -940,6 +940,8 @@ struct SettingsRequest {
 /// Saves the complete document to a transferred output descriptor.
 struct SaveRequest {
     FileTransfer file;
+    bool exportEpub = false;
+    bool exportAzw3 = false;
 };
 
 /// Saves selected pages to a transferred output descriptor as PDF.

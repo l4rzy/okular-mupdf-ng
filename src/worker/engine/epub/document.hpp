@@ -99,6 +99,7 @@ public:
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
     [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
+    [[nodiscard]] bool exportAzw3Fd(int fd, std::string* error = nullptr) const;
 
     [[nodiscard]] bool
     savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;

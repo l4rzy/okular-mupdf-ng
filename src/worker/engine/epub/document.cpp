@@ -18,6 +18,9 @@
 #include "runtime/memory_pressure.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/validation.hpp"
+#include "sys/sys.hpp"
+
+extern "C" int mupdfng_epub_convert(int input, int output);
 
 namespace Mu::Worker::Engine {
 
@@ -172,6 +175,16 @@ EpubDocument::~EpubDocument()
 bool EpubDocument::openFd(int fd, std::string displayName, std::string* error)
 {
     return openFdWithAccelerator(fd, std::move(displayName), { }, error);
+}
+
+bool EpubDocument::exportAzw3Fd(int fd, std::string* error) const
+{
+    Sys::FileDescriptor output(fd);
+    if (!isOpen() || !m_input || !output)
+        return fail(error, "EPUB document is not open");
+    if (mupdfng_epub_convert(::fileno(m_input), output.get()) != 0)
+        return fail(error, "could not convert EPUB to AZW3");
+    return true;
 }
 
 bool EpubDocument::openFdWithAccelerator(int fd,

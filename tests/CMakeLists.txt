@@ -160,7 +160,8 @@ target_link_libraries(test_tools_cli_export PRIVATE MuPDF::Engine)
 target_compile_definitions(test_tools_cli_export PRIVATE
     MUPDFNG_CLI_PATH="$<TARGET_FILE:mupdfng-cli>"
     WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
-    TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub")
+    TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub"
+    TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi")
 add_dependencies(test_tools_cli_export mupdfng-cli mupdfng-worker)
 set_tests_properties(test_tools_cli_export PROPERTIES TIMEOUT 150)
 
@@ -279,6 +280,7 @@ target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Okular::Core KF6::Con
 target_compile_definitions(test_generator_epub PRIVATE
     TEST_BUNDLED_MUPDF=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
+    TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")

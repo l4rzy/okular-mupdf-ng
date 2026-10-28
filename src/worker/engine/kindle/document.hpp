@@ -5,6 +5,7 @@
 #define MU_WORKER_ENGINE_KINDLE_DOCUMENT_HPP
 
 #include "engine/epub/document.hpp"
+#include "sys/sys.hpp"
 
 namespace Mu::Worker::Engine {
 
@@ -13,8 +14,13 @@ public:
     using EpubDocument::EpubDocument;
 
     [[nodiscard]] bool openFd(int fd, std::string displayName, std::string* error = nullptr) override;
+    void close() noexcept override;
+    [[nodiscard]] bool exportEpubFd(int fd, std::string* error = nullptr) const;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
+
+private:
+    Sys::FileDescriptor m_epub;
 };
 
 } // namespace Mu::Worker::Engine

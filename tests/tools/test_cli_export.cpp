@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QFile>
+#include <QMimeDatabase>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QTemporaryDir>
@@ -12,6 +13,53 @@
 class TestCliExport : public QObject {
     Q_OBJECT
 private slots:
+
+    void exportsEpubToAzw3()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto output = directory.filePath(QStringLiteral("export.azw3"));
+        QProcess cli;
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH),
+                  { QStringLiteral("export"),
+                    QStringLiteral(TEST_EPUB_PATH),
+                    output,
+                    QStringLiteral("--worker"),
+                    QStringLiteral(WORKER_BUILD_PATH) });
+        QVERIFY(cli.waitForFinished(60000));
+        QCOMPARE(cli.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(cli.exitCode() == 0, cli.readAllStandardError().constData());
+        QFile result(output);
+        QVERIFY(result.open(QIODevice::ReadOnly));
+        QCOMPARE(result.readAll().mid(60, 8), QByteArray("BOOKMOBI"));
+    }
+
+    void exportsKindleToEpub_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::newRow("azw3") << QStringLiteral("sample.azw3");
+        QTest::newRow("kfx") << QStringLiteral("sample.kfx");
+    }
+
+    void exportsKindleToEpub()
+    {
+        QFETCH(QString, fixture);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto output = directory.filePath(QStringLiteral("export.epub"));
+        QProcess cli;
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH),
+                  { QStringLiteral("export"),
+                    QStringLiteral(TEST_MOBI_DIR "/") + fixture,
+                    output,
+                    QStringLiteral("--worker"),
+                    QStringLiteral(WORKER_BUILD_PATH) });
+        QVERIFY(cli.waitForFinished(60000));
+        QCOMPARE(cli.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(cli.exitCode() == 0, cli.readAllStandardError().constData());
+        QCOMPARE(QMimeDatabase().mimeTypeForFile(output, QMimeDatabase::MatchContent).name(),
+                 QStringLiteral("application/epub+zip"));
+    }
 
     void appliesLayout_data()
     {

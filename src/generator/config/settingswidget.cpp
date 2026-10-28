@@ -358,13 +358,13 @@ void MuPDFNGSettingsWidget::setupToolTips()
     setToolTip({ m_mupdfsw->signaturePreviewLabel },
                i18n("Preview the selected signature profile, emblem, and time format using sample identity data."));
     setToolTip({ m_mupdfsw->kcfg_EpubFontSize, m_mupdfsw->labelEpubFontSize },
-               i18n("Set the base font size for EPUB text."));
+               i18n("Set the base font size for ePUB text."));
     setToolTip({ m_mupdfsw->kcfg_EpubFontFamily, m_mupdfsw->labelEpubFontFamily },
-               i18n("Choose the base font family for EPUB text. Default uses the document’s font selection."));
+               i18n("Choose the base font family for ePUB text. Default uses the document’s font selection."));
     setToolTip({ m_mupdfsw->kcfg_EpubPageSize, m_mupdfsw->labelEpubPageSize },
-               i18n("Choose the page dimensions used to lay out EPUB content."));
+               i18n("Choose the page dimensions used to lay out ePUB content."));
     setToolTip({ m_mupdfsw->customCssButton, m_mupdfsw->kcfg_EpubCustomCss },
-               i18n("Customize EPUB appearance with CSS rules."));
+               i18n("Customize ePUB appearance with CSS rules."));
     const QString databaseToolTip = m_mupdfsw->kcfg_dBCertificatePath->toolTip();
     m_mupdfsw->kcfg_dBCertificatePath->lineEdit()->setToolTip(databaseToolTip);
     m_mupdfsw->kcfg_dBCertificatePath->button()->setToolTip(databaseToolTip);

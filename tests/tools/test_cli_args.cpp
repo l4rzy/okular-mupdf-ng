@@ -73,6 +73,18 @@ private slots:
 
     void exportInfersFormatFromSuffix()
     {
+        const Cli::Command epub = Cli::parseArgs({ "mupdfng-cli", "export", "book.azw3", "out.EPUB" });
+        QVERIFY(epub.error.empty());
+        QCOMPARE(epub.exportOptions.format, Cli::ExportFormat::Epub);
+        const Cli::Command azw3 = Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.AZW3" });
+        QVERIFY(azw3.error.empty());
+        QCOMPARE(azw3.exportOptions.format, Cli::ExportFormat::Azw3);
+        QVERIFY(!Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", "out.azw3", "--pages", "0" }).error.empty());
+        for (const auto* option : { "--use-layout", "--flatten" }) {
+            const Cli::Command invalid = Cli::parseArgs({ "mupdfng-cli", "export", "book.azw3", "out.epub", option });
+            QVERIFY(!invalid.error.empty());
+        }
+        QVERIFY(!Cli::parseArgs({ "mupdfng-cli", "export", "book.azw3", "out.epub", "--pages", "0" }).error.empty());
         const Cli::Command xfdf = Cli::parseArgs({ "mupdfng-cli", "export", "doc.pdf", "-o", "out.xfdf" });
         QVERIFY(xfdf.error.empty());
         QCOMPARE(xfdf.exportOptions.format, Cli::ExportFormat::Xfdf);

@@ -3,7 +3,9 @@
 
 #include <QTest>
 
+#include "plugin/util/request_timeout.hpp"
 #include "plugin/worker_client.hpp"
+#include "shared/transport/common.hpp"
 
 using Mu::Plugin::WorkerClient;
 using State = Mu::Plugin::WorkerClient::State;
@@ -12,6 +14,35 @@ class TestWorkerClientState : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    void bookRequestTimeouts_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<int>("timeout");
+        QTest::newRow("kindle-open") << 0 << Mu::IPC::Timeout::ExportMs;
+        QTest::newRow("epub-open") << 1 << Mu::IPC::Timeout::GenericOpMs;
+        QTest::newRow("epub-export") << 2 << Mu::IPC::Timeout::ExportMs;
+        QTest::newRow("azw3-export") << 3 << Mu::IPC::Timeout::ExportMs;
+        QTest::newRow("ordinary-save") << 4 << Mu::IPC::Timeout::GenericOpMs;
+    }
+
+    void bookRequestTimeouts()
+    {
+        QFETCH(int, kind);
+        QFETCH(int, timeout);
+        Mu::Model::RequestPayload payload;
+        if (kind < 2) {
+            Mu::Model::OpenRequest open;
+            open.documentType = kind == 0 ? Mu::Model::DocumentType::Kindle : Mu::Model::DocumentType::Epub;
+            payload = open;
+        } else {
+            Mu::Model::SaveRequest save;
+            save.exportEpub = kind == 2;
+            save.exportAzw3 = kind == 3;
+            payload = save;
+        }
+        QCOMPARE(Mu::Plugin::Util::requestTimeoutFor(payload), timeout);
+    }
 
     void initialStateIsStoppedAndNotOperational()
     {

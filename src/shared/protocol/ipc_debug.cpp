@@ -362,6 +362,8 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
             } else if constexpr (std::is_same_v<T, Model::SaveRequest>) {
                 out << "save";
                 field(out, "transfer", value.file.transferId);
+                field(out, "exportEpub", value.exportEpub);
+                field(out, "exportAzw3", value.exportAzw3);
             } else if constexpr (std::is_same_v<T, Model::SavePdfRequest>) {
                 out << (value.flatten ? "flatten-pdf" : "save-pdf");
                 field(out, "transfer", value.file.transferId);

@@ -174,6 +174,54 @@ private slots:
         config->sync();
     }
 
+    void exportsEpubToAzw3()
+    {
+        const auto path = QStringLiteral(TEST_EPUB_DIR "/sample.epub");
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        const auto formats = document.exportFormats();
+        const auto it = std::find_if(formats.begin(), formats.end(), [](const auto& format) {
+            return format.mimeType().name() == QStringLiteral("application/vnd.amazon.mobi8-ebook");
+        });
+        QVERIFY(it != formats.end());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto output = directory.filePath(QStringLiteral("export.azw3"));
+        QVERIFY(document.exportTo(output, *it));
+        QFile result(output);
+        QVERIFY(result.open(QIODevice::ReadOnly));
+        const auto bytes = result.readAll();
+        QCOMPARE(bytes.mid(60, 8), QByteArray("BOOKMOBI"));
+    }
+
+    void exportsKindleToEpub_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::newRow("azw3") << QStringLiteral("sample.azw3");
+        QTest::newRow("kfx") << QStringLiteral("sample.kfx");
+    }
+
+    void exportsKindleToEpub()
+    {
+        QFETCH(QString, fixture);
+        const QString path = QStringLiteral(TEST_MOBI_DIR "/") + fixture;
+        Okular::Document document(nullptr);
+        const auto kindleMime = QMimeDatabase().mimeTypeForName(QStringLiteral("application/vnd.amazon.mobi8-ebook"));
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), kindleMime), Okular::Document::OpenSuccess);
+        const auto formats = document.exportFormats();
+        const auto it = std::find_if(formats.begin(), formats.end(), [](const auto& format) {
+            return format.mimeType().name() == QStringLiteral("application/epub+zip");
+        });
+        QVERIFY(it != formats.end());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto output = directory.filePath(QStringLiteral("export.epub"));
+        QVERIFY(document.exportTo(output, *it));
+        QCOMPARE(QMimeDatabase().mimeTypeForFile(output, QMimeDatabase::MatchContent).name(),
+                 QStringLiteral("application/epub+zip"));
+    }
+
     void attachmentResultsAreCachedOnlyOnSuccess_data()
     {
         QTest::addColumn<int>("declaredSize");

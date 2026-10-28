@@ -29,6 +29,7 @@
 #include "plugin/caching/pdf_toc_cache.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/process_memory.hpp"
+#include "plugin/util/request_timeout.hpp"
 #include "plugin/util/temp_dir.hpp"
 #include "shared/compat.hpp"
 #include "shared/logging.hpp"
@@ -124,11 +125,9 @@ receiveRenderFrame(IPC::FdChannel& channel, quint64 transferId, const char* labe
     return MappedFrame { mapping, *size };
 }
 
-// =============================================================================
-// Request Timeout Policy
-// =============================================================================
+} // namespace
 
-int timeoutFor(const RequestPayload& payload)
+int Util::requestTimeoutFor(const RequestPayload& payload)
 {
     return std::visit(
         [](const auto& value) {
@@ -137,6 +136,10 @@ int timeoutFor(const RequestPayload& payload)
                 return Timeout::RenderMs;
             if constexpr (std::is_same_v<T, OcrPageRequest> || std::is_same_v<T, OcrResultRequest>)
                 return Timeout::OcrMs;
+            if constexpr (std::is_same_v<T, OpenRequest>)
+                return value.documentType == DocumentType::Kindle ? Timeout::ExportMs : Timeout::GenericOpMs;
+            if constexpr (std::is_same_v<T, SaveRequest>)
+                return value.exportEpub || value.exportAzw3 ? Timeout::ExportMs : Timeout::GenericOpMs;
             if constexpr (std::is_same_v<T, ExportPdfAsyncRequest>)
                 // Only the job submission round-trip is bounded here; the
                 // export itself completes out-of-band via a notification.
@@ -149,8 +152,6 @@ int timeoutFor(const RequestPayload& payload)
         },
         payload);
 }
-
-} // namespace
 
 // =============================================================================
 // Shared Frame Slots & Lease Release
@@ -916,6 +917,16 @@ bool WorkerTransport::saveToFile(const QString& target)
     return writeFile(SaveRequest { }, target);
 }
 
+bool WorkerTransport::exportEpubToFile(const QString& target)
+{
+    return writeFile(SaveRequest { { }, true }, target);
+}
+
+bool WorkerTransport::exportAzw3ToFile(const QString& target)
+{
+    return writeFile(SaveRequest { { }, false, true }, target);
+}
+
 bool WorkerTransport::flattenPdfToFile(const QString& target, const QVector<int>& pages)
 {
     std::vector<std::int32_t> pageList(pages.begin(), pages.end());
@@ -1172,7 +1183,7 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
     // otherwise the frame is an inline notification that is handled immediately
     // so the response stream stays ordered.
     const auto started = std::chrono::steady_clock::now();
-    const auto deadline = started + std::chrono::milliseconds(timeoutFor(request.payload));
+    const auto deadline = started + std::chrono::milliseconds(Util::requestTimeoutFor(request.payload));
     for (;;) {
         const auto remaining =
             std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();

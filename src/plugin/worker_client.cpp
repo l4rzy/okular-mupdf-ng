@@ -317,6 +317,16 @@ bool WorkerClient::saveToFile(const QString& t)
     return sync([&](WorkerTransport* transport) { return transport->saveToFile(t); });
 }
 
+bool WorkerClient::exportEpubToFile(const QString& target)
+{
+    return sync([&](WorkerTransport* transport) { return transport->exportEpubToFile(target); });
+}
+
+bool WorkerClient::exportAzw3ToFile(const QString& target)
+{
+    return sync([&](WorkerTransport* transport) { return transport->exportAzw3ToFile(target); });
+}
+
 bool WorkerClient::flattenPdfToFile(const QString& target, const QVector<int>& pages)
 {
     return sync([&](WorkerTransport* transport) { return transport->flattenPdfToFile(target, pages); });

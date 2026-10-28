@@ -1724,6 +1724,16 @@ Okular::ExportFormat::List Main::exportFormats() const
     Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
     if (Model::isReflowableDocument(m_document.type))
         formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
+    if (m_document.type == Model::DocumentType::Kindle) {
+        const QMimeType epub = QMimeDatabase().mimeTypeForName(QStringLiteral("application/epub+zip"));
+        if (epub.isValid())
+            formats.append(Okular::ExportFormat(i18n("ePUB"), epub));
+    }
+    if (m_document.type == Model::DocumentType::Epub) {
+        const QMimeType azw3 = QMimeDatabase().mimeTypeForName(QStringLiteral("application/vnd.amazon.mobi8-ebook"));
+        if (azw3.isValid())
+            formats.append(Okular::ExportFormat(i18n("Kindle (AZW3)"), azw3));
+    }
     if (m_document.type == Model::DocumentType::Pdf) {
         const QMimeType pdf = QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"));
         if (pdf.isValid())
@@ -1741,6 +1751,22 @@ Okular::ExportFormat::List Main::exportFormats() const
 // Okular Generator Func: exports the document to a selected format.
 bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 {
+    if (format.mimeType().name() == QLatin1String("application/vnd.amazon.mobi8-ebook")) {
+        if (m_document.type != Model::DocumentType::Epub || !workerReady())
+            return false;
+        const bool success = m_worker.exportAzw3ToFile(fileName);
+        if (success)
+            Q_EMIT notice(i18n("Export to AZW3 finished."), NoticeMs);
+        return success;
+    }
+    if (format.mimeType().name() == QLatin1String("application/epub+zip")) {
+        if (m_document.type != Model::DocumentType::Kindle || !workerReady())
+            return false;
+        const bool success = m_worker.exportEpubToFile(fileName);
+        if (success)
+            Q_EMIT notice(i18n("Export to ePUB finished."), NoticeMs);
+        return success;
+    }
     if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
         if (!workerReady())
             return false;

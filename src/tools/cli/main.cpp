@@ -265,6 +265,28 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
 // PDF & XFDF Export
 // =============================================================================
 
+int runExportBook(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
+{
+    const QString file = QString::fromStdString(options.file);
+    const bool azw3 = options.format == ExportFormat::Azw3;
+    const auto inputType = azw3 ? Mu::Model::DocumentType::Epub : Mu::Model::DocumentType::Kindle;
+    if (Mu::Plugin::Util::documentTypeForFile(file) != inputType) {
+        reportError(azw3 ? QStringLiteral("AZW3 export only supports ePUB documents")
+                         : QStringLiteral("ePUB export only supports Kindle documents"));
+        return ExitJobFailed;
+    }
+    if (openDocument(client, file, QString::fromStdString(options.shared.password), inputType) < 0)
+        return ExitJobFailed;
+    const QString output = QString::fromStdString(options.output);
+    if (!(azw3 ? client.exportAzw3ToFile(output) : client.exportEpubToFile(output))) {
+        reportError(QStringLiteral("book export failed"));
+        return ExitJobFailed;
+    }
+    ok(QStringLiteral("Exported %1 to %2").arg(azw3 ? QStringLiteral("AZW3") : QStringLiteral("ePUB"), output));
+    out().flush();
+    return ExitOk;
+}
+
 int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
     const QString file = QString::fromStdString(options.file);
@@ -273,16 +295,16 @@ int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
         reportError(options.flatten
                         ? QStringLiteral("flattened PDF export only supports PDF documents")
                         : QStringLiteral(
-                              "PDF export only supports EPUB and legacy MOBI documents; use --flatten for PDF input"));
+                              "PDF export only supports ePUB and legacy MOBI documents; use --flatten for PDF input"));
         return ExitJobFailed;
     }
     if (options.useLayout) {
         const Mu::Model::DocumentSettings settings = readLayoutConfig();
         if (!client.setSettings(settings)) {
-            reportError(QStringLiteral("failed to apply EPUB layout settings"));
+            reportError(QStringLiteral("failed to apply ePUB layout settings"));
             return ExitJobFailed;
         }
-        info(QStringLiteral("Applied Okular EPUB layout settings"));
+        info(QStringLiteral("Applied Okular ePUB layout settings"));
     }
     const qsizetype pageCount = openDocument(client, file, QString::fromStdString(options.shared.password), type);
     if (pageCount < 0)
@@ -515,6 +537,9 @@ int run(const Command& command)
     else if (command.kind == Command::Kind::Export) {
         if (command.exportOptions.format == ExportFormat::Pdf)
             code = runExportPdf(client, command.exportOptions);
+        else if (command.exportOptions.format == ExportFormat::Epub
+                 || command.exportOptions.format == ExportFormat::Azw3)
+            code = runExportBook(client, command.exportOptions);
         else
             code = runExportXfdf(client, command.exportOptions);
     } else if (command.kind == Command::Kind::Import)

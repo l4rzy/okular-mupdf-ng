@@ -175,6 +175,9 @@ public:
     /// Saves document modifications back to an output file descriptor.
     [[nodiscard]] ResponseMessage saveFdResponse(std::uint64_t id, int fd);
 
+    /// Exports an ePUB or Kindle book to a transferred output descriptor.
+    [[nodiscard]] ResponseMessage saveBookFdResponse(std::uint64_t id, const Model::SaveRequest& payload, int fd);
+
     /// Writes printable pages, a flattened PDF, or format-specific PDF export.
     [[nodiscard]] ResponseMessage savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd);
 

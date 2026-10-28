@@ -69,15 +69,16 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
 {
     parser.setApplicationDescription(
         "Export a document through the MuPDF worker.\n"
-        "The format is inferred from the output suffix: .pdf exports an EPUB or legacy MOBI document "
-        "to PDF (or flattens a PDF with --flatten), .xfdf/.xml exports a PDF document's annotations as XFDF.\n"
+        "The format is inferred from the output suffix: .pdf exports an ePUB or legacy MOBI document "
+        "to PDF (or flattens a PDF with --flatten), .epub converts Kindle to ePUB, .azw3 converts ePUB to Kindle, and "
+        ".xfdf/.xml exports a PDF document's annotations as XFDF.\n"
         "XFDF export does not support PDF documents containing rotated pages.");
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output file; alternative to the OUTPUT positional.", "file" });
     parser.addOption({ "pages", "Zero-based pages to export, e.g. 0,2,5 or 1-3. Default: all pages.", "list" });
     parser.addOption({ "flatten", "Bake PDF annotations and form fields into static page content." });
     parser.addOption({ "use-layout",
-                       "Apply the configured EPUB layout settings (font size, page size, font family, custom CSS) "
+                       "Apply the configured ePUB layout settings (font size, page size, font family, custom CSS) "
                        "before exporting." });
     addSharedOptions(parser);
     parser.addPositionalArgument("file", "Input document.", "<file>");
@@ -197,6 +198,11 @@ Command parseExport(const QStringList& args)
         return command;
     options.useLayout = parser.isSet("use-layout");
     options.flatten = parser.isSet("flatten");
+    if ((options.format == ExportFormat::Epub || options.format == ExportFormat::Azw3)
+        && (parser.isSet("pages") || options.useLayout || options.flatten)) {
+        command.error = "ePUB and AZW3 export do not support --pages, --use-layout, or --flatten";
+        return command;
+    }
     if (options.flatten && (options.format != ExportFormat::Pdf || options.useLayout)) {
         command.error = "--flatten requires PDF output and cannot be combined with --use-layout";
         return command;
@@ -290,6 +296,10 @@ ExportFormat exportFormatForSuffix(const std::string& path)
     });
     if (suffix == "pdf")
         return ExportFormat::Pdf;
+    if (suffix == "epub")
+        return ExportFormat::Epub;
+    if (suffix == "azw3")
+        return ExportFormat::Azw3;
     if (suffix == "xfdf" || suffix == "xml")
         return ExportFormat::Xfdf;
     return ExportFormat::Unknown;

@@ -392,6 +392,28 @@ ResponseMessage CommandService::saveFdResponse(std::uint64_t id, int fd)
     return success(id);
 }
 
+ResponseMessage CommandService::saveBookFdResponse(std::uint64_t id, const SaveRequest& payload, int fd)
+{
+    Sys::FileDescriptor output(fd);
+    if (payload.exportAzw3) {
+        auto* epub = dynamic_cast<Engine::EpubDocument*>(m_document.get());
+        if (payload.exportEpub || !epub || dynamic_cast<Engine::KindleDocument*>(epub)
+            || dynamic_cast<Engine::MobiDocument*>(epub) || !hasOpenDocument())
+            return failure(id, ErrorCode::InvalidRequest, "export_azw3", "EPUB document is not open");
+        std::string error;
+        if (!epub->exportAzw3Fd(output.release(), &error))
+            return failure(id, ErrorCode::Internal, "export_azw3", error);
+        return success(id);
+    }
+    auto* kindle = dynamic_cast<Engine::KindleDocument*>(m_document.get());
+    if (!kindle || !hasOpenDocument())
+        return failure(id, ErrorCode::InvalidRequest, "export_epub", "Kindle document is not open");
+    std::string error;
+    if (!kindle->exportEpubFd(output.release(), &error))
+        return failure(id, ErrorCode::Internal, "export_epub", error);
+    return success(id);
+}
+
 ResponseMessage CommandService::savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd)
 {
     const char* method = payload.flatten ? "flatten_pdf" : "save_pdf";
@@ -1231,8 +1253,11 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
                 });
             },
             [&](const SaveRequest& payload) {
-                return dispatchWithFd(
-                    "save", payload.file.transferId, [&](int fd) { return saveFdResponse(request.id, fd); });
+                return dispatchWithFd("save", payload.file.transferId, [&](int fd) {
+                    if (!payload.exportEpub && !payload.exportAzw3)
+                        return saveFdResponse(request.id, fd);
+                    return saveBookFdResponse(request.id, payload, fd);
+                });
             },
             [&](const SavePdfRequest& payload) {
                 return dispatchWithFd(payload.flatten ? "flatten_pdf" : "save_pdf",
