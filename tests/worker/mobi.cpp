@@ -83,6 +83,14 @@ private slots:
         QTest::addColumn<QString>("fixture");
         QTest::addColumn<QString>("name");
         QTest::addColumn<Model::DocumentType>("type");
+        QTest::newRow("pdf-extensionless")
+            << QStringLiteral("../pdf/digital_signature.pdf") << QStringLiteral("book") << Model::DocumentType::Pdf;
+        QTest::newRow("pdf-as-epub") << QStringLiteral("../pdf/digital_signature.pdf") << QStringLiteral("book.epub")
+                                     << Model::DocumentType::Pdf;
+        QTest::newRow("epub-extensionless")
+            << QStringLiteral("../epub/sample.epub") << QStringLiteral("book") << Model::DocumentType::Epub;
+        QTest::newRow("epub-as-pdf") << QStringLiteral("../epub/sample.epub") << QStringLiteral("book.pdf")
+                                     << Model::DocumentType::Epub;
         QTest::newRow("azw3-extensionless")
             << QStringLiteral("sample.azw3") << QStringLiteral("book") << Model::DocumentType::Kindle;
         QTest::newRow("azw3-as-pdf") << QStringLiteral("sample.azw3") << QStringLiteral("book.pdf")
@@ -137,6 +145,49 @@ private slots:
     }
 
     void resolvesKindleMime()
+    {
+        QFETCH(QString, mime);
+        QFETCH(QString, suffix);
+        QFETCH(Model::DocumentType, type);
+        QCOMPARE(Plugin::Util::resolveDocumentType(mime, suffix), type);
+    }
+
+    void resolvesContainerSuffixes_data()
+    {
+        QTest::addColumn<QString>("mime");
+        QTest::addColumn<QString>("suffix");
+        QTest::addColumn<Model::DocumentType>("type");
+
+        using Type = Model::DocumentType;
+
+        struct SuffixCase {
+            const char* suffix;
+            Type binaryType;
+            Type zipType;
+        };
+
+        constexpr std::array cases {
+            SuffixCase { "pdf", Type::Unknown, Type::Unknown }, SuffixCase { "epub", Type::Epub, Type::Epub },
+            SuffixCase { "mobi", Type::Mobi, Type::Unknown },   SuffixCase { "azw3", Type::Kindle, Type::Unknown },
+            SuffixCase { "kfx", Type::Kindle, Type::Unknown },  SuffixCase { "zip", Type::Unknown, Type::Unknown },
+            SuffixCase { "", Type::Unknown, Type::Unknown },
+        };
+        for (const auto& test : cases) {
+            const auto suffix = QString::fromLatin1(test.suffix);
+            const auto binaryName = QByteArray("binary-") + test.suffix;
+            QTest::newRow(binaryName.constData())
+                << QStringLiteral("application/octet-stream") << suffix << test.binaryType;
+            for (const auto* mime : { "application/zip",
+                                      "application/x-zip",
+                                      "application/x-zip-compressed",
+                                      "application/java-archive" }) {
+                const auto name = QByteArray(mime) + '-' + test.suffix;
+                QTest::newRow(name.constData()) << QString::fromLatin1(mime) << suffix << test.zipType;
+            }
+        }
+    }
+
+    void resolvesContainerSuffixes()
     {
         QFETCH(QString, mime);
         QFETCH(QString, suffix);

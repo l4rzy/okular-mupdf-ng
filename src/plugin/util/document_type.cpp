@@ -4,6 +4,7 @@
 #include "plugin/util/document_type.hpp"
 #include "shared/logging.hpp"
 
+#include <QBuffer>
 #include <QFile>
 #include <QFileInfo>
 #include <QMimeDatabase>
@@ -31,14 +32,47 @@ std::uint32_t readFirstRecordOffset(const QByteArray& database)
 // ZIP-based types that carry no document information on their own. EPUB
 // archives are ZIP containers, so these defer to the file suffix; a real
 // .zip/.jar remains Unknown.
-bool isGenericContainerMime(const QString& mime) noexcept
+bool isZipContainerMime(const QString& mime) noexcept
 {
     return mime == QStringLiteral("application/zip") || mime == QStringLiteral("application/x-zip")
-        || mime == QStringLiteral("application/x-zip-compressed") || mime == QStringLiteral("application/java-archive")
-        || mime == QStringLiteral("application/octet-stream");
+        || mime == QStringLiteral("application/x-zip-compressed") || mime == QStringLiteral("application/java-archive");
+}
+
+Model::DocumentType detectDocumentType(QIODevice& device, const QString& suffixLower = { })
+{
+    const auto database = device.peek(94);
+    if (database.startsWith("CONT"))
+        return Model::DocumentType::Kindle;
+
+    const auto mime = QMimeDatabase().mimeTypeForData(&device);
+    const auto type = resolveDocumentType(mime.name(), suffixLower);
+    if (type != Model::DocumentType::Mobi || !device.seek(readFirstRecordOffset(database)))
+        return type;
+    return detectMobiType(database, device.read(40));
 }
 
 } // namespace
+
+Model::DocumentType documentTypeForFile(const QString& fileName)
+{
+    QFile file(fileName);
+    const auto suffix = QFileInfo(fileName).suffix().toLower();
+    if (file.open(QIODevice::ReadOnly))
+        return detectDocumentType(file, suffix);
+
+    // Preserve Qt's MIME fallback when the source cannot be opened.
+    const auto mime = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase::MatchContent);
+    return resolveDocumentType(mime.name(), suffix);
+}
+
+Model::DocumentType documentTypeForData(const QByteArray& data)
+{
+    QBuffer buffer;
+    buffer.setData(data);
+    if (!buffer.open(QIODevice::ReadOnly))
+        return Model::DocumentType::Unknown;
+    return detectDocumentType(buffer);
+}
 
 Model::DocumentType resolveDocumentType(const QString& contentMime, const QString& suffixLower) noexcept
 {
@@ -47,10 +81,11 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
     if (fromContent != Model::DocumentType::Unknown)
         return fromContent;
 
-    // Only generic containers may fall back to the suffix: a definitive
-    // non-document type (for example image/png named .epub) must not be sent
-    // to the worker as if it were a document.
-    if (!isGenericContainerMime(contentMime)) {
+    // Recognized non-document MIME types cannot use suffix fallbacks.
+    // Unidentified binary content permits EPUB, MOBI and Kindle suffixes;
+    // ZIP containers permit only the EPUB fallback.
+    const bool isUnidentifiedBinary = contentMime == QStringLiteral("application/octet-stream");
+    if (!isUnidentifiedBinary && !isZipContainerMime(contentMime)) {
         MU_LOG(critical, "Mu::Plugin", "Unsupported common container type; aborting");
         return Model::DocumentType::Unknown;
     }
@@ -63,51 +98,15 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
         return Model::DocumentType::Epub;
     }
 
-    if (contentMime == QStringLiteral("application/octet-stream") && suffixLower == QStringLiteral("mobi"))
-        return Model::DocumentType::Mobi;
-    if (contentMime == QStringLiteral("application/octet-stream")
-        && (suffixLower == QStringLiteral("azw3") || suffixLower == QStringLiteral("kfx")))
-        return Model::DocumentType::Kindle;
-
-    if (suffixLower == QStringLiteral("pdf")) {
-        MU_LOG(warning, "Mu::Plugin", "Falling back to pdf suffix");
-        return Model::DocumentType::Pdf;
+    if (isUnidentifiedBinary) {
+        if (suffixLower == QStringLiteral("mobi"))
+            return Model::DocumentType::Mobi;
+        if (suffixLower == QStringLiteral("azw3") || suffixLower == QStringLiteral("kfx"))
+            return Model::DocumentType::Kindle;
     }
 
     MU_LOG(critical, "Mu::Plugin", "Unsupported MIME type; aborting");
     return Model::DocumentType::Unknown;
-}
-
-Model::DocumentType documentTypeForFile(const QString& fileName)
-{
-    // MatchContent handles files whose extension is missing or misleading.
-    QFile file(fileName);
-    const auto database = file.open(QIODevice::ReadOnly) ? file.read(94) : QByteArray();
-    if (database.startsWith("CONT"))
-        return Model::DocumentType::Kindle;
-    const auto mime = QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase::MatchContent);
-    const auto type = resolveDocumentType(mime.name(), QFileInfo(fileName).suffix().toLower());
-    if (type != Model::DocumentType::Mobi)
-        return type;
-    if (!file.isOpen())
-        return type;
-    if (!file.seek(readFirstRecordOffset(database)))
-        return type;
-    return detectMobiType(database, file.read(40));
-}
-
-Model::DocumentType documentTypeForData(const QByteArray& data)
-{
-    // Content sniffing is the only available source of type information for
-    // documents opened from memory.
-    if (data.startsWith("CONT"))
-        return Model::DocumentType::Kindle;
-    const auto mime = QMimeDatabase().mimeTypeForData(data);
-    const auto type = documentTypeForMime(mime.name());
-    if (type != Model::DocumentType::Mobi)
-        return type;
-    const auto database = data.left(94);
-    return detectMobiType(database, data.mid(readFirstRecordOffset(database), 40));
 }
 
 } // namespace Mu::Plugin::Util

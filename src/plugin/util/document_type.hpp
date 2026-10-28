@@ -17,18 +17,18 @@ inline Model::DocumentType documentTypeForMime(const QString& mime)
     return Model::documentTypeFromMime(mime.toStdString());
 }
 
+/// Detects the document type of a file by content, with a suffix fallback.
+Model::DocumentType documentTypeForFile(const QString& fileName);
+
+/// Detects the document type of in-memory data; no suffix is available.
+Model::DocumentType documentTypeForData(const QByteArray& data);
+
 /**
  * Resolves a document type from a sniffed MIME type and a lowercased file
  * suffix. Definitive content wins; generic container types can fall back to
  * the suffix. The file/data adapters distinguish MOBI and AZW3 by their headers.
  */
 Model::DocumentType resolveDocumentType(const QString& contentMime, const QString& suffixLower) noexcept;
-
-/// Detects the document type of a file by content, with a suffix fallback.
-Model::DocumentType documentTypeForFile(const QString& fileName);
-
-/// Detects the document type of in-memory data; no suffix is available.
-Model::DocumentType documentTypeForData(const QByteArray& data);
 
 } // namespace Mu::Plugin::Util
 
