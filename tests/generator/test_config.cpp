@@ -23,6 +23,7 @@
 #include "generator/config/certmanager/dialog_utils.hpp"
 #include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/config/certmanager/self_signed_dialog.hpp"
+#include "generator/config/document_settings.hpp"
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
@@ -45,6 +46,97 @@ private slots:
         qputenv("XDG_DATA_HOME", m_root.filePath("data").toUtf8());
         qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
         KLocalizedString::setApplicationDomain("okular_mupdfng");
+    }
+
+    void documentOverrides_data()
+    {
+        QTest::addColumn<bool>("theme");
+        QTest::addColumn<bool>("layout");
+        QTest::addColumn<bool>("ocr");
+        QTest::newRow("inherit") << false << false << false;
+        QTest::newRow("theme") << true << false << false;
+        QTest::newRow("layout") << false << true << false;
+        QTest::newRow("ocr") << false << false << true;
+        QTest::newRow("all") << true << true << true;
+    }
+
+    void documentOverrides()
+    {
+        namespace Config = Mu::Generator::Config;
+        QFETCH(bool, theme);
+        QFETCH(bool, layout);
+        QFETCH(bool, ocr);
+        Config::DocumentSettings settings;
+        if (theme)
+            settings.theme = Mu::Model::DocumentTheme::Dusk;
+        if (layout)
+            settings.layout =
+                Config::EpubSettings { 16, 2, 0, QString::fromLatin1(QByteArray("body { color: red; }").toBase64()) };
+        if (ocr) {
+            settings.ocr = Config::OcrSettings();
+            settings.ocr->language = QStringLiteral("vie");
+            settings.ocr->dpi = 300;
+            settings.ocr->notify = false;
+            Config::setOcrTriggerMode(*settings.ocr, 3);
+        }
+        const auto key = QStringLiteral("test-document");
+        QVERIFY(Config::writeDocumentSettings(key, settings));
+        QVERIFY(Config::readDocumentSettings(key) == settings);
+        QVERIFY(Config::readDocumentSettings(QStringLiteral("other-document")) == Config::DocumentSettings());
+        QVERIFY(Config::writeDocumentSettings(key, { }));
+        QVERIFY(Config::readDocumentSettings(key) == Config::DocumentSettings());
+        KConfig config(QStringLiteral("okular-mupdf-ng/documentsrc"), KConfig::SimpleConfig);
+        QVERIFY(!config.hasGroup(key));
+    }
+
+    void ocrModeRoundTrip_data()
+    {
+        QTest::addColumn<int>("mode");
+        QTest::newRow("off") << 0;
+        QTest::newRow("automatic") << 1;
+        QTest::newRow("sparse") << 2;
+        QTest::newRow("always") << 3;
+    }
+
+    void ocrModeRoundTrip()
+    {
+        QFETCH(int, mode);
+        Mu::Generator::Config::OcrSettings settings;
+        Mu::Generator::Config::setOcrTriggerMode(settings, mode);
+        QCOMPARE(Mu::Generator::Config::ocrTriggerModeFor(settings), mode);
+        QCOMPARE(settings.force, mode == 3);
+        QCOMPARE(settings.autoTrigger, mode != 0);
+        QCOMPARE(settings.triggerThreshold, mode == 1 ? 5U : 20U);
+    }
+
+    void documentIdentity()
+    {
+        namespace Config = Mu::Generator::Config;
+        QFile file(m_root.filePath("identity.epub"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("first");
+        file.close();
+        const auto key = Config::documentSettingsKey(file.fileName());
+        QVERIFY(!key.isEmpty());
+        QCOMPARE(Config::documentSettingsKey(file.fileName()), key);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("replacement");
+        file.close();
+        QCOMPARE(Config::documentSettingsKey(file.fileName()), key);
+        QFile other(m_root.filePath("other.epub"));
+        QVERIFY(other.open(QIODevice::WriteOnly));
+        other.write("replacement");
+        other.close();
+        QVERIFY(Config::documentSettingsKey(other.fileName()) != key);
+        QVERIFY(Config::documentSettingsKey(QStringLiteral("/missing/document.epub")).isEmpty());
+        const QByteArray data(200000, 'x');
+        QCOMPARE(Config::documentSettingsKey(data), Config::documentSettingsKey(data));
+        QByteArray changed = data;
+        changed.back() = 'y';
+        QVERIFY(Config::documentSettingsKey(data) != Config::documentSettingsKey(changed));
+        changed = data;
+        changed[100000] = 'y';
+        QVERIFY(Config::documentSettingsKey(data) != Config::documentSettingsKey(changed));
     }
 
     void defaultsLinkPreviewToOff()

@@ -53,9 +53,15 @@ void Main::setupActions()
         dialog.exec();
     });
     setupThemeActions();
+    auto* documentSettings =
+        new QAction(QIcon::fromTheme(QStringLiteral("configure")), i18n("Document Settings…"), this);
+    actionCollection()->addAction(QStringLiteral("mupdf_document_settings"), documentSettings);
+    KActionCollection::setShortcutsConfigurable(documentSettings, false);
+    connect(documentSettings, &QAction::triggered, this, &Main::showDocumentSettings);
     auto* import =
         new QAction(QIcon::fromTheme(QStringLiteral("document-import")), i18n("Import Annotations from XFDF…"), this);
     actionCollection()->addAction(QStringLiteral("mupdf_import_xfdf"), import);
+    KActionCollection::setShortcutsConfigurable(import, false);
     connect(import, &QAction::triggered, this, &Main::importXfdf);
     // All actions exist before their initial state and shortcut registration.
     syncActions();
@@ -67,7 +73,7 @@ void Main::setupActions()
 
 void Main::setupOcrActions()
 {
-    auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("document-scan")), i18n("MuPDF OCR"), this);
+    auto* menu = new KActionMenu(QIcon::fromTheme(QStringLiteral("document-scan")), i18n("Tesseract OCR"), this);
     actionCollection()->addAction(QStringLiteral("mupdf_ocr"), menu);
     KActionCollection::setShortcutsConfigurable(menu, false);
     m_ocrActions = new QActionGroup(this);
@@ -80,6 +86,7 @@ void Main::setupOcrActions()
         menu->addAction(action);
     };
     using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
+    addMode(QStringLiteral("mupdf_ocr_inherit"), i18n("Use Global"), -1);
     addMode(QStringLiteral("mupdf_ocr_off"), i18n("Off"), Mode::Never);
     addMode(QStringLiteral("mupdf_ocr_auto"), i18n("Automatic"), Mode::Five);
     addMode(QStringLiteral("mupdf_ocr_on"), i18n("On"), Mode::Always);
@@ -88,21 +95,35 @@ void Main::setupOcrActions()
         m_ocrUnavailableActions->addAction(menu->menu()->addAction(text));
     m_ocrUnavailableActions->setEnabled(false);
     const auto setMode = [this](int mode) {
-        MuPDFNGSettings::setOcrTriggerMode(mode);
-        MuPDFNGSettings::self()->save();
+        if (mode >= 0 && !m_document.settings.ocr) {
+            MuPDFNGSettings::setOcrTriggerMode(mode);
+            MuPDFNGSettings::self()->save();
+        } else {
+            auto settings = m_document.settings;
+            if (mode < 0)
+                settings.ocr.reset();
+            else
+                Config::setOcrTriggerMode(*settings.ocr, mode);
+            if (!applyDocumentSettings(settings)) {
+                syncOcrActions();
+                return;
+            }
+        }
         const int menuMode = mode == Mode::Twenty ? Mode::Five : mode;
         for (QAction* action : m_ocrActions->actions()) {
             if (action->data().toInt() == menuMode) {
-                Q_EMIT notice(i18n("MuPDF OCR: %1", KLocalizedString::removeAcceleratorMarker(action->text())),
+                Q_EMIT notice(i18n("Tesseract OCR: %1", KLocalizedString::removeAcceleratorMarker(action->text())),
                               ShortNoticeMs);
                 break;
             }
         }
     };
-    auto* toggle = new QAction(menu->icon(), i18n("Toggle MuPDF OCR"), this);
+    auto* toggle = new QAction(menu->icon(), i18n("Toggle Tesseract OCR"), this);
     actionCollection()->addAction(QStringLiteral("mupdf_ocr_toggle"), toggle);
     connect(toggle, &QAction::triggered, this, [this, setMode] {
-        setMode(m_menuRegistration->nextOcrMode(MuPDFNGSettings::ocrTriggerMode()));
+        const int mode = m_document.settings.ocr ? Config::ocrTriggerModeFor(*m_document.settings.ocr)
+                                                 : MuPDFNGSettings::ocrTriggerMode();
+        setMode(m_menuRegistration->nextOcrMode(mode, m_document.settings.ocr.has_value()));
     });
     connect(menu->menu(), &QMenu::aboutToShow, this, &Main::syncOcrActions);
     connect(
@@ -122,23 +143,33 @@ void Main::setupThemeActions()
     actionCollection()->addAction(QStringLiteral("mupdf_theme"), menu);
     KActionCollection::setShortcutsConfigurable(menu, false);
     m_themeActions = new QActionGroup(this);
-    const auto addTheme = [&](const QString& name, const QString& label, Model::DocumentTheme theme) {
+    const auto addTheme = [&](const QString& name, const QString& label, std::optional<Model::DocumentTheme> theme) {
         auto* action = new QAction(label, m_themeActions);
         action->setCheckable(true);
-        action->setData(static_cast<int>(theme));
+        action->setData(theme ? static_cast<int>(*theme) : -1);
         KActionCollection::setShortcutsConfigurable(action, false);
         actionCollection()->addAction(name, action);
         menu->addAction(action);
     };
+    addTheme(QStringLiteral("mupdf_theme_inherit"), i18n("Use Global"), std::nullopt);
     addTheme(QStringLiteral("mupdf_theme_default"), i18n("Default"), Model::DocumentTheme::Default);
     addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::DocumentTheme::Twilight);
     addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::DocumentTheme::Dusk);
     addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::DocumentTheme::Dark);
-    const auto setTheme = [this](Model::DocumentTheme theme) {
-        MuPDFNGSettings::setDocumentTheme(static_cast<int>(theme));
-        MuPDFNGSettings::self()->save();
+    const auto setTheme = [this](std::optional<Model::DocumentTheme> theme) {
+        if (theme && !m_document.settings.theme) {
+            MuPDFNGSettings::setDocumentTheme(static_cast<int>(*theme));
+            MuPDFNGSettings::self()->save();
+        } else {
+            auto settings = m_document.settings;
+            settings.theme = theme;
+            if (!applyDocumentSettings(settings)) {
+                syncThemeActions();
+                return;
+            }
+        }
         for (QAction* action : m_themeActions->actions()) {
-            if (action->data().toInt() == static_cast<int>(theme)) {
+            if (action->data().toInt() == (theme ? static_cast<int>(*theme) : -1)) {
                 Q_EMIT notice(i18n("Document theme: %1", KLocalizedString::removeAcceleratorMarker(action->text())),
                               ShortNoticeMs);
                 break;
@@ -146,16 +177,17 @@ void Main::setupThemeActions()
         }
     };
     connect(m_themeActions, &QActionGroup::triggered, this, [setTheme](QAction* action) {
-        setTheme(static_cast<Model::DocumentTheme>(action->data().toInt()));
+        const int value = action->data().toInt();
+        setTheme(value < 0 ? std::nullopt : std::optional(static_cast<Model::DocumentTheme>(value)));
     });
     const auto addToggle =
         [this, setTheme](const QString& name, const QString& label, const QString& icon, Model::DocumentTheme theme) {
             auto* action = new QAction(QIcon::fromTheme(icon), label, this);
             actionCollection()->addAction(name, action);
-            connect(action, &QAction::triggered, this, [setTheme, theme] {
-                setTheme(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()) == theme
-                             ? Model::DocumentTheme::Default
-                             : theme);
+            connect(action, &QAction::triggered, this, [this, setTheme, theme] {
+                const auto current = m_document.settings.theme.value_or(
+                    static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()));
+                setTheme(current == theme ? Model::DocumentTheme::Default : theme);
             });
         };
     addToggle(QStringLiteral("mupdf_theme_toggle_dusk"),
@@ -177,7 +209,7 @@ void Main::setupThemeActions()
         &KCoreConfigSkeleton::configChanged,
         this,
         [this] {
-            if (const auto* currentDocument = document(); currentDocument
+            if (const auto* currentDocument = document(); currentDocument && !m_document.settings.theme
                 && m_settings.rendering.documentTheme
                     != static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()))
                 const_cast<Okular::Document*>(currentDocument)->reparseConfig();
@@ -189,14 +221,20 @@ void Main::setupThemeActions()
 void Main::syncThemeActions()
 {
     const bool enabled = !m_okularPages.isEmpty() && !m_pageError.isActive();
-    actionCollection()->action(QStringLiteral("mupdf_theme"))->setEnabled(enabled);
+    auto* menu = actionCollection()->action(QStringLiteral("mupdf_theme"));
+    menu->setEnabled(enabled);
+    menu->setText(m_document.settings.theme ? i18n("%1 (Local)", i18n("Document Theme")) : i18n("Document Theme"));
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dusk"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_twilight"))->setEnabled(enabled);
     m_themeActions->setEnabled(enabled);
-    const auto theme = static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme());
+    actionCollection()
+        ->action(QStringLiteral("mupdf_theme_inherit"))
+        ->setVisible(m_document.settings.theme.has_value());
+    const int theme = static_cast<int>(
+        m_document.settings.theme.value_or(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
     for (QAction* action : m_themeActions->actions())
-        action->setChecked(action->data().toInt() == static_cast<int>(theme));
+        action->setChecked(action->data().toInt() == theme);
 }
 
 void Main::syncOcrActions()
@@ -204,13 +242,22 @@ void Main::syncOcrActions()
     const bool enabled =
         m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && !m_pageError.isActive();
     const bool hasModels = !Config::installedOcrModels().isEmpty();
-    actionCollection()->action(QStringLiteral("mupdf_ocr"))->setEnabled(enabled);
+    auto* menu = actionCollection()->action(QStringLiteral("mupdf_ocr"));
+    menu->setEnabled(enabled);
+    menu->setText(m_document.settings.ocr ? i18n("%1 (Local)", i18n("Tesseract OCR")) : i18n("Tesseract OCR"));
     actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"))->setEnabled(enabled && hasModels);
-    m_ocrActions->setEnabled(enabled && hasModels);
-    m_ocrActions->setVisible(hasModels);
+    m_ocrActions->setEnabled(enabled);
+    for (QAction* action : m_ocrActions->actions()) {
+        action->setEnabled(enabled && hasModels);
+        action->setVisible(hasModels);
+    }
+    auto* inherit = actionCollection()->action(QStringLiteral("mupdf_ocr_inherit"));
+    inherit->setVisible(m_document.settings.ocr.has_value());
+    inherit->setEnabled(enabled);
     m_ocrUnavailableActions->setVisible(!hasModels);
     using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
-    const int configuredMode = MuPDFNGSettings::ocrTriggerMode();
+    const int configuredMode = m_document.settings.ocr ? Config::ocrTriggerModeFor(*m_document.settings.ocr)
+                                                       : MuPDFNGSettings::ocrTriggerMode();
     const int menuMode = configuredMode == Mode::Twenty ? Mode::Five : configuredMode;
     for (QAction* action : m_ocrActions->actions())
         action->setChecked(action->data().toInt() == menuMode);
@@ -220,6 +267,11 @@ void Main::syncActions()
 {
     syncThemeActions();
     syncOcrActions();
+    auto* documentSettings = actionCollection()->action(QStringLiteral("mupdf_document_settings"));
+    documentSettings->setEnabled(!m_okularPages.isEmpty() && workerReady());
+    const auto& settings = m_document.settings;
+    documentSettings->setText(settings.theme || settings.layout || settings.ocr ? i18n("Document Settings (Local)…")
+                                                                                : i18n("Document Settings…"));
     actionCollection()->action(QStringLiteral("mupdf_import_xfdf"))->setEnabled(canImportXfdf());
     actionCollection()
         ->action(QStringLiteral("mupdf_link_preview_toggle"))

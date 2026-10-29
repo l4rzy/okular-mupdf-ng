@@ -272,6 +272,7 @@ endif()
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
   generator/ui/actions.cpp
+  generator/ui/document_settings.cpp
   generator/ui/xfdf_import.cpp
   generator/ui/window_menus.cpp
   generator/config/settingswidget.cpp
@@ -289,7 +290,7 @@ ki18n_wrap_ui(okularGenerator_mupdfng_SRCS
    generator/config/settingswidget.ui
 )
 
-set(mupdf_generator_settings_SRCS generator/config/settings.cpp generator/config/signature_preview.cpp)
+set(mupdf_generator_settings_SRCS generator/config/document_settings.cpp generator/config/settings.cpp generator/config/signature_preview.cpp)
 kconfig_add_kcfg_files(mupdf_generator_settings_SRCS
    GENERATE_MOC generator/config/mupdfngsettings.kcfgc
 )

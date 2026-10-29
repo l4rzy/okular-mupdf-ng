@@ -231,24 +231,26 @@ OcrSettings readOcrSettings()
     }
     settings.language = Plugin::Util::stripLangSuffix(language);
 
-    switch (MuPDFNGSettings::ocrTriggerMode()) {
-    case MuPDFNGSettings::EnumOcrTriggerMode::Five:
-        settings.autoTrigger = true;
-        settings.triggerThreshold = 5;
-        break;
-    case MuPDFNGSettings::EnumOcrTriggerMode::Twenty:
-        settings.autoTrigger = true;
-        settings.triggerThreshold = 20;
-        break;
-    case MuPDFNGSettings::EnumOcrTriggerMode::Always:
-        settings.force = true;
-        break;
-    case MuPDFNGSettings::EnumOcrTriggerMode::Never:
-    default:
-        settings.autoTrigger = false;
-        break;
-    }
+    setOcrTriggerMode(settings, MuPDFNGSettings::ocrTriggerMode());
     return settings;
+}
+
+int ocrTriggerModeFor(const OcrSettings& settings)
+{
+    using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
+    if (settings.force)
+        return Mode::Always;
+    if (!settings.autoTrigger)
+        return Mode::Never;
+    return settings.triggerThreshold == 5 ? Mode::Five : Mode::Twenty;
+}
+
+void setOcrTriggerMode(OcrSettings& settings, int mode)
+{
+    using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
+    settings.force = mode == Mode::Always;
+    settings.autoTrigger = mode == Mode::Five || mode == Mode::Twenty || mode == Mode::Always;
+    settings.triggerThreshold = mode == Mode::Five ? 5 : 20;
 }
 
 // =============================================================================

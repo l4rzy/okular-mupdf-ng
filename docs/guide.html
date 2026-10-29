@@ -147,13 +147,21 @@ sudo apt install tesseract-ocr-eng</code></pre>
         <img src="assets/guide/ocr_configs.png" alt="PDF Optical Character Recognition settings with a Tesseract model, quality, and automatic OCR threshold" width="620" height="266" loading="lazy">
         <figcaption>Choose the Tesseract model and recognition settings in the PDF tab.</figcaption>
       </figure>
+      <p>For one PDF, open <strong>Tools → Document Settings</strong> and uncheck
+        <strong>Use Global</strong> in the <strong>Tesseract OCR</strong> section.
+        Choose its language, quality, trigger mode, and notifications, then apply.
+        These settings are remembered for that PDF and apply without reopening it.
+        Check <strong>Use Global</strong> to remove the override. The OCR menu
+        controls global defaults unless an override exists. With an override, it
+        shows <strong>(Local)</strong> and edits that PDF&rsquo;s settings; choose
+        <strong>Use Global</strong> there to restore inheritance.</p>
       <h3>Enable OCR</h3>
-      <p>Choose <strong>Tools → MuPDF OCR → Automatic</strong> for scanned pages,
+      <p>Choose <strong>Tools → Tesseract OCR → Automatic</strong> for scanned pages,
         or <strong>On</strong> to run OCR even when a page already contains text.
         Choose <strong>Off</strong> to stop automatic recognition.</p>
       <figure class="guide-screenshot">
-        <img src="assets/guide/ocr_toggle.png" alt="Tools menu open to MuPDF OCR options Off, Automatic, and On" width="730" height="543" loading="lazy">
-        <figcaption>Choose Off, Automatic, or On from Tools → MuPDF OCR.</figcaption>
+        <img src="assets/guide/ocr_toggle.png" alt="Tools menu open to Tesseract OCR options Off, Automatic, and On" width="730" height="543" loading="lazy">
+        <figcaption>Choose Off, Automatic, or On from Tools → Tesseract OCR.</figcaption>
       </figure>
       <p>View the pages to recognize them, then select or search the recognized text.
         Recognition results are cached; OCR does not add a text layer to the saved PDF.
@@ -177,12 +185,15 @@ sudo apt install tesseract-ocr-eng</code></pre>
       <p>ePUB, legacy MOBI, AZW3, and KFX use the same rendering and layout engine.
         The font, page size, and custom CSS settings below apply to all four formats.</p>
       <ol>
-        <li>Open the <strong>ePUB → Page Layout</strong> settings.</li>
+        <li>Open <strong>Tools → Document Settings</strong> for a local book and
+          uncheck <strong>Use Global</strong> under <strong>Ebook layout</strong>.</li>
         <li>Set <strong>Font Size</strong>, <strong>Font Family</strong>, and
           <strong>Page Size</strong>.</li>
         <li>Expand <strong>Custom CSS</strong> to add your own document styles.</li>
-        <li>Apply the settings and restart Okular when prompted.</li>
+        <li>Apply the settings. The book reloads with the new layout.</li>
       </ol>
+      <p>Applied overrides are remembered for this document. Select <strong>Use Global</strong> to remove the layout override. Set defaults for other books
+        under <strong>ePUB → Page Layout</strong> in the backend settings.</p>
       <p>For example, this rule increases inherited line spacing:</p>
       <pre><code>body { line-height: 1.8; }</code></pre>
       <p>A document&rsquo;s own rules on individual elements can override inherited
@@ -192,9 +203,12 @@ sudo apt install tesseract-ocr-eng</code></pre>
 
     <section id="document-themes">
       <h2>Document Theming</h2>
-      <p>Choose <strong>Tools → Document Theme</strong>, below MuPDF OCR, or use
-        <strong>General → Rendering → Document Theme</strong> in the backend settings.
-        The choice is saved and shared across all supported document formats.</p>
+      <p><strong>Tools → Document Theme</strong> controls the global theme by
+        default. Use <strong>Tools → Document Settings</strong> to save a theme
+        for one document. Its menu then shows <strong>(Local)</strong> and edits
+        that override. Choose <strong>Use Global</strong> to remove the override
+        and return to the global theme. Themes apply immediately, independently
+        of ebook layout.</p>
       <figure class="guide-screenshot">
         <img src="assets/guide/doc_theming.png" alt="Okular's Document Theme menu open over a PDF, with Dusk selected" width="822" height="618" loading="lazy">
         <figcaption>Select a document theme from the Tools menu.</figcaption>
@@ -265,10 +279,10 @@ sudo apt install tesseract-ocr-eng</code></pre>
         <li>Select an action, assign a shortcut, and apply the change.</li>
       </ol>
       <figure class="guide-screenshot">
-        <img src="assets/guide/shortcuts.png" alt="Okular keyboard shortcut settings listing the MuPDF OCR and document theme toggle actions" width="503" height="327" loading="lazy">
+        <img src="assets/guide/shortcuts.png" alt="Okular keyboard shortcut settings listing the Tesseract OCR and document theme toggle actions" width="503" height="327" loading="lazy">
         <figcaption>MuPDF actions in Configure Shortcuts. The OCR shortcut shown is a custom assignment.</figcaption>
       </figure>
-      <p>These actions have no default shortcuts. <strong>Toggle MuPDF OCR</strong>
+      <p>These actions have no default shortcuts. <strong>Toggle Tesseract OCR</strong>
         switches between On and the previous OCR mode. <strong>Toggle Twilight Mode</strong>,
         <strong>Toggle Dusk Mode</strong>, and <strong>Toggle Dark Mode</strong> switch
         between the selected theme and Default.</p>

@@ -23,6 +23,7 @@
 #include <optional>
 #include <utility>
 
+#include "generator/config/document_settings.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
 #include "generator/ui/layers_model.hpp"
@@ -157,6 +158,10 @@ private:
     void setupActions();
     void setupOcrActions();
     void setupThemeActions();
+    void showDocumentSettings();
+    Config::OcrSettings ocrSettings() const;
+    bool applyDocumentSettings(const Config::DocumentSettings& settings);
+    void loadDocumentSettings(const QString& key);
     [[nodiscard]] bool canImportXfdf() const;
     void importXfdf();
     void syncActions();
@@ -172,12 +177,9 @@ private:
     // Clears transient Okular display state without removing document data.
     void clearPageDisplayState(int page);
     void clearPageTextState(int page);
-    // Tracks settings that are fixed when the generator process starts.
-    // Refreshes restart-required state: fresh EPUB settings are compared
-    // against the frozen startup set; the NSS database is the runtime-checked
-    // half — initialization is one-way per process, so a changed database
-    // path only applies after an Okular restart. The caller supplies the
-    // fresh EPUB settings so a single KCfg read can be reused.
+    // Preserve the global settings dialog's restart notice. Compare layout
+    // defaults with the startup snapshot, independently of document overrides;
+    // NSS database initialization remains one-way per process.
     void updateSettingRestartState(const Config::EpubSettings& freshEpub);
     // Reports xref-repair state to the user, mirroring the poppler generator's
     // xrefReconstructionHandler.
@@ -189,7 +191,7 @@ private:
     // when the Paper render mode is off) and records it for the next push.
     void refreshPaperColor();
     void loadLayers();
-    void refreshLayerText(std::uint64_t revision);
+    void refreshDocumentText(std::uint64_t revision);
     void applyOcrResult(int page,
                         QVector<Plugin::Caching::OCR::CacheItem> boxes,
                         std::uint64_t revision,
@@ -252,7 +254,7 @@ private:
     bool m_observingVisiblePages = false;
 
     std::unique_ptr<LayersModel> m_layersModel;
-    // Render/extraction threads must discard results from previous visibility.
+    // Render/extraction threads discard results from previous visibility or OCR policy.
     std::atomic<std::uint64_t> m_layerRevision { 0 };
     std::atomic<bool> m_defaultLayerVisibility { true };
     // Settings reloads can run while image() is rendering on another thread.
@@ -273,6 +275,8 @@ private:
         QString sourcePath;
         QByteArray sourceData;
         QString hash;
+        QString settingsKey;
+        Config::DocumentSettings settings;
         Model::DocumentType type = Model::DocumentType::Pdf;
         bool hasXfaForm = false;
         // Snapshot on open; changing this option does not refresh the sidebar.
@@ -295,10 +299,9 @@ private:
     // (terminal for the generator lifetime).
     Page::Error m_pageError;
 
-    // Session-scope worker configuration; EPUB settings are fixed during
-    // worker startup (changes require restarting Okular rather than being
-    // sent to the already-sandboxed worker).
+    // Effective settings for the current document.
     Config::WorkerSettings m_settings;
+    const Config::EpubSettings m_startupEpub = m_settings.startupEpub;
     // A JavaScript preference changed while the active PDF had unsaved edits;
     // apply it at the next document-open boundary.
     std::optional<bool> m_pendingFormJavaScriptEnabled;

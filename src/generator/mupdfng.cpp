@@ -363,7 +363,9 @@ bool Main::reparseConfig()
     m_linkPreview.setMode(Config::readLinkPreviewMode());
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
-    const Config::WorkerSettings settings = Config::readWorkerSettings();
+    Config::WorkerSettings settings = Config::readWorkerSettings();
+    if (m_document.settings.theme)
+        settings.rendering.documentTheme = *m_document.settings.theme;
     updatePagePlaceholder(m_pageError.isActive() ? Model::DocumentTheme::Default : settings.rendering.documentTheme);
     updateSettingRestartState(settings.startupEpub);
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
@@ -445,11 +447,11 @@ bool Main::reparseConfig()
 
 void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
 {
-    // Worker process lifetime settings must not be applied to a running worker.
+    // Compare global defaults, never the active document's layout override.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
     // The defaulted identity is fixed at generator construction, so a first
     // launch needs no restart.
-    m_restartState.required = freshEpub != m_settings.startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
+    m_restartState.required = freshEpub != m_startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
 }
 
 // =============================================================================
@@ -670,6 +672,7 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
 
     // Push render settings before the open round trip; the paper color is the
     // only swapped value, refreshed immediately before the settings are built.
+    loadDocumentSettings(Config::documentSettingsKey(fileName));
     refreshPaperColor();
     QList<Plugin::WorkerClient::PageInfo> workerPages;
     if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
@@ -719,6 +722,7 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
         m_pendingFormJavaScriptEnabled.reset();
     }
 
+    loadDocumentSettings(Config::documentSettingsKey(fileData));
     refreshPaperColor();
     QList<Plugin::WorkerClient::PageInfo> workerPages;
     if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
@@ -1010,7 +1014,7 @@ void Main::observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nat
     const Okular::Document* doc = document();
     if (!doc)
         return;
-    const Config::OcrSettings ocrSettings = Config::readOcrSettings();
+    const Config::OcrSettings ocrSettings = this->ocrSettings();
     QList<Plugin::OCR::VisiblePage> visiblePages;
     for (const Okular::VisiblePageRect* visible : doc->visiblePageRects()) {
         const Okular::Page* page = visible ? doc->page(visible->pageNumber) : nullptr;
@@ -1052,7 +1056,7 @@ void Main::applyOcrResult(int page,
     auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
     target->setTextPage(textPage);
     Q_EMIT signalTextGenerationDone(target, textPage);
-    if (!boxes.isEmpty() && notifyCompletion && Config::readOcrSettings().notify)
+    if (!boxes.isEmpty() && notifyCompletion && ocrSettings().notify)
         Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
 }
 
@@ -1515,7 +1519,7 @@ void Main::loadLayers()
         ++m_layerRevision;
         m_defaultLayerVisibility = m_layersModel->isDefaultVisibility();
         m_ocrController->reset();
-        refreshLayerText(m_layerRevision.load());
+        refreshDocumentText(m_layerRevision.load());
         observeOcrFocus();
     });
 
@@ -1525,14 +1529,14 @@ void Main::loadLayers()
     }
 }
 
-void Main::refreshLayerText(std::uint64_t revision)
+void Main::refreshDocumentText(std::uint64_t revision)
 {
     if (revision != m_layerRevision.load())
         return;
     // Wait asynchronously for Okular to deliver any already-finished extraction
-    // before clearing it; a queued completion must not restore old layer text.
+    // before clearing it; a queued completion must not restore outdated text.
     if (!canGenerateTextPage()) {
-        QTimer::singleShot(10, this, [this, revision] { refreshLayerText(revision); });
+        QTimer::singleShot(10, this, [this, revision] { refreshDocumentText(revision); });
         return;
     }
     QMutexLocker locker(userMutex());

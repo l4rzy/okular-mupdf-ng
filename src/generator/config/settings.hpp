@@ -35,7 +35,7 @@ struct RenderingSettings {
     bool operator==(const RenderingSettings& other) const = default;
 };
 
-/// EPUB layout values passed to the worker; custom CSS remains base64 encoded.
+/// Ebook layout values passed to the worker; custom CSS remains base64 encoded.
 struct EpubSettings {
     int fontSize = 11;
     int fontFamily = 0;
@@ -57,6 +57,8 @@ struct OcrSettings {
     bool notify = true;
     /// Scroll-settle delay in milliseconds before OCR fires (hidden setting).
     int debounceMs = 250;
+
+    bool operator==(const OcrSettings&) const = default;
 };
 
 /// Stable inputs that identify an OCR cache namespace for one document.
@@ -127,8 +129,7 @@ inline bool renderingOutputChanged(const RenderingSettings& previous, const Rend
         || previous.documentTheme != current.documentTheme;
 }
 
-/// Session-scope worker configuration: rendering and PDF JavaScript values
-/// track the settings dialog; EPUB values stay fixed at process start.
+/// Effective worker configuration. Layout values change at document-open boundaries.
 struct WorkerSettings {
     RenderingSettings rendering;
     EpubSettings startupEpub;
@@ -171,6 +172,8 @@ LinkPreviewMode readLinkPreviewMode();
 EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
 OcrSettings readOcrSettings();
+int ocrTriggerModeFor(const OcrSettings& settings);
+void setOcrTriggerMode(OcrSettings& settings, int mode);
 SignatureAppearanceOptions readSignatureAppearance();
 /// Lists usable Tesseract language models (*.traineddata in the given
 /// directories, excluding the non-language equ/osd data files) as a deduplicated,

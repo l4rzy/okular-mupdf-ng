@@ -10,6 +10,7 @@
 #include <KXMLGUIClient>
 #include <KXMLGUIFactory>
 #include <QAction>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCursor>
 #include <QDateTime>
@@ -23,13 +24,16 @@
 #include <QMimeDatabase>
 #include <QPainter>
 #include <QPdfWriter>
+#include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QScreen>
 #include <QSignalSpy>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <okular/core/action.h>
 #include <okular/core/document.h>
 #include <okular/core/generator.h>
@@ -41,6 +45,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "generator/config/document_settings.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
@@ -137,6 +142,14 @@ private slots:
         config->sync();
     }
 
+    void cleanup()
+    {
+        for (const auto& path :
+             { QStringLiteral(TEST_PDF_PATH), QStringLiteral(TEST_EPUB_PATH), QStringLiteral(TEST_MOBI_PATH) })
+            QVERIFY(
+                Mu::Generator::Config::writeDocumentSettings(Mu::Generator::Config::documentSettingsKey(path), { }));
+    }
+
     void ocrMenuAvailability_data()
     {
         QTest::addColumn<QString>("path");
@@ -168,13 +181,17 @@ private slots:
                 !Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR) }).isEmpty();
             QCOMPARE(action->isEnabled(), expected);
             for (QAction* registered : client->actionCollection()->actions())
-                QCOMPARE(registered->isEnabled(),
-                         registered->objectName() == QStringLiteral("mupdf_manage_certificates")
-                             || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
-                             || registered->objectName().startsWith(QStringLiteral("mupdf_theme"))
-                             || (expected
-                                 && (registered == action
-                                     || registered->objectName() == QStringLiteral("mupdf_import_xfdf") || hasModels)));
+                QCOMPARE(
+                    registered->isEnabled(),
+                    registered->isVisible()
+                        && (registered->objectName() == QStringLiteral("mupdf_manage_certificates")
+                            || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
+                            || registered->objectName() == QStringLiteral("mupdf_document_settings")
+                            || registered->objectName().startsWith(QStringLiteral("mupdf_theme"))
+                            || (expected
+                                && (registered == action
+                                    || registered->objectName() == QStringLiteral("mupdf_import_xfdf")
+                                    || registered->objectName() == QStringLiteral("mupdf_ocr_inherit") || hasModels))));
             document.reparseConfig();
             QCOMPARE(action->isEnabled(), expected);
             document.closeDocument();
@@ -705,7 +722,40 @@ private slots:
         QTRY_COMPARE(image->pixmap().size(), QSize(width, qRound(width * 1.5)));
     }
 
-    void documentThemeMenu_data()
+    void documentSettingsLabel_data()
+    {
+        QTest::addColumn<int>("overrideType");
+        QTest::newRow("theme") << 0;
+        QTest::newRow("layout") << 1;
+        QTest::newRow("ocr") << 2;
+    }
+
+    void documentSettingsLabel()
+    {
+        namespace Config = Mu::Generator::Config;
+        QFETCH(int, overrideType);
+        const QString path = overrideType == 1 ? QStringLiteral(TEST_EPUB_PATH) : QStringLiteral(TEST_PDF_PATH);
+        const auto key = Config::documentSettingsKey(path);
+        Config::DocumentSettings settings;
+        if (overrideType == 0)
+            settings.theme = Mu::Model::DocumentTheme::Dark;
+        else if (overrideType == 1)
+            settings.layout = Config::EpubSettings();
+        else
+            settings.ocr = Config::OcrSettings();
+        QVERIFY(Config::writeDocumentSettings(key, settings));
+        const auto cleanup = qScopeGuard([&] { Config::writeDocumentSettings(key, { }); });
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        config->sync();
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"))->text(),
+                 QStringLiteral("Document Settings (Local)…"));
+    }
+
+    void documentSettingsDialog_data()
     {
         QTest::addColumn<QString>("path");
         QTest::newRow("pdf") << QStringLiteral(TEST_PDF_PATH);
@@ -713,9 +763,210 @@ private slots:
         QTest::newRow("mobi") << QStringLiteral(TEST_MOBI_PATH);
     }
 
+    void documentSettingsDialog()
+    {
+        namespace Config = Mu::Generator::Config;
+        QFETCH(QString, path);
+        const bool ebook = path != QStringLiteral(TEST_PDF_PATH);
+        const auto key = Config::documentSettingsKey(path);
+        QVERIFY(Config::writeDocumentSettings(key, { }));
+        const auto cleanup = qScopeGuard([&] { Config::writeDocumentSettings(key, { }); });
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup(config, QStringLiteral("General")).writeEntry("SandboxEnforcement", "Relaxed");
+        config->sync();
+        Okular::Document document(nullptr);
+        const auto open = [&] {
+            return document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path));
+        };
+        QCOMPARE(open(), Okular::Document::OpenSuccess);
+        QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"))->text(),
+                 QStringLiteral("Document Settings…"));
+        const double width = document.page(0)->width();
+        const double height = document.page(0)->height();
+        QTimer::singleShot(0, this, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            QCOMPARE(dialog->windowTitle(), QStringLiteral("MuPDF-NG Document Settings"));
+            auto* documentName = dialog->findChild<QLabel*>(QStringLiteral("documentName"));
+            QVERIFY(documentName);
+            QVERIFY(documentName->font().bold());
+            QVERIFY(documentName->text().size() <= 512);
+            auto* languages = dialog->findChild<QComboBox*>(QStringLiteral("ocrLanguage"));
+            QVERIFY(languages);
+            for (int i = 1; i < languages->count(); ++i)
+                QVERIFY(languages->itemText(i).contains(QStringLiteral(".traineddata")));
+            auto* theme = dialog->findChild<QComboBox*>(QStringLiteral("documentTheme"));
+            auto* inherit = dialog->findChild<QCheckBox*>(QStringLiteral("inheritLayout"));
+            auto* size = dialog->findChild<QSpinBox*>(QStringLiteral("fontSize"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            QVERIFY(theme && inherit && size && buttons);
+            QCOMPARE(theme->currentIndex(), 0);
+            QVERIFY(inherit->isChecked());
+            QVERIFY(!size->isEnabled());
+            QVERIFY(!buttons->button(QDialogButtonBox::Apply)->isEnabled());
+            theme->setCurrentIndex(4); // Dark override.
+            if (ebook) {
+                inherit->setChecked(false);
+                size->setValue(18);
+                auto* pageSize = dialog->findChild<QComboBox*>(QStringLiteral("pageSize"));
+                QVERIFY(pageSize);
+                pageSize->setCurrentIndex((pageSize->currentIndex() + 1) % pageSize->count());
+                auto* css = dialog->findChild<QPlainTextEdit*>(QStringLiteral("customCss"));
+                QVERIFY(css);
+                css->setPlainText(QStringLiteral("body { color: red; }"));
+                QVERIFY(size->isEnabled());
+            }
+            if (!ebook) {
+                auto* inheritOcr = dialog->findChild<QCheckBox*>(QStringLiteral("inheritOcr"));
+                auto* quality = dialog->findChild<QComboBox*>(QStringLiteral("ocrQuality"));
+                auto* mode = dialog->findChild<QComboBox*>(QStringLiteral("ocrMode"));
+                auto* notify = dialog->findChild<QCheckBox*>(QStringLiteral("ocrNotify"));
+                QVERIFY(inheritOcr && quality && mode && notify);
+                QVERIFY(inheritOcr->isChecked());
+                QVERIFY(!quality->isEnabled());
+                inheritOcr->setChecked(false);
+                quality->setCurrentIndex(2);
+                mode->setCurrentIndex(3);
+                notify->setChecked(false);
+            }
+            buttons->button(QDialogButtonBox::Apply)->click();
+            QVERIFY(!buttons->button(QDialogButtonBox::Apply)->isEnabled());
+            const auto applied = Config::readDocumentSettings(key);
+            QCOMPARE(applied.theme, std::optional(Mu::Model::DocumentTheme::Dark));
+            QCOMPARE(applied.layout.has_value(), ebook);
+            QCOMPARE(applied.ocr.has_value(), !ebook);
+            QCOMPARE(
+                document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"))->text(),
+                QStringLiteral("Document Settings (Local)…"));
+            QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_theme"))->text(),
+                     QStringLiteral("Document Theme (Local)"));
+            QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_ocr"))->text(),
+                     ebook ? QStringLiteral("Tesseract OCR") : QStringLiteral("Tesseract OCR (Local)"));
+            if (!ebook) {
+                QCOMPARE(applied.ocr->dpi, 300);
+                QCOMPARE(Config::ocrTriggerModeFor(*applied.ocr), 3);
+                QVERIFY(!applied.ocr->notify);
+                dialog->findChild<QComboBox*>(QStringLiteral("ocrQuality"))->setCurrentIndex(0);
+            }
+            if (ebook) {
+                QCOMPARE(applied.layout->fontSize, 18);
+                QVERIFY(document.page(0)->width() != width);
+                QVERIFY(document.page(0)->height() != height);
+                QCOMPARE(QByteArray::fromBase64(applied.layout->customCssBase64.toLatin1()),
+                         QByteArray("body { color: red; }"));
+            }
+            // Cancel discards only edits made since Apply.
+            theme->setCurrentIndex(1);
+            if (ebook)
+                size->setValue(12);
+            buttons->button(QDialogButtonBox::Cancel)->click();
+        });
+        document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"))->trigger();
+        QCOMPARE(Config::readDocumentSettings(key).theme, std::optional(Mu::Model::DocumentTheme::Dark));
+        const double appliedWidth = document.page(0)->width();
+        const double appliedHeight = document.page(0)->height();
+        document.closeDocument();
+        QCOMPARE(open(), Okular::Document::OpenSuccess);
+        QCOMPARE(document.page(0)->width(), appliedWidth);
+        QCOMPARE(document.page(0)->height(), appliedHeight);
+        QVERIFY(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_theme_dark"))->isChecked());
+        QTimer::singleShot(0, this, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            QCOMPARE(dialog->windowTitle(), QStringLiteral("MuPDF-NG Document Settings"));
+            auto* documentName = dialog->findChild<QLabel*>(QStringLiteral("documentName"));
+            QVERIFY(documentName);
+            QVERIFY(documentName->font().bold());
+            QVERIFY(documentName->text().size() <= 512);
+            auto* languages = dialog->findChild<QComboBox*>(QStringLiteral("ocrLanguage"));
+            QVERIFY(languages);
+            for (int i = 1; i < languages->count(); ++i)
+                QVERIFY(languages->itemText(i).contains(QStringLiteral(".traineddata")));
+            auto* theme = dialog->findChild<QComboBox*>(QStringLiteral("documentTheme"));
+            auto* inherit = dialog->findChild<QCheckBox*>(QStringLiteral("inheritLayout"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            QCOMPARE(theme->currentIndex(), 4);
+            theme->setCurrentIndex(0);
+            inherit->setChecked(true);
+            if (!ebook) {
+                auto* inheritOcr = dialog->findChild<QCheckBox*>(QStringLiteral("inheritOcr"));
+                QVERIFY(!inheritOcr->isChecked());
+                QCOMPARE(dialog->findChild<QComboBox*>(QStringLiteral("ocrQuality"))->currentData().toInt(), 300);
+                inheritOcr->setChecked(true);
+            }
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+        document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"))->trigger();
+        QVERIFY(Config::readDocumentSettings(key) == Config::DocumentSettings());
+        QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"))->text(),
+                 QStringLiteral("Document Settings…"));
+        QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_theme"))->text(),
+                 QStringLiteral("Document Theme"));
+        QCOMPARE(document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_ocr"))->text(),
+                 QStringLiteral("Tesseract OCR"));
+        QCOMPARE(document.page(0)->width(), width);
+        QCOMPARE(document.page(0)->height(), height);
+        QVERIFY(!document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_theme_inherit"))->isVisible());
+    }
+
+    void themePreservesActiveLayout()
+    {
+        namespace Config = Mu::Generator::Config;
+        const QString path = QStringLiteral(TEST_EPUB_PATH);
+        const auto key = Config::documentSettingsKey(path);
+        Config::DocumentSettings overrides;
+        overrides.theme = Mu::Model::DocumentTheme::Default;
+        QVERIFY(Config::writeDocumentSettings(key, overrides));
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        KConfigGroup epub(config, QStringLiteral("EPUB"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        const int previousSize = epub.readEntry("EpubFontSize", 11);
+        config->sync();
+        Okular::Document document(nullptr);
+        const auto cleanup = qScopeGuard([&] {
+            Config::writeDocumentSettings(key, { });
+            epub.writeEntry("EpubFontSize", previousSize);
+            config->sync();
+            document.reparseConfig();
+            Config::reloadSettings();
+        });
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        QSignalSpy closed(&document, &Okular::Document::aboutToClose);
+        const auto* firstPage = document.page(0);
+        epub.writeEntry("EpubFontSize", previousSize == 18 ? 12 : 18);
+        config->sync();
+        document.reparseConfig();
+        auto* actions = document.guiClient()->actionCollection();
+        actions->action(QStringLiteral("mupdf_theme_dark"))->trigger();
+        QCOMPARE(closed.count(), 0);
+        QCOMPARE(document.page(0), firstPage);
+        QVERIFY(actions->action(QStringLiteral("mupdf_theme_dark"))->isChecked());
+        // A later global theme change must not replace the explicit override.
+        general.writeEntry("ReadingTheme", "Twilight");
+        config->sync();
+        document.reparseConfig();
+        QVERIFY(actions->action(QStringLiteral("mupdf_theme_dark"))->isChecked());
+        general.writeEntry("ReadingTheme", "Default");
+        config->sync();
+    }
+
+    void documentThemeMenu_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("local");
+        for (const bool local : { false, true }) {
+            QTest::newRow(local ? "pdf-local" : "pdf-global") << QStringLiteral(TEST_PDF_PATH) << local;
+            QTest::newRow(local ? "epub-local" : "epub-global") << QStringLiteral(TEST_EPUB_PATH) << local;
+            QTest::newRow(local ? "mobi-local" : "mobi-global") << QStringLiteral(TEST_MOBI_PATH) << local;
+        }
+    }
+
     void documentThemeMenu()
     {
         QFETCH(QString, path);
+        QFETCH(bool, local);
         const bool originalChangeColors = Okular::SettingsCore::changeColors();
         const int originalRenderMode = Okular::SettingsCore::renderMode();
         const QColor originalPaper = Okular::SettingsCore::paperColor();
@@ -724,6 +975,12 @@ private slots:
         general.writeEntry("SandboxEnforcement", "Relaxed");
         general.writeEntry("ReadingTheme", "Default");
         config->sync();
+        if (local) {
+            Mu::Generator::Config::DocumentSettings settings;
+            settings.theme = Mu::Model::DocumentTheme::Default;
+            QVERIFY(Mu::Generator::Config::writeDocumentSettings(Mu::Generator::Config::documentSettingsKey(path),
+                                                                 settings));
+        }
         Okular::Document document(nullptr);
         QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
                  Okular::Document::OpenSuccess);
@@ -741,12 +998,18 @@ private slots:
         Okular::Document other(nullptr);
         QCOMPARE(other.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
                  Okular::Document::OpenSuccess);
-        other.addObserver(&observer);
-        const auto cleanup = qScopeGuard([&] { other.removeObserver(&observer); });
+        if (local)
+            other.guiClient()->actionCollection()->action(QStringLiteral("mupdf_theme_inherit"))->trigger();
+        document.addObserver(&observer);
+        const auto cleanup = qScopeGuard([&] {
+            document.removeObserver(&observer);
+            Mu::Generator::Config::writeDocumentSettings(Mu::Generator::Config::documentSettingsKey(path), { });
+        });
         auto* actions = document.guiClient()->actionCollection();
         QVERIFY(actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
+        QCOMPARE(actions->action(QStringLiteral("mupdf_theme_inherit"))->isVisible(), local);
         const auto menuItems = actions->action(QStringLiteral("mupdf_theme"))->menu()->actions();
-        const QStringList menuOrder { "Default", "Twilight", "Dusk", "Dark" };
+        const QStringList menuOrder { "Inherit", "Default", "Twilight", "Dusk", "Dark" };
         QCOMPARE(menuItems.size(), menuOrder.size());
         for (int i = 0; i < menuOrder.size(); ++i)
             QCOMPARE(menuItems.at(i), actions->action(QStringLiteral("mupdf_theme_") + menuOrder.at(i).toLower()));
@@ -766,7 +1029,8 @@ private slots:
             QCOMPARE(notices.back().at(0).toString(), QStringLiteral("Document theme: %1").arg(action->text()));
             QCOMPARE(notices.back().at(1).toInt(), 1500);
             QCOMPARE(otherNotices.count(), 0);
-            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), action->text());
+            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")),
+                     local ? QStringLiteral("Default") : action->text());
             QCOMPARE(document.pages(), pageCount);
             QVERIFY(document.isHistoryClean());
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
@@ -776,7 +1040,7 @@ private slots:
                                                                                   : QColor(Qt::white);
             for (int page = 0; page < static_cast<int>(document.pages()); ++page) {
                 QCOMPARE(document.page(page)->placeholderColor(), expectedColor);
-                QCOMPARE(other.page(page)->placeholderColor(), expectedColor);
+                QCOMPARE(other.page(page)->placeholderColor(), local ? QColor(Qt::white) : expectedColor);
             }
 #endif
             QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
@@ -794,7 +1058,8 @@ private slots:
             const auto previousNotices = notices.count();
             toggle->trigger();
             QTRY_VERIFY(observer.refreshes > previousRefreshes);
-            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), expected.at(i));
+            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")),
+                     local ? QStringLiteral("Default") : expected.at(i));
             QCOMPARE(notices.count(), previousNotices + 1);
             QCOMPARE(notices.back().at(0).toString(), QStringLiteral("Document theme: %1").arg(expected.at(i)));
             QCOMPARE(notices.back().at(1).toInt(), 1500);
@@ -809,6 +1074,9 @@ private slots:
         auto* configInterface =
             qobject_cast<Okular::ConfigInterface*>(actions->action(QStringLiteral("mupdf_theme"))->parent());
         QVERIFY(configInterface);
+        if (local)
+            actions->action(QStringLiteral("mupdf_theme_inherit"))->trigger();
+        QVERIFY(!actions->action(QStringLiteral("mupdf_theme_inherit"))->isVisible());
         int previousMode = 0;
         for (const int mode : { 1, 2, 3, 0 }) {
             KConfigSkeleton hostSettings;
@@ -922,7 +1190,7 @@ private slots:
             factory.addClient(client);
             auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
             QVERIFY(tools);
-            QTRY_COMPARE(tools->actions().size(), 5);
+            QTRY_COMPARE(tools->actions().size(), 6);
             for (auto* candidate : factory.clients()) {
                 if (candidate->xmlFile() == QStringLiteral("mupdfngui.rc"))
                     actions = candidate->actionCollection();
@@ -951,7 +1219,7 @@ private slots:
             QCOMPARE(visible.size(), hasModels ? 3 : 2);
             QCOMPARE(actions->action(QStringLiteral("mupdf_ocr_toggle"))->isEnabled(), hasModels);
             for (QAction* action : visible)
-                QCOMPARE(action->isEnabled(), hasModels);
+                QCOMPARE(action->isEnabled(), hasModels || action->objectName() == QStringLiteral("mupdf_ocr_inherit"));
             if (!hasModels) {
                 QCOMPARE(visible.at(0)->text(), QStringLiteral("No OCR models available."));
                 QCOMPARE(visible.at(1)->text(), QStringLiteral("Please install a Tesseract language model."));
@@ -964,20 +1232,33 @@ private slots:
         QTest::addColumn<QString>("initialMode");
         QTest::addColumn<QString>("actionName");
         QTest::addColumn<QString>("requestedMode");
-        QTest::newRow("off") << QStringLiteral("Always") << QStringLiteral("mupdf_ocr_off") << QStringLiteral("Never");
-        QTest::newRow("automatic") << QStringLiteral("Never") << QStringLiteral("mupdf_ocr_auto")
-                                   << QStringLiteral("Five");
-        QTest::newRow("on") << QStringLiteral("Five") << QStringLiteral("mupdf_ocr_on") << QStringLiteral("Always");
-        QTest::newRow("automatic-twenty")
-            << QStringLiteral("Twenty") << QStringLiteral("mupdf_ocr_auto") << QStringLiteral("Five");
-        QTest::newRow("toggle-from-off") << QStringLiteral("Never") << QStringLiteral("mupdf_ocr_toggle")
-                                         << QStringLiteral("Always");
-        QTest::newRow("toggle-from-five")
-            << QStringLiteral("Five") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Always");
-        QTest::newRow("toggle-from-twenty")
-            << QStringLiteral("Twenty") << QStringLiteral("mupdf_ocr_toggle") << QStringLiteral("Always");
-        QTest::newRow("toggle-from-on") << QStringLiteral("Always") << QStringLiteral("mupdf_ocr_toggle")
-                                        << QStringLiteral("Never");
+        QTest::addColumn<bool>("local");
+
+        struct Case {
+            const char* name;
+            const char* initial;
+            const char* action;
+            const char* requested;
+        };
+
+        const Case cases[] {
+            { "off", "Always", "mupdf_ocr_off", "Never" },
+            { "automatic", "Never", "mupdf_ocr_auto", "Five" },
+            { "on", "Five", "mupdf_ocr_on", "Always" },
+            { "automatic-twenty", "Twenty", "mupdf_ocr_auto", "Five" },
+            { "toggle-from-off", "Never", "mupdf_ocr_toggle", "Always" },
+            { "toggle-from-five", "Five", "mupdf_ocr_toggle", "Always" },
+            { "toggle-from-twenty", "Twenty", "mupdf_ocr_toggle", "Always" },
+            { "toggle-from-on", "Always", "mupdf_ocr_toggle", "Never" },
+        };
+        for (const bool local : { false, true }) {
+            for (const auto& entry : cases) {
+                const auto name = QByteArray(entry.name) + (local ? "-local" : "-global");
+                QTest::newRow(name.constData())
+                    << QString::fromLatin1(entry.initial) << QString::fromLatin1(entry.action)
+                    << QString::fromLatin1(entry.requested) << local;
+            }
+        }
     }
 
     void menuBarOrder_data()
@@ -1022,7 +1303,7 @@ private slots:
         const auto tools = [&]() {
             return qobject_cast<QMenu*>(factory->container(QStringLiteral("tools"), nullptr));
         };
-        QTRY_VERIFY(tools() && tools()->actions().size() == 5);
+        QTRY_VERIFY(tools() && tools()->actions().size() == 6);
         QPointer<QAction> theme = tools()->actions().at(3);
         const auto menuOrder = [&] {
             QStringList order;
@@ -1047,7 +1328,7 @@ private slots:
             factory->addClient(newPart);
             QTRY_VERIFY(tools() && tools()->actions().contains(theme));
             QCOMPARE(menuOrder(), expected);
-            QCOMPARE(tools()->actions().size(), 5);
+            QCOMPARE(tools()->actions().size(), 6);
             QCOMPARE(tools()->actions().front(), newPart->actionCollection()->action(QStringLiteral("tools")));
         }
         // Leave a rebuild queued while removing the last document or GUI factory.
@@ -1133,8 +1414,8 @@ private slots:
         auto* otherTools = qobject_cast<QMenu*>(otherFactory.container(QStringLiteral("tools"), &otherHost));
         QVERIFY(tools);
         QVERIFY(otherTools);
-        QTRY_COMPARE(tools->actions().size(), 5);
-        QTRY_COMPARE(otherTools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 6);
+        QTRY_COMPARE(otherTools->actions().size(), 6);
         auto* theme = tools->actions().at(3);
         QVERIFY(theme != otherTools->actions().at(3));
         for (auto* client : clients)
@@ -1143,14 +1424,14 @@ private slots:
         TestGuiClient part;
         factory.addClient(&part);
         factory.removeClient(&part);
-        QTRY_COMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 6);
         // A tab switch rebuilds Tools along with the part. Reacquire its menu;
         // the shared rows must still follow the part's after the queued merge.
         for (int index = 0; index < 2; ++index) {
             factory.removeClient(&host);
             factory.addClient(&host);
             QTRY_VERIFY((tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host)))
-                        && tools->actions().size() == 5);
+                        && tools->actions().size() == 6);
             QCOMPARE(tools->actions().front(), host.actionCollection()->action(QStringLiteral("previous")));
             QCOMPARE(tools->actions().at(2)->objectName(), QStringLiteral("mupdf_ocr"));
             QCOMPARE(tools->actions().at(3), theme);
@@ -1171,25 +1452,26 @@ private slots:
         factory.removeClient(clients[firstClosed]);
         documents[firstClosed]->closeDocument();
         documents[firstClosed].reset();
-        QTRY_COMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 6);
         if (checkToggle) {
             toggle->trigger();
             config->reparseConfiguration();
             QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), initialMode);
         }
-        QCOMPARE(tools->actions().size(), 5);
+        QCOMPARE(tools->actions().size(), 6);
         QCOMPARE(tools->actions().at(3), theme);
         const int remaining = 1 - firstClosed;
         auto* source = clients[remaining]->actionCollection()->action(QStringLiteral("mupdf_theme_dark"));
         QSignalSpy triggered(source, &QAction::triggered);
         theme->menu()->actions().back()->trigger();
         QCOMPARE(triggered.count(), 1);
+        QVERIFY(!theme->text().endsWith(QStringLiteral("(Local)")));
         // Removing and re-adding a cached client must restore one presentation.
         if (checkToggle)
             toggle->trigger();
         factory.removeClient(clients[remaining]);
         QCOMPARE(tools->actions().size(), 1);
-        QCOMPARE(otherTools->actions().size(), 5);
+        QCOMPARE(otherTools->actions().size(), 6);
         if (checkToggle) {
             // The registration also retains history while no GUI is attached.
             auto* detachedToggle = clients[remaining]->actionCollection()->action(QStringLiteral("mupdf_ocr_toggle"));
@@ -1199,7 +1481,7 @@ private slots:
             detachedToggle->trigger();
         }
         factory.addClient(clients[remaining]);
-        QTRY_COMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 6);
         if (checkToggle) {
             for (auto* candidate : factory.clients()) {
                 if (candidate->xmlFile() == QStringLiteral("mupdfngui.rc"))
@@ -1212,7 +1494,7 @@ private slots:
         documents[remaining]->closeDocument();
         documents[remaining].reset();
         QCOMPARE(tools->actions().size(), 1);
-        QCOMPARE(otherTools->actions().size(), 5);
+        QCOMPARE(otherTools->actions().size(), 6);
     }
 
     void closesDocumentDuringMenuAction_data()
@@ -1255,7 +1537,7 @@ private slots:
         });
         auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
         QVERIFY(tools);
-        QTRY_COMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 6);
         QPointer<QAction> proxy;
         for (auto* client : factory.clients()) {
             if (client->xmlFile() == QStringLiteral("mupdfngui.rc"))
@@ -1269,7 +1551,7 @@ private slots:
         proxy->trigger();
         QCOMPARE(triggered.count(), 1);
         QVERIFY(!client->factory());
-        QTRY_COMPARE(tools->actions().size(), keepOtherDocument ? 5 : 1);
+        QTRY_COMPARE(tools->actions().size(), keepOtherDocument ? 6 : 1);
         if (keepOtherDocument) {
             QVERIFY(proxy);
             QSignalSpy otherTriggered(second.guiClient()->actionCollection()->action(actionName), &QAction::triggered);
@@ -1286,6 +1568,7 @@ private slots:
         if (Mu::Generator::Config::installedOcrModels({ QStringLiteral(TESSDATA_DIR) }).isEmpty())
             QSKIP("OCR menu modes require an installed language model");
         QFETCH(QString, initialMode);
+        QFETCH(bool, local);
         QFETCH(QString, actionName);
         QFETCH(QString, requestedMode);
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
@@ -1295,6 +1578,15 @@ private slots:
         config->sync();
         Okular::Document document(nullptr);
         const QString path = QStringLiteral(TEST_PDF_PATH);
+        if (local) {
+            Mu::Generator::Config::DocumentSettings settings;
+            settings.ocr = Mu::Generator::Config::OcrSettings();
+            Mu::Generator::Config::setOcrTriggerMode(
+                *settings.ocr,
+                static_cast<int>(QStringList { "Never", "Five", "Twenty", "Always" }.indexOf(initialMode)));
+            QVERIFY(Mu::Generator::Config::writeDocumentSettings(Mu::Generator::Config::documentSettingsKey(path),
+                                                                 settings));
+        }
         QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
                  Okular::Document::OpenSuccess);
         document.reparseConfig();
@@ -1312,7 +1604,7 @@ private slots:
         });
         auto* tools = qobject_cast<QMenu*>(factory.container(QStringLiteral("tools"), &host));
         QVERIFY(tools);
-        QTRY_COMPARE(tools->actions().size(), 5);
+        QTRY_COMPARE(tools->actions().size(), 6);
         QVERIFY(tools->actions().at(1)->isSeparator());
         KXMLGUIClient* presentation = nullptr;
         for (auto* candidate : factory.clients()) {
@@ -1327,26 +1619,36 @@ private slots:
         QCOMPARE(tools->actions().at(3), presentation->actionCollection()->action(QStringLiteral("mupdf_theme")));
         auto* menu = tools->actions().at(2)->menu();
         QVERIFY(menu);
-        QCOMPARE(menu->title(), QStringLiteral("MuPDF OCR"));
-        QCOMPARE(menu->actions().size(), 5);
-        QVERIFY(!menu->actions().at(3)->isVisible());
+        QCOMPARE(menu->title(), local ? QStringLiteral("Tesseract OCR (Local)") : QStringLiteral("Tesseract OCR"));
+        QCOMPARE(menu->actions().size(), 6);
         QVERIFY(!menu->actions().at(4)->isVisible());
-        QCOMPARE(client->actionCollection()->actions().count(), 16);
+        QVERIFY(!menu->actions().at(5)->isVisible());
+        QCOMPARE(client->actionCollection()->actions().count(), 19);
         for (QAction* registered : presentation->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle")
-                         || registered->objectName() == QStringLiteral("mupdf_import_xfdf")
                          || registered->objectName() == QStringLiteral("mupdf_link_preview_toggle")
                          || registered->objectName().startsWith(QStringLiteral("mupdf_theme_toggle_")));
-        QCOMPARE(menu->actions().at(1)->text(), QStringLiteral("Automatic"));
+        QCOMPARE(menu->actions().at(2)->text(), QStringLiteral("Automatic"));
         const QStringList modes { "Never", "Five", "Always" };
         const QStringList labels { "Off", "Automatic", "On" };
         // KDE may add access-key markers when the menu is first shown.
         for (int i = 0; i < labels.size(); ++i)
-            menu->actions().at(i)->setText('&' + labels.at(i));
+            menu->actions().at(i + 1)->setText('&' + labels.at(i));
         const QString initialMenuMode = initialMode == QStringLiteral("Twenty") ? QStringLiteral("Five") : initialMode;
         for (int i = 0; i < modes.size(); ++i)
-            QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
+            QCOMPARE(menu->actions().at(i + 1)->isChecked(), modes.at(i) == initialMenuMode);
+        auto* inherit = presentation->actionCollection()->action(QStringLiteral("mupdf_ocr_inherit"));
+        QVERIFY(inherit);
+        QCOMPARE(inherit->isVisible(), local);
+        QCOMPARE(inherit->text(), QStringLiteral("Use Global"));
+        const auto activeMode = [&] {
+            const auto settings =
+                Mu::Generator::Config::readDocumentSettings(Mu::Generator::Config::documentSettingsKey(path));
+            return settings.ocr ? QStringList { "Never", "Five", "Twenty", "Always" }.at(
+                                      Mu::Generator::Config::ocrTriggerModeFor(*settings.ocr))
+                                : ocr.readEntry("OcrTriggerMode", QStringLiteral("Five"));
+        };
         auto* action = presentation->actionCollection()->action(actionName);
         QVERIFY(action);
         QSignalSpy notices(&document, &Okular::Document::notice);
@@ -1373,13 +1675,15 @@ private slots:
             action->trigger();
         }
         config->reparseConfiguration();
-        QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), requestedMode);
+        QCOMPARE(activeMode(), requestedMode);
+        QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), local ? initialMode : requestedMode);
+        QVERIFY(!inherit->isChecked());
         QCOMPARE(notices.count(), 1);
         QCOMPARE(notices.front().at(0).toString(),
-                 QStringLiteral("MuPDF OCR: %1").arg(labels.at(modes.indexOf(requestedMode))));
+                 QStringLiteral("Tesseract OCR: %1").arg(labels.at(modes.indexOf(requestedMode))));
         QCOMPARE(notices.front().at(1).toInt(), 1500);
         for (int i = 0; i < modes.size(); ++i)
-            QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == requestedMode);
+            QCOMPARE(menu->actions().at(i + 1)->isChecked(), modes.at(i) == requestedMode);
 
         if (actionName == QStringLiteral("mupdf_ocr_toggle")) {
             int expectedNotices = 1;
@@ -1388,38 +1692,39 @@ private slots:
                 ++expectedNotices;
                 QTRY_COMPARE(notices.count(), expectedNotices);
                 config->reparseConfiguration();
-                QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expectedMode);
+                QCOMPARE(activeMode(), expectedMode);
                 const QString menuMode =
                     expectedMode == QStringLiteral("Twenty") ? QStringLiteral("Five") : expectedMode;
                 for (int i = 0; i < modes.size(); ++i)
-                    QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == menuMode);
+                    QCOMPARE(menu->actions().at(i + 1)->isChecked(), modes.at(i) == menuMode);
                 QCOMPARE(notices.back().at(0).toString(),
-                         QStringLiteral("MuPDF OCR: %1").arg(labels.at(modes.indexOf(menuMode))));
+                         QStringLiteral("Tesseract OCR: %1").arg(labels.at(modes.indexOf(menuMode))));
             }
             QCOMPARE(notices.count(), 4);
         }
 
-        // Changes from the configuration dialog refresh the same menu state.
-        ocr.writeEntry("OcrTriggerMode", initialMode);
+        // Global changes leave the local mode alone until inheritance is restored.
+        const auto localMode = activeMode();
+        ocr.writeEntry("OcrTriggerMode", "Twenty");
         config->sync();
         document.reparseConfig();
-        for (int i = 0; i < modes.size(); ++i)
-            QCOMPARE(menu->actions().at(i)->isChecked(), modes.at(i) == initialMenuMode);
+        QCOMPARE(activeMode(), local ? localMode : QStringLiteral("Twenty"));
+        QCOMPARE(inherit->isVisible(), local);
+        if (local)
+            inherit->trigger();
+        QVERIFY(!inherit->isVisible());
+        QVERIFY(!Mu::Generator::Config::readDocumentSettings(Mu::Generator::Config::documentSettingsKey(path)).ocr);
+        QCOMPARE(client->actionCollection()->action(QStringLiteral("mupdf_ocr"))->text(),
+                 QStringLiteral("Tesseract OCR"));
         if (actionName == QStringLiteral("mupdf_ocr_toggle")) {
-            // A settings change replaces the mode remembered by the next toggle.
-            ocr.writeEntry("OcrTriggerMode", "Twenty");
-            config->sync();
-            document.reparseConfig();
             for (const auto& expected : { QStringLiteral("Always"), QStringLiteral("Twenty") }) {
                 action->trigger();
-                config->reparseConfiguration();
-                QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expected);
+                QCOMPARE(activeMode(), expected);
             }
             client->actionCollection()->action(QStringLiteral("mupdf_ocr_off"))->trigger();
             for (const auto& expected : { QStringLiteral("Always"), QStringLiteral("Never") }) {
                 action->trigger();
-                config->reparseConfiguration();
-                QCOMPARE(ocr.readEntry("OcrTriggerMode", QStringLiteral("Five")), expected);
+                QCOMPARE(activeMode(), expected);
             }
         }
         resetShortcut();
@@ -1435,16 +1740,19 @@ private slots:
         QTest::addColumn<QString>("mode");
         QTest::addColumn<bool>("withImage");
         QTest::addColumn<bool>("missingModel");
-        QTest::newRow("mixed-page") << QStringLiteral("Always") << true << false;
-        QTest::newRow("text-only-page") << QStringLiteral("Always") << false << false;
-        QTest::newRow("recognition-failure") << QStringLiteral("Always") << true << true;
-        QTest::newRow("automatic-five") << QStringLiteral("Five") << true << false;
-        QTest::newRow("automatic-twenty") << QStringLiteral("Twenty") << true << false;
+        QTest::addColumn<bool>("perDocument");
+        QTest::newRow("mixed-page") << QStringLiteral("Always") << true << false << false;
+        QTest::newRow("text-only-page") << QStringLiteral("Always") << false << false << false;
+        QTest::newRow("recognition-failure") << QStringLiteral("Always") << true << true << false;
+        QTest::newRow("automatic-five") << QStringLiteral("Five") << true << false << false;
+        QTest::newRow("automatic-twenty") << QStringLiteral("Twenty") << true << false << false;
+        QTest::newRow("per-document") << QStringLiteral("Always") << true << false << true;
     }
 
     void preservesNativeText()
     {
         QFETCH(QString, mode);
+        QFETCH(bool, perDocument);
         QFETCH(bool, withImage);
         const QString nativeText =
             mode == QStringLiteral("Always") ? QStringLiteral("NATIVEONLY") : QStringLiteral("OK");
@@ -1457,7 +1765,7 @@ private slots:
         general.writeEntry("SandboxEnforcement", "Relaxed");
         KConfigGroup ocr(config, QStringLiteral("OCR"));
         ocr.writeEntry("OcrLanguage", missingModel ? "missingocrmodel.traineddata" : "eng.traineddata");
-        ocr.writeEntry("OcrTriggerMode", mode);
+        ocr.writeEntry("OcrTriggerMode", perDocument ? QStringLiteral("Never") : mode);
         ocr.writeEntry("OcrQuality", "Speed");
         ocr.writeEntry("OcrDebounceMs", 1000);
         ocr.writeEntry("OcrNotify", true);
@@ -1482,6 +1790,15 @@ private slots:
                 painter.drawImage(QRect(100, 100, 1000, 400), scan);
             }
         }
+        const QString settingsKey = Mu::Generator::Config::documentSettingsKey(path);
+        if (perDocument) {
+            Mu::Generator::Config::DocumentSettings settings;
+            settings.ocr = Mu::Generator::Config::OcrSettings();
+            settings.ocr->dpi = 150;
+            Mu::Generator::Config::setOcrTriggerMode(*settings.ocr, 3);
+            QVERIFY(Mu::Generator::Config::writeDocumentSettings(settingsKey, settings));
+        }
+        const auto clearOverride = qScopeGuard([&] { Mu::Generator::Config::writeDocumentSettings(settingsKey, { }); });
         Okular::DocumentObserver observer;
         Okular::Document document(nullptr);
         QSignalSpy notices(&document, &Okular::Document::notice);
@@ -1513,6 +1830,38 @@ private slots:
             QCOMPARE(text().count(QStringLiteral("RASTERONLY")), withImage ? 1 : 0);
         }
         QCOMPARE(text().count(nativeText), 1);
+        if (perDocument) {
+            QSignalSpy closed(&document, &Okular::Document::aboutToClose);
+            auto* actions = document.guiClient()->actionCollection();
+            QVERIFY(actions->action(QStringLiteral("mupdf_ocr_on"))->isChecked());
+            actions->action(QStringLiteral("mupdf_ocr_off"))->trigger();
+            document.requestTextPage(0);
+            QTRY_VERIFY(document.page(0)->hasTextPage());
+            QVERIFY(!text().contains(QStringLiteral("RASTERONLY")));
+            QVERIFY(text().contains(nativeText));
+            actions->action(QStringLiteral("mupdf_ocr_on"))->trigger();
+            QTRY_VERIFY_WITH_TIMEOUT(text().contains(QStringLiteral("RASTERONLY")), 10000);
+            QCOMPARE(closed.count(), 0);
+            QCOMPARE(ocr.readEntry("OcrTriggerMode", QString()), QStringLiteral("Never"));
+            QTimer::singleShot(0, this, [&] {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                QVERIFY(dialog);
+                dialog->findChild<QComboBox*>(QStringLiteral("ocrLanguage"))->setCurrentIndex(0);
+                dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+            });
+            warnings.clear();
+            actions->action(QStringLiteral("mupdf_document_settings"))->trigger();
+            document.requestTextPage(0);
+            QTRY_VERIFY(document.page(0)->hasTextPage());
+            QTest::qWait(1500);
+            QVERIFY(text().contains(nativeText));
+            QVERIFY(!text().contains(QStringLiteral("RASTERONLY")));
+            QVERIFY(warnings.empty());
+            // Restore the model for the cached-result reopen checks below.
+            auto saved = Mu::Generator::Config::readDocumentSettings(settingsKey);
+            saved.ocr->language = QStringLiteral("eng");
+            QVERIFY(Mu::Generator::Config::writeDocumentSettings(settingsKey, saved));
+        }
         document.closeDocument();
         if (!missingModel) {
             // Race cached OCR delivery against Okular's threaded text extraction.

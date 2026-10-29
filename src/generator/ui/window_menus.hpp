@@ -25,7 +25,7 @@ public:
     explicit MenuRegistration(KXMLGUIClient* client);
     ~MenuRegistration() override;
     void schedule();
-    int nextOcrMode(int currentMode);
+    int nextOcrMode(int currentMode, bool local);
 
 private:
     void attach();
@@ -38,6 +38,7 @@ private:
     QList<QAction*> m_configurable;
     bool m_pending = false;
     std::optional<int> m_previousOcrMode;
+    std::optional<int> m_previousLocalOcrMode;
 };
 
 } // namespace Mu::Generator

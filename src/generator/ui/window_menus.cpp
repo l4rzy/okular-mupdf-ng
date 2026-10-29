@@ -151,6 +151,7 @@ private:
         const auto* collection = selectActionCollection();
         for (QAction* action : actionCollection()->actions()) {
             if (auto* source = collection ? collection->action(action->objectName()) : nullptr) {
+                action->setText(source->text());
                 action->setEnabled(source->isEnabled());
                 action->setVisible(source->isVisible());
                 action->setChecked(source->isChecked());
@@ -171,8 +172,8 @@ private:
 
     QList<Client> m_clients;
     QList<QAction*> m_unavailable;
-    bool m_rebuildPending = false;
     std::optional<int> m_previousOcrMode;
+    bool m_rebuildPending = false;
 };
 
 namespace {
@@ -199,12 +200,11 @@ MenuRegistration::~MenuRegistration()
     detach();
 }
 
-int MenuRegistration::nextOcrMode(int currentMode)
+int MenuRegistration::nextOcrMode(int currentMode, bool local)
 {
     using Mode = MuPDFNGSettings::EnumOcrTriggerMode;
-    // Headless clients retain their own history; registered tabs share the
-    // window's history so closing the original tab does not lose it.
-    auto& previousMode = m_menus ? m_menus->m_previousOcrMode : m_previousOcrMode;
+    // Global toggles share window history; local toggles retain document history.
+    auto& previousMode = local ? m_previousLocalOcrMode : m_menus ? m_menus->m_previousOcrMode : m_previousOcrMode;
     if (currentMode == Mode::Always)
         return previousMode.value_or(Mode::Never);
     previousMode = currentMode;

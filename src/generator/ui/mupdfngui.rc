@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org> -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="okular_mupdfng" version="4" translationDomain="okular_mupdfng">
+<gui name="okular_mupdfng" version="5" translationDomain="okular_mupdfng">
     <MenuBar>
         <Menu name="edit">
             <Separator/>
@@ -12,6 +12,7 @@
             <Separator/>
             <Action name="mupdf_ocr"/>
             <Action name="mupdf_theme"/>
+            <Action name="mupdf_document_settings"/>
             <Action name="mupdf_manage_certificates"/>
         </Menu>
     </MenuBar>
