@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 23:39-0500\n"
+"POT-Creation-Date: 2026-10-28 23:54-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -932,7 +932,7 @@ msgstr ""
 msgid "Failed to save PDF document."
 msgstr ""
 
-#: src/generator/mupdfng.cpp:1734 rc.cpp:43
+#: src/generator/mupdfng.cpp:1734
 msgid "ePUB"
 msgstr ""
 
@@ -1088,7 +1088,7 @@ msgstr ""
 msgid "Manage Certificates…"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:57 src/generator/ui/actions.cpp:275
+#: src/generator/ui/actions.cpp:57 src/generator/ui/actions.cpp:274
 msgid "Document Settings…"
 msgstr ""
 
@@ -1177,7 +1177,7 @@ msgstr ""
 msgid "%1 (Local)"
 msgstr ""
 
-#: src/generator/ui/actions.cpp:274
+#: src/generator/ui/actions.cpp:273
 msgid "Document Settings (Local)…"
 msgstr ""
 
@@ -1399,6 +1399,10 @@ msgstr ""
 
 #: rc.cpp:42
 msgid "Draw signature border"
+msgstr ""
+
+#: rc.cpp:43
+msgid "eBook"
 msgstr ""
 
 #: rc.cpp:44

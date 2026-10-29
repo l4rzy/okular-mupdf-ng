@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-28 23:39-0500\n"
+"POT-Creation-Date: 2026-10-28 23:54-0500\n"
 "PO-Revision-Date: 2026-10-28 13:28-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
@@ -1001,7 +1001,7 @@ msgstr "Worker MuPDF không khả dụng."
 msgid "Failed to save PDF document."
 msgstr "Không thể lưu tài liệu PDF."
 
-#: src/generator/mupdfng.cpp:1734 rc.cpp:43
+#: src/generator/mupdfng.cpp:1734
 msgid "ePUB"
 msgstr "ePUB"
 
@@ -1159,7 +1159,7 @@ msgstr "Xem trước liên kết trang: %1"
 msgid "Manage Certificates…"
 msgstr "Quản lý chứng chỉ…"
 
-#: src/generator/ui/actions.cpp:57 src/generator/ui/actions.cpp:275
+#: src/generator/ui/actions.cpp:57 src/generator/ui/actions.cpp:274
 msgid "Document Settings…"
 msgstr "Cài đặt tài liệu…"
 
@@ -1248,7 +1248,7 @@ msgstr "Bật/tắt chế độ nhá nhem"
 msgid "%1 (Local)"
 msgstr "%1 (Cục bộ)"
 
-#: src/generator/ui/actions.cpp:274
+#: src/generator/ui/actions.cpp:273
 msgid "Document Settings (Local)…"
 msgstr "Cài đặt tài liệu (Cục bộ)…"
 
@@ -1475,6 +1475,10 @@ msgstr "Dùng giờ UTC cho chữ ký"
 #: rc.cpp:42
 msgid "Draw signature border"
 msgstr "Vẽ đường viền chữ ký"
+
+#: rc.cpp:43
+msgid "eBook"
+msgstr "Sách điện tử"
 
 #: rc.cpp:44
 msgid "Page Layout"
