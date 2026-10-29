@@ -121,6 +121,29 @@ private slots:
                                    << QByteArray("Name") << QStringLiteral("Encrypted edit");
     }
 
+    void reopensWithheldEncryptedDocument()
+    {
+        const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(config, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Strict");
+        config->sync();
+        const auto restore = qScopeGuard([&] {
+            general.writeEntry("SandboxEnforcement", "Relaxed");
+            config->sync();
+        });
+
+        Okular::Document document(nullptr);
+        QCOMPARE(openDocument(document, QStringLiteral(TEST_FORM_DIR "/encrypted.pdf"), QStringLiteral("forms-test")),
+                 Okular::Document::OpenSuccess);
+        if (findField<Okular::FormFieldText>(document, 0, "Name"))
+            QSKIP("Worker is fully hardened; Strict enforcement does not withhold the document");
+
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        config->sync();
+        document.reparseConfig();
+        QTRY_VERIFY(findField<Okular::FormFieldText>(document, 0, "Name"));
+    }
+
     void persistsTextEdits()
     {
         QFETCH(QString, file);

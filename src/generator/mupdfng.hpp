@@ -222,9 +222,9 @@ private:
     void clearWorkerDerivedState();
     // Queues an Okular close/open cycle so placeholder deactivation restores
     // the real document after Strict enforcement relaxes.
+    void queueWithheldDocumentReopen();
+    // Executes the queued cycle after the current Okular call returns.
     void reopenWithheldDocument();
-    // Executes the queued cycle; maps the module's outcome to user signals.
-    void reopenWithheldDocumentInternal();
 
     // Converts worker page information into Okular-owned pages and wires their
     // annotations, links, and form proxies to the current worker session.

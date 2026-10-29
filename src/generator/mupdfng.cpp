@@ -217,7 +217,7 @@ Main::Main(QObject* parent, const QVariantList& args)
                 }
                 if (sandboxGated()) {
                     // Degraded sandbox under Strict after restart: withhold document,
-                    // keep session failed until Relaxed triggers reopenWithheldDocument.
+                    // keep session failed until Relaxed queues a document reopen.
                     m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
                     closeWorkerDocument();
                     clearPageErrorDerivedState();
@@ -437,7 +437,7 @@ bool Main::reparseConfig()
             closeWorkerDocument();
             clearPageErrorDerivedState();
         } else if (m_pageError.deactivate()) {
-            reopenWithheldDocument();
+            queueWithheldDocumentReopen();
         }
     }
 
@@ -918,14 +918,14 @@ void Main::clearPageErrorDerivedState()
 
 // Queued because Okular invokes reparseConfig() synchronously; closing and
 // reopening the document from inside that call would re-enter Okular::Document.
-void Main::reopenWithheldDocument()
+void Main::queueWithheldDocumentReopen()
 {
-    QMetaObject::invokeMethod(this, [this] { reopenWithheldDocumentInternal(); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, [this] { reopenWithheldDocument(); }, Qt::QueuedConnection);
 }
 
-// Executes the queued close/open cycle on a clean stack. UI-free: maps the
-// outcome to signals; the caller reports it to the user.
-void Main::reopenWithheldDocumentInternal()
+// Executes the queued close/open cycle on a clean stack. Warns when a nonlocal
+// document needs manual reopening and logs an attempted reopen failure.
+void Main::reopenWithheldDocument()
 {
     // Capture everything before closeDocument(): it nulls the generator's
     // document back-pointer (Document::closeDocument), and doCloseDocument()
@@ -944,11 +944,12 @@ void Main::reopenWithheldDocumentInternal()
         return;
     }
     const QString docFile = url.toLocalFile();
+    const QString password = m_document.password;
     const QMimeType mime = QMimeDatabase().mimeTypeForFile(docFile);
     MU_LOG(debug, "Mu::Generator::Main", "sandbox gate relaxed; reopening withheld document");
     doc->closeDocument();
     // On failure the generator signals are disconnected, so this is log-only.
-    if (doc->openDocument(docFile, url, mime, m_document.password) != Okular::Document::OpenSuccess)
+    if (doc->openDocument(docFile, url, mime, password) != Okular::Document::OpenSuccess)
         MU_LOG(warning, "Mu::Generator::Main", "document reopen failed after enforcement change");
     notifyDegradedSandbox();
 }
