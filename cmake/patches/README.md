@@ -67,6 +67,28 @@ Okular records undo per UI group, so uneven sets of mirrored options can still
 omit the previous selection in another group from undo history. Selection and
 persistence follow the PDF flag; fixing that undo limitation requires host support.
 
+`mupdf-1.28.5-html-background.patch` expands a lone `background: none` to a
+transparent background color, matching the keyword without regard to case.
+Previously the image keyword reached the color parser's fallback and became
+opaque black, hiding black text in tables such as
+Cloud Native Data Center Networking's table 10-1. Table-driven rendering tests
+in `tests/worker/epub.cpp` cover transparency, resetting an earlier color,
+keyword case, declaration precedence, `!important`, and explicit named/hex colors.
+Pagination is unchanged.
+
+`mupdf-1.28.5-css-attribute-selectors.patch` adds prefix (`^=`), suffix (`$=`),
+and substring (`*=`) attribute selectors. It also fixes dash-prefix (`|=`)
+matching and whitespace-token (`~=`) matching, including class selectors,
+and accepts whitespace before attribute values. Empty substring needles never
+match. Worker tests cover missing/empty attributes, case-sensitive matching,
+Unicode, compound/descendant selectors, specificity, malformed-selector recovery,
+long values, and the book's footnote selector. Cache revision 6 invalidates layouts
+from before these rules applied.
+Attribute namespaces and the explicit `i`/`s` case flags remain unsupported.
+
+`mupdf-1.28.5-css-calc.patch` is retained for reference but is not applied by
+CMake. CSS `calc()` and viewport units remain unsupported by this build.
+
 CMake applies the patches with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
 verifies an already-applied patch using a reverse dry run. Unexpected source changes
 fail configuration rather than silently skipping the fix. The patch and affected

@@ -59,6 +59,8 @@ else()
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-layout.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-media.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-image-width.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-background.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-css-attribute-selectors.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-form-autosize.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-radio-unison.patch")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_mupdf_patches})
@@ -248,6 +250,7 @@ else()
             "${MUPDF_SOURCE_DIR}/source/html/html-layout.c"
             "${MUPDF_SOURCE_DIR}/source/html/html-imp.h"
             "${MUPDF_SOURCE_DIR}/source/html/css-apply.c"
+            "${MUPDF_SOURCE_DIR}/source/html/css-parse.c"
         WORKING_DIRECTORY "${MUPDF_SOURCE_DIR}"
         VERBATIM
         COMMENT "Building bundled MuPDF ${MUPDF_VERSION} (${MUPDF_BUILD_PROFILE})"

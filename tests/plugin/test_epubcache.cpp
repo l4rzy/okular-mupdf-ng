@@ -89,6 +89,8 @@ private slots:
         QTest::newRow("pre-page-margins-outline") << false << quint32(2);
         QTest::newRow("pre-media-filter-accelerator") << true << quint32(3);
         QTest::newRow("pre-media-filter-outline") << false << quint32(3);
+        QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5);
+        QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5);
     }
 
     void ignoresUnpatchedLayoutCache()

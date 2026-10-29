@@ -98,6 +98,213 @@ class TestEpub : public QObject {
     Q_OBJECT
 private slots:
 
+    void testAttributeSelectors_data()
+    {
+        QTest::addColumn<QString>("selector");
+        QTest::addColumn<QString>("attributes");
+        QTest::addColumn<bool>("matches");
+        const auto add = [](const char* name, const QString& selector, const QString& attributes, bool matches) {
+            QTest::newRow(name) << selector << attributes << matches;
+        };
+        add("invalid-prefix-operator", "[data-value^text]", "data-value='text'", false);
+        add("invalid-suffix-value", "[data-value$=]", "data-value='text'", false);
+        add("invalid-substring-bracket", "[data-value*='text'", "data-value='text'", false);
+        add("invalid-operator", "[data-value**='text']", "data-value='text'", false);
+        add("invalid-attribute-name", "[^='text']", "data-value='text'", false);
+        add("long-suffix",
+            "[data-value$='text']",
+            QStringLiteral("data-value='%1text'").arg(QString(900, QLatin1Char('a'))),
+            true);
+        add("longer-dash-needle",
+            QStringLiteral("[data-value|='%1']").arg(QString(1000, QLatin1Char('a'))),
+            "data-value='a'",
+            false);
+        add("exists", "[data-value]", "data-value='text'", true);
+        add("exists-empty", "[data-value]", "data-value=''", true);
+        add("exists-missing", "[data-value]", "", false);
+        add("exact", "[data-value='text']", "data-value='text'", true);
+        add("exact-empty", "[data-value='']", "data-value=''", true);
+        add("exact-missing", "[data-value='']", "", false);
+        add("exact-case", "[data-value='text']", "data-value='Text'", false);
+        add("exact-partial", "[data-value='text']", "data-value='textual'", false);
+        for (const auto& op : { QStringLiteral("^"), QStringLiteral("$"), QStringLiteral("*") }) {
+            const auto selector = QStringLiteral("[data-value%1='text']").arg(op);
+            add(qPrintable(op + "-exact"), selector, "data-value='text'", true);
+            add(qPrintable(op + "-missing"), selector, "", false);
+            add(qPrintable(op + "-empty-attribute"), selector, "data-value=''", false);
+            add(qPrintable(op + "-short"), selector, "data-value='tex'", false);
+            add(qPrintable(op + "-case"), selector, "data-value='TEXT'", false);
+            add(qPrintable(op + "-empty-needle"),
+                QStringLiteral("[data-value%1='']").arg(op),
+                "data-value='text'",
+                false);
+            add(qPrintable(op + "-both-empty"), QStringLiteral("[data-value%1='']").arg(op), "data-value=''", false);
+        }
+        add("operator-whitespace", "[ data-value ^= 'text' ]", "data-value='text-more'", true);
+        add("exact-whitespace", "[ data-value = text ]", "data-value='text'", true);
+        add("empty-whitespace", "[ data-value $= '' ]", "data-value='text'", false);
+        add("prefix", "[data-value^=text]", "data-value='text-more'", true);
+        add("prefix-middle", "[data-value^='text']", "data-value='a-text'", false);
+        add("suffix", "[data-value$=text]", "data-value='more-text'", true);
+        add("suffix-repeated", "[data-value$='text']", "data-value='text-more-text'", true);
+        add("suffix-middle", "[data-value$='text']", "data-value='text-more'", false);
+        add("substring", "[data-value*=text]", "data-value='a-text-b'", true);
+        add("substring-miss", "[data-value*='text']", "data-value='next'", false);
+        add("suffix-unicode", QString::fromUtf8("[data-value$='é']"), QString::fromUtf8("data-value='café'"), true);
+        add("dash-exact", "[data-value|=en]", "data-value='en'", true);
+        add("dash-prefix", "[data-value|=en]", "data-value='en-US'", true);
+        add("dash-partial", "[data-value|=en]", "data-value='english'", false);
+        add("dash-middle", "[data-value|=en]", "data-value='a-en'", false);
+        add("dash-missing", "[data-value|='']", "", false);
+        add("dash-empty", "[data-value|='']", "data-value=''", true);
+        add("dash-empty-prefix", "[data-value|='']", "data-value='-en'", true);
+        add("dash-short", "[data-value|=english]", "data-value='en'", false);
+        add("dash-case", "[data-value|=en]", "data-value='EN-us'", false);
+        add("dash-space", "[data-value|=en]", "data-value='en US'", false);
+        add("token-missing", "[data-value~=text]", "", false);
+        add("token-empty-value", "[data-value~=text]", "data-value=''", false);
+        add("token-only-whitespace", "[data-value~=text]", "data-value=' &#9;&#13;&#10;&#12;'", false);
+        add("token-trailing-whitespace", "[data-value~=text]", "data-value='other text &#9;'", true);
+        add("token-nonbreaking-space", "[data-value~=text]", "data-value='other&#160;text'", false);
+        add("token", "[data-value~=text]", "data-value='first text last'", true);
+        add("token-repeat", "[data-value~=text]", "data-value='textual text'", true);
+        add("token-whitespace", "[data-value~=text]", "data-value='first&#9;&#13;text&#10;&#12;last'", true);
+        add("token-substring", "[data-value~=text]", "data-value='textual'", false);
+        add("token-empty", "[data-value~='']", "data-value=''", false);
+        add("token-space", "[data-value~='two words']", "data-value='two words'", false);
+        add("class-token", ".text", "class='textual&#9;text'", true);
+        add("compound", "p[data-value^='text'][data-value$='end']", "data-value='text-end'", true);
+        add("compound-miss", "p[data-value^='text'][data-value$='end']", "data-value='text-other'", false);
+        add("descendant", "div[data-parent*='book'] p[data-value$='marker']", "data-value='note-marker'", true);
+        add("book-footnote", "p[data-type='footnote'] a[href$='-marker']", "href='note-marker'", true);
+        add("book-footnote-miss", "p[data-type='footnote'] a[href$='-marker']", "href='note-marker-more'", false);
+    }
+
+    void testAttributeSelectors()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF attribute selector patch");
+#endif
+        QFETCH(QString, selector);
+        QFETCH(QString, attributes);
+        QFETCH(bool, matches);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const bool footnote = selector.contains(QStringLiteral("a[href"));
+        const auto target = footnote ? QStringLiteral("<p data-type='footnote'><a %1>Target</a></p>").arg(attributes)
+                                     : QStringLiteral("<p %1>Target</p>").arg(attributes);
+        // The later type rule must lose to an attribute selector's specificity.
+        // The control also checks that parsing continues after the tested selector.
+        const auto content = QStringLiteral("<html><head><style>p { font-size: 12pt; } %1 { font-size: 24pt; } "
+                                            "p { font-size: 12pt; } p.control { font-size: 18pt; } "
+                                            "</style></head><body><div data-parent='my-book'>%2</div>"
+                                            "<p class='control'>Control</p></body></html>")
+                                 .arg(selector, target)
+                                 .toUtf8();
+        QFile html(directory.filePath(QStringLiteral("selectors.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 400, 600, 12);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto inspection = Mu::Test::inspectDocumentText(context, document);
+        QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+        QVERIFY(inspection.lines.contains(QStringLiteral("Target")));
+        QVERIFY(inspection.lines.contains(QStringLiteral("Control")));
+        QCOMPARE(inspection.lines.value(QStringLiteral("Target")).size, matches ? 24.0f : 12.0f);
+        QCOMPARE(inspection.lines.value(QStringLiteral("Control")).size, 18.0f);
+    }
+
+    void testTableBackground_data()
+    {
+        QTest::addColumn<QString>("background");
+        QTest::addColumn<int>("expectedRgb");
+        QTest::newRow("none") << QStringLiteral("background: none;") << 0xd0ccb8;
+        QTest::newRow("none-uppercase") << QStringLiteral("background: NONE;") << 0xd0ccb8;
+        QTest::newRow("none-mixed-case") << QStringLiteral("background: NoNe;") << 0xd0ccb8;
+        QTest::newRow("none-comment") << QStringLiteral("background: /* reset */ none;") << 0xd0ccb8;
+        QTest::newRow("none-compact-important") << QStringLiteral("background:none!important;") << 0xd0ccb8;
+        QTest::newRow("none-important-wins")
+            << QStringLiteral("background: none !important; background: black;") << 0xd0ccb8;
+        QTest::newRow("earlier-color-important-wins")
+            << QStringLiteral("background-color: #336699 !important; background: none;") << 0x336699;
+        QTest::newRow("later-color-wins") << QStringLiteral("background: none; background: #336699;") << 0x336699;
+        QTest::newRow("none-important") << QStringLiteral("background: none !important;") << 0xd0ccb8;
+        QTest::newRow("reset-color") << QStringLiteral("background-color: red; background: none;") << 0xd0ccb8;
+        QTest::newRow("transparent") << QStringLiteral("background: transparent;") << 0xd0ccb8;
+        QTest::newRow("hex-color") << QStringLiteral("background: #336699;") << 0x336699;
+        QTest::newRow("named-color") << QStringLiteral("background: black;") << 0x000000;
+    }
+
+    void testTableBackground()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF background shorthand patch");
+#endif
+        QFETCH(QString, background);
+        QFETCH(int, expectedRgb);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        // Match the book's table > cell > div > pre structure, with a visible parent background.
+        const auto content =
+            QStringLiteral("<html><head><style>@page { margin: 0; } body { margin: 0; background: #d0ccb8; } "
+                           "table { width: 200px; border-spacing: 0; %1 } td { padding: 0; } pre { margin: 0; } "
+                           "</style></head><body><table><tr><td><div><pre>spine01\ninterface lo\nrouter bgp 65000\n"
+                           "network 10.0.0.21/32</pre></div></td></tr></table></body></html>")
+                .arg(background)
+                .toUtf8();
+        QFile html(directory.filePath(QStringLiteral("table.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_pixmap* pixmap = nullptr;
+        fz_var(document);
+        fz_var(pixmap);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 300, 200, 12);
+            pixmap = fz_new_pixmap_from_page_number(context, document, 0, fz_identity, fz_device_rgb(context), 0);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] {
+            fz_drop_pixmap(context, pixmap);
+            fz_drop_document(context, document);
+        });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto* pixel = fz_pixmap_samples(context, pixmap) + 25 * fz_pixmap_stride(context, pixmap)
+            + 180 * fz_pixmap_components(context, pixmap);
+        QCOMPARE((int(pixel[0]) << 16) | (int(pixel[1]) << 8) | int(pixel[2]), expectedRgb);
+        const auto inspection = Mu::Test::inspectDocumentText(context, document);
+        QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+        QVERIFY(inspection.lines.contains(QStringLiteral("spine01")));
+        QVERIFY(inspection.lines.contains(QStringLiteral("router bgp 65000")));
+    }
+
     void testWideImagesFitPage_data()
     {
         QTest::addColumn<QString>("display");

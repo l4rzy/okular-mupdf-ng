@@ -1,0 +1,13 @@
+--- a/source/html/css-apply.c
++++ b/source/html/css-apply.c
+@@ -988,6 +988,10 @@
+ static void
+ add_shorthand_background(fz_css_match *match, fz_css_value *value, int spec)
+ {
++	/* A lone image keyword resets the omitted background color to transparent. */
++	static fz_css_value transparent = { CSS_KEYWORD, "transparent", NULL, NULL };
++	if (value->type == CSS_KEYWORD && !fz_strcasecmp(value->data, "none") && !value->next)
++		value = &transparent;
+ 	/* TODO: background-image, -origin, -size, -repeat */
+ 	add_property(match, PRO_BACKGROUND_COLOR, value, spec);
+ }

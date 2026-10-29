@@ -70,7 +70,8 @@ if [ "$BUILD_TYPE" = "Release" ]; then
   cmake_args+=(-DBUILD_TESTING=ON -DENABLE_LTO=ON -DENABLE_BUILD_TREE_WORKER=ON -DENABLE_MU_DEBUG=ON)
 fi
 if [ "$1" = "asan" ]; then
-  cmake_args+=(-DENABLE_SANITIZERS=ON -DMUPDF_OPTIMIZED_BUILD=OFF)
+  # The worker's address-space limit conflicts with ASan's shadow mapping.
+  cmake_args+=(-DENABLE_SANITIZERS=ON -DMUPDF_OPTIMIZED_BUILD=OFF -DDISABLE_WORKER_SANDBOX=ON)
 fi
 # Link with mold when available and supported (CMake >= 3.29); otherwise the
 # default linker is used unchanged.

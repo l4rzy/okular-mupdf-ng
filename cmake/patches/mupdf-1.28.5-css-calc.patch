@@ -1,0 +1,839 @@
+--- a/source/html/css-parse.c
++++ b/source/html/css-parse.c
+@@ -632,6 +632,44 @@
+ 	return t == ':' || t == '.' || t == '[' || t == CSS_HASH;
+ }
+ 
++/* Read calc() separately: the ordinary value grammar treats + and - as signs,
++ * not binary operators. Keep the expression intact for typed numeric validation. */
++static fz_css_value *parse_calc(struct lexbuf *buf)
++{
++	int depth = 1, closed = 0;
++	fz_css_value *args;
++	buf->string_len = 0;
++	while (buf->c && buf->c != ';' && buf->c != '}')
++	{
++		if (buf->c == '/' && *buf->s == '*')
++		{
++			css_lex_next(buf);
++			css_lex_next(buf);
++			while (buf->c && !(buf->c == '*' && *buf->s == '/'))
++				css_lex_next(buf);
++			if (!buf->c) break;
++			css_lex_next(buf);
++			css_lex_next(buf);
++			css_push_char(buf, ' ');
++			continue;
++		}
++		if (buf->c == '(')
++			++depth;
++		if (buf->c == ')' && --depth == 0)
++		{
++			closed = 1;
++			css_lex_next(buf);
++			break;
++		}
++		css_push_char(buf, buf->c);
++		css_lex_next(buf);
++	}
++	css_push_zero(buf);
++	args = fz_new_css_value(buf->ctx, buf->pool, closed ? CSS_STRING : CSS_KEYWORD, buf->string);
++	next(buf);
++	return args;
++}
++
+ static fz_css_value *parse_term(struct lexbuf *buf)
+ {
+ 	fz_css_value *v;
+@@ -662,7 +700,12 @@
+ 	{
+ 		v = fz_new_css_value(buf->ctx, buf->pool, CSS_KEYWORD, buf->string);
+ 		next(buf);
+-		if (accept(buf, '('))
++		if (buf->lookahead == '(' && !fz_strcasecmp(v->data, "calc"))
++		{
++			v->type = '(';
++			v->args = parse_calc(buf);
++		}
++		else if (accept(buf, '('))
+ 		{
+ 			white(buf);
+ 			v->type = '(';
+--- a/source/html/css-apply.c
++++ b/source/html/css-apply.c
+@@ -27,6 +27,9 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <assert.h>
++#include <math.h>
++
++static int is_calc(fz_css_value *value);
+ 
+ static const char *border_width_kw[] = {
+ 	"medium",
+@@ -996,7 +999,7 @@
+ 		}
+ 		else if (value->type == CSS_NUMBER)
+ 			font_weight = value;
+-		else if (value->type == CSS_LENGTH || value->type == CSS_PERCENT)
++		else if (value->type == CSS_LENGTH || value->type == CSS_PERCENT || is_calc(value))
+ 			value = add_shorthand_font_size(match, value, spec);
+ 	}
+ 
+@@ -1028,9 +1031,41 @@
+ 	add_property(match, PRO_BACKGROUND_COLOR, value, spec);
+ }
+ 
++/* Limit calc() to properties whose numeric resolution is implemented below. */
++static int
++supports_calc(int property)
++{
++	switch (property)
++	{
++	case PRO_FONT: case PRO_FONT_SIZE: case PRO_LINE_HEIGHT: case PRO_LEADING:
++	case PRO_WIDTH: case PRO_HEIGHT: case PRO_VERTICAL_ALIGN:
++	case PRO_TEXT_INDENT: case PRO_TEXT_STROKE_WIDTH: case PRO_BORDER_SPACING:
++	case PRO_MARGIN: case PRO_MARGIN_TOP: case PRO_MARGIN_RIGHT: case PRO_MARGIN_BOTTOM: case PRO_MARGIN_LEFT:
++	case PRO_PADDING: case PRO_PADDING_TOP: case PRO_PADDING_RIGHT: case PRO_PADDING_BOTTOM: case PRO_PADDING_LEFT:
++	case PRO_INSET: case PRO_INSET_TOP: case PRO_INSET_RIGHT: case PRO_INSET_BOTTOM: case PRO_INSET_LEFT:
++	case PRO_BORDER: case PRO_BORDER_TOP: case PRO_BORDER_RIGHT: case PRO_BORDER_BOTTOM: case PRO_BORDER_LEFT:
++	case PRO_BORDER_WIDTH: case PRO_BORDER_TOP_WIDTH: case PRO_BORDER_RIGHT_WIDTH:
++	case PRO_BORDER_BOTTOM_WIDTH: case PRO_BORDER_LEFT_WIDTH:
++		return 1;
++	default: return 0;
++	}
++}
++
++static int parse_calc_number(fz_css_value *value, fz_css_number *number);
++
+ static void
+ add_property(fz_css_match *match, int name, fz_css_value *value, int spec)
+ {
++	fz_css_value *v, *previous = NULL;
++	fz_css_number n;
++	/* Invalid calc declarations must not replace an earlier fallback. Validate
++	 * every shorthand component before expanding any of them. */
++	for (v = value; v; previous = v, v = v->next)
++		if (is_calc(v) && (!supports_calc(name) || !parse_calc_number(v, &n) ||
++			(n.unit == N_NUMBER && name != PRO_LINE_HEIGHT &&
++			!(name == PRO_FONT && previous && previous->type == '/'))))
++			return;
++
+ 	/* shorthand expansions: */
+ 	switch (name)
+ 	{
+@@ -1354,7 +1389,7 @@
+ static fz_css_number
+ make_number(float v, int u)
+ {
+-	fz_css_number n;
++	fz_css_number n = { 0 };
+ 	n.value = v;
+ 	n.unit = u;
+ 	return n;
+@@ -1363,7 +1398,7 @@
+ static fz_css_number
+ make_undefined_number(void)
+ {
+-	fz_css_number n;
++	fz_css_number n = { 0 };
+ 	n.value = 0;
+ 	n.unit = N_UNDEFINED;
+ 	return n;
+@@ -1408,6 +1443,203 @@
+ 	return sign * v;
+ }
+ 
++/* Linear combinations preserve relative units until their layout context exists. */
++typedef struct
++{
++	float term[8]; /* pt, em, rem, %, vw, vh, vmin, vmax */
++	int scalar;
++} css_calc_value;
++
++typedef struct
++{
++	const char *p;
++	int terms;
++} css_calc_parser;
++
++static void
++skip_calc_space(const char **p)
++{
++	const char *end;
++	for (;;)
++	{
++		*p += strspn(*p, " \t\r\n\f");
++		if ((*p)[0] != '/' || (*p)[1] != '*')
++			return;
++		end = strstr(*p + 2, "*/");
++		if (!end)
++		{
++			*p += strlen(*p);
++			return;
++		}
++		*p = end + 2;
++	}
++}
++
++static int
++finite_calc(css_calc_value *v)
++{
++	int i;
++	for (i = 0; i < 8; ++i)
++		if (!isfinite(v->term[i]))
++			return 0;
++	return 1;
++}
++
++static int parse_calc_sum(css_calc_parser *parser, int depth, css_calc_value *v);
++
++static int
++parse_calc_atom(css_calc_parser *parser, int depth, css_calc_value *v)
++{
++	const char *unit;
++	char *end;
++	float x;
++	size_t len;
++	int slot = 0;
++	memset(v, 0, sizeof *v);
++	skip_calc_space(&parser->p);
++	if (depth > 32 || ++parser->terms > 128)
++		return 0;
++	if (*parser->p == '(' || !fz_strncasecmp(parser->p, "calc(", 5))
++	{
++		parser->p += *parser->p == '(' ? 1 : 5;
++		if (!parse_calc_sum(parser, depth + 1, v))
++			return 0;
++		skip_calc_space(&parser->p);
++		if (*parser->p != ')')
++			return 0;
++		++parser->p;
++		return 1;
++	}
++	if (!strchr("+-.0123456789", *parser->p) || !*parser->p)
++		return 0;
++	x = fz_strtof(parser->p, &end);
++	if (end == parser->p || !isfinite(x))
++		return 0;
++	parser->p = unit = end;
++	while ((*parser->p >= 'a' && *parser->p <= 'z') || (*parser->p >= 'A' && *parser->p <= 'Z'))
++		++parser->p;
++	if (*parser->p == '%')
++		++parser->p;
++	len = parser->p - unit;
++#define CALC_UNIT(s) (len == sizeof(s)-1 && !fz_strncasecmp(unit, s, len))
++	if (!len) v->scalar = 1;
++	else if (CALC_UNIT("pt") || CALC_UNIT("px")) { }
++	else if (CALC_UNIT("in")) x *= 72;
++	else if (CALC_UNIT("cm")) x *= 7200.0f / 254;
++	else if (CALC_UNIT("mm")) x *= 720.0f / 254;
++	else if (CALC_UNIT("q")) x *= 180.0f / 254;
++	else if (CALC_UNIT("pc")) x *= 12;
++	else if (CALC_UNIT("em")) slot = 1;
++	else if (CALC_UNIT("ex") || CALC_UNIT("ch")) { slot = 1; x *= .5f; }
++	else if (CALC_UNIT("rem")) slot = 2;
++	else if (CALC_UNIT("%")) slot = 3;
++	else if (CALC_UNIT("vw")) slot = 4;
++	else if (CALC_UNIT("vh")) slot = 5;
++	else if (CALC_UNIT("vmin")) slot = 6;
++	else if (CALC_UNIT("vmax")) slot = 7;
++	else return 0;
++#undef CALC_UNIT
++	v->term[slot] = x;
++	return finite_calc(v);
++}
++
++static int
++parse_calc_product(css_calc_parser *parser, int depth, css_calc_value *v)
++{
++	css_calc_value rhs;
++	const char *p;
++	float scale;
++	int op, i;
++	if (!parse_calc_atom(parser, depth, v))
++		return 0;
++	for (;;)
++	{
++		p = parser->p;
++		skip_calc_space(&p);
++		op = *p;
++		if (op != '*' && op != '/')
++			return 1;
++		parser->p = p + 1;
++		if (!parse_calc_atom(parser, depth, &rhs))
++			return 0;
++		if (op == '/')
++		{
++			if (!rhs.scalar || rhs.term[0] == 0)
++				return 0;
++			scale = 1 / rhs.term[0];
++		}
++		else if (rhs.scalar)
++			scale = rhs.term[0];
++		else if (v->scalar)
++		{
++			scale = v->term[0];
++			*v = rhs;
++		}
++		else return 0;
++		for (i = 0; i < 8; ++i)
++			v->term[i] *= scale;
++		if (!finite_calc(v))
++			return 0;
++	}
++}
++
++static int
++parse_calc_sum(css_calc_parser *parser, int depth, css_calc_value *v)
++{
++	css_calc_value rhs;
++	const char *p, *after;
++	int op, i;
++	if (!parse_calc_product(parser, depth, v))
++		return 0;
++	for (;;)
++	{
++		p = parser->p;
++		skip_calc_space(&p);
++		op = *p;
++		if (op != '+' && op != '-')
++			return 1;
++		/* Binary + and - require whitespace on both sides. */
++		after = p + 1;
++		skip_calc_space(&after);
++		if (p == parser->p || after == p + 1)
++			return 0;
++		parser->p = after;
++		if (!parse_calc_product(parser, depth, &rhs) || rhs.scalar != v->scalar)
++			return 0;
++		for (i = 0; i < 8; ++i)
++			v->term[i] += op == '+' ? rhs.term[i] : -rhs.term[i];
++		if (!finite_calc(v))
++			return 0;
++	}
++}
++
++static int
++is_calc(fz_css_value *value)
++{
++	return value && value->type == '(' && !fz_strcasecmp(value->data, "calc");
++}
++
++static int
++parse_calc_number(fz_css_value *value, fz_css_number *number)
++{
++	css_calc_parser parser;
++	css_calc_value result;
++	int i;
++	if (!value->args || value->args->type != CSS_STRING)
++		return 0;
++	parser.p = value->args->data;
++	parser.terms = 0;
++	if (!parse_calc_sum(&parser, 0, &result))
++		return 0;
++	skip_calc_space(&parser.p);
++	if (*parser.p)
++		return 0;
++	*number = make_number(result.term[0], result.scalar ? N_NUMBER : N_CALC);
++	for (i = 0; i < 7; ++i)
++		number->calc[i] = result.term[i+1];
++	return 1;
++}
++
+ static fz_css_number
+ number_from_value(fz_css_value *value, float initial, int initial_unit)
+ {
+@@ -1415,6 +1647,11 @@
+ 
+ 	if (!value)
+ 		return make_number(initial, initial_unit);
++	if (is_calc(value))
++	{
++		fz_css_number n;
++		return parse_calc_number(value, &n) ? n : make_number(initial, initial_unit);
++	}
+ 
+ 	if (value->type == CSS_PERCENT)
+ 		return make_number(fz_css_strtof(value->data, NULL), N_PERCENT);
+@@ -1448,6 +1685,11 @@
+ 		if (p[0] == 'r' && p[1] == 'e' && p[2] == 'm' && p[3] == 0)
+ 			return make_number(x, N_ROOT_SCALE);
+ 
++		if (!fz_strcasecmp(p, "vw")) return make_number(x, N_VW);
++		if (!fz_strcasecmp(p, "vh")) return make_number(x, N_VH);
++		if (!fz_strcasecmp(p, "vmin")) return make_number(x, N_VMIN);
++		if (!fz_strcasecmp(p, "vmax")) return make_number(x, N_VMAX);
++
+ 		/* FIXME: 'ch' should be width of '0' character. This is an approximation. */
+ 		if (p[0] == 'c' && p[1] == 'h' && p[2] == 0)
+ 			return make_number(x / 2, N_LENGTH);
+@@ -1467,7 +1709,12 @@
+ static fz_css_number
+ number_from_property(fz_css_match *match, int property, float initial, int initial_unit)
+ {
+-	return number_from_value(value_from_property(match, property), initial, initial_unit);
++	fz_css_number n = number_from_value(value_from_property(match, property), initial, initial_unit);
++	if (is_calc(value_from_property(match, property)))
++		n.nonnegative = property == PRO_WIDTH || property == PRO_HEIGHT || property == PRO_LINE_HEIGHT ||
++			property == PRO_PADDING_TOP || property == PRO_PADDING_RIGHT ||
++			property == PRO_PADDING_BOTTOM || property == PRO_PADDING_LEFT || property == PRO_BORDER_SPACING;
++	return n;
+ }
+ 
+ static int
+@@ -1478,7 +1725,7 @@
+ 	if (val == NULL)
+ 		return 0;
+ 
+-	*num = number_from_value(val, initial, initial_unit);
++	*num = number_from_property(match, property, initial, initial_unit);
+ 
+ 	return 1;
+ }
+@@ -1500,6 +1747,7 @@
+ 		*num = make_number(4, N_LENGTH);
+ 	else
+ 		*num = number_from_value(value, 0, N_LENGTH);
++	if (num->unit == N_CALC) num->nonnegative = 1;
+ 
+ 	return 1;
+ }
+@@ -1545,8 +1793,9 @@
+ }
+ 
+ float
+-fz_from_css_number(fz_css_number number, float em, float percent_value, float auto_value, float root_em)
+-{
++fz_from_css_number(fz_css_number number, float em, float percent_value, float auto_value, float root_em, float viewport_w, float viewport_h)
++{
++	float value;
+ 	switch (number.unit) {
+ 	default:
+ 	case N_NUMBER: return number.value;
+@@ -1555,21 +1804,26 @@
+ 	case N_ROOT_SCALE: return number.value * root_em;
+ 	case N_PERCENT: return number.value * 0.01f * percent_value;
+ 	case N_AUTO: return auto_value;
++	case N_VW: return number.value * .01f * viewport_w;
++	case N_VH: return number.value * .01f * viewport_h;
++	case N_VMIN: return number.value * .01f * fz_min(viewport_w, viewport_h);
++	case N_VMAX: return number.value * .01f * fz_max(viewport_w, viewport_h);
++	case N_CALC:
++		value = number.value + number.calc[0] * em + number.calc[1] * root_em +
++			.01f * (number.calc[2] * percent_value + number.calc[3] * viewport_w +
++			number.calc[4] * viewport_h + number.calc[5] * fz_min(viewport_w, viewport_h) +
++			number.calc[6] * fz_max(viewport_w, viewport_h));
++		if (!isfinite(value)) return auto_value;
++		return number.nonnegative ? fz_max(0, value) : value;
+ 	}
+ }
+ 
+ float
+-fz_from_css_number_scale(fz_css_number number, float scale, float root_em)
+-{
+-	switch (number.unit) {
+-	default:
+-	case N_NUMBER: return number.value * scale;
+-	case N_LENGTH: return number.value;
+-	case N_SCALE: return number.value * scale;
+-	case N_ROOT_SCALE: return number.value * root_em;
+-	case N_PERCENT: return number.value * 0.01f * scale;
+-	case N_AUTO: return scale;
+-	}
++fz_from_css_number_scale(fz_css_number number, float scale, float root_em, float viewport_w, float viewport_h)
++{
++	if (number.unit == N_NUMBER)
++		return number.nonnegative ? fz_max(0, number.value * scale) : number.value * scale;
++	return fz_from_css_number(number, scale, scale, scale, root_em, viewport_w, viewport_h);
+ }
+ 
+ static fz_css_color
+@@ -1668,9 +1922,9 @@
+ 		vr = value->args;
+ 		vg = vr && vr->next ? vr->next->next : NULL; /* skip the ',' nodes */
+ 		vb = vg && vg->next ? vg->next->next : NULL; /* skip the ',' nodes */
+-		r = fz_from_css_number(number_from_value(vr, 0, N_NUMBER), 255, 255, 0, 16);
+-		g = fz_from_css_number(number_from_value(vg, 0, N_NUMBER), 255, 255, 0, 16);
+-		b = fz_from_css_number(number_from_value(vb, 0, N_NUMBER), 255, 255, 0, 16);
++		r = fz_from_css_number(number_from_value(vr, 0, N_NUMBER), 255, 255, 0, 16, 0, 0);
++		g = fz_from_css_number(number_from_value(vg, 0, N_NUMBER), 255, 255, 0, 16, 0, 0);
++		b = fz_from_css_number(number_from_value(vb, 0, N_NUMBER), 255, 255, 0, 16, 0, 0);
+ 		return make_color(r, g, b, 255);
+ 	}
+ 
+@@ -1682,10 +1936,10 @@
+ 		vg = vr && vr->next ? vr->next->next : NULL; /* skip the ',' nodes */
+ 		vb = vg && vg->next ? vg->next->next : NULL; /* skip the ',' nodes */
+ 		va = vb && vb->next ? vb->next->next : NULL; /* skip the ',' nodes */
+-		r = fz_from_css_number(number_from_value(vr, 0, N_NUMBER), 255, 255, 0, 16);
+-		g = fz_from_css_number(number_from_value(vg, 0, N_NUMBER), 255, 255, 0, 16);
+-		b = fz_from_css_number(number_from_value(vb, 0, N_NUMBER), 255, 255, 0, 16);
+-		a = fz_from_css_number(number_from_value(va, 0, N_NUMBER), 255, 255, 255, 16);
++		r = fz_from_css_number(number_from_value(vr, 0, N_NUMBER), 255, 255, 0, 16, 0, 0);
++		g = fz_from_css_number(number_from_value(vg, 0, N_NUMBER), 255, 255, 0, 16, 0, 0);
++		b = fz_from_css_number(number_from_value(vb, 0, N_NUMBER), 255, 255, 0, 16, 0, 0);
++		a = fz_from_css_number(number_from_value(va, 0, N_NUMBER), 255, 255, 255, 16, 0, 0);
+ 		return make_color(r, g, b, a);
+ 	}
+ 
+@@ -1919,7 +2173,7 @@
+ 			style->vertical_align = VA_PERCENT;
+ 			style->vertical_align_number = number_from_value(value, 0, N_PERCENT);
+ 		}
+-		else if (value->type == CSS_LENGTH)
++		else if (value->type == CSS_LENGTH || is_calc(value))
+ 		{
+ 			style->vertical_align = VA_LENGTH;
+ 			style->vertical_align_number = number_from_value(value, 0, N_LENGTH);
+@@ -1943,7 +2197,7 @@
+ 		/* percentage */
+ 		else if (value->type == CSS_PERCENT) style->font_size = number_from_value(value, 12, N_LENGTH);
+ 		/* length */
+-		else if (value->type == CSS_LENGTH) style->font_size = number_from_value(value, 12, N_LENGTH);
++		else if (value->type == CSS_LENGTH || is_calc(value)) style->font_size = number_from_value(value, 12, N_LENGTH);
+ 		/* default to 1em */
+ 		else style->font_size = make_number(1, N_SCALE);
+ 	}
+@@ -1951,6 +2205,8 @@
+ 	{
+ 		style->font_size = make_number(1, N_SCALE);
+ 	}
++
++	if (style->font_size.unit == N_CALC) style->font_size.nonnegative = 1;
+ 
+ 	value = value_from_property(match, PRO_LIST_STYLE_TYPE);
+ 	if (value)
+--- a/source/html/html-imp.h
++++ b/source/html/html-imp.h
+@@ -262,7 +262,7 @@
+ 	/* We do not support 'anywhere'. */
+ };
+ 
+-enum { N_NUMBER='u', N_LENGTH='p', N_SCALE='m', N_ROOT_SCALE='r', N_PERCENT='%', N_AUTO='a', N_UNDEFINED='x' };
++enum { N_NUMBER='u', N_LENGTH='p', N_SCALE='m', N_ROOT_SCALE='r', N_PERCENT='%', N_AUTO='a', N_UNDEFINED='x', N_CALC='c', N_VW='w', N_VH='h', N_VMIN='i', N_VMAX='o' };
+ 
+ enum {
+ 	FZ_CSS_PSEUDO_NONE,
+@@ -274,6 +274,9 @@
+ {
+ 	float value;
+ 	int unit;
++	/* Deferred em, rem, percent, vw, vh, vmin, vmax coefficients for calc(). */
++	float calc[7];
++	int nonnegative;
+ };
+ 
+ struct fz_css_color_s
+@@ -511,6 +514,7 @@
+ 		struct {
+ 			float x, y, w, b; /* content */
+ 			float em, rem, baseline;
++			float viewport_w, viewport_h;
+ 		} layout;
+ 	} s;
+ 
+@@ -605,8 +609,8 @@
+ */
+ const fz_css_style *fz_css_enlist(fz_context *ctx, const fz_css_style *style, fz_css_style_splay **tree, fz_pool *pool);
+ 
+-float fz_from_css_number(fz_css_number number, float em, float percent_value, float auto_value, float root_em);
+-float fz_from_css_number_scale(fz_css_number number, float scale, float root_em);
++float fz_from_css_number(fz_css_number number, float em, float percent_value, float auto_value, float root_em, float viewport_w, float viewport_h);
++float fz_from_css_number_scale(fz_css_number number, float scale, float root_em, float viewport_w, float viewport_h);
+ int fz_css_number_defined(fz_css_number number);
+ int fz_css_number_defined_not_auto(fz_css_number number);
+ 
+--- a/source/html/html-layout.c
++++ b/source/html/html-layout.c
+@@ -354,9 +354,9 @@
+ {
+ 	float em = node->box->s.layout.em;
+ 	if (fz_css_number_defined(node->box->style->leading))
+-		node->h = fz_from_css_number(node->box->style->leading, em, em, 0, node->box->s.layout.rem);
++		node->h = fz_from_css_number(node->box->style->leading, em, em, 0, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 	else
+-		node->h = fz_from_css_number_scale(node->box->style->line_height, em, node->box->s.layout.rem);
++		node->h = fz_from_css_number_scale(node->box->style->line_height, em, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ }
+ 
+ 
+@@ -384,7 +384,7 @@
+ 	case VA_LENGTH:
+ 		return -node->h - fz_from_css_number(
+ 			node->box->style->vertical_align_number, em,
+-			fz_from_css_number_scale(node->box->style->line_height, em, node->box->s.layout.rem), 0, node->box->s.layout.rem);
++			fz_from_css_number_scale(node->box->style->line_height, em, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h), 0, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 	}
+ }
+ 
+@@ -558,9 +558,9 @@
+ 				va = -fz_from_css_number(
+ 					node->box->style->vertical_align_number,
+ 					node->box->s.layout.em,
+-					fz_from_css_number_scale(node->box->style->line_height, node->box->s.layout.em, node->box->s.layout.rem),
++					fz_from_css_number_scale(node->box->style->line_height, node->box->s.layout.em, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h),
+ 					0, node->box->s.layout.rem
+-				);
++				, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 				break;
+ 			}
+ 			node->y = y + baseline + va;
+@@ -852,7 +852,7 @@
+ 	fz_html_restarter *restart = ld->restart;
+ 
+ 	float em = box->s.layout.em;
+-	indent = box->is_first_flow ? fz_from_css_number(top->style->text_indent, em, ld->bounds[R] - ld->bounds[L], 0, top->s.layout.rem) : 0;
++	indent = box->is_first_flow ? fz_from_css_number(top->style->text_indent, em, ld->bounds[R] - ld->bounds[L], 0, top->s.layout.rem, top->s.layout.viewport_w, top->s.layout.viewport_h) : 0;
+ 	align = top->style->text_align;
+ 	justify_align = TA_LEFT;
+ 
+@@ -948,9 +948,9 @@
+ 			aspect = node->h ? node->w / node->h : 0;
+ 
+ 			if (node->box->style->width.unit != N_AUTO)
+-				node->w = fz_from_css_number(node->box->style->width, top->s.layout.em, max_w, node->w, node->box->s.layout.rem);
++				node->w = fz_from_css_number(node->box->style->width, top->s.layout.em, max_w, node->w, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 			if (node->box->style->height.unit != N_AUTO)
+-				node->h = fz_from_css_number(node->box->style->height, top->s.layout.em, max_h, node->h, node->box->s.layout.rem);
++				node->h = fz_from_css_number(node->box->style->height, top->s.layout.em, max_h, node->h, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 			if (node->box->style->width.unit == N_AUTO && node->box->style->height.unit != N_AUTO)
+ 				node->w = node->h * aspect;
+ 			if (node->box->style->width.unit != N_AUTO && node->box->style->height.unit == N_AUTO)
+@@ -1281,9 +1281,9 @@
+ 
+ 	/* Now calculate the bounds for any sub blocks. */
+ 	pd->has_width = fz_css_number_defined_not_auto(box->style->width);
+-	pd->width = fz_from_css_number(box->style->width, em, ld->bounds[R] - ld->bounds[L], 0, box->s.layout.rem);
++	pd->width = fz_from_css_number(box->style->width, em, ld->bounds[R] - ld->bounds[L], 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 	pd->has_height = fz_css_number_defined_not_auto(box->style->height);
+-	pd->height = fz_from_css_number(box->style->height, em, ld->bounds[B] - ld->bounds[T], 0, box->s.layout.rem);
++	pd->height = fz_from_css_number(box->style->height, em, ld->bounds[B] - ld->bounds[T], 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 
+ 	/* Adjust horizontally for Width and spacings */
+ 	auto_w = ld->bounds[R] - ld->bounds[L] - (margin[L] + margin[R] + border[L] + border[R] + padding[L] + padding[R]);
+@@ -1291,11 +1291,11 @@
+ 	if (ignore_width)
+ 		ld->bounds[R] = ld->bounds[L] + auto_w;
+ 	else
+-		ld->bounds[R] = ld->bounds[L] + fz_from_css_number(box->style->width, em, auto_w, auto_w, box->s.layout.rem);
++		ld->bounds[R] = ld->bounds[L] + fz_from_css_number(box->style->width, em, auto_w, auto_w, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 
+ 	/* Adjust vertically for Height and spacings (noting that we have already done the top ones above!) */
+ 	auto_h = ld->bounds[B] - ld->bounds[T] - (margin[B] + border[B] + padding[B]);
+-	ld->bounds[B] = ld->bounds[T] + fz_from_css_number(box->style->height, em, auto_h, auto_h, box->s.layout.rem);
++	ld->bounds[B] = ld->bounds[T] + fz_from_css_number(box->style->height, em, auto_h, auto_h, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 
+ 	/* So bounds and fixed are calculated as they should be for positioned: static */
+ 	ld->used[T] = ld->bounds[T];
+@@ -1337,10 +1337,10 @@
+ 	TRBLCPY(ld->ancestor, ld->bounds);
+ 
+ 	/* Calculate insets. */
+-	pd->inset[T] = fz_from_css_number(box->style->inset[T], em, em, 0, box->s.layout.rem);
+-	pd->inset[R] = fz_from_css_number(box->style->inset[R], em, em, 0, box->s.layout.rem);
+-	pd->inset[B] = fz_from_css_number(box->style->inset[B], em, em, 0, box->s.layout.rem);
+-	pd->inset[L] = fz_from_css_number(box->style->inset[L], em, em, 0, box->s.layout.rem);
++	pd->inset[T] = fz_from_css_number(box->style->inset[T], em, em, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++	pd->inset[R] = fz_from_css_number(box->style->inset[R], em, em, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++	pd->inset[B] = fz_from_css_number(box->style->inset[B], em, em, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++	pd->inset[L] = fz_from_css_number(box->style->inset[L], em, em, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 
+ 	switch (box->style->position)
+ 	{
+@@ -1603,7 +1603,7 @@
+ 		{
+ 			if (fz_css_number_defined_not_auto(box->style->height))
+ 			{
+-				float h = fz_from_css_number(box->style->height, em, em, 0, box->s.layout.rem);
++				float h = fz_from_css_number(box->style->height, em, em, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 				/* Top and Height determine the box. */
+ 				box->s.layout.b = box->s.layout.y + h;
+ 			}
+@@ -2183,7 +2183,7 @@
+ 
+ 	if (fz_css_number_defined_not_auto(row->style->height))
+ 	{
+-		row_height = fz_from_css_number(row->style->height, em, em, 0, row->s.layout.rem);
++		row_height = fz_from_css_number(row->style->height, em, em, 0, row->s.layout.rem, row->s.layout.viewport_w, row->s.layout.viewport_h);
+ 		fixed_height = 1;
+ 	}
+ 
+@@ -2283,7 +2283,7 @@
+ 		cell->s.layout.b = ld->used[B];
+ 		if (fz_css_number_defined_not_auto(cell->style->height))
+ 		{
+-			float cellheight = fz_from_css_number(cell->style->height, em, em, 0, cell->s.layout.rem);
++			float cellheight = fz_from_css_number(cell->style->height, em, em, 0, cell->s.layout.rem, cell->s.layout.viewport_w, cell->s.layout.viewport_h);
+ 			if (cell->s.layout.b < cell->s.layout.y + cellheight)
+ 			cell->s.layout.b = cell->s.layout.y + cellheight;
+ 		}
+@@ -2517,7 +2517,7 @@
+ 
+ 	position_data position;
+ 
+-	spacing = fz_from_css_number(box->style->border_spacing, box->s.layout.em, box->s.layout.w, 0, box->s.layout.rem);
++	spacing = fz_from_css_number(box->style->border_spacing, box->s.layout.em, box->s.layout.w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 	if (border_collapse)
+ 		spacing = 0;
+ 
+@@ -2593,7 +2593,7 @@
+ 				if (fz_css_number_defined_not_auto(cell->style->width))
+ 				{
+ 					float em = box->s.layout.em;
+-					float w = fz_from_css_number(cell->style->width, em, em, 0, cell->s.layout.rem) + cell_pad;
++					float w = fz_from_css_number(cell->style->width, em, em, 0, cell->s.layout.rem, cell->s.layout.viewport_w, cell->s.layout.viewport_h) + cell_pad;
+ 					tc->fixed = 1;
+ 					tc->minw = w;
+ 					tc->maxw = w;
+@@ -2632,7 +2632,7 @@
+ 		min_tabw += spacing * (ncol + 1);
+ 		max_tabw += spacing * (ncol + 1);
+ 
+-		avail_w = fz_from_css_number(box->style->width, box->s.layout.em, ld->bounds[R] - ld->bounds[L], ld->bounds[R] - ld->bounds[L], box->s.layout.rem);
++		avail_w = fz_from_css_number(box->style->width, box->s.layout.em, ld->bounds[R] - ld->bounds[L], ld->bounds[R] - ld->bounds[L], box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 		table_has_width = fz_css_number_defined_not_auto(box->style->width);
+ 
+ 		if (min_tabw >= avail_w)
+@@ -2938,7 +2938,7 @@
+ 	/* reserve space for the list mark */
+ 	if (box->list_item && box->s.layout.y == box->s.layout.b)
+ 	{
+-		float delta = fz_from_css_number_scale(style->line_height, em, box->s.layout.rem);
++		float delta = fz_from_css_number_scale(style->line_height, em, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 		box->s.layout.b += delta;
+ 		ld->used[B] += delta;
+ 	}
+@@ -2969,8 +2969,10 @@
+ 		float em;
+ 		/* The document element resolves its own rem font size against the initial em. */
+ 		box->s.layout.rem = top->s.layout.rem;
++		box->s.layout.viewport_w = top->s.layout.viewport_w;
++		box->s.layout.viewport_h = top->s.layout.viewport_h;
+ 		em = box->s.layout.em = box->is_document_root ? box->s.layout.rem :
+-			fz_from_css_number(style->font_size, top_em, top_em, top_em, box->s.layout.rem);
++			fz_from_css_number(style->font_size, top_em, top_em, top_em, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 
+ 		if (style->vertical_align == VA_SUPER)
+ 			box->s.layout.baseline = top_baseline - top_em / 3;
+@@ -2985,27 +2987,27 @@
+ 			float *border = box->u.block.border;
+ 			float *padding = box->u.block.padding;
+ 
+-			margin[T] = fz_from_css_number(style->margin[T], em, top_w, 0, box->s.layout.rem);
+-			margin[R] = fz_from_css_number(style->margin[R], em, top_w, 0, box->s.layout.rem);
+-			margin[B] = fz_from_css_number(style->margin[B], em, top_w, 0, box->s.layout.rem);
+-			margin[L] = fz_from_css_number(style->margin[L], em, top_w, 0, box->s.layout.rem);
+-
+-			padding[T] = fz_from_css_number(style->padding[T], em, top_w, 0, box->s.layout.rem);
+-			padding[R] = fz_from_css_number(style->padding[R], em, top_w, 0, box->s.layout.rem);
+-			padding[B] = fz_from_css_number(style->padding[B], em, top_w, 0, box->s.layout.rem);
+-			padding[L] = fz_from_css_number(style->padding[L], em, top_w, 0, box->s.layout.rem);
+-
+-			border[T] = style->border_style_0 ? fz_from_css_number(style->border_width[T], em, top_w, 0, box->s.layout.rem) : 0;
+-			border[R] = style->border_style_1 ? fz_from_css_number(style->border_width[R], em, top_w, 0, box->s.layout.rem) : 0;
+-			border[B] = style->border_style_2 ? fz_from_css_number(style->border_width[B], em, top_w, 0, box->s.layout.rem) : 0;
+-			border[L] = style->border_style_3 ? fz_from_css_number(style->border_width[L], em, top_w, 0, box->s.layout.rem) : 0;
++			margin[T] = fz_from_css_number(style->margin[T], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++			margin[R] = fz_from_css_number(style->margin[R], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++			margin[B] = fz_from_css_number(style->margin[B], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++			margin[L] = fz_from_css_number(style->margin[L], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++
++			padding[T] = fz_from_css_number(style->padding[T], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++			padding[R] = fz_from_css_number(style->padding[R], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++			padding[B] = fz_from_css_number(style->padding[B], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++			padding[L] = fz_from_css_number(style->padding[L], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
++
++			border[T] = style->border_style_0 ? fz_from_css_number(style->border_width[T], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h) : 0;
++			border[R] = style->border_style_1 ? fz_from_css_number(style->border_width[R], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h) : 0;
++			border[B] = style->border_style_2 ? fz_from_css_number(style->border_width[B], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h) : 0;
++			border[L] = style->border_style_3 ? fz_from_css_number(style->border_width[L], em, top_w, 0, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h) : 0;
+ 
+ 			// TODO: BLOCK nested inside TABLE!
+ 			if (box->type == BOX_BLOCK || box->type == BOX_TABLE)
+ 			{
+ 				/* Compute preliminary width (will be adjusted if block is nested in table cell later) */
+ 				float auto_w = top_w - (margin[L] + margin[R] + border[L] + border[R] + padding[L] + padding[R]);
+-				box->s.layout.w = fz_from_css_number(box->style->width, em, auto_w, auto_w, box->s.layout.rem);
++				box->s.layout.w = fz_from_css_number(box->style->width, em, auto_w, auto_w, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 			}
+ 		}
+ 
+@@ -3041,7 +3043,7 @@
+ 				{
+ 					/* start with "native" size (only used for table width calculations) */
+ 					node->w = node->content.image->w * 72.0f / 96.0f;
+-					node->w = fz_from_css_number(node->box->style->width, top->s.layout.em, node->w, node->w, node->box->s.layout.rem);
++					node->w = fz_from_css_number(node->box->style->width, top->s.layout.em, node->w, node->w, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 				}
+ 				else if (node->type == FLOW_WORD || node->type == FLOW_SPACE || node->type == FLOW_SHYPHEN)
+ 					measure_string_w(ctx, node, hb_buf);
+@@ -3187,7 +3189,7 @@
+ 	layout_data ld = { 0 };
+ 	fz_html_box *box = tree->root;
+ 
+-	box->s.layout.rem = fz_from_css_number(tree->root_font_size, em, em, em, em);
++	float root_em = fz_from_css_number(tree->root_font_size, em, em, em, em, page_w, page_h);
+ 
+ 	fz_var(ld.hb_buf);
+ 	fz_var(unlocked);
+@@ -3227,8 +3229,12 @@
+ 			restart->potential = NULL;
+ 
+ 		// Update em/margin/padding/border if necessary.
+-		if (box->s.layout.em != em || box->s.layout.x != start_x || box->s.layout.w != page_w)
+-		{
++		if (box->s.layout.em != em || box->s.layout.x != start_x || box->s.layout.w != page_w ||
++			box->s.layout.rem != root_em || box->s.layout.viewport_w != page_w || box->s.layout.viewport_h != page_h)
++		{
++			box->s.layout.rem = root_em;
++			box->s.layout.viewport_w = page_w;
++			box->s.layout.viewport_h = page_h;
+ 			box->s.layout.em = em;
+ 			box->s.layout.baseline = 0;
+ 			box->s.layout.x = start_x;
+@@ -3257,20 +3263,21 @@
+ void
+ fz_layout_html(fz_context *ctx, fz_html *html, float w, float h, float em)
+ {
+-	float root_em = fz_from_css_number(html->tree.root_font_size, em, em, em, em);
++	float root_em;
+ 	/* Override requested page size if the meta viewport defines a width or height */
+ 	w = fz_max(w, html->meta_w);
+ 	h = fz_max(h, html->meta_h);
++	root_em = fz_from_css_number(html->tree.root_font_size, em, em, em, em, w, h);
+ 
+ 	/* If we're already laid out to the specifications we need,
+ 	 * nothing to do. */
+ 	if (html->layout_w == w && html->layout_h == h && html->layout_em == em)
+ 		return;
+ 
+-	html->page_margin[T] = fz_from_css_number(html->tree.root->style->margin[T], em, em, 0, root_em);
+-	html->page_margin[B] = fz_from_css_number(html->tree.root->style->margin[B], em, em, 0, root_em);
+-	html->page_margin[L] = fz_from_css_number(html->tree.root->style->margin[L], em, em, 0, root_em);
+-	html->page_margin[R] = fz_from_css_number(html->tree.root->style->margin[R], em, em, 0, root_em);
++	html->page_margin[T] = fz_from_css_number(html->tree.root->style->margin[T], em, em, 0, root_em, w, h);
++	html->page_margin[B] = fz_from_css_number(html->tree.root->style->margin[B], em, em, 0, root_em, w, h);
++	html->page_margin[L] = fz_from_css_number(html->tree.root->style->margin[L], em, em, 0, root_em, w, h);
++	html->page_margin[R] = fz_from_css_number(html->tree.root->style->margin[R], em, em, 0, root_em, w, h);
+ 
+ 	html->page_w = w - html->page_margin[L] - html->page_margin[R];
+ 	if (html->page_w <= 72)
+@@ -3425,7 +3432,7 @@
+ 					draw_rect(ctx, dev, ctm, page_top, bg,
+ 						node->x, node->y - 0.8f * node->h, node->x + node->w, node->y + 0.2f * node->h);
+ 
+-				line_width = fz_from_css_number(style->text_stroke_width, em, em, 0, node->box->s.layout.rem);
++				line_width = fz_from_css_number(style->text_stroke_width, em, em, 0, node->box->s.layout.rem, node->box->s.layout.viewport_w, node->box->s.layout.viewport_h);
+ 				filling = style->text_fill_color.a != 0;
+ 				stroking = style->text_stroke_color.a != 0;
+ 				if (stroking)
+@@ -3907,7 +3914,7 @@
+ 	}
+ 	else
+ 	{
+-		float h = fz_from_css_number_scale(box->style->line_height, box->s.layout.em, box->s.layout.rem);
++		float h = fz_from_css_number_scale(box->style->line_height, box->s.layout.em, box->s.layout.rem, box->s.layout.viewport_w, box->s.layout.viewport_h);
+ 		float a = box->s.layout.em * 0.8f;
+ 		float d = box->s.layout.em * 0.2f;
+ 		if (a + d > h)

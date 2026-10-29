@@ -1,0 +1,115 @@
+--- a/source/html/css-parse.c
++++ b/source/html/css-parse.c
+@@ -794,6 +794,7 @@
+ {
+ 	char *s;
+ 
++	white(buf);
+ 	if (buf->lookahead == CSS_KEYWORD || buf->lookahead == CSS_STRING)
+ 	{
+ 		s = fz_pool_strdup(buf->ctx, buf->pool, buf->string);
+@@ -869,16 +870,12 @@
+ 			c->type = '=';
+ 			c->val = parse_attrib_value(buf);
+ 		}
+-		else if (accept(buf, '|'))
+-		{
++		else if (buf->lookahead == '|' || buf->lookahead == '~' ||
++			buf->lookahead == '^' || buf->lookahead == '$' || buf->lookahead == '*')
++		{
++			c->type = buf->lookahead;
++			next(buf);
+ 			expect(buf, '=');
+-			c->type = '|';
+-			c->val = parse_attrib_value(buf);
+-		}
+-		else if (accept(buf, '~'))
+-		{
+-			expect(buf, '=');
+-			c->type = '~';
+ 			c->val = parse_attrib_value(buf);
+ 		}
+ 
+--- a/source/html/css-apply.c
++++ b/source/html/css-apply.c
+@@ -451,18 +451,45 @@
+ match_att_has_condition(fz_xml *node, const char *att, const char *needle)
+ {
+ 	const char *haystack = fz_xml_att(node, att);
+-	const char *ss;
+-	size_t n;
+-	if (haystack) {
+-		ss = strstr(haystack, needle);
+-		if (ss)
+-		{
+-			n = strlen(needle);
+-
+-			/* Look for exact matches or matching words. */
+-			if ((ss[n] == ' ' || ss[n] == 0) && (ss == haystack || ss[-1] == ' '))
+-				return 1;
+-		}
++	const char *space = " \t\r\n\f";
++	size_t n = strlen(needle);
++	size_t word;
++
++	/* CSS word matching excludes empty needles and needles containing whitespace. */
++	if (!haystack || !n || strpbrk(needle, space))
++		return 0;
++	while (*haystack)
++	{
++		haystack += strspn(haystack, space);
++		word = strcspn(haystack, space);
++		if (word == n && !strncmp(haystack, needle, n))
++			return 1;
++		haystack += word;
++	}
++	return 0;
++}
++
++static int
++match_att_substring_condition(fz_xml *node, const char *key, const char *val, int type)
++{
++	const char *att = fz_xml_att(node, key);
++	size_t n = strlen(val);
++	size_t len;
++
++	if (!att)
++		return 0;
++	/* Unlike substring selectors, |= permits an empty value. */
++	if (type == '|')
++		return !strncmp(att, val, n) && (att[n] == 0 || att[n] == '-');
++	if (!n)
++		return 0;
++	switch (type)
++	{
++	case '^': return !strncmp(att, val, n);
++	case '$':
++		len = strlen(att);
++		return len >= n && !strcmp(att + len - n, val);
++	case '*': return strstr(att, val) != NULL;
+ 	}
+ 	return 0;
+ }
+@@ -649,7 +676,12 @@
+ 	case '[': if (!match_att_exists_condition(node, cond->key)) return 0; break;
+ 	case '=': if (!match_att_is_condition(node, cond->key, cond->val)) return 0; break;
+ 	case '~': if (!match_att_has_condition(node, cond->key, cond->val)) return 0; break;
+-	case '|': if (!match_att_is_condition(node, cond->key, cond->val)) return 0; break;
++	case '|':
++	case '^':
++	case '$':
++	case '*':
++		if (!match_att_substring_condition(node, cond->key, cond->val, cond->type)) return 0;
++		break;
+ 	}
+ 
+ 	return match_condition(cond->next, node, pseudo);
+@@ -2281,6 +2313,8 @@
+ 		printf("[%s=%s]", cond->key, cond->val);
+ 	else if (cond->type == '[')
+ 		printf("[%s]", cond->key);
++	else if (cond->type == '~' || cond->type == '|' || cond->type == '^' || cond->type == '$' || cond->type == '*')
++		printf("[%s%c=%s]", cond->key, cond->type, cond->val);
+ 	else if (cond->type == ':' && cond->val)
+ 		printf(":%s(%s)", cond->key, cond->val);
+ 	else if (cond->type == ':' && !cond->val)
