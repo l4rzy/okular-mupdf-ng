@@ -19,6 +19,7 @@
 #include <QTimer>
 #include <QVector>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -33,10 +34,6 @@
 #include "shared/protocol/limits.hpp"
 #include "shared/transport/ctrl_channel.hpp"
 #include "shared/transport/fd_channel.hpp"
-
-#ifdef MU_DEBUG_ENABLED
-#include <chrono>
-#endif
 
 namespace Mu::Plugin {
 
@@ -81,7 +78,7 @@ public:
     bool close();
     QImage render(int page, int width, int height, const QRect& rect, int cancellationFd = -1);
     std::vector<Model::TextBox>
-    getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots = false, bool* success = nullptr);
+    getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false, bool* success = nullptr);
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);
     Model::OcrResult ocrResult(quint64 id);
     bool cancelOcrJobs();
@@ -112,7 +109,7 @@ public:
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
     std::optional<Model::FormUpdateResponse> clickFormButton(const Model::FormButtonClickRequest& request);
-    bool settings(const Model::DocumentSettings& settings);
+    bool setSettings(const Model::DocumentSettings& settings);
 
 signals:
     void operationFailed(const QString& message, Model::ErrorCode code);
@@ -122,6 +119,8 @@ signals:
     void pdfExportFinished(quint64 jobId, bool success, QString error);
 
 private:
+    friend class TestWorkerTransport;
+
     struct FrameSlotMapping;
     struct FrameLease;
 
@@ -200,6 +199,10 @@ private:
     std::optional<Model::ResponseMessage> requestOcr(int page, const QString& language, int dpi);
     // Opt in only when the caller has no existing error presentation.
     std::optional<Model::ResponseMessage> call(Model::RequestPayload payload, bool reportFailure = false);
+    // Reads inline notifications until the expected response arrives. A single
+    // absolute deadline covers the entire receive loop; failures abort the session.
+    std::optional<Model::ResponseMessage> receiveResponse(quint64 requestId,
+                                                          std::chrono::steady_clock::time_point deadline);
     void processIncomingNotifications();
     bool handleNotification(const Model::NotificationMessage& notification, std::string* error = nullptr);
     static void cleanupFrameLease(void* data);

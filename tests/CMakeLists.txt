@@ -315,6 +315,15 @@ target_compile_definitions(test_plugin_ocrcontroller PRIVATE
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
 add_dependencies(test_plugin_ocrcontroller mupdfng-worker)
 
+add_layer_test(test_plugin_workertransport plugin/test_worker_transport.cpp plugin)
+target_include_directories(test_plugin_workertransport PRIVATE ../src)
+target_link_libraries(test_plugin_workertransport PRIVATE mupdf_plugin_worker)
+target_compile_definitions(test_plugin_workertransport PRIVATE WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>")
+if(MU_DEBUG_BUILD)
+    target_compile_definitions(test_plugin_workertransport PRIVATE MU_DEBUG_ENABLED)
+endif()
+add_dependencies(test_plugin_workertransport mupdfng-worker)
+
 add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp plugin)
 target_include_directories(test_plugin_workerclientstate PRIVATE ../src)
 target_link_libraries(test_plugin_workerclientstate PRIVATE mupdf_plugin_worker)

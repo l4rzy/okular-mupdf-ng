@@ -299,13 +299,9 @@ int WorkerServer::run(std::string* error)
         if (m_commandService->hasPendingPageLinks()) {
             std::string notificationError;
             if (!writePageLinks(&notificationError)) {
-                disconnected = true;
+                disconnectClient();
+                return 0;
             }
-        }
-
-        if (disconnected) {
-            disconnectClient();
-            return 0;
         }
 
         PollLoop loop;

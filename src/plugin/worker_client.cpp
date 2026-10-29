@@ -124,14 +124,16 @@ std::optional<quint64> WorkerClient::workerMemoryBytes() const
 // Document Opening & Closing
 // =============================================================================
 
-OpenStatus WorkerClient::open(const QString& p, const QString& w, QList<PageInfo>& pages, DocumentType type)
+OpenStatus WorkerClient::open(const QString& path, const QString& password, QList<PageInfo>& pages, DocumentType type)
 {
-    return sync([&](WorkerTransport* transport) { return transport->open(p, w, &pages, type); }, OpenStatus::Failed);
+    return sync([&](WorkerTransport* transport) { return transport->open(path, password, &pages, type); },
+                OpenStatus::Failed);
 }
 
-OpenStatus WorkerClient::openData(const QByteArray& d, const QString& p, QList<PageInfo>& pages, DocumentType type)
+OpenStatus
+WorkerClient::openData(const QByteArray& data, const QString& password, QList<PageInfo>& pages, DocumentType type)
 {
-    return sync([&](WorkerTransport* transport) { return transport->openData(d, p, &pages, type); },
+    return sync([&](WorkerTransport* transport) { return transport->openData(data, password, &pages, type); },
                 OpenStatus::Failed);
 }
 
@@ -144,10 +146,11 @@ bool WorkerClient::close()
 // Page Rendering, Text Extraction & OCR
 // =============================================================================
 
-QImage WorkerClient::render(int p, int w, int h, const QRect& t, const std::function<bool()>& shouldAbort)
+QImage
+WorkerClient::render(int page, int width, int height, const QRect& tile, const std::function<bool()>& shouldAbort)
 {
     if (!shouldAbort)
-        return sync([&](WorkerTransport* transport) { return transport->render(p, w, h, t); });
+        return sync([&](WorkerTransport* transport) { return transport->render(page, width, height, tile); });
     if (shouldAbort() || !m_transport)
         return { };
 
@@ -186,7 +189,7 @@ QImage WorkerClient::render(int p, int w, int h, const QRect& t, const std::func
     // reference a PixmapRequest that is destroyed as soon as this call returns.
     if (!QMetaObject::invokeMethod(
             m_transport,
-            [transport = m_transport, state, p, w, h, t] {
+            [transport = m_transport, state, page, width, height, tile] {
                 {
                     const std::lock_guard lock(state->mutex);
                     if (state->cancelled)
@@ -194,7 +197,7 @@ QImage WorkerClient::render(int p, int w, int h, const QRect& t, const std::func
                 }
                 // Once dispatched, finish the exchange, including receiving
                 // frame descriptors. Discarded images use normal lease cleanup.
-                QImage image = transport->render(p, w, h, t, state->cancellationFd);
+                QImage image = transport->render(page, width, height, tile, state->cancellationFd);
                 {
                     const std::lock_guard lock(state->mutex);
                     if (!state->cancelled)
@@ -226,22 +229,24 @@ QImage WorkerClient::render(int p, int w, int h, const QRect& t, const std::func
     }
 }
 
-std::vector<TextBox> WorkerClient::getTextBoxesForPage(int p, qreal x, qreal y, bool skipAnnots, bool* success) const
+std::vector<TextBox>
+WorkerClient::getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots, bool* success) const
 {
     if (success)
         *success = false;
-    return sync(
-        [&](WorkerTransport* transport) { return transport->getTextBoxesForPage(p, x, y, skipAnnots, success); });
+    return sync([&](WorkerTransport* transport) {
+        return transport->getTextBoxesForPage(page, dpiX, dpiY, skipAnnots, success);
+    });
 }
 
-std::optional<quint64> WorkerClient::startOcrPage(int p, const QString& l, int d) const
+std::optional<quint64> WorkerClient::startOcrPage(int page, const QString& language, int dpi) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->startOcrPage(p, l, d); });
+    return sync([&](WorkerTransport* transport) { return transport->startOcrPage(page, language, dpi); });
 }
 
-OcrResult WorkerClient::ocrResult(quint64 id) const
+OcrResult WorkerClient::ocrResult(quint64 jobId) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->ocrResult(id); });
+    return sync([&](WorkerTransport* transport) { return transport->ocrResult(jobId); });
 }
 
 bool WorkerClient::cancelOcrJobs() const
@@ -253,9 +258,9 @@ bool WorkerClient::cancelOcrJobs() const
 // Document Inspection
 // =============================================================================
 
-std::vector<Font> WorkerClient::fonts(int p) const
+std::vector<Font> WorkerClient::fonts(int page) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->fonts(p); });
+    return sync([&](WorkerTransport* transport) { return transport->fonts(page); });
 }
 
 std::optional<std::vector<EmbeddedFile>> WorkerClient::embeddedFiles() const
@@ -268,28 +273,33 @@ std::optional<std::vector<OutlineNode>> WorkerClient::synopsis(bool allowHeurist
     return sync([&](WorkerTransport* transport) { return transport->synopsis(allowHeuristic, generatedSynopsis); });
 }
 
-DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& k) const
+DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& keys) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->getDocumentInfo(k); });
+    return sync([&](WorkerTransport* transport) { return transport->getDocumentInfo(keys); });
 }
 
 // =============================================================================
 // Annotation & Form Mutations
 // =============================================================================
 
-std::optional<AnnotationHandle> WorkerClient::addAnnotation(int p, const Annotation& a) const
+std::optional<AnnotationHandle> WorkerClient::addAnnotation(int page, const Annotation& annotation) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->addAnnotation(p, a); });
+    return sync([&](WorkerTransport* transport) { return transport->addAnnotation(page, annotation); });
 }
 
-bool WorkerClient::modifyAnnotation(int p, const QString& h, const Annotation& a, bool c) const
+bool WorkerClient::modifyAnnotation(int page,
+                                    const QString& id,
+                                    const Annotation& annotation,
+                                    bool appearanceChanged) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->modifyAnnotation(p, h, a, c); });
+    return sync([&](WorkerTransport* transport) {
+        return transport->modifyAnnotation(page, id, annotation, appearanceChanged);
+    });
 }
 
-bool WorkerClient::removeAnnotation(int p, const QString& h) const
+bool WorkerClient::removeAnnotation(int page, const QString& id) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->removeAnnotation(p, h); });
+    return sync([&](WorkerTransport* transport) { return transport->removeAnnotation(page, id); });
 }
 
 std::optional<Model::FormUpdateResponse> WorkerClient::updateForm(const Model::FormUpdateRequest& request) const
@@ -312,9 +322,9 @@ WorkerClient::clickFormButton(const Model::FormButtonClickRequest& request) cons
 // Document Saving, Export & Signing
 // =============================================================================
 
-bool WorkerClient::saveToFile(const QString& t)
+bool WorkerClient::saveToFile(const QString& target)
 {
-    return sync([&](WorkerTransport* transport) { return transport->saveToFile(t); });
+    return sync([&](WorkerTransport* transport) { return transport->saveToFile(target); });
 }
 
 bool WorkerClient::exportEpubToFile(const QString& target)
@@ -332,19 +342,19 @@ bool WorkerClient::flattenPdfToFile(const QString& target, const QVector<int>& p
     return sync([&](WorkerTransport* transport) { return transport->flattenPdfToFile(target, pages); });
 }
 
-bool WorkerClient::savePdfToFile(const QString& t, const QVector<int>& pages, bool withReferences)
+bool WorkerClient::savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences)
 {
-    return sync([&](WorkerTransport* transport) { return transport->savePdfToFile(t, pages, withReferences); });
+    return sync([&](WorkerTransport* transport) { return transport->savePdfToFile(target, pages, withReferences); });
 }
 
-std::optional<quint64> WorkerClient::startPdfExport(const QString& t, const QVector<int>& pages) const
+std::optional<quint64> WorkerClient::startPdfExport(const QString& target, const QVector<int>& pages) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->startPdfExport(t, pages); });
+    return sync([&](WorkerTransport* transport) { return transport->startPdfExport(target, pages); });
 }
 
-SignResponse WorkerClient::sign(const SignRequest& r, const QString& password, const QString& t)
+SignResponse WorkerClient::sign(const SignRequest& request, const QString& password, const QString& target)
 {
-    return sync([&](WorkerTransport* transport) { return transport->signToFile(r, password, t); },
+    return sync([&](WorkerTransport* transport) { return transport->signToFile(request, password, target); },
                 SignResponse { SigningResult::GenericError, "worker is unavailable" });
 }
 
@@ -364,7 +374,7 @@ std::optional<Model::LayersResponse> WorkerClient::setLayer(const Model::SetLaye
 
 bool WorkerClient::setSettings(const DocumentSettings& settings)
 {
-    return sync([&](WorkerTransport* transport) { return transport->settings(settings); });
+    return sync([&](WorkerTransport* transport) { return transport->setSettings(settings); });
 }
 
 SandboxStatus WorkerClient::sandboxStatus() const

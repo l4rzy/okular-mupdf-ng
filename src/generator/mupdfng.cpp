@@ -358,16 +358,22 @@ void Main::refreshPaperColor()
 // Okular Generator Func: reloads settings and sends rendering changes to the worker.
 bool Main::reparseConfig()
 {
+    // Global preferences.
     Config::reloadSettings();
     syncActions();
     m_linkPreview.setMode(Config::readLinkPreviewMode());
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
+
+    // Document override and restart state.
     Config::WorkerSettings settings = Config::readWorkerSettings();
     if (m_document.settings.theme)
         settings.rendering.documentTheme = *m_document.settings.theme;
-    updatePagePlaceholder(m_pageError.isActive() ? Model::DocumentTheme::Default : settings.rendering.documentTheme);
+    if (!m_pageError.isActive() && settings.rendering.documentTheme != m_settings.rendering.documentTheme)
+        updatePagePlaceholder(settings.rendering.documentTheme);
     updateSettingRestartState(settings.startupEpub);
+
+    // Rendering changes.
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
     refreshPaperColor();
     const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
@@ -375,16 +381,18 @@ bool Main::reparseConfig()
     const bool renderingSettingsChanged = settings.rendering != m_settings.rendering || paperColorChanged;
     if (renderingSettingsChanged)
         m_linkPreview.reset();
-    const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
-    const bool pendingJavaScriptChanged =
-        !m_pendingFormJavaScriptEnabled || *m_pendingFormJavaScriptEnabled != settings.formJavaScriptEnabled;
-    const bool activePdf = document() && !m_pageError.isActive() && !m_okularPages.isEmpty()
-        && m_document.type == Model::DocumentType::Pdf;
-    const bool deferJavaScript = formJavaScriptChanged && activePdf && (m_formsDirty || m_annotationsDirty);
-    const bool refreshJavaScript = formJavaScriptChanged && activePdf && !deferJavaScript && workerReady();
-
     m_settings.rendering = settings.rendering;
+
+    // PDF JavaScript changes.
+    const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
+    const bool hasActivePdf = document() && !m_pageError.isActive() && !m_okularPages.isEmpty()
+        && m_document.type == Model::DocumentType::Pdf;
+    const bool deferJavaScript = formJavaScriptChanged && hasActivePdf && (m_formsDirty || m_annotationsDirty);
+    const bool reopenForJavaScript = formJavaScriptChanged && hasActivePdf && !deferJavaScript && workerReady();
+
     if (deferJavaScript) {
+        const bool pendingJavaScriptChanged =
+            !m_pendingFormJavaScriptEnabled || *m_pendingFormJavaScriptEnabled != settings.formJavaScriptEnabled;
         m_pendingFormJavaScriptEnabled = settings.formJavaScriptEnabled;
         if (pendingJavaScriptChanged)
             Q_EMIT warning(i18n("PDF JavaScript will be enabled or disabled when this document is next opened."),
@@ -394,14 +402,14 @@ bool Main::reparseConfig()
         m_pendingFormJavaScriptEnabled.reset();
     }
 
-    const bool settingsChanged =
-        !refreshJavaScript && (renderingSettingsChanged || (formJavaScriptChanged && !deferJavaScript));
+    const bool pushWorkerSettings =
+        !reopenForJavaScript && (renderingSettingsChanged || (formJavaScriptChanged && !deferJavaScript));
 
     // Propagate changed settings to the worker process.
-    if (settingsChanged && workerReady() && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
+    if (pushWorkerSettings && workerReady() && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
 
-    if (refreshJavaScript) {
+    if (reopenForJavaScript) {
         // Disable worker-backed edits during the source refresh; a failure is
         // terminal because the worker has replaced its prior document copy.
         m_formCoordinator->setAvailable(false);
@@ -411,38 +419,42 @@ bool Main::reparseConfig()
             failClosed(i18n("The PDF could not be refreshed after changing its JavaScript setting. Restart Okular."));
     }
 
-    // Re-evaluate sandbox enforcement for the active document. Blocking
-    // immediately withholds the document (renders become placeholders and the
-    // worker copy is dropped); unblocking is deferred: deactivate() queues a
-    // full close/open cycle, and the placeholder stays active until the
-    // successful reopen clears it in initPages(), so no render can reach the
-    // worker while the document is still closed there.
-    const bool newBlocked = sandboxGated();
-    if (newBlocked != m_pageError.isActive() && document()) {
-        MU_LOG(debug,
-               "Mu::Generator::Main",
-               std::string("sandbox enforcement changed: ") + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
-        if (newBlocked) {
-            if (m_formsDirty || m_annotationsDirty) {
-                // Closing and reopening would discard UI mutations that have
-                // not been persisted in the retained source document.
-                failClosed(i18n(
-                    "Strict sandbox enforcement cannot be enabled while unsaved changes are present. Restart Okular "
-                    "after saving or discarding those changes."));
-                return changed;
-            }
-            // Side effects run after activate() publishes the flag, so any
-            // render triggered by them observes the active state.
-            m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
-            closeWorkerDocument();
-            clearPageErrorDerivedState();
-        } else if (m_pageError.deactivate()) {
-            queueWithheldDocumentReopen();
-        }
-    }
+    if (!updateSandboxGate())
+        return changed;
 
     observeOcrFocus();
     return changed;
+}
+
+// Blocking withholds the document immediately; unblocking queues a full
+// close/open cycle after the current Okular call returns.
+bool Main::updateSandboxGate()
+{
+    const bool newBlocked = sandboxGated();
+    if (newBlocked == m_pageError.isActive() || !document())
+        return true;
+
+    MU_LOG(debug,
+           "Mu::Generator::Main",
+           std::string("sandbox enforcement changed: ") + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
+    if (newBlocked) {
+        if (m_formsDirty || m_annotationsDirty) {
+            // Closing and reopening would discard UI mutations that have
+            // not been persisted in the retained source document.
+            failClosed(
+                i18n("Strict sandbox enforcement cannot be enabled while unsaved changes are present. Restart Okular "
+                     "after saving or discarding those changes."));
+            return false;
+        }
+        // Side effects run after activate() publishes the flag; renders then
+        // observe the active placeholder until the document is reopened.
+        m_pageError.activate(sandboxGateMessage(), Page::Error::Reason::SandboxGate);
+        closeWorkerDocument();
+        clearPageErrorDerivedState();
+    } else if (m_pageError.deactivate()) {
+        queueWithheldDocumentReopen();
+    }
+    return true;
 }
 
 void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
@@ -1093,15 +1105,16 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
     // the Okular pages that remain on screen.
     const auto metadata = m_worker.getDocumentInfo({ QStringLiteral("hash") });
     const auto hash = metadata.values.find("hash");
-    const bool valid = pages.size() == m_okularPages.size() && metadata.pageCount == m_okularPages.size()
+    const bool documentMatches = pages.size() == m_okularPages.size() && metadata.pageCount == m_okularPages.size()
         && (m_document.hash.isEmpty()
             || (hash != metadata.values.end() && QString::fromStdString(hash->second) == m_document.hash));
-    if (!valid) {
+    if (!documentMatches) {
         MU_LOG(warning, "Mu::Generator::Main", "reopened document does not match the active document");
         closeWorkerDocument();
         return false;
     }
 
+    // Restore the layer state before rebuilding the UI.
     if (m_document.type == Model::DocumentType::Pdf) {
         const auto layers = m_worker.layers();
         if (!layers

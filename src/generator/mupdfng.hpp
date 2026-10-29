@@ -201,6 +201,9 @@ private:
     QString generatorExtraDescription() const;
     // Reports whether Strict enforcement currently blocks the not-fully-hardened worker.
     [[nodiscard]] bool sandboxGated() const;
+    // Applies a changed sandbox gate; false means a fail-closed transition
+    // stopped the remaining configuration work.
+    bool updateSandboxGate();
     // Reports whether worker-backed operations may run: the worker session is
     // ready (not stopped, recovering, or failed) and no placeholder withholds
     // the document.

@@ -661,11 +661,12 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
     return createImage(frame->mapping, cleanupMappedFrame, mappedFrame);
 }
 
-std::vector<TextBox> WorkerTransport::getTextBoxesForPage(int page, qreal x, qreal y, bool skipAnnots, bool* success)
+std::vector<TextBox>
+WorkerTransport::getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots, bool* success)
 {
     if (success)
         *success = false;
-    auto response = call(TextBoxesRequest { page, x, y, skipAnnots });
+    auto response = call(TextBoxesRequest { page, dpiX, dpiY, skipAnnots });
     if (!response || response->error)
         return { };
     if (auto* boxes = std::get_if<TextBoxesResponse>(&response->payload)) {
@@ -1101,7 +1102,7 @@ SignResponse WorkerTransport::signToFile(SignRequest request, const QString& pas
 // Document Settings
 // =============================================================================
 
-bool WorkerTransport::settings(const DocumentSettings& settings)
+bool WorkerTransport::setSettings(const DocumentSettings& settings)
 {
     if (!isValidDocumentSettings(settings))
         return false;
@@ -1134,15 +1135,6 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
     // stop being delivered out-of-band; the scope guard re-enables them and
     // drains anything buffered once the exchange has fully restored the
     // transport's serialized state, on every exit path.
-    const auto abortWith = [&](const std::string& reason, bool critical = false) -> std::optional<ResponseMessage> {
-        if (critical)
-            MU_LOG(critical, "Mu::Plugin", reason + "; aborting transport");
-        else
-            MU_LOG(warning, "Mu::Plugin", reason + "; aborting transport");
-        abort();
-        return { };
-    };
-
     if (m_notifier)
         m_notifier->setEnabled(false);
 
@@ -1174,58 +1166,75 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
     if (const auto* sign = std::get_if<SignRequest>(&request.payload))
         m_signingAuthorization = { id, sign->certificateNickname };
     MU_LOG(debug, "Plugin -> Worker", IPC::Debug::request(request, true));
-    std::string e;
-    if (!IPC::ZppCodec::writeMessage(m_ctrl, request, Timeout::ControlWriteMs, &e, "plugin"))
-        return abortWith("request write failed: " + e);
+    std::string error;
+    if (!IPC::ZppCodec::writeMessage(m_ctrl, request, Timeout::ControlWriteMs, &error, "plugin")) {
+        MU_LOG(warning, "Mu::Plugin", "request write failed: " + error + "; aborting transport");
+        abort();
+        return { };
+    }
 
-    // Phase 4: drain the stream until the matching response arrives. Every frame
-    // is checked against the response first; a wrong id is a desynchronization,
-    // otherwise the frame is an inline notification that is handled immediately
-    // so the response stream stays ordered.
+    // Phase 4: receive the matching response, then publish it before the guard
+    // restores idle dispatch and drains queued notifications.
     const auto started = std::chrono::steady_clock::now();
     const auto deadline = started + std::chrono::milliseconds(Util::requestTimeoutFor(request.payload));
+    auto response = receiveResponse(id, deadline);
+    if (!response)
+        return { };
+    if (reportFailure && response->error && response->error->code != ErrorCode::Cancelled)
+        Q_EMIT operationFailed(QString::fromStdString(response->error->message), response->error->code);
+    if (!response->error && std::holds_alternative<OpenRequest>(request.payload)) {
+        // Publish the generation before the guard drains queued link notifications.
+        if (const auto* opened = std::get_if<OpenResponse>(&response->payload))
+            m_linkGeneration = opened->linkGeneration;
+    }
+#ifdef MU_DEBUG_ENABLED
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+    MU_LOG(debug, "Plugin <- Worker", IPC::Debug::response(*response, true) + " elapsedMs=" + std::to_string(elapsed));
+#endif
+    return response;
+}
+
+std::optional<ResponseMessage> WorkerTransport::receiveResponse(quint64 requestId,
+                                                                std::chrono::steady_clock::time_point deadline)
+{
+    const auto abortWith = [&](const std::string& reason, bool critical = false) -> std::optional<ResponseMessage> {
+        if (critical)
+            MU_LOG(critical, "Mu::Plugin", reason + "; aborting transport");
+        else
+            MU_LOG(warning, "Mu::Plugin", reason + "; aborting transport");
+        abort();
+        return { };
+    };
+
+    // Inline notifications consume the same deadline as the pending response.
+    std::string error;
     for (;;) {
         const auto remaining =
             std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count();
         if (remaining <= 0)
-            return abortWith("request timed out id=" + std::to_string(id));
+            return abortWith("request timed out id=" + std::to_string(requestId));
 
         std::vector<std::byte> frame;
-        if (!IPC::readFrame(m_ctrl, &frame, static_cast<int>(remaining), &e))
-            return abortWith("response read failed: " + e);
+        if (!IPC::readFrame(m_ctrl, &frame, static_cast<int>(remaining), &error))
+            return abortWith("response read failed: " + error);
 
         MU_LOG(debug, "Mu::Plugin", "read frame bytes=" + std::to_string(frame.size()));
         ResponseMessage response;
-        if (IPC::ZppCodec::decode(frame, &response, &e)) {
-            if (response.id == id) {
-                if (reportFailure && response.error && response.error->code != ErrorCode::Cancelled)
-                    Q_EMIT operationFailed(QString::fromStdString(response.error->message), response.error->code);
-                if (!response.error && std::holds_alternative<OpenRequest>(request.payload)) {
-                    // Publish the generation before the guard drains queued link notifications.
-                    if (const auto* opened = std::get_if<OpenResponse>(&response.payload))
-                        m_linkGeneration = opened->linkGeneration;
-                }
-#ifdef MU_DEBUG_ENABLED
-                const auto elapsed =
-                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started)
-                        .count();
-                MU_LOG(debug,
-                       "Plugin <- Worker",
-                       IPC::Debug::response(response, true) + " elapsedMs=" + std::to_string(elapsed));
-#endif
+        if (IPC::ZppCodec::decode(frame, &response, &error)) {
+            if (response.id == requestId)
                 return response;
-            }
-            return abortWith("protocol stream desynchronization: expected response id=" + std::to_string(id)
+            return abortWith("protocol stream desynchronization: expected response id=" + std::to_string(requestId)
                                  + " but received id=" + std::to_string(response.id),
                              true);
         }
 
         NotificationMessage notification;
-        if (!IPC::ZppCodec::decode(frame, &notification, &e))
-            return abortWith("protocol message decode failed: " + e, true);
+        if (!IPC::ZppCodec::decode(frame, &notification, &error))
+            return abortWith("protocol message decode failed: " + error, true);
 
-        if (!handleNotification(notification, &e))
-            return abortWith(e);
+        if (!handleNotification(notification, &error))
+            return abortWith(error);
     }
 }
 
