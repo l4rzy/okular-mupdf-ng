@@ -11,6 +11,8 @@ namespace Mu::Worker::Engine {
 
 class KindleDocument final : public EpubDocument {
 public:
+    [[nodiscard]] Model::DocumentType type() const noexcept override { return Model::DocumentType::Kindle; }
+
     using EpubDocument::EpubDocument;
 
     [[nodiscard]] bool openFd(int fd, std::string displayName, std::string* error = nullptr) override;

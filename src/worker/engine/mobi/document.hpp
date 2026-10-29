@@ -11,6 +11,8 @@ namespace Mu::Worker::Engine {
 // Legacy MOBI uses MuPDF's HTML reflow engine and the existing EPUB settings.
 class MobiDocument final : public EpubDocument {
 public:
+    [[nodiscard]] Model::DocumentType type() const noexcept override { return Model::DocumentType::Mobi; }
+
     using EpubDocument::EpubDocument;
 
     [[nodiscard]] bool openFd(int fd, std::string displayName, std::string* error = nullptr) override;

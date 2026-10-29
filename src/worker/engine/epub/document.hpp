@@ -36,6 +36,8 @@ namespace Mu::Worker::Engine {
  */
 class EpubDocument : public DocumentBase {
 public:
+    [[nodiscard]] Model::DocumentType type() const noexcept override { return Model::DocumentType::Epub; }
+
     explicit EpubDocument(std::size_t storeSize = Constant::DefaultStoreSize);
     ~EpubDocument() override;
 

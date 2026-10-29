@@ -53,7 +53,7 @@ public:
     /// Submits a background export job. Consumes both descriptors on every
     /// path: rejection closes them here; a started job transfers ownership to
     /// the engine (DocumentBase::openFd/savePdfFdWithReferences close them on
-    /// all paths). Returns nullopt while another export is running.
+    /// all paths). Returns nullopt for unsupported types or while another export is running.
     [[nodiscard]] std::optional<std::uint64_t> submit(int inputFd,
                                                       int outputFd,
                                                       const ::Mu::Model::DocumentSettings& settings,

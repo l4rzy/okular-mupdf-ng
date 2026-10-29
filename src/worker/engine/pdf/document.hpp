@@ -38,6 +38,8 @@ namespace Mu::Worker::Engine {
  */
 class PdfDocument : public DocumentBase {
 public:
+    [[nodiscard]] Model::DocumentType type() const noexcept override { return Model::DocumentType::Pdf; }
+
     explicit PdfDocument(std::size_t storeSize = Constant::DefaultStoreSize);
     ~PdfDocument() override;
 

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/document_factory.hpp"
 #include "engine/kindle/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
@@ -77,6 +78,45 @@ class TestMobi : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void testDocumentFactory_data()
+    {
+        QTest::addColumn<int>("type");
+        QTest::addColumn<bool>("supported");
+        QTest::newRow("pdf") << int(Model::DocumentType::Pdf) << true;
+        QTest::newRow("epub") << int(Model::DocumentType::Epub) << true;
+        QTest::newRow("mobi") << int(Model::DocumentType::Mobi) << true;
+        QTest::newRow("kindle") << int(Model::DocumentType::Kindle) << true;
+        QTest::newRow("unknown") << int(Model::DocumentType::Unknown) << false;
+    }
+
+    void testDocumentFactory()
+    {
+        QFETCH(int, type);
+        QFETCH(bool, supported);
+        const auto expected = static_cast<Model::DocumentType>(type);
+        const auto document = Worker::Engine::createDocument(expected, Worker::Engine::Constant::DefaultStoreSize);
+        QCOMPARE(bool(document), supported);
+        if (document) {
+            QCOMPARE(document->type(), expected);
+            switch (expected) {
+            case Model::DocumentType::Pdf:
+                QVERIFY(dynamic_cast<Worker::Engine::PdfDocument*>(document.get()));
+                break;
+            case Model::DocumentType::Epub:
+                QVERIFY(dynamic_cast<Worker::Engine::EpubDocument*>(document.get()));
+                break;
+            case Model::DocumentType::Mobi:
+                QVERIFY(dynamic_cast<Worker::Engine::MobiDocument*>(document.get()));
+                break;
+            case Model::DocumentType::Kindle:
+                QVERIFY(dynamic_cast<Worker::Engine::KindleDocument*>(document.get()));
+                break;
+            default:
+                QFAIL("Unexpected document type");
+            }
+        }
+    }
 
     void detectsDocumentContent_data()
     {

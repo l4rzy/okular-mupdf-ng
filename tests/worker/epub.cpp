@@ -1617,6 +1617,27 @@ private slots:
         QVERIFY(!error.empty());
     }
 
+    void testExportJobsRejectsUnsupportedTypes_data()
+    {
+        QTest::addColumn<int>("type");
+        QTest::newRow("pdf") << int(::Mu::Model::DocumentType::Pdf);
+        QTest::newRow("unknown") << int(::Mu::Model::DocumentType::Unknown);
+    }
+
+    void testExportJobsRejectsUnsupportedTypes()
+    {
+        QFETCH(int, type);
+        ::Mu::Worker::Engine::ExportJobs jobs;
+        QVERIFY(jobs.eventFd() >= 0);
+        const int inFd = ::open("/dev/null", O_RDONLY);
+        const int outFd = ::open("/dev/null", O_WRONLY);
+        QVERIFY(inFd >= 0);
+        QVERIFY(outFd >= 0);
+        QVERIFY(!jobs.submit(inFd, outFd, { }, { }, static_cast<::Mu::Model::DocumentType>(type)));
+        QVERIFY(::fcntl(inFd, F_GETFD) == -1 && errno == EBADF);
+        QVERIFY(::fcntl(outFd, F_GETFD) == -1 && errno == EBADF);
+    }
+
     void testExportJobsRejectsSubmissionsWithoutCompletionChannel()
     {
         // A dead completion eventfd strands every job silently, so the runner

@@ -9,9 +9,7 @@
 #include <unistd.h>
 #include <utility>
 
-#include "engine/epub/document.hpp"
-#include "engine/kindle/document.hpp"
-#include "engine/mobi/document.hpp"
+#include "engine/document_factory.hpp"
 #include "shared/logging.hpp"
 #include "sys/operation_budget.hpp"
 
@@ -48,6 +46,8 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
     // Both descriptors are consumed on every path below, including rejection.
     Sys::FileDescriptor ownedInput(inputFd);
     Sys::FileDescriptor ownedOutput(outputFd);
+    if (!Model::isReflowableDocument(type))
+        return std::nullopt;
 
     // Copy settings before reserving the slot. Moving the copy into the closure
     // keeps its construction noexcept, so thread startup is the only fallible
@@ -82,15 +82,14 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                 // Private document instance: the session engine is
                 // single-threaded and must never be touched from this thread.
                 const auto storeSize = static_cast<std::size_t>(settings.memoryCacheBytes);
-                std::unique_ptr<EpubDocument> document;
-                if (type == Model::DocumentType::Mobi)
-                    document = std::make_unique<MobiDocument>(storeSize);
-                else if (type == Model::DocumentType::Kindle)
-                    document = std::make_unique<KindleDocument>(storeSize);
-                else
-                    document = std::make_unique<EpubDocument>(storeSize);
-                document->setSettings(settings);
-                if (document->openFd(inputFd, "export.epub", &error)) {
+                auto document = createDocument(type, storeSize);
+                if (document)
+                    document->setSettings(settings);
+                if (!document) {
+                    ::close(inputFd);
+                    ::close(outputFd);
+                    error = "unsupported ebook type";
+                } else if (document->openFd(inputFd, "export.epub", &error)) {
                     // savePdfFdWithReferences adopts and closes the output
                     // descriptor on every exit path, so ownership simply moves
                     // to the engine.

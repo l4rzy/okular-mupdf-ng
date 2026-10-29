@@ -31,6 +31,7 @@ set(mupdf_worker_core_SRCS
     runtime/command_service.cpp
     runtime/frame_pool.cpp
     engine/document_base.cpp
+    engine/document_factory.cpp
     engine/mupdf_helpers.cpp
     engine/theming/device.cpp
     engine/theming/palette.cpp

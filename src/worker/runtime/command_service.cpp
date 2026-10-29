@@ -16,9 +16,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "engine/document_factory.hpp"
 #include "engine/epub/document.hpp"
 #include "engine/kindle/document.hpp"
-#include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
 #include "engine/signer.hpp"
 #include "shared/compat.hpp"
@@ -256,14 +256,13 @@ bool CommandService::openFd(int fd,
 
     // Instantiate appropriate engine backend
     const auto storeSize = static_cast<std::size_t>(m_settings.memoryCacheBytes);
-    if (type == DocumentType::Epub)
-        m_document = std::make_unique<Engine::EpubDocument>(storeSize);
-    else if (type == DocumentType::Mobi)
-        m_document = std::make_unique<Engine::MobiDocument>(storeSize);
-    else if (type == DocumentType::Kindle)
-        m_document = std::make_unique<Engine::KindleDocument>(storeSize);
-    else
-        m_document = std::make_unique<Engine::PdfDocument>(storeSize);
+    m_document = Engine::createDocument(type, storeSize);
+    if (!m_document) {
+        ::close(fd);
+        if (error)
+            *error = "document type is unknown";
+        return false;
+    }
 
     m_document->setSettings(m_settings);
     // DocumentBase::openFd takes ownership of fd on every exit path.
@@ -396,20 +395,18 @@ ResponseMessage CommandService::saveBookFdResponse(std::uint64_t id, const SaveR
 {
     Sys::FileDescriptor output(fd);
     if (payload.exportAzw3) {
-        auto* epub = dynamic_cast<Engine::EpubDocument*>(m_document.get());
-        if (payload.exportEpub || !epub || dynamic_cast<Engine::KindleDocument*>(epub)
-            || dynamic_cast<Engine::MobiDocument*>(epub) || !hasOpenDocument())
+        if (payload.exportEpub || !hasOpenDocument() || m_document->type() != DocumentType::Epub)
             return failure(id, ErrorCode::InvalidRequest, "export_azw3", "EPUB document is not open");
         std::string error;
-        if (!epub->exportAzw3Fd(output.release(), &error))
+        // The factory maps each reported type to its corresponding engine class.
+        if (!static_cast<Engine::EpubDocument*>(m_document.get())->exportAzw3Fd(output.release(), &error))
             return failure(id, ErrorCode::Internal, "export_azw3", error);
         return success(id);
     }
-    auto* kindle = dynamic_cast<Engine::KindleDocument*>(m_document.get());
-    if (!kindle || !hasOpenDocument())
+    if (!hasOpenDocument() || m_document->type() != DocumentType::Kindle)
         return failure(id, ErrorCode::InvalidRequest, "export_epub", "Kindle document is not open");
     std::string error;
-    if (!kindle->exportEpubFd(output.release(), &error))
+    if (!static_cast<Engine::KindleDocument*>(m_document.get())->exportEpubFd(output.release(), &error))
         return failure(id, ErrorCode::Internal, "export_epub", error);
     return success(id);
 }
@@ -452,7 +449,7 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
         return failure(r.id, ErrorCode::NotOpen, "export_pdf_async", "no document is open");
     // The background job re-opens the source file with the session's fixed
     // EPUB settings, which reproduce the live document's layout exactly.
-    if (!dynamic_cast<Engine::EpubDocument*>(m_document.get()))
+    if (!isReflowableDocument(m_document->type()))
         return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an ebook document");
 
     // A dead completion eventfd would strand the job silently, so reject the
@@ -460,10 +457,7 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
     if (m_exportJobs.eventFd() < 0)
         return failure(r.id, ErrorCode::Internal, "export_pdf_async", "export completion channel is unavailable");
 
-    const auto type = dynamic_cast<Engine::MobiDocument*>(m_document.get()) ? DocumentType::Mobi
-        : dynamic_cast<Engine::KindleDocument*>(m_document.get())           ? DocumentType::Kindle
-                                                                            : DocumentType::Epub;
-    auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages, type);
+    auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages, m_document->type());
     if (!job)
         return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
     return success(r.id, JobResponse { *job });
@@ -982,7 +976,7 @@ ResponseMessage CommandService::ocrPage(const RequestMessage& r, const OcrPageRe
     if (!hasOpenDocument()) {
         return failure(r.id, ErrorCode::NotOpen, "ocr_page", "no document is open");
     }
-    if (dynamic_cast<Engine::EpubDocument*>(m_document.get())) {
+    if (m_document->type() != DocumentType::Pdf) {
         return failure(r.id, ErrorCode::Unavailable, "ocr_page", "OCR is only supported for PDF documents");
     }
 
