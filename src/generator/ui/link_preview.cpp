@@ -141,13 +141,18 @@ public:
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(6, 6, 6, 6);
         m_header = new QWidget(this);
+        m_header->setObjectName(QStringLiteral("previewHeader"));
+        m_header->setCursor(Qt::OpenHandCursor);
+        m_header->installEventFilter(this);
         auto* headerLayout = new QHBoxLayout(m_header);
         headerLayout->setContentsMargins(0, 0, 0, 0);
         m_status = new QLabel(m_header);
+        m_status->setAttribute(Qt::WA_TransparentForMouseEvents);
         m_status->setWordWrap(true);
         m_status->setForegroundRole(QPalette::WindowText);
         headerLayout->addWidget(m_status, 1, Qt::AlignTop);
         auto* hint = new QLabel(i18n("Press Esc to cancel"), m_header);
+        hint->setAttribute(Qt::WA_TransparentForMouseEvents);
         hint->setWordWrap(true);
         hint->setAlignment(Qt::AlignRight | Qt::AlignTop);
         hint->setForegroundRole(QPalette::WindowText);
@@ -170,10 +175,11 @@ public:
         connect(m_scroll->verticalScrollBar(), &QScrollBar::rangeChanged, this, requestPages, Qt::QueuedConnection);
     }
 
-    bool isDragging() const { return m_scroll->isDragging(); }
+    bool isDragging() const { return m_moving || m_scroll->isDragging(); }
 
     void prepare(int page, LinkPreviewSize size, bool loading, const QRect& available, QPoint anchor)
     {
+        stopMoving();
         m_scroll->stopScrolling();
         m_status->setText(loading ? i18n("Page %1 — Loading preview…", static_cast<qint64>(page) + 1)
                                   : i18n("Page %1", static_cast<qint64>(page) + 1));
@@ -248,6 +254,51 @@ public:
     }
 
 protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (watched != m_header)
+            return QFrame::eventFilter(watched, event);
+        switch (event->type()) {
+        case QEvent::MouseButtonPress: {
+            const auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() != Qt::LeftButton)
+                break;
+            m_moveOffset = mouse->globalPosition().toPoint() - pos();
+            m_moving = true;
+            m_scroll->stopScrolling();
+            m_header->setCursor(Qt::ClosedHandCursor);
+            return true;
+        }
+        case QEvent::MouseMove: {
+            const auto* mouse = static_cast<QMouseEvent*>(event);
+            if (!(mouse->buttons() & Qt::LeftButton))
+                stopMoving();
+            if (!m_moving)
+                break;
+            move(mouse->globalPosition().toPoint() - m_moveOffset);
+            return true;
+        }
+        case QEvent::MouseButtonRelease:
+            if (static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton && m_moving) {
+                stopMoving();
+                return true;
+            }
+            break;
+        case QEvent::UngrabMouse:
+            stopMoving();
+            break;
+        default:
+            break;
+        }
+        return QFrame::eventFilter(watched, event);
+    }
+
+    void hideEvent(QHideEvent* event) override
+    {
+        stopMoving();
+        QFrame::hideEvent(event);
+    }
+
     void paintEvent(QPaintEvent*) override
     {
         QPainter painter(this);
@@ -263,10 +314,18 @@ protected:
     }
 
 private:
+    void stopMoving()
+    {
+        m_moving = false;
+        m_header->setCursor(Qt::OpenHandCursor);
+    }
+
     QWidget* m_header;
     QLabel* m_status;
     PreviewScrollArea* m_scroll;
     std::vector<QLabel*> m_labels;
+    QPoint m_moveOffset;
+    bool m_moving = false;
 };
 
 LinkPreview::LinkPreview(Renderer render, PageInfo pageInfo)
@@ -547,7 +606,7 @@ bool LinkPreview::eventFilter(QObject* watched, QEvent* event)
     switch (event->type()) {
     case QEvent::MouseButtonRelease:
     case QEvent::UngrabMouse:
-        // Input reaches this filter before the scroll area clears its drag
+        // Input reaches this filter before the preview clears its drag
         // state. Check hover after that transition, at the grace deadline.
         m_closeTimer.start();
         break;

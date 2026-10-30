@@ -878,6 +878,49 @@ private slots:
         QTRY_VERIFY(!window->isVisible());
     }
 
+    void dragsHeader_data()
+    {
+        QTest::addColumn<Qt::MouseButton>("button");
+        QTest::addColumn<bool>("hint");
+        QTest::newRow("page-label") << Qt::LeftButton << false;
+        QTest::newRow("hint-label") << Qt::LeftButton << true;
+        QTest::newRow("right-button") << Qt::RightButton << false;
+        QTest::newRow("middle-button") << Qt::MiddleButton << false;
+    }
+
+    void dragsHeader()
+    {
+        QFETCH(Qt::MouseButton, button);
+        QFETCH(bool, hint);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(560, 1600)));
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(destination(0.5)));
+        QTRY_VERIFY(!previewImage().isNull());
+        auto* window = previewWindow();
+        auto* header = window->findChild<QWidget*>(QStringLiteral("previewHeader"));
+        QVERIFY(header);
+        const auto labels = header->findChildren<QLabel*>();
+        QCOMPARE(labels.size(), 2);
+        const auto* label = labels.at(hint ? 1 : 0);
+        const QPoint start = window->mapFromGlobal(label->mapToGlobal(label->rect().center()));
+        const QPoint initial = window->pos();
+        const QPoint delta(45, 35);
+        const int scrollPosition = previewScrollArea()->verticalScrollBar()->value();
+        QTest::mousePress(window->windowHandle(), button, Qt::NoModifier, start);
+        const auto releaseMouse = qScopeGuard([&] { QTest::mouseRelease(m_host.windowHandle(), button); });
+        QCOMPARE(header->cursor().shape(), button == Qt::LeftButton ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
+        QTest::mouseMove(window->windowHandle(), start + delta);
+        QCOMPARE(window->pos(), button == Qt::LeftButton ? initial + delta : initial);
+        QCOMPARE(previewScrollArea()->verticalScrollBar()->value(), scrollPosition);
+        const QPoint release = window->mapFromGlobal(initial + start + delta);
+        QTest::mouseRelease(window->windowHandle(), button, Qt::NoModifier, release);
+        QCOMPARE(header->cursor().shape(), Qt::OpenHandCursor);
+        const QPoint moved = window->pos();
+        QTest::mouseMove(window->windowHandle(), release + QPoint(10, 0));
+        QCOMPARE(window->pos(), moved);
+    }
+
     void dragsPage_data()
     {
         QTest::addColumn<Qt::MouseButton>("button");
@@ -1036,22 +1079,26 @@ private slots:
     void dragOutsideKeepsPreviewUntilFinished_data()
     {
         QTest::addColumn<bool>("loseGrab");
-        QTest::newRow("released") << false;
-        QTest::newRow("grab-lost") << true;
+        QTest::addColumn<bool>("headerDrag");
+        QTest::newRow("released") << false << false;
+        QTest::newRow("grab-lost") << true << false;
+        QTest::newRow("header-released") << false << true;
+        QTest::newRow("header-grab-lost") << true << true;
     }
 
     void dragOutsideKeepsPreviewUntilFinished()
     {
         QFETCH(bool, loseGrab);
+        QFETCH(bool, headerDrag);
         Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
                                         singlePage(QSizeF(560, 1600)));
         previews.setMode(LinkPreviewMode::Large);
         QVERIFY(previews.showPreview(destination()));
         QTRY_VERIFY(!previewImage().isNull());
         QPointer<QWidget> window = previewWindow();
-        auto* scroll = previewScrollArea();
-        const QPoint start =
-            window->mapFromGlobal(scroll->viewport()->mapToGlobal(scroll->viewport()->rect().center()));
+        auto* dragTarget =
+            headerDrag ? window->findChild<QWidget*>(QStringLiteral("previewHeader")) : previewScrollArea()->viewport();
+        const QPoint start = window->mapFromGlobal(dragTarget->mapToGlobal(dragTarget->rect().center()));
         const QPoint outside(window->width() + 10, start.y());
         // Native QtTest mouse events don't move QCursor on the offscreen
         // platform. Set the position used by the hover check explicitly.
@@ -1064,29 +1111,40 @@ private slots:
             if (!released)
                 QTest::mouseRelease(m_host.windowHandle(), Qt::LeftButton);
         });
-        QTest::mouseMove(window->windowHandle(), outside);
+        // Moving the header would move the window under the cursor. Hold
+        // that gesture here to exercise the timer with an outside cursor.
+        if (!headerDrag)
+            QTest::mouseMove(window->windowHandle(), outside);
         QTest::qWait(450);
         QVERIFY(window->isVisible());
         if (loseGrab) {
             QEvent event(QEvent::UngrabMouse);
-            QCoreApplication::sendEvent(scroll->viewport(), &event);
+            QCoreApplication::sendEvent(dragTarget, &event);
         } else {
             QTest::mouseRelease(window->windowHandle(), Qt::LeftButton, Qt::NoModifier, outside);
             released = true;
         }
+        // Qt may synthesize a final move before releasing the header grab.
+        // Once the gesture ends, leaving the moved frame must dismiss it.
+        if (headerDrag)
+            QCursor::setPos(window->mapToGlobal(outside));
         QTRY_VERIFY(!window->isVisible());
     }
 
     void interruptedDrag_data()
     {
         QTest::addColumn<bool>("loseGrab");
-        QTest::newRow("dismissed") << false;
-        QTest::newRow("grab-lost") << true;
+        QTest::addColumn<bool>("headerDrag");
+        QTest::newRow("dismissed") << false << false;
+        QTest::newRow("grab-lost") << true << false;
+        QTest::newRow("header-dismissed") << false << true;
+        QTest::newRow("header-grab-lost") << true << true;
     }
 
     void interruptedDrag()
     {
         QFETCH(bool, loseGrab);
+        QFETCH(bool, headerDrag);
         Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
                                         singlePage(QSizeF(560, 1600)));
         previews.setMode(LinkPreviewMode::Large);
@@ -1094,23 +1152,26 @@ private slots:
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
         auto* scroll = previewScrollArea();
-        const QPoint start =
-            window->mapFromGlobal(scroll->viewport()->mapToGlobal(scroll->viewport()->rect().center()));
+        auto* dragTarget =
+            headerDrag ? window->findChild<QWidget*>(QStringLiteral("previewHeader")) : scroll->viewport();
+        const QPoint start = window->mapFromGlobal(dragTarget->mapToGlobal(dragTarget->rect().center()));
         QTest::mousePress(window->windowHandle(), Qt::LeftButton, Qt::NoModifier, start);
         const auto releaseMouse = qScopeGuard([&] { QTest::mouseRelease(m_host.windowHandle(), Qt::LeftButton); });
-        QCOMPARE(scroll->viewport()->cursor().shape(), Qt::ClosedHandCursor);
+        QCOMPARE(dragTarget->cursor().shape(), Qt::ClosedHandCursor);
         const int initial = scroll->verticalScrollBar()->value();
+        const QPoint initialPosition = window->pos();
         if (loseGrab) {
             QEvent event(QEvent::UngrabMouse);
-            QCoreApplication::sendEvent(scroll->viewport(), &event);
+            QCoreApplication::sendEvent(dragTarget, &event);
             QTest::mouseMove(window->windowHandle(), start + QPoint(0, -80));
             QCOMPARE(scroll->verticalScrollBar()->value(), initial);
+            QCOMPARE(window->pos(), initialPosition);
             QVERIFY(window->isVisible());
         } else {
             QTest::keyClick(&m_host, Qt::Key_Escape);
             QVERIFY(!window->isVisible());
         }
-        QCOMPARE(scroll->viewport()->cursor().shape(), Qt::OpenHandCursor);
+        QCOMPARE(dragTarget->cursor().shape(), Qt::OpenHandCursor);
     }
 
     void dismissesOnInteraction_data()
