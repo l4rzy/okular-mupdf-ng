@@ -9,6 +9,7 @@
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
@@ -18,6 +19,7 @@
 #include <QScrollBar>
 #include <QScroller>
 #include <QScrollerProperties>
+#include <QToolButton>
 #include <QToolTip>
 #include <QVBoxLayout>
 #include <QVariant>
@@ -127,7 +129,7 @@ private:
 
 class LinkPreviewWindow final : public QFrame {
 public:
-    LinkPreviewWindow(QWidget* parent, std::function<void()> onScroll)
+    LinkPreviewWindow(QWidget* parent, std::function<void()> onScroll, std::function<void()> onPinChanged)
         : QFrame(parent, Qt::ToolTip | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus)
     {
         setObjectName(QStringLiteral("mupdfLinkPreview"));
@@ -143,7 +145,6 @@ public:
         m_header = new QWidget(this);
         m_header->setObjectName(QStringLiteral("previewHeader"));
         m_header->setCursor(Qt::OpenHandCursor);
-        m_header->installEventFilter(this);
         auto* headerLayout = new QHBoxLayout(m_header);
         headerLayout->setContentsMargins(0, 0, 0, 0);
         m_status = new QLabel(m_header);
@@ -157,6 +158,20 @@ public:
         hint->setAlignment(Qt::AlignRight | Qt::AlignTop);
         hint->setForegroundRole(QPalette::WindowText);
         headerLayout->addWidget(hint, 1, Qt::AlignTop);
+        m_pin = new QToolButton(m_header);
+        m_pin->setObjectName(QStringLiteral("previewPin"));
+        m_pin->setText(i18n("Pin"));
+        m_pin->setIcon(QIcon::fromTheme(QStringLiteral("window-pin")));
+        m_pin->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        m_pin->setAutoRaise(true);
+        m_pin->setAccessibleName(i18n("Keep preview open"));
+        m_pin->setToolTip(i18n("Keep the preview open when the pointer leaves"));
+        m_pin->setCheckable(true);
+        m_pin->setFocusPolicy(Qt::NoFocus);
+        m_pin->setCursor(Qt::ArrowCursor);
+        headerLayout->addWidget(m_pin, 0, Qt::AlignTop);
+        m_header->installEventFilter(this);
+        connect(m_pin, &QToolButton::toggled, this, std::move(onPinChanged));
         layout->addWidget(m_header);
         m_scroll = new PreviewScrollArea(this);
         // Let the viewport shrink below its size hint when the header wraps.
@@ -177,6 +192,10 @@ public:
 
     bool isDragging() const { return m_moving || m_scroll->isDragging(); }
 
+    bool isPinned() const { return m_pin->isChecked(); }
+
+    void unpin() { m_pin->setChecked(false); }
+
     void prepare(int page, LinkPreviewSize size, bool loading, const QRect& available, QPoint anchor)
     {
         stopMoving();
@@ -186,6 +205,7 @@ public:
         m_scroll->setFixedWidth(size.render.width());
         m_header->setFixedWidth(size.render.width());
         ensurePolished();
+        resizePin();
         // Apply the new minimum size before resize() can clamp to the old width.
         layout()->activate();
         resize(std::min(available.width(), sizeHint().width()), std::min(available.height(), size.visibleHeight + 48));
@@ -259,6 +279,9 @@ protected:
         if (watched != m_header)
             return QFrame::eventFilter(watched, event);
         switch (event->type()) {
+        case QEvent::FontChange:
+            resizePin();
+            break;
         case QEvent::MouseButtonPress: {
             const auto* mouse = static_cast<QMouseEvent*>(event);
             if (mouse->button() != Qt::LeftButton)
@@ -296,6 +319,7 @@ protected:
     void hideEvent(QHideEvent* event) override
     {
         stopMoving();
+        unpin();
         QFrame::hideEvent(event);
     }
 
@@ -314,6 +338,16 @@ protected:
     }
 
 private:
+    void resizePin()
+    {
+        // Font propagation can finish on show, after the initial layout.
+        // Sizes are logical pixels; Qt scales the button and themed icon for the display.
+        const int pinSize = std::min(18, m_header->fontMetrics().height());
+        const int iconSize = std::max(1, pinSize - 2);
+        m_pin->setFixedSize(pinSize, pinSize);
+        m_pin->setIconSize(QSize(iconSize, iconSize));
+    }
+
     void stopMoving()
     {
         m_moving = false;
@@ -323,6 +357,7 @@ private:
     QWidget* m_header;
     QLabel* m_status;
     PreviewScrollArea* m_scroll;
+    QToolButton* m_pin;
     std::vector<QLabel*> m_labels;
     QPoint m_moveOffset;
     bool m_moving = false;
@@ -336,7 +371,7 @@ LinkPreview::LinkPreview(Renderer render, PageInfo pageInfo)
     m_closeTimer.setSingleShot(true);
     m_closeTimer.setInterval(350);
     connect(&m_closeTimer, &QTimer::timeout, this, [this] {
-        if (!isHovered())
+        if (!isHovered() && !(m_window && m_window->isPinned()))
             dismiss();
     });
 }
@@ -421,6 +456,11 @@ bool LinkPreview::showPreview(const Model::Viewport& destination, int sourcePage
         return false;
     if (m_window && (source == m_window.data() || m_window->isAncestorOf(source)))
         return true; // A delayed source tooltip must not replace the open preview.
+    // A pin belongs to its source link, even when another link has the same
+    // destination. Repeated tooltip queries at the original anchor keep it.
+    if (m_window && m_window->isPinned()
+        && (source != m_source || QCursor::pos() != m_anchor || destination.page != m_pages[m_targetIndex].number))
+        dismiss();
     auto* screen = QGuiApplication::screenAt(QCursor::pos());
     if (!screen)
         screen = source->screen();
@@ -494,7 +534,13 @@ bool LinkPreview::showPreview(const Model::Viewport& destination, int sourcePage
     if (m_window && m_window->parentWidget() != source->window())
         delete m_window.data();
     if (!m_window)
-        m_window = new LinkPreviewWindow(source->window(), [this] { renderVisiblePages(); });
+        m_window = new LinkPreviewWindow(
+            source->window(),
+            [this] { renderVisiblePages(); },
+            [this] {
+                if (m_window && m_window->isVisible())
+                    m_closeTimer.start();
+            });
     if (newLayout) {
         constexpr int PageGap = 8;
         m_pages = std::move(pages);
@@ -613,7 +659,7 @@ bool LinkPreview::eventFilter(QObject* watched, QEvent* event)
     case QEvent::MouseMove:
     case QEvent::Enter:
     case QEvent::Leave:
-        if (isHovered())
+        if (m_window->isPinned() || isHovered())
             m_closeTimer.stop();
         else if (!m_closeTimer.isActive())
             m_closeTimer.start();
@@ -625,8 +671,11 @@ bool LinkPreview::eventFilter(QObject* watched, QEvent* event)
         }
         [[fallthrough]];
     case QEvent::MouseButtonPress:
-    case QEvent::Wheel:
         if (!inPreview)
+            dismiss();
+        break;
+    case QEvent::Wheel:
+        if (!inPreview && !m_window->isPinned())
             dismiss();
         break;
     case QEvent::Hide:

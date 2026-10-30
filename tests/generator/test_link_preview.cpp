@@ -15,6 +15,7 @@
 #include <QScrollBar>
 #include <QScroller>
 #include <QTest>
+#include <QToolButton>
 #include <QWheelEvent>
 #include <QWidget>
 #include <QWindow>
@@ -878,6 +879,112 @@ private slots:
         QTRY_VERIFY(!window->isVisible());
     }
 
+    void pinFitsHeader_data()
+    {
+        QTest::addColumn<int>("fontSize");
+        QTest::newRow("small-font") << 8;
+        QTest::newRow("normal-font") << 11;
+        QTest::newRow("large-font") << 18;
+    }
+
+    void pinFitsHeader()
+    {
+        QFETCH(int, fontSize);
+        const QFont original = QApplication::font();
+        const auto restoreFont = qScopeGuard([&] { QApplication::setFont(original); });
+        QFont font = original;
+        font.setPointSize(fontSize);
+        QApplication::setFont(font);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(560, 840)));
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(!previewImage().isNull());
+        auto* window = previewWindow();
+        const auto* pin = window->findChild<QToolButton*>(QStringLiteral("previewPin"));
+        const auto* header = window->findChild<QWidget*>(QStringLiteral("previewHeader"));
+        QVERIFY(pin);
+        QVERIFY(header);
+        QVERIFY(pin->height() <= header->fontMetrics().height());
+        QVERIFY(pin->iconSize().height() < pin->height());
+        QVERIFY(header->rect().contains(pin->geometry()));
+    }
+
+    void pinsPreview_data()
+    {
+        QTest::addColumn<bool>("unpin");
+        QTest::addColumn<bool>("scrollDocument");
+        QTest::newRow("stay-open") << false << false;
+        QTest::newRow("unpin") << true << false;
+        QTest::newRow("document-scroll") << false << true;
+        QTest::newRow("unpin-after-document-scroll") << true << true;
+    }
+
+    void pinsPreview()
+    {
+        QFETCH(bool, unpin);
+        QFETCH(bool, scrollDocument);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(560, 1600)));
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(!previewImage().isNull());
+        auto* window = previewWindow();
+        auto* pin = window->findChild<QToolButton*>(QStringLiteral("previewPin"));
+        QVERIFY(pin);
+        QVERIFY(!pin->isChecked());
+        const QPoint initial = window->pos();
+        QTest::mouseClick(pin, Qt::LeftButton);
+        QVERIFY(pin->isChecked());
+        QCOMPARE(window->pos(), initial); // The button must not start a header drag.
+        // Repeated tooltip queries for the same source must preserve the pin.
+        QTest::mouseMove(&m_host, QPoint(40, 40));
+        QVERIFY(previews.showPreview(destination()));
+        QVERIFY(pin->isChecked());
+        QTest::mouseMove(&m_host, QPoint(5, 5));
+        if (scrollDocument) {
+            sendWheel(&m_host, -120);
+            QTest::wheelEvent(m_host.windowHandle(), QPoint(5, 5), QPoint(0, -120));
+            QCOMPARE(m_host.wheels, 2); // Pinning must not consume document input.
+        }
+        QTest::qWait(450);
+        QVERIFY(window->isVisible());
+        QVERIFY(pin->isChecked());
+        if (unpin) {
+            QTest::mouseClick(pin, Qt::LeftButton);
+            QVERIFY(!pin->isChecked());
+            QTest::mouseMove(&m_host, QPoint(5, 5));
+            QTRY_VERIFY(!window->isVisible());
+        }
+    }
+
+    void anotherLinkClearsPin_data()
+    {
+        QTest::addColumn<bool>("sameDestination");
+        QTest::newRow("same-destination") << true;
+        QTest::newRow("different-destination") << false;
+    }
+
+    void anotherLinkClearsPin()
+    {
+        QFETCH(bool, sameDestination);
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); }, pageRange(2));
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(!previewImage().isNull());
+        auto* window = previewWindow();
+        auto* pin = window->findChild<QToolButton*>(QStringLiteral("previewPin"));
+        QTest::mouseClick(pin, Qt::LeftButton);
+        QTest::mouseMove(&m_host, QPoint(40, 45));
+        auto next = destination();
+        next.page = sameDestination ? 0 : 1;
+        QVERIFY(previews.showPreview(next));
+        QTRY_VERIFY(!previewImage().isNull());
+        QVERIFY(!pin->isChecked());
+        QTest::mouseMove(&m_host, QPoint(5, 5));
+        QTRY_VERIFY(!window->isVisible());
+    }
+
     void dragsHeader_data()
     {
         QTest::addColumn<Qt::MouseButton>("button");
@@ -1177,23 +1284,32 @@ private slots:
     void dismissesOnInteraction_data()
     {
         QTest::addColumn<int>("activity");
-        QTest::newRow("escape") << 0;
-        QTest::newRow("outside-click") << 1;
-        QTest::newRow("source-scroll") << 2;
-        QTest::newRow("source-hidden") << 3;
-        QTest::newRow("window-deactivated") << 4;
-        QTest::newRow("document-reset") << 5;
+        QTest::addColumn<bool>("pinned");
+        QTest::newRow("escape") << 0 << false;
+        QTest::newRow("outside-click") << 1 << false;
+        QTest::newRow("source-scroll") << 2 << false;
+        QTest::newRow("source-hidden") << 3 << false;
+        QTest::newRow("window-deactivated") << 4 << false;
+        QTest::newRow("document-reset") << 5 << false;
+        QTest::newRow("pinned-escape") << 0 << true;
+        QTest::newRow("pinned-outside-click") << 1 << true;
+        QTest::newRow("pinned-source-hidden") << 3 << true;
+        QTest::newRow("pinned-window-deactivated") << 4 << true;
+        QTest::newRow("pinned-document-reset") << 5 << true;
     }
 
     void dismissesOnInteraction()
     {
         QFETCH(int, activity);
+        QFETCH(bool, pinned);
         Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
                                         singlePage(QSizeF(560, 840)));
         previews.setMode(LinkPreviewMode::Large);
         QVERIFY(previews.showPreview(destination()));
         QTRY_VERIFY(!previewImage().isNull());
         QPointer<QWidget> window = previewWindow();
+        if (pinned)
+            QTest::mouseClick(window->findChild<QToolButton*>(QStringLiteral("previewPin")), Qt::LeftButton);
         if (activity == 0) {
             QTest::keyClick(&m_host, Qt::Key_Escape);
         } else if (activity == 1) {
@@ -1211,6 +1327,8 @@ private slots:
             previews.reset();
         }
         QTRY_VERIFY(!window || !window->isVisible());
+        if (window)
+            QVERIFY(!window->findChild<QToolButton*>(QStringLiteral("previewPin"))->isChecked());
     }
 
     void resetCancelsAndDiscardsOldCompletion()
