@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.7
+Version:        0.5.8
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -110,6 +110,13 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Thu Oct 29 2026 l4rzy <me@23ro.org> - 0.5.8-1
+- Update to version 0.5.8.
+- Add per-document theme, ebook layout, and OCR settings.
+- Add draggable, pinnable link previews.
+- Fix ebook background colors and CSS attribute selectors.
+- Preserve passwords when reopening withheld encrypted documents.
+
 * Wed Oct 28 2026 l4rzy <me@23ro.org> - 0.5.7-1
 - Update to version 0.5.7.
 - Add ePUB to AZW3 and Kindle to ePUB export.

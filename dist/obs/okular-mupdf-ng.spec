@@ -11,7 +11,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.7
+Version:        0.5.8
 Release:        0%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1

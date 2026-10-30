@@ -1,4 +1,13 @@
 -------------------------------------------------------------------
+Fri Oct 30 02:09:32 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.8.
+- Add per-document theme, ebook layout, and OCR settings.
+- Add draggable, pinnable link previews.
+- Fix ebook background colors and CSS attribute selectors.
+- Preserve passwords when reopening withheld encrypted documents.
+
+-------------------------------------------------------------------
 Wed Oct 28 18:55:55 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.7.
