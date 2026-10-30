@@ -32,8 +32,8 @@
     <param name="compression">gz</param>
   </service>
 
-  <!-- Run locally with obs-service-cargo installed, then upload vendor.tar.gz.
-       The OBS service host does not provide this service. -->
+  <!-- Generate vendor.tar.gz with python3 scripts/vendor-boko.py from the
+       matching source checkout, then upload it. -->
   <service name="cargo_vendor" mode="manual">
     <param name="src">*okular-mupdf-ng-*.tar.gz</param>
     <param name="cargotoml">src/worker/engine/kindle/Cargo.toml</param>

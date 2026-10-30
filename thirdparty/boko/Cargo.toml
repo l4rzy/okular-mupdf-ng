@@ -31,9 +31,9 @@ parallel = ["dep:rayon"]
 optimize-images = ["dep:image"]
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23.1"
 bstr = { version = "1.11", default-features = false, features = ["alloc"] }
-cssparser = "0.36"
+cssparser = "0.37"
 encoding_rs = "0.8"
 flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 html5ever = "0.39"
@@ -44,7 +44,7 @@ precomputed-hash = "0.1"
 quick-xml = "0.39"
 rayon = { version = "1.10", optional = true }
 rustc-hash = "2.1"
-selectors = "0.35"
+selectors = "0.40"
 sha1_smol = { version = "1.0", features = ["std"] }
 smallvec = "1.15"
 thiserror = "2"
