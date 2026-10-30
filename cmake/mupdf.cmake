@@ -59,6 +59,7 @@ else()
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-layout.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-media.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-image-width.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-image-float.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-background.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-css-attribute-selectors.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-form-autosize.patch"

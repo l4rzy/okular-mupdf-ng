@@ -305,6 +305,224 @@ private slots:
         QVERIFY(inspection.lines.contains(QStringLiteral("router bgp 65000")));
     }
 
+    void testFloatingImages_data()
+    {
+        QTest::addColumn<QString>("side");
+        QTest::addColumn<QString>("display");
+        QTest::addColumn<bool>("pageEnd");
+        QTest::addColumn<bool>("clear");
+        for (const auto& side : { QStringLiteral("left"), QStringLiteral("right"), QStringLiteral("none") }) {
+            for (const auto& display : { QStringLiteral("inline"), QStringLiteral("block") }) {
+                for (const bool pageEnd : { false, true }) {
+                    QTest::newRow(qPrintable(side + '-' + display + (pageEnd ? "-page-end" : "")))
+                        << side << display << pageEnd << false;
+                }
+                QTest::newRow(qPrintable(side + '-' + display + "-clear")) << side << display << false << true;
+            }
+        }
+    }
+
+    void testFloatingImages()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF floating image patch");
+#endif
+        QFETCH(QString, side);
+        QFETCH(QString, display);
+        QFETCH(bool, pageEnd);
+        QFETCH(bool, clear);
+        QImage image(40, 100, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("float.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto content =
+            QStringLiteral(
+                "<html><head><style>@page { margin: 12pt; } body { margin: 0; font-size: 12pt; }"
+                "p { margin: 0; line-height: 20pt; } img { float: %1; display: %2; width: 40pt; height: 100pt;"
+                "margin: 0 6pt 0 6pt; } </style></head><body><div style='height: %3pt'></div>"
+                "<div><img src='data:image/png;base64,%4'/><p>First</p><p>Second</p></div>"
+                "<p style='clear: %5'>Third</p><p>Fourth</p><p>Fifth</p><p>Sixth</p><p>Seventh</p>"
+                "<p style='clear: both'>Cleared</p></body></html>")
+                .arg(side, display)
+                .arg(pageEnd ? 170 : 0)
+                .arg(QString::fromLatin1(png.toBase64()))
+                .arg(clear ? "both" : "none")
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        bool failed = false;
+        fz_try(context)
+        {
+            document = fz_open_document(context, QFile::encodeName(html.fileName()).constData());
+        }
+        fz_catch(context)
+        {
+            failed = true;
+        }
+        QVERIFY2(!failed, fz_caught_message(context));
+        // Repeated layout must discard the previous float list and recompute wrapping.
+        for (const float width : { 240.0f, 180.0f, 240.0f }) {
+            fz_try(context)
+            {
+                fz_layout_document(context, document, width, 240, 12);
+            }
+            fz_catch(context)
+            {
+                failed = true;
+            }
+            QVERIFY2(!failed, fz_caught_message(context));
+            const auto inspection = ::Mu::Test::inspectDocumentText(context, document);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QCOMPARE(inspection.images.size(), 1);
+            const auto bounds = inspection.images.front();
+            const auto first = inspection.lines.value(QStringLiteral("First"));
+            const auto third = inspection.lines.value(QStringLiteral("Third"));
+            const auto sixth = inspection.lines.value(QStringLiteral("Sixth"));
+            QVERIFY(inspection.lines.contains(QStringLiteral("First")));
+            QVERIFY(inspection.lines.contains(QStringLiteral("Third")));
+            QVERIFY(bounds.y0 >= 12 && bounds.y1 <= 228);
+            if (side != QStringLiteral("none")) {
+                if (!pageEnd) {
+                    QVERIFY(first.origin.y >= bounds.y0);
+                    QVERIFY(first.origin.y < bounds.y0 + 20);
+                    if (clear) {
+                        QVERIFY(third.origin.y >= bounds.y1);
+                        QVERIFY(std::abs(third.origin.x - 12) < 0.01f);
+                    } else {
+                        QVERIFY(third.origin.y < bounds.y1);
+                    }
+                    if (side == QStringLiteral("left")) {
+                        QVERIFY(first.origin.x >= bounds.x1 + 6 - 0.01f);
+                        if (!clear)
+                            QVERIFY(third.origin.x >= bounds.x1 + 6 - 0.01f);
+                    } else {
+                        QVERIFY(std::abs(bounds.x1 - (width - 18)) < 0.01f);
+                        QVERIFY(first.origin.x < bounds.x0);
+                    }
+                    QVERIFY(std::abs(sixth.origin.x - 12) < 0.01f);
+                }
+            } else if (!pageEnd) {
+                QVERIFY(first.origin.y >= bounds.y1);
+            }
+        }
+    }
+
+    void testFloatingImageEdgeCases_data()
+    {
+        QTest::addColumn<QString>("markup");
+        QTest::addColumn<QString>("extraCss");
+        QTest::addColumn<bool>("invalid");
+        QTest::addColumn<int>("imageCount");
+        const QString image = "%1";
+        QTest::newRow("table-row-retry")
+            << "<div style='height: 170pt'></div><table><tr><td><div>%1<p>Inside</p></div></td>"
+               "<td>Other</td></tr></table><p style='clear:both'>After</p>"
+            << QString() << false << 1;
+        QTest::newRow("positioned-image") << image + "<p>After</p>" << "img { position: absolute; }" << false << 1;
+        QTest::newRow("positioned-container")
+            << "<div style='position:relative'>%1<p>After</p></div>" << QString() << false << 1;
+        QTest::newRow("missing-image") << "<img src='missing.png'/><p>After</p>" << QString() << false << 0;
+        QTest::newRow("hidden-image") << image + "<p>After</p>" << "img { display: none; }" << false << 0;
+        QTest::newRow("negative-margins") << image + "<p>After</p>" << "img { margin: -20pt; }" << false << 1;
+        QTest::newRow("zero-size") << image + "<p>After</p>" << "img { width: 0; height: 0; }" << false << 0;
+        QTest::newRow("overflowing-margin")
+            << image + "<p>After</p>" << "img { margin-left: " + QString(80, '9') + "em; }" << true << 0;
+        QTest::newRow("stacked-floats") << image + image + "<p style='clear:both'>After</p>"
+                                        << QString("img { height:60pt; }") << false << 2;
+    }
+
+    void testFloatingImageEdgeCases()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF floating image patch");
+#endif
+        QFETCH(QString, markup);
+        QFETCH(QString, extraCss);
+        QFETCH(bool, invalid);
+        QFETCH(int, imageCount);
+        QImage image(4, 4, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        const QString imageUrl = "data:image/png;base64," + QString::fromLatin1(png.toBase64());
+        markup.replace("%1", "<img src='" + imageUrl + "'/>");
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("float-edge.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto content =
+            QStringLiteral("<html><head><style>@page { margin:12pt; } body { margin:0; font-size:12pt; }"
+                           "p { margin:0; line-height:20pt; } img { float:left; width:40pt; height:100pt; } %1"
+                           "</style></head><body>%2</body></html>")
+                .arg(extraCss, markup)
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        bool failed = false;
+        fz_try(context)
+        {
+            document = fz_open_document(context, QFile::encodeName(html.fileName()).constData());
+        }
+        fz_catch(context)
+        {
+            failed = true;
+        }
+        QVERIFY2(!failed, fz_caught_message(context));
+        for (const float width : { 240.0f, 180.0f, 240.0f }) {
+            fz_try(context)
+            {
+                fz_layout_document(context, document, width, 240, 12);
+                (void)fz_count_pages(context, document);
+            }
+            fz_catch(context)
+            {
+                failed = true;
+            }
+            QCOMPARE(failed, invalid);
+            if (invalid) {
+                QVERIFY(QString::fromUtf8(fz_caught_message(context)).contains("non-finite floating image"));
+                break;
+            }
+            const auto inspection = ::Mu::Test::inspectDocumentText(context, document);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QCOMPARE(inspection.images.size(), imageCount);
+            QVERIFY(inspection.lines.contains(QStringLiteral("After")));
+            const auto after = inspection.lines.value(QStringLiteral("After"));
+            QVERIFY(std::isfinite(after.origin.x));
+            QVERIFY(std::isfinite(after.origin.y));
+            if (QByteArray(QTest::currentDataTag()) == "table-row-retry") {
+                QCOMPARE(fz_count_pages(context, document), 2);
+                QVERIFY(inspection.lines.value(QStringLiteral("Inside")).origin.y >= inspection.images[0].y1);
+            }
+            if (QByteArray(QTest::currentDataTag()) == "missing-image") {
+                QVERIFY(inspection.lines.contains(QStringLiteral("[image]")));
+                QVERIFY(after.origin.y > inspection.lines.value(QStringLiteral("[image]")).origin.y);
+            }
+            if (QByteArray(QTest::currentDataTag()) == "stacked-floats") {
+                QVERIFY(inspection.images[0].y1 <= inspection.images[1].y0);
+                QVERIFY(after.origin.y >= inspection.images[1].y1);
+            }
+        }
+    }
+
     void testWideImagesFitPage_data()
     {
         QTest::addColumn<QString>("display");

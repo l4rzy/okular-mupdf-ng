@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <KLocalizedString>
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QImage>
+#include <QScopeGuard>
 #include <QTest>
 #include <QThread>
 
@@ -17,6 +19,8 @@ class TestPageError : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    void initTestCase() { KLocalizedString::setApplicationDomain("okular_mupdfng"); }
 
     void activationRaisesFlagAndPublishesMessage()
     {
@@ -90,19 +94,27 @@ private Q_SLOTS:
         QCOMPARE(placeholder.message(), QStringLiteral("terminal"));
     }
 
+    void readerThreadObservesCompleteMessage_data()
+    {
+        QTest::addColumn<int>("startupDelayMs");
+        QTest::newRow("immediate-start") << 0;
+        QTest::newRow("delayed-start") << 50;
+    }
+
     void readerThreadObservesCompleteMessage()
     {
+        QFETCH(int, startupDelayMs);
         PageError placeholder;
         QVERIFY(!placeholder.isActive());
 
         std::atomic<bool> stop = false;
         std::atomic<bool> readerReady = false;
         std::atomic<int> observations = 0;
-        std::atomic<int> stale = 0;
         std::atomic<int> torn = 0;
         std::atomic<bool> sawInactive = false;
         const QString expected = QStringLiteral("single atomic publication");
         QThread* reader = QThread::create([&] {
+            QThread::msleep(static_cast<unsigned long>(startupDelayMs));
             readerReady.store(true);
             while (!stop.load()) {
                 if (!placeholder.isActive()) {
@@ -116,16 +128,24 @@ private Q_SLOTS:
                 const QString text = placeholder.message();
                 if (text == expected)
                     ++observations;
-                else if (text.isEmpty())
-                    ++stale;
-                else
+                else if (!text.isEmpty())
                     ++torn;
             }
         });
+        // QtTest assertions can return early. Join before any captured stack
+        // state is destroyed, including on readiness or completion failures.
+        const auto cleanup = qScopeGuard([&] {
+            stop.store(true);
+            reader->wait();
+            delete reader;
+        });
         reader->start();
-        for (int spin = 0; spin < 10000 && !readerReady.load(); ++spin)
-            QThread::yieldCurrentThread();
-        QVERIFY(readerReady.load());
+        QTRY_VERIFY_WITH_TIMEOUT(readerReady.load(), 5000);
+
+        // Hold an active publication until sampled; scheduler delays must not
+        // make the reader miss every short active interval below.
+        placeholder.activate(expected, PageError::Reason::SandboxGate);
+        QTRY_VERIFY_WITH_TIMEOUT(observations.load() > 0, 5000);
 
         // Pace the toggles so the reader reliably samples both states.
         for (int i = 0; i < 100; ++i) {
@@ -134,12 +154,10 @@ private Q_SLOTS:
             placeholder.reset();
             QThread::msleep(1);
         }
-        // Let the reader observe the final inactive state before stopping.
-        for (int i = 0; i < 1000 && (observations.load() == 0 || !sawInactive.load()); ++i)
-            QThread::msleep(1);
+        // Ensure both states have been sampled before stopping the reader.
+        QTRY_VERIFY_WITH_TIMEOUT(sawInactive.load(), 5000);
         stop.store(true);
         QVERIFY(reader->wait(30000));
-        delete reader;
 
         QVERIFY(sawInactive.load());
         QCOMPARE(torn.load(), 0);

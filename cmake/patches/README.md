@@ -67,6 +67,24 @@ Okular records undo per UI group, so uneven sets of mirrored options can still
 omit the previous selection in another group from undo history. Selection and
 persistence follow the PDF flag; fixing that undo limitation requires host support.
 
+`mupdf-1.28.5-html-image-float.patch` supports left/right floating HTML images,
+including their margins, line-by-line text wrapping across paragraph and container
+boundaries, `clear`, and image pagination. Float overflow contributes to document
+height and remains drawable when the enclosing paragraph ends on an earlier page.
+This fixes decorative chapter initials in Gutenberg EPUBs such as *Round the Globe*.
+The scope is static image elements in non-restarting ebook layout. Images in
+tables or positioned containers use the existing block-image path: table rows may
+be laid out repeatedly, and positioned boxes move after layout. Tables isolate
+external float exclusions. Arbitrary floated containers and floats in restartable
+stories remain unsupported. Multiple image floats stack vertically. Missing-image
+placeholders keep their normal-flow height, and hidden images are skipped before
+loading. Non-finite image/margin geometry is rejected; clearance requires strict
+forward progress. The list borrows tree-owned boxes and resets for every layout.
+Table-driven tests cover both sides, inline/block display, clearing, pagination,
+repeated reflow, row retries, positioned/hidden/missing images, zero dimensions,
+negative and overflowing margins, and multiple floats. The EPUB layout cache
+revision changes to invalidate pagination from the previous engine.
+
 `mupdf-1.28.5-html-background.patch` expands a lone `background: none` to a
 transparent background color, matching the keyword without regard to case.
 Previously the image keyword reached the color parser's fallback and became
