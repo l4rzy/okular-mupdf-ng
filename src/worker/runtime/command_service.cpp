@@ -111,6 +111,10 @@ std::optional<ResponseMessage> validateInboundRequest(std::uint64_t id, const Re
                                           operation = "render";
                                           return isValidRenderRequest(request, &reason);
                                       },
+                                      [&](const Model::ResolveLinkRequest& request) {
+                                          operation = "resolve-link";
+                                          return isValidResolveLinkRequest(request, &reason);
+                                      },
                                       [&](const TextBoxesRequest& request) {
                                           operation = "text_boxes";
                                           return isValidTextBoxesRequest(request, &reason);
@@ -316,12 +320,9 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
     Engine::ExtractionBudgets budgets;
 
     // Step 4: Populate initial page descriptors, geometries, annotations, and signatures.
-    // Links are resolved incrementally after the response is sent.
-    // The sweep visits every page exactly once, so suspend page caching:
-    // storing would only churn keeps and evictions for pages nobody views.
-    // The suspension lasts until the link walk completes (cancelPageLinks)
-    // or the document closes (closeDocument).
-    m_document->setPageCacheSuspended(true);
+    // Non-EPUB links are resolved by a subsequent sweep, so suspend their
+    // page cache until aggregation completes. EPUB caches only requested pages.
+    m_document->setPageCacheSuspended(type != DocumentType::Epub);
     for (int page = 0; page < m_document->pageCount(); ++page) {
         auto details = m_document->pageDetails(page, &error, false, &budgets);
         if (!error.empty()) {
@@ -357,13 +358,15 @@ ResponseMessage CommandService::openFdResponse(std::uint64_t id,
                                  std::move(details.formFields) });
     }
 
-    m_pendingPageLinks = PendingPageLinks { linkGeneration, 0, 0, { }, std::move(budgets) };
     if (type == DocumentType::Epub) {
+        m_renderLinkCharged.assign(output.pages.size(), false);
         auto* epub = static_cast<Engine::EpubDocument*>(m_document.get());
         std::string acceleratorError;
         output.epubAccelerator = epub->exportAccelerator(&acceleratorError);
         if (!acceleratorError.empty())
             MU_LOG(warning, "Mu::Worker::Epub", "could not export EPUB accelerator: " + acceleratorError);
+    } else {
+        m_pendingPageLinks = PendingPageLinks { linkGeneration, 0, 0, { }, std::move(budgets) };
     }
     return success(id, std::move(output));
 }
@@ -482,6 +485,9 @@ void CommandService::closeDocument() noexcept
     // Closing is a document boundary. No password, opaque handle, deferred link,
     // OCR result, or frame pool may be reused by the next open.
     m_pendingPageLinks.reset();
+    m_renderLinkCharged.clear();
+    m_renderLinkBytes = 0;
+    m_renderLinkCount = 0;
     if (m_document) {
         // The open sweep suspends page caching until the link walk completes;
         // a close in between must resume it so no flag outlives its document.
@@ -672,14 +678,45 @@ ResponseMessage CommandService::renderResponse(const RequestMessage& request, co
     ++m_rendersSinceTrim;
     m_bytesSinceTrim += dataSize;
 
-    return success(request.id,
-                   RenderResponse { { transferId,
-                                      lease.slotId,
-                                      lease.leaseId,
-                                      static_cast<std::int32_t>(rw),
-                                      static_cast<std::int32_t>(rh),
-                                      static_cast<std::int32_t>(outputStride),
-                                      1 } });
+    auto response = success(request.id,
+                            RenderResponse { { transferId,
+                                               lease.slotId,
+                                               lease.leaseId,
+                                               static_cast<std::int32_t>(rw),
+                                               static_cast<std::int32_t>(rh),
+                                               static_cast<std::int32_t>(outputStride),
+                                               1 },
+                                             std::nullopt });
+    if (render.includeLinks && m_document->type() == DocumentType::Epub) {
+        auto& metadata = std::get<RenderResponse>(response.payload).links;
+        metadata = Model::RenderLinks { m_linkGeneration, { }, { } };
+        if (render.generation != m_linkGeneration) {
+            metadata->error = "obsolete document generation";
+        } else {
+            Engine::ExtractionBudgets budgets;
+            // Leave room for the control envelope and frame, independently of image size.
+            budgets.links.remainingBytes =
+                std::min<std::size_t>(Limit::MaxAggregateMetadataBytes, Limit::MaxControlMessageBytes / 2);
+            const auto initialBytes = budgets.links.remainingBytes;
+            auto* epub = static_cast<Engine::EpubDocument*>(m_document.get());
+            metadata->links = epub->extractLinkUris(render.page, &metadata->error, &budgets);
+            const auto bytes = initialBytes - budgets.links.remainingBytes;
+            auto charged = m_renderLinkCharged.at(static_cast<std::size_t>(render.page));
+            if (metadata->error.empty() && !charged) {
+                if (bytes > Limit::MaxAggregateMetadataBytes - m_renderLinkBytes
+                    || metadata->links.size() > MaxOpenLinks - m_renderLinkCount) {
+                    metadata->error = "resource limit: document links exceeded";
+                } else {
+                    charged = true; // Empty pages are charged once as well.
+                    m_renderLinkBytes += bytes;
+                    m_renderLinkCount += metadata->links.size();
+                }
+            }
+            if (!metadata->error.empty())
+                metadata->links.clear();
+        }
+    }
+    return response;
 }
 
 ResponseMessage CommandService::releaseFrameSlotResponse(const RequestMessage& request,
@@ -1049,9 +1086,10 @@ std::optional<PageLinksNotification> CommandService::processPageLinks()
 
 void CommandService::cancelPageLinks() noexcept
 {
+    if (!m_pendingPageLinks)
+        return;
     m_pendingPageLinks.reset();
-    // Link destinations are cached only while constructing this aggregate. Keeping
-    // them after cancellation or delivery would retain document-specific metadata.
+    // Non-EPUB aggregation no longer needs its temporary destination cache.
     if (m_document) {
         // The link walk is the tail of the load phase, which suspends page
         // caching in openFdResponse; its completion re-arms the cache.
@@ -1274,6 +1312,18 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
             [&](const SignRequest& payload) {
                 return dispatchWithFd(
                     "sign", payload.file.transferId, [&](int fd) { return signFdResponse(request, payload, fd); });
+            },
+            [&](const Model::ResolveLinkRequest& payload) {
+                if (!hasOpenDocument())
+                    return failure(request.id, ErrorCode::NotOpen, "resolve-link", "no document is open");
+                if (payload.generation != m_linkGeneration)
+                    return failure(
+                        request.id, ErrorCode::InvalidRequest, "resolve-link", "obsolete document generation");
+                auto target = m_document->resolveLink(payload.uri, nullptr);
+                // A missing anchor is a normal unresolved outcome, never page zero.
+                if (target.external)
+                    target = { };
+                return success(request.id, Model::ResolveLinkResponse { std::move(target) });
             },
             [&](const RenderRequest& payload) { return renderResponse(request, payload); },
             [&](const ReleaseFrameSlotRequest& payload) { return releaseFrameSlotResponse(request, payload); },

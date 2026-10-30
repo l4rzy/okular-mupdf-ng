@@ -23,6 +23,7 @@ class PreviewGotoAction final : public Okular::GotoAction {
 public:
     PreviewGotoAction(const Model::Viewport& destination, LinkPreview* previews, int sourcePage);
 
+    PreviewGotoAction(const QString& uri, LinkPreview* previews, int sourcePage);
     QString actionTip() const override;
 
 private:

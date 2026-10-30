@@ -3,6 +3,8 @@
 
 #include "engine/ocr/jobs.hpp"
 #include "runtime/memory_pressure.hpp"
+#include "runtime/worker_server.hpp"
+#include "shared/protocol/zpp_codec.hpp"
 #include "shared/transport/poll.hpp"
 #include "sys/sys.hpp"
 
@@ -35,10 +37,62 @@ namespace {
 
 } // namespace
 
+namespace Mu::Worker::Runtime {
+
 class TestWorkerNativeRuntime : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void oversizedResponse_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::newRow("normal-render") << 0;
+        QTest::newRow("oversized-optional-links") << 1;
+        QTest::newRow("oversized-required-payload") << 2;
+    }
+
+    void oversizedResponse()
+    {
+        int sockets[2];
+        QCOMPARE(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sockets), 0);
+        WorkerServer server({ }, nullptr, { }, -1, { });
+        server.m_client = std::make_unique<IPC::CtrlChannel>(sockets[0]);
+        IPC::CtrlChannel peer(sockets[1]);
+        Model::RenderResponse rendered { { 13, 2, 5, 100, 100, 400, Model::PixelFormatRgba8888 }, std::nullopt };
+        Model::ResponseMessage response { 7, rendered, std::nullopt };
+        QFETCH(int, kind);
+        if (kind == 1) {
+            auto& metadata = std::get<Model::RenderResponse>(response.payload).links.emplace();
+            metadata.generation = 9;
+            metadata.links.emplace_back().target.uri.assign(Limit::MaxControlMessageBytes, 'x');
+        } else if (kind == 2) {
+            auto& files = response.payload.emplace<Model::EmbeddedFilesResponse>().files;
+            files.emplace_back().data.resize(Limit::MaxControlMessageBytes);
+        }
+        std::string error;
+        QVERIFY2(server.writeResponse(response, &error), error.c_str());
+        QVERIFY(error.empty());
+        Model::ResponseMessage received;
+        QVERIFY2(IPC::ZppCodec::readMessage(peer, &received, 1000, &error), error.c_str());
+        QCOMPARE(received.id, response.id);
+        if (kind == 2) {
+            QVERIFY(received.error);
+            QCOMPARE(received.error->code, Model::ErrorCode::ResourceLimit);
+            return;
+        }
+        QVERIFY(!received.error);
+        const auto& image = std::get<Model::RenderResponse>(received.payload);
+        QCOMPARE(image.frame.transferId, rendered.frame.transferId);
+        QCOMPARE(image.frame.slotId, rendered.frame.slotId);
+        QCOMPARE(image.frame.leaseId, rendered.frame.leaseId);
+        QCOMPARE(image.links.has_value(), kind == 1);
+        if (image.links) {
+            QCOMPARE(image.links->generation, 9u);
+            QVERIFY(image.links->links.empty());
+            QVERIFY(image.links->error.starts_with("resource limit:"));
+        }
+    }
 
     void eventFdDispatchesPollCallbacks()
     {
@@ -375,9 +429,11 @@ private slots:
     }
 };
 
+} // namespace Mu::Worker::Runtime
+
 int runTestWorkerNativeRuntime(int argc, char** argv)
 {
-    TestWorkerNativeRuntime test;
+    Mu::Worker::Runtime::TestWorkerNativeRuntime test;
     return QTest::qExec(&test, argc, argv);
 }
 

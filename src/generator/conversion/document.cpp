@@ -99,7 +99,10 @@ Okular::ObjectRect* objectRect(const Model::Link& link, LinkPreview* previews, i
     std::unique_ptr<Okular::Action> action;
     if (link.target.external && isAllowedExternalUri(QString::fromStdString(link.target.uri))) {
         action = std::make_unique<Okular::BrowseAction>(QUrl(QString::fromStdString(link.target.uri)));
-    } else if (link.target.valid && link.target.viewport.page >= 0) {
+    } else if (!link.target.external && !link.target.valid && !link.target.uri.empty()) {
+        action =
+            std::make_unique<Proxy::PreviewGotoAction>(QString::fromStdString(link.target.uri), previews, sourcePage);
+    } else if (!link.target.external && link.target.valid && link.target.viewport.page >= 0) {
         action = std::make_unique<Proxy::PreviewGotoAction>(link.target.viewport, previews, sourcePage);
     }
     if (!action)

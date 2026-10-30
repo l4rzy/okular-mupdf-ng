@@ -327,7 +327,9 @@ private slots:
         QCOMPARE(std::get<Model::OcrResponse>(decoded.payload).result.boxes.front().text, std::string("ok"));
 
         const Model::ResponseMessage renderResponse {
-            8, Model::RenderResponse { { 13, 2, 5, 320, 240, 1280, Model::PixelFormatRgba8888 } }, std::nullopt
+            8,
+            Model::RenderResponse { { 13, 2, 5, 320, 240, 1280, Model::PixelFormatRgba8888 }, std::nullopt },
+            std::nullopt
         };
         const auto renderBytes = ::Mu::IPC::ZppCodec::encode(renderResponse, &error);
         QVERIFY(renderBytes);
@@ -371,6 +373,87 @@ private slots:
         QCOMPARE(output.pages.size(), size_t(1));
         QCOMPARE(output.pages.front().geometry.duration, 1.5);
         QCOMPARE(output.epubAccelerator, std::vector<std::uint8_t>({ 1, 2 }));
+    }
+
+    void renderLinksRoundTrip_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::newRow("not-requested") << 0;
+        QTest::newRow("empty") << 1;
+        QTest::newRow("named") << 2;
+        QTest::newRow("failed") << 3;
+        QTest::newRow("nonfinite") << 4;
+        QTest::newRow("oversized-uri") << 5;
+    }
+
+    void renderLinksRoundTrip()
+    {
+        QFETCH(int, kind);
+        using namespace Mu;
+        Model::RenderRequest request { 0, 100, 100, std::nullopt, 0, kind != 0, 12 };
+        const auto requestBytes = IPC::ZppCodec::encode(Model::RequestMessage { 1, request });
+        QVERIFY(requestBytes);
+        Model::RequestMessage requestDecoded;
+        QVERIFY(IPC::ZppCodec::decode(*requestBytes, &requestDecoded));
+        const auto& received = std::get<Model::RenderRequest>(requestDecoded.payload);
+        QCOMPARE(received.includeLinks, kind != 0);
+        QCOMPARE(received.generation, 12u);
+        request.generation = 0;
+        QCOMPARE(Model::isValidRenderRequest(request), kind == 0);
+        Model::RenderResponse render { { }, std::nullopt };
+        if (kind) {
+            render.links = Model::RenderLinks { 12, { }, { } };
+            if (kind == 3)
+                render.links->error = "resource limit: page links";
+            if (kind == 2 || kind >= 4) {
+                Model::Link link;
+                link.target.uri = "chapter.xhtml#anchor";
+                if (kind == 4)
+                    link.left = std::numeric_limits<double>::quiet_NaN();
+                if (kind == 5)
+                    link.target.uri.assign(65537, 'x');
+                render.links->links.push_back(link);
+            }
+        }
+        const auto bytes = IPC::ZppCodec::encode(Model::ResponseMessage { 1, render, std::nullopt });
+        QVERIFY(bytes);
+        Model::ResponseMessage decoded;
+        QVERIFY(IPC::ZppCodec::decode(*bytes, &decoded));
+        const auto& result = std::get<Model::RenderResponse>(decoded.payload);
+        QCOMPARE(result.links.has_value(), kind != 0);
+        if (kind) {
+            QCOMPARE(Model::isValidRenderLinks(*result.links), kind < 4);
+            QCOMPARE(result.links->generation, 12u);
+            QCOMPARE(result.links->error, render.links->error);
+        }
+    }
+
+    void resolveLinkValidation_data()
+    {
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<quint64>("generation");
+        QTest::addColumn<bool>("valid");
+        QTest::newRow("anchor") << QStringLiteral("chapter.xhtml#anchor") << quint64(1) << true;
+        QTest::newRow("empty") << QString() << quint64(1) << false;
+        QTest::newRow("generation") << QStringLiteral("chapter.xhtml") << quint64(0) << false;
+        QTest::newRow("long") << QString(65537, 'x') << quint64(1) << false;
+        QTest::newRow("nul") << QString(QChar(0)) << quint64(1) << false;
+    }
+
+    void resolveLinkValidation()
+    {
+        QFETCH(QString, uri);
+        QFETCH(quint64, generation);
+        QFETCH(bool, valid);
+        using namespace Mu;
+        Model::ResolveLinkRequest target { uri.toStdString(), generation };
+        QCOMPARE(Model::isValidResolveLinkRequest(target), valid);
+        const auto bytes = IPC::ZppCodec::encode(Model::RequestMessage { 1, target });
+        QVERIFY(bytes);
+        Model::RequestMessage decoded;
+        QVERIFY(IPC::ZppCodec::decode(*bytes, &decoded));
+        QCOMPARE(std::get<Model::ResolveLinkRequest>(decoded.payload).uri, target.uri);
+        QCOMPARE(std::get<Model::ResolveLinkRequest>(decoded.payload).generation, generation);
     }
 
     void pageLinksNotificationRoundTrip()

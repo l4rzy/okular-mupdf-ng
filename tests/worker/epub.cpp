@@ -1024,6 +1024,219 @@ private slots:
         QVERIFY(details.links.empty());
     }
 
+    void testUriExtraction_data()
+    {
+        QTest::addColumn<QString>("name");
+        for (const auto* name : { "sample.epub", "linked.epub", "styled-linked.epub" })
+            QTest::newRow(name) << QString::fromLatin1(name);
+    }
+
+    void testUriExtraction()
+    {
+        QFETCH(QString, name);
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/") + name);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), name.toStdString(), &error), error.c_str());
+        document.discardResolvedLinkCache();
+        for (int page = 0; page < document.pageCount(); ++page) {
+            const auto cached = document.resolvedLinkCacheSize();
+            const auto uris = document.extractLinkUris(page, &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(document.resolvedLinkCacheSize(), cached);
+            const auto eager = document.extractLinks(page, &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(uris.size(), eager.size());
+            for (std::size_t i = 0; i < uris.size(); ++i) {
+                QCOMPARE(uris[i].left, eager[i].left);
+                QCOMPARE(uris[i].top, eager[i].top);
+                QCOMPARE(uris[i].right, eager[i].right);
+                QCOMPARE(uris[i].bottom, eager[i].bottom);
+                QCOMPARE(uris[i].target.external, eager[i].target.external);
+                if (!uris[i].target.external) {
+                    QVERIFY(!uris[i].target.valid);
+                    QVERIFY(!uris[i].target.uri.empty());
+                    const auto target = document.resolveLink(uris[i].target.uri, &error);
+                    QCOMPARE(target.valid, eager[i].target.valid);
+                    QCOMPARE(target.viewport.page, eager[i].target.viewport.page);
+                    const auto size = document.resolvedLinkCacheSize();
+                    const auto repeated = document.resolveLink(uris[i].target.uri, nullptr);
+                    QCOMPARE(repeated.valid, target.valid);
+                    QCOMPARE(document.resolvedLinkCacheSize(), size);
+                }
+            }
+        }
+        document.close();
+        QCOMPARE(document.resolvedLinkCacheSize(), 0u);
+    }
+
+    void testOnDemandService()
+    {
+        using namespace ::Mu::Model;
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Runtime::CommandService service({ });
+        const auto opened = service.openFdResponse(1, ::dup(file.handle()), "linked.epub", { }, DocumentType::Epub);
+        QVERIFY(!opened.error);
+        const auto generation = std::get<OpenResponse>(opened.payload).linkGeneration;
+        QVERIFY(!service.hasPendingPageLinks());
+        QVERIFY(!service.processPageLinks());
+        const auto* epub = static_cast<const ::Mu::Worker::Engine::EpubDocument*>(service.document());
+        QVERIFY(epub);
+        std::string error;
+        const auto uris = epub->extractLinkUris(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        const auto found =
+            std::find_if(uris.begin(), uris.end(), [](const auto& link) { return !link.target.external; });
+        QVERIFY(found != uris.end());
+        const auto resolved = service.dispatch({ 2, ResolveLinkRequest { found->target.uri, generation } });
+        QVERIFY(!resolved.error);
+        QVERIFY(std::get<ResolveLinkResponse>(resolved.payload).target.valid);
+        const auto obsolete = service.dispatch({ 3, ResolveLinkRequest { found->target.uri, generation + 1 } });
+        QVERIFY(obsolete.error);
+        const auto broken = service.dispatch({ 4, ResolveLinkRequest { "nonexistent.html", generation } });
+        QVERIFY(!broken.error);
+        QVERIFY(!std::get<ResolveLinkResponse>(broken.payload).target.valid);
+        const auto cacheSize = epub->resolvedLinkCacheSize();
+        service.cancelPageLinks(); // No pending sweep: leave on-demand destinations cached.
+        QCOMPARE(epub->resolvedLinkCacheSize(), cacheSize);
+        const auto repeated = service.dispatch({ 5, ResolveLinkRequest { "nonexistent.html", generation } });
+        QVERIFY(!repeated.error);
+        QCOMPARE(epub->resolvedLinkCacheSize(), cacheSize);
+        const auto replacement =
+            service.openFdResponse(6, ::dup(file.handle()), "linked.epub", { }, DocumentType::Epub);
+        QVERIFY(!replacement.error);
+        const auto old = service.dispatch({ 7, ResolveLinkRequest { found->target.uri, generation } });
+        QVERIFY(old.error);
+        const auto* replaced = static_cast<const ::Mu::Worker::Engine::EpubDocument*>(service.document());
+        QCOMPARE(replaced->resolvedLinkCacheSize(), 0u);
+        QVERIFY(!service.hasPendingPageLinks());
+    }
+
+    void testRenderLinkDelivery_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<bool>("tile");
+        QTest::addColumn<bool>("include");
+        QTest::addColumn<bool>("stale");
+        QTest::newRow("full") << QStringLiteral("linked.epub") << false << true << false;
+        QTest::newRow("tile") << QStringLiteral("linked.epub") << true << true << false;
+        QTest::newRow("empty") << QStringLiteral("sample.epub") << false << true << false;
+        QTest::newRow("not-requested") << QStringLiteral("linked.epub") << false << false << false;
+        QTest::newRow("obsolete") << QStringLiteral("linked.epub") << false << true << true;
+    }
+
+    void testRenderLinkDelivery()
+    {
+        QFETCH(QString, name);
+        QFETCH(bool, tile);
+        QFETCH(bool, include);
+        QFETCH(bool, stale);
+        using namespace ::Mu::Model;
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        std::string error;
+        ::Mu::IPC::FdChannel receiver;
+        const auto path = directory.filePath(QStringLiteral("render.sock")).toStdString();
+        QVERIFY(receiver.listen(path, &error));
+        ::Mu::IPC::FdChannel sender;
+        QVERIFY(sender.connect(path, &error));
+        QVERIFY(receiver.accept(&error));
+        ::Mu::Worker::Runtime::CommandService service({ .sandbox = { }, .fdChannel = &receiver });
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/") + name);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto opened =
+            service.openFdResponse(1, ::dup(file.handle()), name.toStdString(), { }, DocumentType::Epub);
+        QVERIFY(!opened.error);
+        const auto generation = std::get<OpenResponse>(opened.payload).linkGeneration;
+        const auto* epub = static_cast<const ::Mu::Worker::Engine::EpubDocument*>(service.document());
+        QCOMPARE(epub->resolvedLinkCacheSize(), 0u);
+        RenderRequest request { 0, 600, 850, std::nullopt };
+        request.includeLinks = include;
+        request.generation = generation + (stale ? 1 : 0);
+        if (tile)
+            request.tile = RenderTile { 0, 0, 100, 100 };
+        for (int repeat = 0; repeat < 3; ++repeat) {
+            const auto response = service.dispatch({ static_cast<std::uint64_t>(2 + repeat * 2), request });
+            QVERIFY(!response.error); // Optional metadata never makes the frame fail.
+            const auto& rendered = std::get<RenderResponse>(response.payload);
+            QCOMPARE(rendered.links.has_value(), include);
+            QCOMPARE(epub->resolvedLinkCacheSize(), 0u); // Rendering did not resolve destinations.
+            QVERIFY(epub->isPageCached(0));
+            if (include) {
+                QCOMPARE(rendered.links->generation, generation);
+                QCOMPARE(rendered.links->error.empty(), !stale);
+                QCOMPARE(rendered.links->links.size(), stale || name == QStringLiteral("sample.epub") ? 0u : 2u);
+                if (!stale && !rendered.links->links.empty()) {
+                    const auto expected = epub->extractLinkUris(0, &error);
+                    QCOMPARE(rendered.links->links.front().left, expected.front().left);
+                    QCOMPARE(rendered.links->links.front().right, expected.front().right);
+                    QCOMPARE(rendered.links->links.front().target.uri, expected.front().target.uri);
+                }
+            }
+            if (rendered.frame.transferId) {
+                ::Mu::Worker::Sys::FileDescriptor frame(sender.receive(rendered.frame.transferId, &error));
+                QVERIFY(frame);
+            }
+            const auto released =
+                service.dispatch({ static_cast<std::uint64_t>(3 + repeat * 2),
+                                   ReleaseFrameSlotRequest { rendered.frame.slotId, rendered.frame.leaseId } });
+            QVERIFY(!released.error);
+        }
+        QVERIFY(!service.hasPendingPageLinks());
+    }
+
+    void testDestinationCacheIsBounded()
+    {
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument epub;
+        std::string error;
+        QVERIFY(epub.openFd(::dup(file.handle()), "linked.epub", &error));
+        for (std::size_t i = 0; i <= ::Mu::Worker::Engine::Constant::MaxResolvedLinkCacheEntries; ++i) {
+            const auto missing = epub.resolveLink("missing-" + std::to_string(i) + ".html", &error);
+            QVERIFY(!missing.valid);
+            QVERIFY2(error.empty(), error.c_str());
+        }
+        QCOMPARE(epub.resolvedLinkCacheSize(), ::Mu::Worker::Engine::Constant::MaxResolvedLinkCacheEntries);
+        // A saturated cache must still resolve a new valid destination.
+        const auto uris = epub.extractLinkUris(0, &error);
+        const auto found =
+            std::find_if(uris.begin(), uris.end(), [](const auto& link) { return !link.target.external; });
+        QVERIFY(found != uris.end());
+        QVERIFY(epub.resolveLink(found->target.uri, &error).valid);
+        QCOMPARE(epub.resolvedLinkCacheSize(), ::Mu::Worker::Engine::Constant::MaxResolvedLinkCacheEntries);
+        epub.discardResolvedLinkCache();
+        QCOMPARE(epub.resolvedLinkCacheSize(), 0u);
+        QVERIFY(epub.resolveLink(found->target.uri, &error).valid);
+        QCOMPARE(epub.resolvedLinkCacheSize(), 1u);
+    }
+
+    void testUriBudget_data()
+    {
+        QTest::addColumn<int>("bytes");
+        QTest::newRow("none") << 0;
+        QTest::newRow("one") << 1;
+        QTest::newRow("sufficient") << 4096;
+    }
+
+    void testUriBudget()
+    {
+        QFETCH(int, bytes);
+        QFile file(QStringLiteral(TEST_EPUB_DIR "/linked.epub"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument epub;
+        std::string error;
+        QVERIFY(epub.openFd(::dup(file.handle()), "linked.epub", &error));
+        ::Mu::Worker::Engine::ExtractionBudgets budgets;
+        budgets.links.remainingBytes = static_cast<std::size_t>(bytes);
+        const auto links = epub.extractLinkUris(0, &error, &budgets);
+        QCOMPARE(error.empty(), bytes == 4096);
+        QCOMPARE(links.empty(), bytes != 4096);
+        QCOMPARE(epub.resolvedLinkCacheSize(), 0u);
+    }
+
     void testResolveLinkTable_data()
     {
         QTest::addColumn<QString>("uri");
@@ -1806,7 +2019,10 @@ private slots:
         ::Mu::Worker::Runtime::CommandService service({ .sandbox = { }, .fdChannel = &receiver });
         QFile file(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
         QVERIFY(file.open(QIODevice::ReadOnly));
-        QVERIFY(service.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error));
+        const auto opened =
+            service.openFdResponse(99, ::dup(file.handle()), "sample.epub", { }, ::Mu::Model::DocumentType::Epub);
+        QVERIFY(!opened.error);
+        const auto generation = std::get<::Mu::Model::OpenResponse>(opened.payload).linkGeneration;
         ::Mu::Worker::Sys::FileDescriptor cookie(::memfd_create("test-cookie", MFD_CLOEXEC | MFD_ALLOW_SEALING));
         QVERIFY(cookie);
         QCOMPARE(::ftruncate(cookie.get(), size), 0);
@@ -1822,10 +2038,14 @@ private slots:
         QVERIFY(std::holds_alternative<std::monostate>(response.payload));
         pollfd pending { sender.fd(), POLLIN, 0 };
         QCOMPARE(::poll(&pending, 1, 0), 0); // No partial frame descriptor.
-        const auto next = service.dispatch({ 101, ::Mu::Model::RenderRequest { 0, 100, 100, std::nullopt } });
+        const auto next =
+            service.dispatch({ 101, ::Mu::Model::RenderRequest { 0, 100, 100, std::nullopt, 0, true, generation } });
         QVERIFY(!next.error);
         const auto* rendered = std::get_if<::Mu::Model::RenderResponse>(&next.payload);
         QVERIFY(rendered);
+        QVERIFY(rendered->links);
+        QVERIFY(rendered->links->error.empty());
+        QVERIFY(rendered->links->links.empty());
         ::Mu::Worker::Sys::FileDescriptor frame(sender.receive(rendered->frame.transferId, &error));
         QVERIFY(frame);
     }

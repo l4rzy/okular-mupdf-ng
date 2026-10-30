@@ -15,7 +15,7 @@
 
 namespace Mu::IPC {
 
-inline constexpr int PROTOCOL_VERSION = 14;
+inline constexpr int PROTOCOL_VERSION = 15;
 
 // A separate memfd per render holds MuPDF's cookie. The host writes only the
 // first signed 32-bit word (abort); the worker owns the remaining

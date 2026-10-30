@@ -244,7 +244,9 @@ Main::Main(QObject* parent, const QVariantList& args)
         &m_worker,
         &Plugin::WorkerClient::pageLinksReady,
         this,
-        [this](quint64, std::vector<Model::PageLinks> pages, bool resourceLimited, QString error) {
+        [this](quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, QString error) {
+            if (epoch != m_worker.documentEpoch())
+                return;
             for (const auto& pageLinks : pages) {
                 if (pageLinks.page >= 0 && pageLinks.page < m_okularPages.size())
                     m_okularPages.at(pageLinks.page)
@@ -294,6 +296,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         MU_LOG(warning, "Mu::Generator::Main", std::string("OCR failed for page ") + std::to_string(page + 1));
         Q_EMIT warning(i18n("OCR failed for page %1", page + 1), WarningMs);
     });
+    m_linkPreview.setResolver([this](const QString& uri) { return m_worker.resolveLink(uri); });
     MU_LOG(debug, "Mu::Generator::Main", "Scheduling cache vacuum");
     scheduleCacheVacuum();
 }
@@ -638,6 +641,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
 
     loadLayers();
 
+    resetPageLinks();
     // Phase 5: publish the new page set to the generator.
     m_okularPages = pages;
     updatePagePlaceholder(m_settings.rendering.documentTheme);
@@ -889,10 +893,18 @@ Okular::Document::OpenResult Main::loadBlockedPlaceholderDocument(QVector<Okular
     return Okular::Document::OpenSuccess;
 }
 
+// Discard page installation state; worker epochs and layer revisions reject stale deliveries.
+void Main::resetPageLinks()
+{
+    QMutexLocker lock(&m_linkMutex);
+    m_installedLinkPages.clear();
+}
+
 // Must be called while userMutex() is held; drops cached UI objects derived
 // from the worker document.
 void Main::clearWorkerDerivedState()
 {
+    resetPageLinks();
     m_linkPreview.reset();
     m_synopsis.reset();
     m_layersModel.reset();
@@ -1079,6 +1091,7 @@ void Main::applyOcrResult(int page,
 
 bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 {
+    resetPageLinks();
     m_linkPreview.reset();
     if (m_okularPages.isEmpty() || (m_document.sourcePath.isEmpty() && m_document.sourceData.isEmpty()))
         return false;
@@ -1474,7 +1487,15 @@ QImage Main::image(Okular::PixmapRequest* request)
         // Cancellation is optional; discarding obsolete images remains mandatory.
         const std::function<bool()> cancellation =
             m_cancelObsoleteRenders.load() ? shouldAbort : std::function<bool()> { };
-        QImage img = m_worker.render(pageNum, request->width(), request->height(), tile, cancellation);
+        const auto workerEpoch = m_worker.documentEpoch();
+        bool includeLinks = false;
+        {
+            QMutexLocker lock(&m_linkMutex);
+            includeLinks = m_document.type == Model::DocumentType::Epub && !m_installedLinkPages.contains(pageNum);
+        }
+        Model::RenderLinks links;
+        QImage img = m_worker.render(
+            pageNum, request->width(), request->height(), tile, cancellation, includeLinks ? &links : nullptr);
         if (shouldAbort())
             return { };
         if (img.isNull()) {
@@ -1496,7 +1517,26 @@ QImage Main::image(Okular::PixmapRequest* request)
         const Okular::NormalizedRect renderedRegion =
             request->isTile() ? request->normalizedRect() : Okular::NormalizedRect(0, 0, 1, 1);
         m_annotationProxy.paintPendingSignature(img, pageNum, renderedRegion);
-        return shouldAbort() ? QImage { } : img;
+        if (shouldAbort())
+            return { };
+        if (includeLinks && links.generation && links.error.empty()) {
+            auto install = [this, request, pageNum, workerEpoch, revision, links = std::move(links.links)] {
+                QMutexLocker lock(&m_linkMutex);
+                if (workerEpoch != m_worker.documentEpoch() || revision != m_layerRevision.load()
+                    || request->shouldAbortRender() || m_installedLinkPages.contains(pageNum) || pageNum < 0
+                    || pageNum >= m_okularPages.size())
+                    return;
+                m_okularPages.at(pageNum)->setObjectRects(Conversion::objectRects(links, &m_linkPreview, pageNum));
+                m_installedLinkPages.insert(pageNum);
+            };
+            // Posted before Okular's generation-thread finished event. No GUI wait
+            // or userMutex is held across delivery. Synchronous renders install inline.
+            if (QThread::currentThread() == thread())
+                install();
+            else
+                QMetaObject::invokeMethod(this, std::move(install), Qt::QueuedConnection);
+        }
+        return img;
     }
     return { };
 }
@@ -1644,7 +1684,22 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
 // Okular Generator Func: returns generator-specific metadata.
 QVariant Main::metaData(const QString& key, const QVariant& option) const
 {
-    Q_UNUSED(option)
+    if (key == QLatin1String("NamedViewport") && workerReady() && !option.toString().isEmpty()) {
+        // Okular's public named-destination API is synchronous. Only this URI
+        // is resolved; speculative hover resolution uses the preview pool.
+        const auto epoch = m_worker.documentEpoch();
+        const auto target = m_worker.resolveLink(option.toString());
+        if (epoch == m_worker.documentEpoch() && target.valid && !target.external && target.viewport.page >= 0
+            && target.viewport.page < m_okularPages.size()) {
+#if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
+            return QVariant::fromValue(Conversion::viewportFromModel(target.viewport));
+#else
+            // Released Okular versions parse the serialized viewport string.
+            return Conversion::viewportFromModel(target.viewport).toString();
+#endif
+        }
+        return { };
+    }
 
     if (key == QLatin1String("DocumentTitle")) {
         return m_document.name;

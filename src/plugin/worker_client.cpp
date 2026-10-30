@@ -146,11 +146,28 @@ bool WorkerClient::close()
 // Page Rendering, Text Extraction & OCR
 // =============================================================================
 
-QImage
-WorkerClient::render(int page, int width, int height, const QRect& tile, const std::function<bool()>& shouldAbort)
+quint64 WorkerClient::documentEpoch() const noexcept
 {
+    return m_transport ? m_transport->documentEpoch() : 0;
+}
+
+Model::ResolvedLink WorkerClient::resolveLink(const QString& uri) const
+{
+    return sync([&](WorkerTransport* transport) { return transport->resolveLink(uri); });
+}
+
+QImage WorkerClient::render(int page,
+                            int width,
+                            int height,
+                            const QRect& tile,
+                            const std::function<bool()>& shouldAbort,
+                            Model::RenderLinks* links)
+{
+    if (links)
+        *links = { };
     if (!shouldAbort)
-        return sync([&](WorkerTransport* transport) { return transport->render(page, width, height, tile); });
+        return sync(
+            [&](WorkerTransport* transport) { return transport->render(page, width, height, tile, -1, links); });
     if (shouldAbort() || !m_transport)
         return { };
 
@@ -160,6 +177,7 @@ WorkerClient::render(int page, int width, int height, const QRect& tile, const s
         bool cancelled = false;
         bool done = false;
         QImage image;
+        Model::RenderLinks links;
         int cancellationFd = -1;
         void* cookie = MAP_FAILED;
 
@@ -189,7 +207,7 @@ WorkerClient::render(int page, int width, int height, const QRect& tile, const s
     // reference a PixmapRequest that is destroyed as soon as this call returns.
     if (!QMetaObject::invokeMethod(
             m_transport,
-            [transport = m_transport, state, page, width, height, tile] {
+            [transport = m_transport, state, page, width, height, tile, includeLinks = links != nullptr] {
                 {
                     const std::lock_guard lock(state->mutex);
                     if (state->cancelled)
@@ -197,7 +215,8 @@ WorkerClient::render(int page, int width, int height, const QRect& tile, const s
                 }
                 // Once dispatched, finish the exchange, including receiving
                 // frame descriptors. Discarded images use normal lease cleanup.
-                QImage image = transport->render(page, width, height, tile, state->cancellationFd);
+                QImage image = transport->render(
+                    page, width, height, tile, state->cancellationFd, includeLinks ? &state->links : nullptr);
                 {
                     const std::lock_guard lock(state->mutex);
                     if (!state->cancelled)
@@ -222,8 +241,11 @@ WorkerClient::render(int page, int width, int height, const QRect& tile, const s
                 *static_cast<volatile std::int32_t*>(state->cookie) = 1;
             return { };
         }
-        if (state->done)
+        if (state->done) {
+            if (links)
+                *links = std::move(state->links);
             return std::move(state->image);
+        }
         // Completion wakes immediately; poll only the caller-owned abort flag.
         state->completed.wait_for(lock, std::chrono::milliseconds(10));
     }

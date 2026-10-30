@@ -281,7 +281,8 @@ struct Viewport {
     std::uint8_t coordinateMask = 0;
 };
 
-/// Link target that is either external or a document viewport.
+/// External URI, resolved viewport, or named internal target.
+/// A nonempty URI with external=false and valid=false is an unresolved internal target.
 struct ResolvedLink {
     /// True when uri should be opened outside the current document.
     bool external = false;
@@ -293,7 +294,7 @@ struct ResolvedLink {
     bool valid = false;
 };
 
-/// A normalized clickable page rectangle and its resolved destination.
+/// A normalized clickable page rectangle and its target.
 struct Link {
     double left = 0, top = 0, right = 0, bottom = 0;
     ResolvedLink target;
@@ -840,6 +841,18 @@ struct RenderRequest {
     std::int32_t page = -1, width = 0, height = 0;
     std::optional<RenderTile> tile;
     std::uint64_t cancelTransferId = 0;
+    bool includeLinks = false;
+    std::uint64_t generation = 0;
+};
+
+/// Resolve one named destination in the current document/layout.
+struct ResolveLinkRequest {
+    std::string uri;
+    std::uint64_t generation = 0;
+};
+
+struct ResolveLinkResponse {
+    ResolvedLink target;
 };
 
 /// Releases a pooled render slot after the final QImage copy is destroyed.
@@ -1046,7 +1059,8 @@ using RequestPayload = std::variant<PingRequest,
                                     ExportPdfAsyncRequest,
                                     FormButtonClickRequest,
                                     LayersRequest,
-                                    SetLayerRequest>;
+                                    SetLayerRequest,
+                                    ResolveLinkRequest>;
 
 /// Correlated request envelope sent over the control channel.
 struct RequestMessage {
@@ -1073,9 +1087,17 @@ struct PageLinksNotification {
     std::string error;
 };
 
+/// Optional render metadata: absent means not requested; error means extraction failed.
+struct RenderLinks {
+    std::uint64_t generation = 0;
+    std::vector<Link> links;
+    std::string error;
+};
+
 /// Render response carrying the shared-memory frame descriptor.
 struct RenderResponse {
     RenderFrame frame;
+    std::optional<RenderLinks> links;
 };
 
 /// Identifier of an asynchronous worker job.
@@ -1148,7 +1170,8 @@ using ResponsePayload = std::variant<std::monostate,
                                      PingResponse,
                                      SignResponse,
                                      FormUpdateResponse,
-                                     LayersResponse>;
+                                     LayersResponse,
+                                     ResolveLinkResponse>;
 
 struct ResponseMessage {
     /// Identifier matching the request that produced this response.

@@ -318,6 +318,7 @@ bool WorkerTransport::start(const QString& binaryPath,
 
 void WorkerTransport::clearDocumentState()
 {
+    ++m_documentEpoch;
     if (!m_tempPath.isEmpty()) {
         QFile::remove(m_tempPath);
         m_tempPath.clear();
@@ -557,11 +558,23 @@ bool WorkerTransport::close()
 // Page Rendering & Text Extraction
 // =============================================================================
 
-QImage WorkerTransport::render(int page, int width, int height, const QRect& rect, int cancellationFd)
+Model::ResolvedLink WorkerTransport::resolveLink(const QString& uri)
+{
+    auto response = call(Model::ResolveLinkRequest { uri.toStdString(), m_linkGeneration });
+    if (response && !response->error)
+        if (const auto* resolved = std::get_if<Model::ResolveLinkResponse>(&response->payload))
+            return resolved->target;
+    return { };
+}
+
+QImage WorkerTransport::render(
+    int page, int width, int height, const QRect& rect, int cancellationFd, Model::RenderLinks* links)
 {
     // Phase 1: build the render request, folding the tile geometry into the
     // projection when the caller asks for a partial viewport.
     RenderRequest request { page, width, height, std::nullopt };
+    request.includeLinks = links != nullptr;
+    request.generation = m_linkGeneration;
     if (!rect.isEmpty())
         request.tile = RenderTile { rect.x(), rect.y(), rect.width(), rect.height() };
     if (cancellationFd >= 0) {
@@ -582,6 +595,13 @@ QImage WorkerTransport::render(int page, int width, int height, const QRect& rec
     auto* render = std::get_if<RenderResponse>(&response->payload);
     if (!render)
         return { };
+
+    if (links && render->links && render->links->generation == m_linkGeneration) {
+        if (Model::isValidRenderLinks(*render->links))
+            *links = std::move(*render->links);
+        else
+            *links = Model::RenderLinks { m_linkGeneration, { }, "invalid render link metadata" };
+    }
 
     // Phase 3: shared frame-construction lambdas, used by both delivery paths
     // below. validFrame verifies the shared-memory header before pixels are
@@ -1161,6 +1181,8 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
     // Phase 3: build and write the request. The id comes from the monotonic
     // counter used to correlate the upcoming response; the write itself is
     // bounded by the control-write timeout.
+    if (std::holds_alternative<OpenRequest>(payload))
+        ++m_documentEpoch;
     const auto id = m_nextId++;
     RequestMessage request { id, std::move(payload) };
     if (const auto* sign = std::get_if<SignRequest>(&request.payload))
@@ -1273,7 +1295,7 @@ bool WorkerTransport::handleNotification(const NotificationMessage& notification
     if (auto* links = std::get_if<PageLinksNotification>(&notification.payload)) {
         if (links->generation == m_linkGeneration)
             Q_EMIT pageLinksReady(
-                links->generation, links->pages, links->resourceLimited, QString::fromStdString(links->error));
+                documentEpoch(), links->pages, links->resourceLimited, QString::fromStdString(links->error));
         return true;
     }
     if (auto* sign = std::get_if<SignInput>(&notification.payload)) {

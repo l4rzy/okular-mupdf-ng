@@ -248,8 +248,40 @@ bool isValidOcrDpi(float dpi) noexcept
     return dpi >= static_cast<float>(Limit::MinDpi) && dpi <= static_cast<float>(Limit::MaxDpi);
 }
 
+bool isValidRenderLinks(const RenderLinks& metadata) noexcept
+{
+    if (!metadata.generation || metadata.links.size() > Limit::MaxPageLinks
+        || metadata.error.size() > Limit::MaxLinkStringBytes)
+        return false;
+    std::size_t bytes = 0;
+    for (const auto& link : metadata.links) {
+        if (!std::isfinite(link.left) || !std::isfinite(link.top) || !std::isfinite(link.right)
+            || !std::isfinite(link.bottom) || link.right < link.left || link.bottom < link.top
+            || link.target.uri.size() > Limit::MaxLinkStringBytes || link.target.uri.find('\0') != std::string::npos)
+            return false;
+        const auto charge = sizeof(Link) + link.target.uri.size();
+        if (charge > Limit::MaxAggregateMetadataBytes - bytes)
+            return false;
+        bytes += charge;
+    }
+    return true;
+}
+
+bool isValidResolveLinkRequest(const ResolveLinkRequest& request, std::string_view* reason) noexcept
+{
+    if (request.generation == 0 || request.uri.empty() || request.uri.size() > Limit::MaxLinkStringBytes
+        || request.uri.find('\0') != std::string::npos) {
+        if (reason)
+            *reason = "invalid named destination";
+        return false;
+    }
+    return true;
+}
+
 bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason) noexcept
 {
+    if (request.includeLinks && request.generation == 0)
+        return failWith("render link generation is zero", reason);
     if (request.page < 0)
         return failWith("render page index is negative", reason);
     // Tiled canvases are fitted to the engine limit before rendering. Leave

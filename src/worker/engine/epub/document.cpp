@@ -256,7 +256,6 @@ bool EpubDocument::openFdWithAccelerator(int fd,
         return fail(error, fz_caught_message(m_context));
     }
     m_displayName = std::move(displayName);
-    m_resolvedLinkCacheEnabled = true;
     return true;
 }
 
@@ -340,18 +339,15 @@ void EpubDocument::close() noexcept
     m_displayName.clear();
     m_resolvedLinks.clear();
     m_resolvedLinkKeyBytes = 0;
-    m_resolvedLinkCacheEnabled = false;
 
     trimProcessMemory(m_context);
 }
 
 void EpubDocument::discardResolvedLinkCache() noexcept
 {
-    // This cache is scoped to one incremental link aggregation and must not keep
-    // resolved destinations or URI-key storage alive after that operation ends.
+    // Invalidate destinations when the document/layout changes.
     m_resolvedLinks.clear();
     m_resolvedLinkKeyBytes = 0;
-    m_resolvedLinkCacheEnabled = false;
 }
 
 void EpubDocument::trimMemoryForIdle() noexcept
@@ -402,6 +398,8 @@ bool EpubDocument::layoutTo(float widthPoints, float heightPoints, float fontSiz
 
     // The caller owns the surrounding fz_try block. Let MuPDF exceptions
     // reach it so opening cannot succeed with a stale or empty page count.
+    m_resolvedLinks.clear();
+    m_resolvedLinkKeyBytes = 0;
     fz_layout_document(m_context, m_document, widthPoints, heightPoints, fontSize);
     m_pageCount = fz_count_pages(m_context, m_document);
     m_layoutWidth = widthPoints;

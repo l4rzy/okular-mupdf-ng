@@ -42,7 +42,7 @@ inline constexpr const char* EpubPdfWriterOptions =
 inline constexpr std::size_t MaxOutlineDepth = 64;
 inline constexpr std::size_t MaxOutlineNodes = 100'000;
 inline constexpr std::size_t MaxEpubOutlineNodes = 50'000;
-inline constexpr std::size_t MaxPageLinks = 100'000;
+inline constexpr std::size_t MaxPageLinks = ::Mu::Limit::MaxPageLinks;
 
 // --- Link Resolution Cache ---
 inline constexpr std::size_t MaxResolvedLinkCacheEntries = 8'192;

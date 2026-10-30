@@ -19,6 +19,7 @@
 #include <QTimer>
 #include <QVector>
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -76,7 +77,16 @@ public:
     /// Closes the open document and clears staged input. Abandons any
     /// in-flight background PDF export silently (result discarded, no signal).
     bool close();
-    QImage render(int page, int width, int height, const QRect& rect, int cancellationFd = -1);
+    QImage render(int page,
+                  int width,
+                  int height,
+                  const QRect& rect,
+                  int cancellationFd = -1,
+                  Model::RenderLinks* links = nullptr);
+    Model::ResolvedLink resolveLink(const QString& uri);
+
+    [[nodiscard]] quint64 documentEpoch() const noexcept { return m_documentEpoch.load(); }
+
     std::vector<Model::TextBox>
     getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false, bool* success = nullptr);
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi);
@@ -231,6 +241,7 @@ private:
     std::unique_ptr<QTimer> m_exportTimer;
     std::unordered_map<std::uint64_t, std::shared_ptr<FrameSlotMapping>> m_frameSlots;
     quint64 m_nextId = 1, m_nextTransfer = 1, m_linkGeneration = 0;
+    std::atomic<quint64> m_documentEpoch { 0 };
     quint64 m_frameSession = 0;
 #ifdef MU_DEBUG_ENABLED
     std::optional<std::chrono::steady_clock::time_point> m_pageLinksStartedAt;

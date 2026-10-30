@@ -392,6 +392,7 @@ LinkPreviewPage LinkPreview::describePage(const Okular::Page* page)
 void LinkPreview::dismiss()
 {
     m_closeTimer.stop();
+    m_namedUri.clear();
     qApp->removeEventFilter(this);
     if (m_cancelled)
         m_cancelled->store(true);
@@ -413,6 +414,7 @@ void LinkPreview::clearPreview()
     dismiss();
     ++m_generation;
     m_pool.waitForDone();
+    m_pendingUri.clear();
     m_cancelled.reset();
     m_cache.clear();
     m_pages.clear();
@@ -445,6 +447,53 @@ void LinkPreview::observeRender(QWidget* view, int page, QSize renderSize)
     }
     entry->pages.insert(page, scale);
     entry->latest = scale;
+}
+
+bool LinkPreview::showPreview(const QString& uri, int sourcePage)
+{
+    if (m_mode == LinkPreviewMode::Off || !m_resolve || uri.isEmpty())
+        return false;
+    if (uri == m_namedUri)
+        return showPreview(m_namedDestination, sourcePage);
+    // Keep at most one resolution in flight; changed hover cancels its delivery.
+    if (m_cancelled) {
+        if (uri != m_pendingUri || QCursor::pos() != m_anchor)
+            dismiss();
+        return true;
+    }
+    auto* source = QApplication::widgetAt(QCursor::pos());
+    if (!source)
+        return false;
+    dismiss();
+    m_source = source;
+    m_anchor = QCursor::pos();
+    const auto anchor = m_anchor;
+    const QPointer<QWidget> sourceGuard(source);
+    const auto generation = m_generation;
+    const auto cancelled = std::make_shared<std::atomic_bool>(false);
+    m_cancelled = cancelled;
+    m_pendingUri = uri;
+    const auto resolve = m_resolve;
+    qApp->installEventFilter(this);
+    m_pool.start([this, resolve, uri, sourcePage, sourceGuard, anchor, generation, cancelled] {
+        Model::ResolvedLink target;
+        if (!cancelled->load())
+            target = resolve(uri);
+        QMetaObject::invokeMethod(this, [this, uri, sourcePage, sourceGuard, anchor, generation, cancelled, target] {
+            if (generation != m_generation || m_cancelled != cancelled)
+                return;
+            m_cancelled.reset();
+            m_pendingUri.clear();
+            if (cancelled->load() || m_mode == LinkPreviewMode::Off || !sourceGuard
+                || QApplication::widgetAt(QCursor::pos()) != sourceGuard || QCursor::pos() != anchor || !target.valid
+                || target.external || target.viewport.page < 0)
+                return;
+            m_namedUri = uri;
+            m_namedDestination = target.viewport;
+            showPreview(target.viewport, sourcePage);
+        });
+    });
+    return true;
 }
 
 bool LinkPreview::showPreview(const Model::Viewport& destination, int sourcePage)
@@ -517,7 +566,7 @@ bool LinkPreview::showPreview(const Model::Viewport& destination, int sourcePage
         previewSize.render.setWidth(std::max(previewSize.render.width(), page.rect.width()));
         key += QStringLiteral(":%1:%2:%3").arg(page.number).arg(page.rect.width()).arg(page.rect.height());
     }
-    if (m_cancelled && (key != m_key || m_cancelled->load())) {
+    if (m_cancelled && (!m_pendingUri.isEmpty() || key != m_key || m_cancelled->load())) {
         dismiss();
         return false; // Keep at most one render in flight; never queue hover jobs.
     }
@@ -644,6 +693,12 @@ bool LinkPreview::isHovered() const
 
 bool LinkPreview::eventFilter(QObject* watched, QEvent* event)
 {
+    if (m_cancelled && !m_pendingUri.isEmpty()
+        && (event->type() == QEvent::MouseMove || event->type() == QEvent::Leave || event->type() == QEvent::KeyPress
+            || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::WindowDeactivate)) {
+        if (event->type() != QEvent::MouseMove || QCursor::pos() != m_anchor)
+            m_cancelled->store(true);
+    }
     if (!m_window || !m_window->isVisible())
         return false;
     const auto* widget = qobject_cast<QWidget*>(watched);

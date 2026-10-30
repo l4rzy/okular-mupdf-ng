@@ -1532,6 +1532,108 @@ private slots:
         QCOMPARE(previewImage().size(), expected);
     }
 
+    void namedPreviewResolvesAsynchronously()
+    {
+        std::atomic_bool started = false;
+        std::atomic_bool release = false;
+        std::atomic_int calls = 0;
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(640, 960)));
+        previews.setResolver([&](const QString& uri) {
+            ++calls;
+            started = true;
+            while (!release.load())
+                QThread::msleep(1);
+            Model::ResolvedLink target;
+            target.valid = uri == QStringLiteral("chapter.xhtml#anchor");
+            target.viewport = destination(0.5);
+            return target;
+        });
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(QStringLiteral("chapter.xhtml#anchor")));
+        QTRY_VERIFY(started.load()); // GUI events continue while resolution is blocked.
+        QVERIFY(previewImage().isNull());
+        release = true;
+        QTRY_VERIFY(!previewImage().isNull());
+        QCOMPARE(calls.load(), 1);
+        QVERIFY(previews.showPreview(QStringLiteral("chapter.xhtml#anchor")));
+        QCOMPARE(calls.load(), 1);
+    }
+
+    void namedPreviewWaitsForCancelledRender()
+    {
+        std::atomic_bool started = false;
+        std::atomic_bool release = false;
+        std::atomic_int resolutions = 0;
+        Generator::LinkPreview previews(
+            [&](int, QSize size, const auto& cancelled) {
+                started = true;
+                while (!release.load())
+                    QThread::msleep(1);
+                return cancelled() ? QImage { } : solidPage(size);
+            },
+            singlePage(QSizeF(640, 960)));
+        previews.setResolver([&](const QString&) {
+            ++resolutions;
+            Model::ResolvedLink target;
+            target.valid = true;
+            target.viewport = destination();
+            return target;
+        });
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(destination()));
+        QTRY_VERIFY(started.load());
+        QVERIFY(previews.showPreview(QStringLiteral("chapter.xhtml#anchor")));
+        release = true;
+        QTest::qWait(60);
+        QCOMPARE(resolutions.load(), 0); // A hover request must not queue behind the active render.
+        QVERIFY(previews.showPreview(QStringLiteral("chapter.xhtml#anchor")));
+        QTRY_COMPARE(resolutions.load(), 1);
+        QTRY_VERIFY(!previewImage().isNull());
+    }
+
+    void namedPreviewRejectsStaleResolution_data()
+    {
+        QTest::addColumn<int>("change");
+        QTest::newRow("hover") << 0;
+        QTest::newRow("disabled") << 1;
+        QTest::newRow("reset") << 2;
+        QTest::newRow("different-uri") << 3;
+    }
+
+    void namedPreviewRejectsStaleResolution()
+    {
+        QFETCH(int, change);
+        std::atomic_bool started = false;
+        std::atomic_bool release = false;
+        Generator::LinkPreview previews([](int, QSize size, const auto&) { return solidPage(size); },
+                                        singlePage(QSizeF(640, 960)));
+        previews.setResolver([&](const QString&) {
+            started = true;
+            while (!release.load())
+                QThread::msleep(1);
+            Model::ResolvedLink target;
+            target.valid = true;
+            target.viewport = destination();
+            return target;
+        });
+        previews.setMode(LinkPreviewMode::Large);
+        QVERIFY(previews.showPreview(QStringLiteral("old.xhtml#anchor")));
+        QTRY_VERIFY(started.load());
+        if (change == 0)
+            QTest::mouseMove(&m_host, QPoint(200, 200));
+        if (change == 3)
+            QVERIFY(previews.showPreview(QStringLiteral("other.xhtml#anchor")));
+        release = true;
+        if (change == 1)
+            previews.setMode(LinkPreviewMode::Off);
+        if (change == 2)
+            previews.reset();
+        QTest::qWait(60);
+        QVERIFY(previewImage().isNull());
+        QVERIFY(!previewWindow() || !previewWindow()->isVisible());
+    }
+
     void linksKeepNavigationAndExternalActions()
     {
         int pageQueries = 0;

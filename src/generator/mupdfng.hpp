@@ -15,6 +15,8 @@
 #include <okular/interfaces/printinterface.h>
 #include <okular/interfaces/saveinterface.h>
 
+#include <set>
+
 #include <QByteArray>
 #include <QtCore/qglobal.h>
 
@@ -290,6 +292,10 @@ private:
     Document m_document;
 
     QVector<Okular::Page*> m_okularPages;
+    // Shared with Okular's render thread; action ownership stays on the GUI thread.
+    QMutex m_linkMutex;
+    std::set<int> m_installedLinkPages;
+    void resetPageLinks();
     std::unique_ptr<Proxy::CertificateStore> m_certStore;
     std::unique_ptr<Proxy::Form::Coordinator> m_formCoordinator;
     // Unsaved form and annotation changes are discarded on worker recovery;

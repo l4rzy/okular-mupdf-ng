@@ -72,8 +72,7 @@ EpubDocument::pageDetails(int page, std::string* error, bool includeLinks, Extra
     };
     // extractPageLinks never throws across C++: it reports via error only.
     ExtractionBudgets pageBudgets;
-    if (includeLinks)
-        details.links = extractPageLinks(pagePtr, bounds, error, (budgets ? *budgets : pageBudgets).links);
+    details.links = extractPageLinks(pagePtr, bounds, error, (budgets ? *budgets : pageBudgets).links);
 
     fz_try(m_context)
     {
@@ -99,14 +98,9 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
             fail(error, "document is unavailable");
         return result;
     }
-    // Check the temporary cache populated while the worker incrementally
-    // resolves page links after the initial document response has been sent.
-    // Repeated navigation URIs (headers, footers, TOC) otherwise pay a spine
-    // scan plus a fragment box-tree walk on every page.
-    if (m_resolvedLinkCacheEnabled) {
-        if (const auto cached = m_resolvedLinks.find(uri); cached != m_resolvedLinks.end())
-            return cached->second;
-    }
+    // Reuse bounded destinations for this document and layout, including misses.
+    if (const auto cached = m_resolvedLinks.find(uri); cached != m_resolvedLinks.end())
+        return cached->second;
     // Snapshot the MuPDF outcome into PODs only; the C++ result is built
     // after fz_catch so no std::string lives across the longjmp.
     volatile bool isExternal = false;
@@ -137,10 +131,8 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
         result.viewport.page = pageNum;
         result.valid = true;
     }
-    // Cache only internal destinations: external URLs do not require page
-    // coordinate resolution and the cache is discarded after aggregation.
-    if (m_resolvedLinkCacheEnabled && result.valid && !result.external
-        && m_resolvedLinks.size() < Constant::MaxResolvedLinkCacheEntries
+    // External URLs need no engine resolution. Transport failures never enter this cache.
+    if (!result.external && m_resolvedLinks.size() < Constant::MaxResolvedLinkCacheEntries
         && uri.size() <= Constant::MaxResolvedLinkCacheKeyBytes - m_resolvedLinkKeyBytes) {
         const auto [_, inserted] = m_resolvedLinks.emplace(uri, result);
         if (inserted)
@@ -151,6 +143,17 @@ ResolvedLink EpubDocument::resolveLink(const std::string& uri, std::string* erro
 
 std::vector<Link> EpubDocument::extractLinks(int page, std::string* error, ExtractionBudgets* budgets) const
 {
+    return extractLinksImpl(page, error, budgets, true);
+}
+
+std::vector<Link> EpubDocument::extractLinkUris(int page, std::string* error, ExtractionBudgets* budgets) const
+{
+    return extractLinksImpl(page, error, budgets, false);
+}
+
+std::vector<Link>
+EpubDocument::extractLinksImpl(int page, std::string* error, ExtractionBudgets* budgets, bool resolve) const
+{
     fz_rect bounds { };
     fz_page* pagePtr = loadPageWithBounds(page, &bounds, error);
     if (!pagePtr)
@@ -158,7 +161,8 @@ std::vector<Link> EpubDocument::extractLinks(int page, std::string* error, Extra
 
     // extractPageLinks reports via error and never throws across C++.
     ExtractionBudgets pageBudgets;
-    std::vector<Link> result = extractPageLinks(pagePtr, bounds, error, (budgets ? *budgets : pageBudgets).links);
+    std::vector<Link> result =
+        extractPageLinks(pagePtr, bounds, error, (budgets ? *budgets : pageBudgets).links, resolve);
     fz_try(m_context)
     {
         fz_drop_page(m_context, pagePtr);
@@ -171,8 +175,8 @@ std::vector<Link> EpubDocument::extractLinks(int page, std::string* error, Extra
     return result;
 }
 
-std::vector<Link>
-EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect& bounds, std::string* error, ByteBudget& budget) const
+std::vector<Link> EpubDocument::extractPageLinks(
+    fz_page* pagePtr, const fz_rect& bounds, std::string* error, ByteBudget& budget, bool resolve) const
 {
     std::vector<Link> result;
     const float width = bounds.x1 - bounds.x0;
@@ -218,8 +222,25 @@ EpubDocument::extractPageLinks(fz_page* pagePtr, const fz_rect& bounds, std::str
         // resolveLink never throws across C++; the raw uri pointer stays
         // valid until the list is dropped below.
         ResolvedLink target;
-        if (link->uri)
-            target = resolveLink(link->uri, nullptr);
+        if (link->uri) {
+            if (resolve) {
+                target = resolveLink(link->uri, nullptr);
+            } else {
+                // Classification does not load any destination chapter.
+                volatile bool external = false;
+                fz_try(m_context)
+                {
+                    external = fz_is_external_link(m_context, link->uri);
+                }
+                fz_catch(m_context)
+                {
+                    fz_ignore_error(m_context);
+                }
+                target.external = external;
+                target.valid = external;
+                target.uri = link->uri;
+            }
+        }
         result.push_back({ left, top, right, bottom, std::move(target) });
     }
 

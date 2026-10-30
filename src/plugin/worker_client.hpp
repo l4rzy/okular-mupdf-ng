@@ -74,8 +74,14 @@ public:
     /// Cancellation is checked on the calling thread and sets the active
     /// render's shared MuPDF abort flag. The terminal response is still drained
     /// on the transport thread, including any frame produced before cancellation.
-    QImage
-    render(int page, int width, int height, const QRect& tile = { }, const std::function<bool()>& shouldAbort = { });
+    QImage render(int page,
+                  int width,
+                  int height,
+                  const QRect& tile = { },
+                  const std::function<bool()>& shouldAbort = { },
+                  Model::RenderLinks* links = nullptr);
+    Model::ResolvedLink resolveLink(const QString& uri) const;
+    [[nodiscard]] quint64 documentEpoch() const noexcept;
     std::vector<Model::TextBox>
     getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false, bool* success = nullptr) const;
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys = { }) const;
@@ -122,8 +128,7 @@ signals:
     /// Automatic recovery is disabled after repeated worker failures.
     void workerUnavailable();
     void ocrDone(quint64 jobId, int page);
-    void
-    pageLinksReady(quint64 generation, std::vector<Model::PageLinks> pages, bool resourceLimited, const QString& error);
+    void pageLinksReady(quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, const QString& error);
     void pdfExportFinished(quint64 jobId, bool success, const QString& error);
 
 private:

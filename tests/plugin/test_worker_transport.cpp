@@ -128,7 +128,9 @@ private Q_SLOTS:
             &error,
             "test"));
         transport.m_activeSignPassword = QStringLiteral("secret");
+        const auto epoch = transport.documentEpoch();
         const auto response = transport.call(Model::OpenRequest { }, reportFailure);
+        QCOMPARE(transport.documentEpoch(), epoch + 1);
         QVERIFY(response);
         QCOMPARE(failures.size(), errors);
         QCOMPARE(links.size(), scenario == 0 ? 1 : 0);

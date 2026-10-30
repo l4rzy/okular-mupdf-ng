@@ -116,13 +116,19 @@ bool WorkerServer::writeResponse(const ResponseMessage& response, std::string* e
             return false;
         }
 
-        // The original response cannot fit in a control message. Preserve its
-        // request ID so the plugin receives a normal terminal response instead.
-        const ResponseMessage limitResponse { response.id,
-                                              std::monostate { },
-                                              ::Mu::Model::Error { ::Mu::Model::ErrorCode::ResourceLimit,
-                                                                   "response",
-                                                                   "response exceeds control-message limit" } };
+        ResponseMessage limitResponse { response.id, std::monostate { }, std::nullopt };
+        if (const auto* render = std::get_if<Model::RenderResponse>(&response.payload); render && render->links) {
+            // Optional links must not discard an already-published image frame.
+            limitResponse.payload =
+                Model::RenderResponse { render->frame,
+                                        Model::RenderLinks { render->links->generation,
+                                                             { },
+                                                             "resource limit: render links exceed control message" } };
+        } else {
+            // Preserve the request ID so the plugin receives a terminal response.
+            limitResponse.error =
+                Model::Error { Model::ErrorCode::ResourceLimit, "response", "response exceeds control-message limit" };
+        }
         if (error)
             error->clear();
         return ZppCodec::writeMessage(*m_client, limitResponse, Timeout::ControlWriteMs, error, "worker");

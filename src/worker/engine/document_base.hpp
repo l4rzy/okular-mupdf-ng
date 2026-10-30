@@ -97,8 +97,7 @@ public:
     virtual void trimMemoryForIdle() noexcept { }
 
     /// Discards cached link-destination resolutions. Default is a no-op;
-    /// engines that cache resolutions override to scope the cache to one
-    /// incremental link aggregation.
+    /// engines override this to invalidate document/layout-specific destinations.
     virtual void discardResolvedLinkCache() noexcept { }
 
     /// Suspends caching of freshly loaded pages (open sweep visits every page

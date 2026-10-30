@@ -284,6 +284,8 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "page", value.page);
                 field(out, "width", value.width);
                 field(out, "height", value.height);
+                if (value.includeLinks)
+                    field(out, "linkGeneration", value.generation);
                 if (value.cancelTransferId)
                     field(out, "cancelTransfer", value.cancelTransferId);
                 if (value.tile)
@@ -291,6 +293,9 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                           "tile",
                           std::string("[") + std::to_string(value.tile->x) + "," + std::to_string(value.tile->y) + ","
                               + std::to_string(value.tile->width) + "," + std::to_string(value.tile->height) + "]");
+            } else if constexpr (std::is_same_v<T, Model::ResolveLinkRequest>) {
+                out << "resolve-link";
+                field(out, "generation", value.generation);
             } else if constexpr (std::is_same_v<T, Model::ReleaseFrameSlotRequest>) {
                 out << "release-frame-slot";
                 field(out, "slot", value.slotId);
@@ -451,6 +456,8 @@ inline std::string_view responseName(const Model::ResponsePayload& payload)
                 return "open";
             else if constexpr (std::is_same_v<T, Model::RenderResponse>)
                 return "render";
+            else if constexpr (std::is_same_v<T, Model::ResolveLinkResponse>)
+                return "resolve-link";
             else if constexpr (std::is_same_v<T, Model::JobResponse>)
                 return "job";
             else if constexpr (std::is_same_v<T, Model::TextBoxesResponse>)
@@ -518,7 +525,12 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                         << " lease=" << value.frame.leaseId << " width=" << value.frame.width
                         << " height=" << value.frame.height << " stride=" << value.frame.stride
                         << " format=" << value.frame.format << '}';
-                } else if constexpr (std::is_same_v<T, Model::JobResponse>)
+                    if (value.links)
+                        out << " links=" << value.links->links.size()
+                            << " linkError=" << std::quoted(value.links->error);
+                } else if constexpr (std::is_same_v<T, Model::ResolveLinkResponse>)
+                    out << " valid=" << value.target.valid << " page=" << value.target.viewport.page;
+                else if constexpr (std::is_same_v<T, Model::JobResponse>)
                     out << " job=" << value.jobId;
                 else if constexpr (std::is_same_v<T, Model::TextBoxesResponse>)
                     out << " count=" << value.boxes.size();

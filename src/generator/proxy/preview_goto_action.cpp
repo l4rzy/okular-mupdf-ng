@@ -16,9 +16,20 @@ PreviewGotoAction::PreviewGotoAction(const Model::Viewport& destination, LinkPre
 {
 }
 
+PreviewGotoAction::PreviewGotoAction(const QString& uri, LinkPreview* previews, int sourcePage)
+    : GotoAction(QString(), uri)
+    , m_previews(previews)
+    , m_sourcePage(sourcePage)
+{
+}
+
 QString PreviewGotoAction::actionTip() const
 {
-    return m_previews && m_previews->showPreview(m_destination, m_sourcePage) ? QString() : GotoAction::actionTip();
+    const QString uri = destinationName();
+    const bool shown = m_previews
+        && (uri.isEmpty() ? m_previews->showPreview(m_destination, m_sourcePage)
+                          : m_previews->showPreview(uri, m_sourcePage));
+    return shown ? QString() : GotoAction::actionTip();
 }
 
 } // namespace Mu::Generator::Proxy

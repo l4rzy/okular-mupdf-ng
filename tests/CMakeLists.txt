@@ -48,6 +48,7 @@ add_executable(test_mupdf
     worker/mobi.cpp
     worker/native_types.cpp
     worker/native_runtime.cpp
+    ../src/worker/runtime/worker_server.cpp
     integration/ipc.cpp
     signature/validation.cpp
     support/genpdf.cpp

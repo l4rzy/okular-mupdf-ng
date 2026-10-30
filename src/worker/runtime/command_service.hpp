@@ -316,6 +316,10 @@ private:
     // Active document password
     std::string m_documentPassword;
     std::optional<PendingPageLinks> m_pendingPageLinks;
+    // Per-page accounting only: never retain another copy of the extracted links.
+    std::vector<bool> m_renderLinkCharged;
+    std::size_t m_renderLinkBytes = 0;
+    std::size_t m_renderLinkCount = 0;
 
     // Idle-trim pressure: accumulated only by successful renders, consumed
     // only by maybeIdleTrim between dispatches.

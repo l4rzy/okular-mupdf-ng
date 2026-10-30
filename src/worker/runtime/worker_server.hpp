@@ -56,6 +56,8 @@ public:
     int run(std::string* error = nullptr);
 
 private:
+    friend class TestWorkerNativeRuntime;
+
     /// Accepts and authenticates an incoming plugin connection against the expected parent PID.
     bool acceptClient(std::string* error, ::Mu::IPC::IoResult* result = nullptr);
 
@@ -65,7 +67,7 @@ private:
     bool processFrame(std::string* error, std::optional<std::vector<std::byte>> deferred = std::nullopt);
 
     /// Serializes and writes a ResponseMessage to the active client control socket.
-    /// Replaces an oversized response with a frame-sized ResourceLimit response.
+    /// Drops oversized optional links before falling back to a ResourceLimit response.
     bool writeResponse(const ::Mu::Model::ResponseMessage& response, std::string* error);
 
     /// Drains and transmits pending asynchronous OCR completion notifications to the client.

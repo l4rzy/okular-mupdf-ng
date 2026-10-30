@@ -136,7 +136,7 @@ class TestGeneratorEpub : public QObject {
                 return object->objectType() == Okular::ObjectRect::Action;
             });
         };
-        QTRY_VERIFY_WITH_TIMEOUT(linksReady(), 10000);
+        QVERIFY(linksReady()); // Links must already exist when the first pixmap is published.
         const auto& objects = document.page(page)->objectRects();
         bool chapterLink = false;
         for (const auto* object : objects) {
@@ -145,11 +145,24 @@ class TestGeneratorEpub : public QObject {
             const auto* action = static_cast<const Okular::Action*>(object->object());
             if (action->actionType() == Okular::Action::Goto) {
                 const auto* go = static_cast<const Okular::GotoAction*>(action);
-                QCOMPARE(go->destViewport().pageNumber, 1 - page);
+                if (go->destinationName().isEmpty())
+                    QCOMPARE(go->destViewport().pageNumber, 1 - page); // Exported PDF keeps resolved actions.
+                QVERIFY(go->fileName().isEmpty());
+                document.setViewport(Okular::DocumentViewport(page));
+                document.processAction(action);
+                QCOMPARE(document.viewport().pageNumber, 1 - page);
+                QVERIFY(!document.historyAtBegin());
+                document.setPrevViewport();
+                QCOMPARE(document.viewport().pageNumber, page);
                 chapterLink = true;
             }
         }
         QVERIFY(chapterLink);
+        const auto originalObjects = document.page(page)->objectRects();
+        document.requestPixmaps(
+            { new Okular::PixmapRequest(&observer, page, 700, 950, 1, 0, Okular::PixmapRequest::Asynchronous) });
+        QTRY_VERIFY_WITH_TIMEOUT(document.page(page)->hasPixmap(&observer, 700, 950), 10000);
+        QCOMPARE(document.page(page)->objectRects(), originalObjects);
     }
 
 private slots:
@@ -172,6 +185,77 @@ private slots:
         KConfigGroup(config, QStringLiteral("Advanced"))
             .writeEntry("CacheLastVacuum", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         config->sync();
+    }
+
+    void firstTileHasStableNamedActions_data()
+    {
+        QTest::addColumn<int>("rotation");
+        QTest::addColumn<bool>("asynchronous");
+        for (int rotation = 0; rotation < 4; ++rotation) {
+            const auto name = QByteArray::number(rotation);
+            QTest::newRow((name + "-async").constData()) << rotation << true;
+            QTest::newRow((name + "-sync").constData()) << rotation << false;
+        }
+    }
+
+    void firstTileHasStableNamedActions()
+    {
+        QFETCH(int, rotation);
+        QFETCH(bool, asynchronous);
+        const QString path = QStringLiteral(TEST_EPUB_DIR "/linked.epub");
+        Okular::Document document(nullptr);
+        Okular::DocumentObserver observer;
+        document.addObserver(&observer);
+        const auto cleanup = qScopeGuard([&] { document.removeObserver(&observer); });
+        QCOMPARE(document.openDocument(path,
+                                       QUrl::fromLocalFile(path),
+                                       QMimeDatabase().mimeTypeForName(QStringLiteral("application/epub+zip"))),
+                 Okular::Document::OpenSuccess);
+        document.setRotation(rotation);
+        Okular::NormalizedRect region(0, 0, 0.1, 0.1);
+        bool hasTileManager = false;
+        const auto render = [&](int width, int height) {
+            auto* request = new Okular::PixmapRequest(&observer,
+                                                      0,
+                                                      width,
+                                                      height,
+                                                      1,
+                                                      0,
+                                                      asynchronous ? Okular::PixmapRequest::Asynchronous
+                                                                   : Okular::PixmapRequest::NoFeature);
+            // The initial large partial request creates Okular's tile manager;
+            // subsequent requests use it explicitly, as PageView does.
+            request->setTile(hasTileManager);
+            request->setNormalizedRect(region);
+            document.requestPixmaps({ request });
+            hasTileManager = true;
+        };
+        render(4000, 6000);
+        QTRY_VERIFY(document.page(0)->hasPixmap(&observer, 4000, 6000, region));
+        const auto actions = document.page(0)->objectRects();
+        QVERIFY(actions.size() >= 2); // A wrapped URL can contribute several rectangles.
+        const Okular::Action* internal = nullptr;
+        for (const auto* rect : actions) {
+            if (rect->objectType() != Okular::ObjectRect::Action)
+                continue;
+            const auto* action = static_cast<const Okular::Action*>(rect->object());
+            if (action->actionType() == Okular::Action::Goto) {
+                const auto* go = static_cast<const Okular::GotoAction*>(action);
+                QVERIFY(!go->destinationName().isEmpty());
+                QVERIFY(go->fileName().isEmpty());
+                internal = action;
+            }
+        }
+        QVERIFY(internal);
+        region = Okular::NormalizedRect(0.75, 0.75, 1, 1);
+        render(4000, 6000);
+        QTRY_VERIFY(document.page(0)->hasPixmap(&observer, 4000, 6000, region));
+        QCOMPARE(document.page(0)->objectRects(), actions);
+        document.processAction(internal);
+        QCOMPARE(document.viewport().pageNumber, 2);
+        Okular::GotoAction broken(QString(), QStringLiteral("nonexistent.html#missing"));
+        document.processAction(&broken);
+        QCOMPARE(document.viewport().pageNumber, 2);
     }
 
     void exportsEpubToAzw3()
@@ -344,13 +428,17 @@ private slots:
                         if (object->objectType() != Okular::ObjectRect::Action)
                             continue;
                         const auto* action = static_cast<const Okular::Action*>(object->object());
-                        if (action->actionType() == Okular::Action::Goto
-                            && static_cast<const Okular::GotoAction*>(action)->destViewport().pageNumber == 1 - page)
-                            return true;
+                        if (action->actionType() == Okular::Action::Goto) {
+                            const auto* go = static_cast<const Okular::GotoAction*>(action);
+                            if (go->destinationName().isEmpty())
+                                continue;
+                            document.processAction(action);
+                            return document.viewport().pageNumber == 1 - page;
+                        }
                     }
                     return false;
                 };
-                QTRY_VERIFY(hasChapterLink());
+                QVERIFY(hasChapterLink());
             }
             const auto cache = Mu::Plugin::Caching::EPUB::Cache::load(source, settings);
             QVERIFY(cache && cache->accelerator && !cache->accelerator->isEmpty() && cache->outline);

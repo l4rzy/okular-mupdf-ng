@@ -63,7 +63,9 @@ public:
     [[nodiscard]] bool isLocked() const noexcept override;
     [[nodiscard]] int pageCount() const noexcept override;
 
-    /// Test/diagnostic accessor for the parsed page cache.
+    /// Test/diagnostic accessors for document-scoped caches.
+    [[nodiscard]] std::size_t resolvedLinkCacheSize() const noexcept { return m_resolvedLinks.size(); }
+
     [[nodiscard]] bool isPageCached(int page) const noexcept { return m_pageCache.contains(page); }
 
     [[nodiscard]] fz_context* context() const noexcept { return m_context; }
@@ -92,6 +94,9 @@ public:
                                                  std::string* error = nullptr) const override;
     [[nodiscard]] DocumentSettings settings() const noexcept override;
     void setSettings(const DocumentSettings& settings) noexcept override;
+    [[nodiscard]] std::vector<Link>
+    extractLinkUris(int page, std::string* error, ExtractionBudgets* budgets = nullptr) const;
+
     [[nodiscard]] ResolvedLink resolveLink(const std::string& uri, std::string* error = nullptr) const override;
     [[nodiscard]] std::vector<Link>
     extractLinks(int page, std::string* error = nullptr, ExtractionBudgets* budgets = nullptr) const override;
@@ -133,9 +138,12 @@ private:
     /// and must drop it in the operation's fz_always cleanup block.
     [[nodiscard]] fz_page* loadPageWithBounds(int page, fz_rect* bounds, std::string* error) const;
 
-    /// Extracts links from an already-loaded EPUB page.
     [[nodiscard]] std::vector<Link>
-    extractPageLinks(fz_page* page, const fz_rect& bounds, std::string* error, ByteBudget& budget) const;
+    extractLinksImpl(int page, std::string* error, ExtractionBudgets* budgets, bool resolve) const;
+
+    /// Extracts links from an already-loaded EPUB page.
+    [[nodiscard]] std::vector<Link> extractPageLinks(
+        fz_page* page, const fz_rect& bounds, std::string* error, ByteBudget& budget, bool resolve = true) const;
 
     /// Recursively copies MuPDF outline nodes into OutlineNode model vector.
     [[nodiscard]] std::vector<OutlineNode>
@@ -158,7 +166,6 @@ private:
 
     mutable std::unordered_map<std::string, ResolvedLink> m_resolvedLinks;
     mutable std::size_t m_resolvedLinkKeyBytes = 0;
-    bool m_resolvedLinkCacheEnabled = true;
 
     // Parsed pages kept for reuse across renders (tiled rendering, zoom, pan).
     PageCache m_pageCache;

@@ -58,6 +58,7 @@ inline constexpr std::size_t MaxEpubCustomCssBase64Bytes = 8192;
 
 // --- Extracted Document Metadata Limits ---
 inline constexpr std::size_t MaxAggregateMetadataBytes = 32U * 1024U * 1024U;
+inline constexpr std::size_t MaxPageLinks = 100'000;
 inline constexpr std::size_t MaxLinkStringBytes = 64U * 1024U;
 
 // --- Annotation Geometry & Extras Limits ---

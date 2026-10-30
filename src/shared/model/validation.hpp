@@ -28,6 +28,11 @@ bool isValidOcrDpi(float dpi) noexcept;
 /// Validates a descriptor transfer identifier before it reaches the FD channel.
 bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason = nullptr) noexcept;
 
+/// Validates optional link metadata independently from the surrounding image.
+bool isValidRenderLinks(const RenderLinks& links) noexcept;
+/// Validates URI bounds and generation shape; the worker checks the active generation.
+bool isValidResolveLinkRequest(const ResolveLinkRequest& request, std::string_view* reason = nullptr) noexcept;
+
 /// Validates request-level render geometry. Document and page-count state stay
 /// in the command boundary because they are not available to the plugin.
 bool isValidRenderRequest(const RenderRequest& request, std::string_view* reason = nullptr) noexcept;

@@ -49,6 +49,11 @@ public:
 
     // Called by the link's tooltip hook; true suppresses Okular's text tooltip.
     bool showPreview(const Model::Viewport& destination, int sourcePage = -1);
+    using Resolver = std::function<Model::ResolvedLink(const QString&)>;
+
+    void setResolver(Resolver resolve) { m_resolve = std::move(resolve); }
+
+    bool showPreview(const QString& uri, int sourcePage = -1);
     // Cancel and join before changing the worker document or destroying it.
     void reset();
     void setMode(LinkPreviewMode mode);
@@ -80,6 +85,10 @@ private:
     static QString pageKey(const RenderPage& page);
 
     Renderer m_render;
+    Resolver m_resolve;
+    QString m_pendingUri;
+    QString m_namedUri;
+    Model::Viewport m_namedDestination;
     PageInfo m_pageInfo;
     LinkPreviewMode m_mode = LinkPreviewMode::Off;
     QSize m_sessionScreen;
