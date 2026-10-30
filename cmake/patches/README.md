@@ -9,8 +9,11 @@ Skipped nesting levels preserve the preceding parent's children, and offsets
 inside comments wait until the comment closes before inserting a destination.
 The reader also clears dropped record streams, frees extracted text on
 transcoding failure, and releases the entry tree if archive construction fails.
-Synthetic TOC fixtures and allocation-failure tests in `tests/worker/mobi.cpp`
-cover these paths, including under AddressSanitizer and LeakSanitizer.
+Raw-text/RCDATA elements are skipped when placing byte-offset anchors, and
+UTF-8 continuation checks apply only to UTF-8 input, preserving single-byte
+destinations before transcoding. Synthetic TOC fixtures and allocation-failure
+tests in `tests/worker/mobi.cpp` cover these paths, including under AddressSanitizer
+and LeakSanitizer.
 
 `mupdf-1.28.5-ocr-font-release.patch` releases the OCR device's owned Courier
 font reference during destruction. Text objects and target devices retain their
@@ -57,7 +60,9 @@ single-line fitting and explicit sizes.
 
 `mupdf-1.28.5-radio-unison.patch` makes radio-button clicks honor
 `RadiosInUnison`: without it, only the clicked widget is selected; with it,
-all widgets sharing the selected on-state are selected. Checkboxes retain
+all widgets sharing the selected on-state are selected. Selection compares resolved
+widget identity, including direct dictionaries. The group walk checks indirect
+cycles and limits direct nesting before recursing. Checkboxes retain
 their existing behavior. Worker tests cover duplicate values on one or more
 pages, toggle-to-off rules, idempotent updates, and save/reopen. The generator
 separates repeated in-unison options by occurrence instead of page, so Qt's
@@ -76,23 +81,37 @@ The scope is static image elements in non-restarting ebook layout. Images in
 tables or positioned containers use the existing block-image path: table rows may
 be laid out repeatedly, and positioned boxes move after layout. Tables isolate
 external float exclusions. Arbitrary floated containers and floats in restartable
-stories remain unsupported. Multiple image floats stack vertically. Missing-image
+stories remain unsupported. Same-side and opposing image floats share a row when
+their margin boxes fit, otherwise moving to the next available position while
+preserving source order across page breaks. Missing-image
 placeholders keep their normal-flow height, and hidden images are skipped before
 loading. Non-finite image/margin geometry is rejected; clearance requires strict
 forward progress. The list borrows tree-owned boxes and resets for every layout.
+It is ordered by descending margin-box bottom so line lookup stops before expired
+floats; a separate last-float pointer preserves source order without rescanning
+the chapter.
 Table-driven tests cover both sides, inline/block display, clearing, pagination,
 repeated reflow, row retries, positioned/hidden/missing images, zero dimensions,
 negative and overflowing margins, and multiple floats. The EPUB layout cache
 revision changes to invalidate pagination from the previous engine.
 
-`mupdf-1.28.5-html-background.patch` expands a lone `background: none` to a
-transparent background color, matching the keyword without regard to case.
-Previously the image keyword reached the color parser's fallback and became
-opaque black, hiding black text in tables such as
-Cloud Native Data Center Networking's table 10-1. Table-driven rendering tests
-in `tests/worker/epub.cpp` cover transparency, resetting an earlier color,
-keyword case, declaration precedence, `!important`, and explicit named/hex colors.
-Pagination is unchanged.
+`mupdf-1.28.5-html-background.patch` resolves the supported background color from
+shorthand components regardless of their order, resetting an omitted color to
+transparent. Image URLs, repeat/position/size keywords and layer separators no
+longer reach the legacy bare-hex color fallback. Colors are accepted only on the
+final layer. Unsupported components and duplicate colors preserve the preceding
+declaration. CSS-wide `inherit`, `initial` and `unset` retain their color semantics.
+This does not implement background image painting or the complete CSS Backgrounds
+grammar. Synthetic rendering tests cover order, reset, layers, invalid values,
+case and cascade priority; they do not require any external ebook.
+
+`mupdf-1.28.5-html-media.patch` filters HTML link/style media attributes for the
+screen renderer. It accepts media-type lists with `not`/`only` modifiers and
+case-insensitive types. Unsupported feature conditions do not match; commas in
+parentheses or quoted strings do not turn parts of a condition into media types.
+Viewport-dependent media features and CSS `@media` rules remain unsupported.
+The previous blanket match for complex queries is removed. Both linked and inline
+stylesheets use the same filter and synthetic table-driven tests.
 
 `mupdf-1.28.5-css-attribute-selectors.patch` adds prefix (`^=`), suffix (`$=`),
 and substring (`*=`) attribute selectors. It also fixes dash-prefix (`|=`)
@@ -115,4 +134,5 @@ source files are build dependencies so incremental builds refresh the library.
 
 The changes modify MuPDF code licensed under AGPL-3.0-or-later; the original file
 headers and licensing terms remain in the source tree. Regression coverage lives in
-`tests/worker/mobi.cpp` and `tests/generator/test_layers_model.cpp`.
+`tests/worker/document.cpp`, `epub.cpp`, `mobi.cpp` and `ocr.cpp`, with additional
+end-to-end coverage in the generator and integration suites.

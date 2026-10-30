@@ -249,6 +249,23 @@ private slots:
         QTest::newRow("transparent") << QStringLiteral("background: transparent;") << 0xd0ccb8;
         QTest::newRow("hex-color") << QStringLiteral("background: #336699;") << 0x336699;
         QTest::newRow("named-color") << QStringLiteral("background: black;") << 0x000000;
+        QTest::newRow("none-repeat") << QStringLiteral("background: none no-repeat center;") << 0xd0ccb8;
+        QTest::newRow("uppercase-components") << QStringLiteral("background: NONE NO-REPEAT CENTER;") << 0xd0ccb8;
+        QTest::newRow("image-only-reset")
+            << QStringLiteral("background-color: red; background: url(missing.png);") << 0xd0ccb8;
+        QTest::newRow("color-last") << QStringLiteral("background: url(missing.png) center / cover no-repeat #336699;")
+                                    << 0x336699;
+        QTest::newRow("color-first") << QStringLiteral("background: #336699 none no-repeat center;") << 0x336699;
+        QTest::newRow("rgb-color-last") << QStringLiteral("background: none no-repeat rgb(51, 102, 153);") << 0x336699;
+        QTest::newRow("multiple-layers") << QStringLiteral("background: url(first.png), none #336699;") << 0x336699;
+        QTest::newRow("initial-reset") << QStringLiteral("background-color: red; background: initial;") << 0xd0ccb8;
+        QTest::newRow("unset-reset") << QStringLiteral("background-color: red; background: unset;") << 0xd0ccb8;
+        QTest::newRow("invalid-preserves-color")
+            << QStringLiteral("background-color: #336699; background: bogus;") << 0x336699;
+        QTest::newRow("duplicate-color-invalid")
+            << QStringLiteral("background-color: #336699; background: red blue;") << 0x336699;
+        QTest::newRow("nonfinal-color-invalid")
+            << QStringLiteral("background-color: #336699; background: red, none;") << 0x336699;
     }
 
     void testTableBackground()
@@ -439,7 +456,23 @@ private slots:
         QTest::newRow("overflowing-margin")
             << image + "<p>After</p>" << "img { margin-left: " + QString(80, '9') + "em; }" << true << 0;
         QTest::newRow("stacked-floats") << image + image + "<p style='clear:both'>After</p>"
-                                        << QString("img { height:60pt; }") << false << 2;
+                                        << QString("img { width:120pt; height:60pt; }") << false << 2;
+        QTest::newRow("same-side-floats")
+            << image + image + "<p style='clear:both'>After</p>" << QString("img { height:60pt; }") << false << 2;
+        QTest::newRow("opposing-floats") << image + image + "<p style='clear:both'>After</p>"
+                                         << QString("img { height:60pt; } img + img { float:right; }") << false << 2;
+
+        QTest::newRow("unequal-float-bottoms")
+            << image + image + "<p style='padding-top:40pt'>Beside</p><p style='clear:both'>After</p>"
+            << QString("img + img { height:20pt; }") << false << 2;
+        QTest::newRow("float-source-order-after-rewind")
+            << image + "<div style='height:40pt'></div>" + image + "<div style='margin-top:-40pt'>" + image
+                + "</div><p style='clear:both'>After</p>"
+            << QString("img { height:20pt; } body > img:first-child { height:100pt; }") << false << 3;
+
+        QTest::newRow("float-page-order")
+            << "<div style='height:170pt'></div>" + image + image + "<p style='clear:both'>After</p>"
+            << QString("img + img { height:20pt; }") << false << 2;
     }
 
     void testFloatingImageEdgeCases()
@@ -515,6 +548,34 @@ private slots:
             if (QByteArray(QTest::currentDataTag()) == "missing-image") {
                 QVERIFY(inspection.lines.contains(QStringLiteral("[image]")));
                 QVERIFY(after.origin.y > inspection.lines.value(QStringLiteral("[image]")).origin.y);
+            }
+
+            if (QByteArray(QTest::currentDataTag()) == "same-side-floats"
+                || QByteArray(QTest::currentDataTag()) == "opposing-floats") {
+                QVERIFY(inspection.images[0].x1 <= inspection.images[1].x0);
+                QVERIFY(std::abs(inspection.images[0].y0 - inspection.images[1].y0) < 0.01f);
+                QVERIFY(after.origin.y >= inspection.images[1].y1);
+            }
+
+            if (QByteArray(QTest::currentDataTag()) == "unequal-float-bottoms") {
+                QVERIFY(inspection.images[0].y1 > inspection.images[1].y1);
+                QVERIFY(inspection.lines.contains(QStringLiteral("Beside")));
+                const auto beside = inspection.lines.value(QStringLiteral("Beside"));
+                QVERIFY(beside.origin.y > inspection.images[1].y1);
+                QVERIFY(beside.origin.y < inspection.images[0].y1);
+                QVERIFY(beside.origin.x >= inspection.images[0].x1);
+                QVERIFY(after.origin.y >= inspection.images[0].y1);
+            }
+            if (QByteArray(QTest::currentDataTag()) == "float-source-order-after-rewind") {
+                QVERIFY(inspection.images[0].y1 > inspection.images[1].y1);
+                QVERIFY(inspection.images[1].y0 > inspection.images[0].y0);
+                QVERIFY(inspection.images[2].y0 >= inspection.images[1].y0);
+                QVERIFY(after.origin.y >= inspection.images[0].y1);
+            }
+            if (QByteArray(QTest::currentDataTag()) == "float-page-order") {
+                QVERIFY(std::abs(inspection.images[0].y0 - inspection.images[1].y0) < 0.01f);
+                QVERIFY(inspection.images[0].y1 - inspection.images[0].y0 > 99);
+                QVERIFY(inspection.images[1].y1 - inspection.images[1].y0 < 21);
             }
             if (QByteArray(QTest::currentDataTag()) == "stacked-floats") {
                 QVERIFY(inspection.images[0].y1 <= inspection.images[1].y0);
@@ -674,8 +735,20 @@ private slots:
             std::pair { "media='print, all'", true },
             std::pair { "media='  ScReEn  '", true },
             std::pair { "media='  PRINT  '", false },
-            // Preserve existing handling of queries outside simple media lists.
-            std::pair { "media='screen and (min-width: 1px)'", true },
+            std::pair { "media='only screen'", true },
+            std::pair { "media='only print'", false },
+            std::pair { "media='not screen'", false },
+            std::pair { "media='not print'", true },
+            std::pair { "media='NOT ALL'", false },
+            std::pair { "media='not unknown'", true },
+            std::pair { "media='only not screen'", false },
+            std::pair { "media='not'", false },
+            // Viewport conditions remain unsupported at stylesheet-load time.
+            std::pair { "media='screen and (min-width: 1px)'", false },
+            std::pair { "media='print and (min-width: 1px)'", false },
+            std::pair { "media='screen and (unknown: screen, all)'", false },
+            std::pair { "media='screen and (unknown: screen, all), screen'", true },
+            std::pair { "media='screen and (unknown: &quot;, all&quot;)'", false },
         };
         for (const bool linked : { false, true }) {
             for (const auto& [media, applies] : cases) {

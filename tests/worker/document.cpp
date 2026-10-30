@@ -3432,6 +3432,83 @@ private slots:
         QCOMPARE(characters, expected.size());
     }
 
+    void radioGroupTraversal_data()
+    {
+        QTest::addColumn<QString>("kind");
+        for (const char* kind : { "direct-widgets", "cycle", "depth" })
+            QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+
+    void radioGroupTraversal()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF radio group patch");
+#endif
+        QFETCH(QString, kind);
+        QTemporaryDir directory;
+        const auto path = directory.filePath("radio-traversal.pdf");
+        const QByteArray widget("<< /Type /Annot /Subtype /Widget /Parent 4 0 R /P 3 0 R /F 4 "
+                                "/Rect [10 10 30 30] /AS /Off /AP << /N << /Off 7 0 R /A 7 0 R >> >> >>");
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+              "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> /Annots [5 0 R 6 0 R] >>",
+              "<< /FT /Btn /T (Options) /Ff 32768 /V /Off /Kids [5 0 R 6 0 R] >>",
+              widget,
+              widget,
+              "<< /Type /XObject /Subtype /Form /BBox [0 0 20 20] /Resources << >> /Length 0 >>\nstream\nendstream" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument owner;
+        std::string error;
+        QVERIFY2(owner.openFd(::dup(file.handle()), "radio-traversal.pdf", &error), error.c_str());
+        auto* context = owner.context();
+        auto* document = pdf_specifics(context, owner.document());
+        pdf_page* page = nullptr;
+        fz_var(page);
+        const auto cleanup = qScopeGuard([&] { fz_drop_page(context, reinterpret_cast<fz_page*>(page)); });
+        bool failed = false;
+        bool selectionCorrect = false;
+        fz_try(context)
+        {
+            page = pdf_load_page(context, document, 0);
+            auto* selected = pdf_first_widget(context, page);
+            auto* group = pdf_dict_get(context, pdf_annot_obj(context, selected), PDF_NAME(Parent));
+            auto* kids = pdf_dict_get(context, group, PDF_NAME(Kids));
+            if (kind == "direct-widgets") {
+                for (int index = 0; index < 2; ++index)
+                    pdf_array_put(
+                        context, kids, index, pdf_resolve_indirect(context, pdf_array_get(context, kids, index)));
+            } else if (kind == "cycle") {
+                pdf_array_push(context, kids, group);
+            } else {
+                auto* nested = pdf_array_push_dict(context, kids, 1);
+                for (int depth = 0; depth < 300; ++depth) {
+                    auto* children = pdf_dict_put_array(context, nested, PDF_NAME(Kids), 1);
+                    nested = pdf_array_push_dict(context, children, 1);
+                }
+            }
+            pdf_toggle_widget(context, selected);
+            if (kind == "direct-widgets") {
+                selectionCorrect =
+                    pdf_name_eq(
+                        context, pdf_dict_get(context, pdf_array_get(context, kids, 0), PDF_NAME(AS)), PDF_NAME(A))
+                    && pdf_name_eq(
+                        context, pdf_dict_get(context, pdf_array_get(context, kids, 1), PDF_NAME(AS)), PDF_NAME(Off));
+            }
+        }
+        fz_catch(context)
+        {
+            failed = true;
+        }
+        QCOMPARE(failed, kind != "direct-widgets");
+        if (!failed)
+            QVERIFY(selectionCorrect);
+        if (failed)
+            QVERIFY(QString::fromUtf8(fz_caught_message(context)).contains("button group"));
+    }
+
     void repeatedRadioValuesRespectUnison_data()
     {
         QTest::addColumn<bool>("inUnison");

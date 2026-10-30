@@ -65,15 +65,16 @@
  }
 --- a/source/html/html-layout.c
 +++ b/source/html/html-layout.c
-@@ -595,6 +595,7 @@
+@@ -595,6 +595,8 @@
  
  	hb_buffer_t *hb_buf;
  	fz_html_restarter *restart;
-+	fz_html_box *floats;
++	fz_html_box *floats; /* Descending margin-box bottom, so expired tails are skipped. */
++	fz_html_box *last_float; /* Source-order placement is independent of list order. */
  } layout_data;
  
  /* "are we in a restarting context, and still skipping?" */
-@@ -608,6 +609,50 @@
+@@ -608,6 +610,50 @@
  
  #define TRBLCPY(DST,SRC) \
  do { DST[T] = SRC[T] ; DST[R] = SRC[R]; DST[B] = SRC[B]; DST[L] = SRC[L]; } while (0)
@@ -108,7 +109,6 @@
 +	for (image = ld->floats; image; image = image->next_float)
 +	{
 +		fz_rect r = image->float_bounds;
-+		/* Images are stacked, so all older margin boxes end no later. */
 +		if (y >= r.y1)
 +			break;
 +		if (y < r.y1 && y + h > r.y0)
@@ -117,14 +117,15 @@
 +				*left = fz_max(*left, r.x1);
 +			else
 +				*right = fz_min(*right, r.x0);
-+			*bottom = fz_max(*bottom, r.y1);
++			if (*bottom <= y || r.y1 < *bottom)
++				*bottom = r.y1;
 +		}
 +	}
 +}
  
  static int flush_line(fz_context *ctx, fz_html_box *box, layout_data *ld, float line_w, int align, float indent, fz_html_flow *a, fz_html_flow *b, fz_html_restarter *restart)
  {
-@@ -640,7 +685,14 @@
+@@ -640,7 +686,14 @@
  			box->s.layout.b += avail;
  		}
  	}
@@ -140,7 +141,7 @@
  	box->s.layout.b += line_h;
  	if (box->s.layout.b > ld->used[B])
  		ld->used[B] = box->s.layout.b;
-@@ -977,6 +1029,43 @@
+@@ -977,6 +1030,43 @@
  		}
  	}
  
@@ -184,7 +185,7 @@
  	node = box->u.flow.head;
  	if (start_flow)
  	{
-@@ -998,6 +1087,26 @@
+@@ -998,6 +1088,26 @@
  	/* Now collate the measured nodes into a line. */
  	while (node)
  	{
@@ -211,7 +212,7 @@
  
  		switch (node->type)
  		{
-@@ -1326,6 +1435,14 @@
+@@ -1326,6 +1436,14 @@
  			if (pd->has_height && box->s.layout.b - box->s.layout.y < pd->height)
  				box->s.layout.b = pd->height + box->s.layout.y;
  		}
@@ -226,7 +227,7 @@
  	}
  
  	/* So in the common case, we're done! */
-@@ -2499,7 +2616,7 @@
+@@ -2499,7 +2617,7 @@
  	}
  }
  
@@ -235,7 +236,7 @@
  {
  	fz_html_box *row;
  	int col, ncol;
-@@ -2781,6 +2898,19 @@
+@@ -2781,6 +2899,20 @@
  	return 0;
  }
  
@@ -246,6 +247,7 @@
 +	layout_data local = *ld;
 +	int result;
 +	local.floats = NULL;
++	local.last_float = NULL;
 +	result = layout_table_imp(ctx, &local, box);
 +	TRBLCPY(ld->bounds, local.bounds);
 +	TRBLCPY(ld->used, local.used);
@@ -255,7 +257,7 @@
  /* === LAYOUT BLOCKS === */
  
  /*
-@@ -2806,6 +2936,7 @@
+@@ -2806,6 +2938,7 @@
  	position_data position;
  
  	assert(fz_html_box_has_boxes(box));
@@ -263,22 +265,27 @@
  
  	/* If restart is non-NULL, we are running in restartable mode. */
  	if (restart)
-@@ -2836,6 +2967,14 @@
+@@ -2836,6 +2969,19 @@
  			restart->potential = box;
  	}
  
-+	if (!restart && style->clear_side)
++	if (!restart && style->clear_side &&
++		(style->position == POS_STATIC || style->position == POS_RELATIVE))
 +	{
 +		fz_html_box *image;
 +		for (image = ld->floats; image; image = image->next_float)
++		{
++			if (image->float_bounds.y1 <= ld->bounds[T])
++				break;
 +			if (style->clear_side & image->style->float_side)
 +				ld->bounds[T] = ld->used[B] = fz_max(ld->bounds[T], image->float_bounds.y1);
++		}
 +	}
 +
  	/* TODO: remove 'vertical' margin adjustments across automatic page breaks */
  	eop = layout_block_page_break(ctx, ld, &ld->used[B], style->page_break_before);
  
-@@ -2875,6 +3014,37 @@
+@@ -2875,6 +3021,76 @@
  		}
  		ld->used[L] = ld->bounds[L];
  
@@ -288,9 +295,6 @@
 +			fz_html_box *image;
 +			TRBLCPY(bounds, ld->bounds);
 +			TRBLCPY(used, ld->used);
-+			/* Stack subsequent floats rather than allowing image overlap. */
-+			if (ld->floats)
-+				ld->bounds[T] = fz_max(ld->bounds[T], ld->floats->float_bounds.y1);
 +			layout_block(ctx, ld, child);
 +			child->float_bounds = fz_make_rect(
 +				fz_min(child->s.layout.x, child->s.layout.x - child->u.block.margin[L]
@@ -302,11 +306,53 @@
 +			if (!isfinite(child->float_bounds.x0) || !isfinite(child->float_bounds.y0) ||
 +				!isfinite(child->float_bounds.x1) || !isfinite(child->float_bounds.y1))
 +				fz_throw(ctx, FZ_ERROR_FORMAT, "non-finite floating image margin box");
-+			/* Negative margins must not break the ordering used by line lookup. */
-+			if (ld->floats)
-+				child->float_bounds.y1 = fz_max(child->float_bounds.y1, ld->floats->float_bounds.y1);
-+			child->next_float = ld->floats;
-+			ld->floats = child;
++			/* Place floats on the earliest line with room for their margin box.
++			 * This permits same-side and opposing images to share a row. */
++			{
++				float left, right, bottom, dx, dy;
++				float y = child->float_bounds.y0;
++				float w = child->float_bounds.x1 - child->float_bounds.x0;
++				float h = child->float_bounds.y1 - child->float_bounds.y0;
++				float page_h = ld->page[B] - ld->page[T];
++				if (!isfinite(w) || !isfinite(h))
++					fz_throw(ctx, FZ_ERROR_FORMAT, "non-finite floating image extent");
++				/* A later float cannot rise above a preceding float, including
++				 * one moved onto the next page. */
++				if (ld->last_float)
++					y = fz_max(y, ld->last_float->float_bounds.y0);
++				for (;;)
++				{
++					if (page_h > 0)
++					{
++						float avail = page_h - fmodf(y - ld->page[T], page_h);
++						if (h > avail && h <= page_h)
++							y += avail;
++					}
++					float_line_bounds(ld, y, h, &left, &right, &bottom);
++					if (right - left >= w || !(bottom > y))
++						break;
++					y = bottom;
++				}
++				dx = child->style->float_side == 2 ? right - child->float_bounds.x1 : left - child->float_bounds.x0;
++				dy = y - child->float_bounds.y0;
++				if (!isfinite(dx) || !isfinite(dy))
++					fz_throw(ctx, FZ_ERROR_FORMAT, "non-finite floating image placement");
++				child->float_bounds = fz_translate_rect(child->float_bounds, dx, dy);
++				if (!isfinite(child->float_bounds.x0) || !isfinite(child->float_bounds.y0) ||
++					!isfinite(child->float_bounds.x1) || !isfinite(child->float_bounds.y1))
++					fz_throw(ctx, FZ_ERROR_FORMAT, "non-finite floating image placement");
++				shift_box_contents(child, dx, dy);
++			}
++			/* Keep all boxes for later negative margins, but put expired
++			 * floats at the tail so ordinary forward layout never scans them. */
++			{
++				fz_html_box **link = &ld->floats;
++				while (*link && (*link)->float_bounds.y1 > child->float_bounds.y1)
++					link = &(*link)->next_float;
++				child->next_float = *link;
++				*link = child;
++				ld->last_float = child;
++			}
 +			for (image = child; image; image = image->up)
 +				image->float_bottom = fz_max(image->float_bottom, child->float_bounds.y1);
 +			TRBLCPY(ld->bounds, bounds);
@@ -316,21 +362,19 @@
  		if (child->type == BOX_BLOCK)
  			eop = layout_block(ctx, ld, child);
  
-@@ -2908,6 +3078,13 @@
+@@ -2908,6 +3124,11 @@
  			restart->potential = NULL;
  
  		ld->bounds[T] = ld->used[B];
 +	}
 +
-+	if (!box->up && !restart)
++	if (!box->up && !restart && ld->floats)
 +	{
-+		fz_html_box *image;
-+		for (image = ld->floats; image; image = image->next_float)
-+			ld->used[B] = fz_max(ld->used[B], image->float_bounds.y1);
++		ld->used[B] = fz_max(ld->used[B], ld->floats->float_bounds.y1);
  	}
  
  	if (post_position(ctx, &position, ld, box, 0))
-@@ -4437,7 +4614,7 @@
+@@ -4437,7 +4658,7 @@
  	x1 = box->s.layout.x + box->s.layout.w + padding[R];
  	y1 = box->s.layout.b + padding[B];
  

@@ -30,6 +30,10 @@ comment = '''<html><head><guide><reference type="toc" filepos="TOC_OFFSET"/></gu
 <!-- > comment destination with ' quotes and <tags> -->
 <p>First chapter</p></body></html>'''
 
+raw_style = comment.replace("<!-- > comment destination with ' quotes and <tags> -->", '<style>/* raw destination */</style>')
+raw_script = comment.replace("<!-- > comment destination with ' quotes and <tags> -->", '<script>var x = "raw destination";</script>')
+single_byte = comment.replace("<!-- > comment destination with ' quotes and <tags> -->", '<p>© byte destination</p>')
+
 for name, encoding, codepage, compression, source in [
     ('toc-uncompressed.mobi', 'utf-8', 65001, 1, html),
     ('toc-palmdoc.mobi', 'utf-8', 65001, 2, html),
@@ -38,6 +42,9 @@ for name, encoding, codepage, compression, source in [
     ('toc-skipped-levels.mobi', 'utf-8', 65001, 1, nesting),
     ('toc-comment.mobi', 'utf-8', 65001, 1, comment),
     ('toc-comment-bang.mobi', 'utf-8', 65001, 1, comment.replace(' -->', ' --!>')),
+    ('toc-raw-style.mobi', 'utf-8', 65001, 1, raw_style),
+    ('toc-raw-script.mobi', 'utf-8', 65001, 1, raw_script),
+    ('toc-byte-1252.mobi', 'cp1252', 1252, 1, single_byte),
 ]:
     text = source.encode(encoding)
     toc_start = b'<a filepos="FIRST_POS_' if name == 'toc-link-start.mobi' else b'<p id="contents"'
@@ -47,6 +54,11 @@ for name, encoding, codepage, compression, source in [
         if marker.encode() in text:
             if marker == 'FIRST_POS_' and name.startswith('toc-comment'):
                 target = b'comment destination'
+            if marker == 'FIRST_POS_' and name.startswith('toc-raw-'):
+                target = b'raw destination'
+            if marker == 'FIRST_POS_' and name == 'toc-byte-1252.mobi':
+                target = b'\xa9 byte destination'
+
             text = text.replace(marker.encode(), f'{text.index(target):010d}'.encode())
     seed = (root / 'legacy-uncompressed.mobi').read_bytes()
     database = bytearray(seed[:78])

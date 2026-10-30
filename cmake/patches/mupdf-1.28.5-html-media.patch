@@ -1,43 +1,81 @@
 --- a/source/html/html-parse.c
 +++ b/source/html/html-parse.c
-@@ -1688,6 +1688,36 @@
+@@ -1695,6 +1695,74 @@
  	}
  }
  
-+/* Match simple CSS media lists for screen display. Keep the existing behavior
-+ * for complex media queries until a media query evaluator is available. */
++/* No viewport feature evaluator is available while stylesheets load. Unknown
++ * conditions do not match; in particular, print queries must not hide screen
++ * content merely because they contain whitespace or parentheses. */
++static int
++html_matches_media_type(const char *start, const char *end)
++{
++	const char *word;
++	size_t len;
++	int negate = 0, matches;
++	start += strspn(start, " \t\r\n\f");
++	word = start;
++	while (start < end && ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '-'))
++		++start;
++	len = start - word;
++	if ((len == 3 && !fz_strncasecmp(word, "not", 3)) ||
++		(len == 4 && !fz_strncasecmp(word, "only", 4)))
++	{
++		negate = len == 3;
++		if (start == end || !strchr(" \t\r\n\f", *start))
++			return 0;
++		start += strspn(start, " \t\r\n\f");
++		word = start;
++		while (start < end && ((*start >= 'a' && *start <= 'z') || (*start >= 'A' && *start <= 'Z') || *start == '-'))
++			++start;
++		len = start - word;
++	}
++	if (!len || (len == 3 && !fz_strncasecmp(word, "not", 3)) ||
++		(len == 4 && !fz_strncasecmp(word, "only", 4)))
++		return 0;
++	while (start < end && strchr(" \t\r\n\f", *start))
++		++start;
++	if (start != end)
++		return 0;
++	matches = (len == 6 && !fz_strncasecmp(word, "screen", 6)) ||
++		(len == 3 && !fz_strncasecmp(word, "all", 3));
++	return negate ? !matches : matches;
++}
++
 +static int
 +html_matches_media(const char *media)
 +{
-+	const char *end;
-+	size_t len;
-+
++	const char *start, *p;
++	size_t depth = 0;
++	int quote = 0;
 +	if (!media || !media[strspn(media, " \t\r\n\f")])
 +		return 1;
-+	while (*media)
++	start = media;
++	for (p = media; ; ++p)
 +	{
-+		media += strspn(media, " \t\r\n\f");
-+		end = strchr(media, ',');
-+		if (!end)
-+			end = media + strlen(media);
-+		len = end - media;
-+		while (len && strchr(" \t\r\n\f", media[len-1]))
-+			--len;
-+		if ((len == 6 && !fz_strncasecmp(media, "screen", len)) ||
-+			(len == 3 && !fz_strncasecmp(media, "all", len)))
-+			return 1;
-+		/* Whitespace within an entry or parentheses indicate a complex query. */
-+		if (strcspn(media, " \t\r\n\f()") < len)
-+			return 1;
-+		media = *end ? end + 1 : end;
++		if (!*p || (*p == ',' && !depth && !quote))
++		{
++			if (html_matches_media_type(start, p))
++				return 1;
++			if (!*p)
++				return 0;
++			start = p + 1;
++		}
++		else if (quote)
++		{
++			if (*p == '\\' && p[1]) ++p;
++			else if (*p == quote) quote = 0;
++		}
++		else if (*p == '\'' || *p == '"') quote = *p;
++		else if (*p == '(') ++depth;
++		else if (*p == ')' && depth) --depth;
 +	}
-+	return 0;
 +}
 +
  static void
  html_load_css(fz_context *ctx, fz_html_font_set *set, fz_archive *zip, const char *base_uri, fz_css *css, fz_xml *root)
  {
-@@ -1697,6 +1727,8 @@
+@@ -1704,6 +1772,8 @@
  	head = fz_xml_find_down(html, "head");
  	for (node = fz_xml_down(head); node; node = fz_xml_next(node))
  	{

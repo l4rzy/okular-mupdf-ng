@@ -9,6 +9,7 @@
 #include "plugin/worker_client.hpp"
 
 #include <QFile>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -546,6 +547,65 @@ private slots:
 #endif
     }
 
+    void preservesTargetEncoding_data()
+    {
+        QTest::addColumn<QString>("fixture");
+        QTest::addColumn<QByteArray>("before");
+        QTest::addColumn<QByteArray>("after");
+        QTest::newRow("style") << QString("toc-raw-style.mobi") << QByteArray("</style><span id=")
+                               << QByteArray("/* raw destination */</style>");
+        QTest::newRow("script") << QString("toc-raw-script.mobi") << QByteArray("</script><span id=")
+                                << QByteArray("raw destination\";</script>");
+        QTest::newRow("cp1252") << QString("toc-byte-1252.mobi") << QByteArray()
+                                << QString::fromUtf8("\"></span>© byte destination").toUtf8();
+    }
+
+    void preservesTargetEncoding()
+    {
+#if TEST_BUNDLED_MOBI_TOC
+        QFETCH(QString, fixture);
+        QFETCH(QByteArray, before);
+        QFETCH(QByteArray, after);
+        QFile file(QStringLiteral(TEST_MOBI_DIR "/") + fixture);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto bytes = file.readAll();
+        Worker::Engine::MobiDocument owner;
+        auto* context = owner.context();
+        fz_buffer* source = nullptr;
+        fz_archive* archive = nullptr;
+        fz_buffer* html = nullptr;
+        fz_var(source);
+        fz_var(archive);
+        fz_var(html);
+        const auto cleanup = qScopeGuard([&] {
+            fz_drop_buffer(context, html);
+            fz_drop_archive(context, archive);
+            fz_drop_buffer(context, source);
+        });
+        QByteArray extracted;
+        QString error;
+        fz_try(context)
+        {
+            source = fz_new_buffer_from_copied_data(
+                context, reinterpret_cast<const unsigned char*>(bytes.constData()), std::size_t(bytes.size()));
+            archive = fz_extract_html_from_mobi(context, source);
+            html = fz_read_archive_entry(context, archive, "index.html");
+            unsigned char* data = nullptr;
+            const auto size = fz_buffer_storage(context, html, &data);
+            extracted = QByteArray(reinterpret_cast<const char*>(data), qsizetype(size));
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(extracted.contains(before));
+        QVERIFY(extracted.contains(after));
+#else
+        QSKIP("MOBI targets require the bundled MuPDF patch");
+#endif
+    }
+
     void repairsToc_data()
     {
         QTest::addColumn<QString>("fixture");
@@ -557,6 +617,12 @@ private slots:
                                         << QStringList { };
         QTest::newRow("comment-bang-close")
             << QStringLiteral("toc-comment-bang.mobi") << QStringList { "First" } << QStringList { };
+        QTest::newRow("raw-style") << QStringLiteral("toc-raw-style.mobi") << QStringList { "First" }
+                                   << QStringList { };
+        QTest::newRow("raw-script") << QStringLiteral("toc-raw-script.mobi") << QStringList { "First" }
+                                    << QStringList { };
+        QTest::newRow("single-byte-target")
+            << QStringLiteral("toc-byte-1252.mobi") << QStringList { "First" } << QStringList { };
     }
 
     void repairsToc()

@@ -1,19 +1,23 @@
 --- a/source/pdf/pdf-form.c
 +++ b/source/pdf/pdf-form.c
-@@ -465,20 +465,21 @@
+@@ -465,20 +465,24 @@
  
  /* Set the values of all fields in a group defined by a node
   * in the hierarchy */
 -static void set_check_grp(fz_context *ctx, pdf_document *doc, pdf_obj *grp, pdf_obj *val)
-+static void set_check_grp(fz_context *ctx, pdf_document *doc, pdf_obj *grp, pdf_obj *val, pdf_obj *selected)
- {
+-{
++static void set_check_grp(fz_context *ctx, pdf_document *doc, pdf_obj *grp, pdf_obj *val, pdf_obj *selected, pdf_cycle_list *cycle_up, int depth)
++{
++	pdf_cycle_list cycle;
  	pdf_obj *kids = pdf_dict_get(ctx, grp, PDF_NAME(Kids));
  
++	if (depth > 256 || pdf_cycle(ctx, &cycle, cycle_up, grp))
++		fz_throw(ctx, FZ_ERROR_FORMAT, "cycle or excessive depth in button group");
  	if (kids == NULL)
  	{
 -		set_check(ctx, doc, grp, val);
 +		/* Without RadiosInUnison, only the clicked widget may be on. */
-+		set_check(ctx, doc, grp, selected && pdf_objcmp(ctx, grp, selected) ? PDF_NAME(Off) : val);
++		set_check(ctx, doc, grp, selected && pdf_resolve_indirect(ctx, grp) != pdf_resolve_indirect(ctx, selected) ? PDF_NAME(Off) : val);
  	}
  	else
  	{
@@ -21,17 +25,17 @@
  
  		for (i = 0; i < n; i++)
 -			set_check_grp(ctx, doc, pdf_array_get(ctx, kids, i), val);
-+			set_check_grp(ctx, doc, pdf_array_get(ctx, kids, i), val, selected);
++			set_check_grp(ctx, doc, pdf_array_get(ctx, kids, i), val, selected, &cycle, depth + 1);
  	}
  }
  
-@@ -582,7 +583,8 @@
+@@ -582,7 +586,8 @@
  		}
  
  		pdf_dict_put(ctx, grp, PDF_NAME(V), val);
 -		set_check_grp(ctx, doc, grp, val);
 +		set_check_grp(ctx, doc, grp, val,
-+			is_radio && !(ff & PDF_BTN_FIELD_IS_RADIOS_IN_UNISON) ? field : NULL);
++			is_radio && !(ff & PDF_BTN_FIELD_IS_RADIOS_IN_UNISON) ? field : NULL, NULL, 0);
  		doc->recalculate = 1;
  		end_annot_op(ctx, annot);
  	}

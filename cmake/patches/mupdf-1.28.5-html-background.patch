@@ -1,13 +1,59 @@
 --- a/source/html/css-apply.c
 +++ b/source/html/css-apply.c
-@@ -988,6 +988,10 @@
- static void
- add_shorthand_background(fz_css_match *match, fz_css_value *value, int spec)
+@@ -1022,4 +1022,55 @@
  {
-+	/* A lone image keyword resets the omitted background color to transparent. */
 +	static fz_css_value transparent = { CSS_KEYWORD, "transparent", NULL, NULL };
-+	if (value->type == CSS_KEYWORD && !fz_strcasecmp(value->data, "none") && !value->next)
-+		value = &transparent;
++	static const char *keywords[] = {
++		"none", "repeat", "repeat-x", "repeat-y", "no-repeat", "space", "round",
++		"scroll", "fixed", "local", "left", "right", "top", "bottom", "center",
++		"cover", "contain", "auto", "border-box", "padding-box", "content-box"
++	};
++	fz_css_value *color = &transparent, *v;
++	int has_color = 0;
++	size_t i;
++
++	/* Shorthands reset omitted components. Image/position/size values must
++	 * never reach the color parser's legacy bare-hex fallback. */
++	if (!value)
++		return;
++	if (!value->next && value->type == CSS_KEYWORD && !fz_strcasecmp(value->data, "inherit"))
++	{
++		add_property(match, PRO_BACKGROUND_COLOR, value, spec);
++		return;
++	}
++	for (v = value; v; v = v->next)
++	{
++		if (v->type == CSS_HASH ||
++			(v->type == CSS_KEYWORD && lookup_named_color(v->data)) ||
++			(v->type == '(' && (!strcmp(v->data, "rgb") || !strcmp(v->data, "rgba"))))
++		{
++			if (has_color)
++				return;
++			color = v;
++			has_color = 1;
++		}
++		else if (v->type == ',')
++		{
++			/* A color is permitted only in the final background layer. */
++			if (has_color || !v->next)
++				return;
++		}
++		else if (v->type == CSS_KEYWORD)
++		{
++			if (!v->next && v == value &&
++				(!fz_strcasecmp(v->data, "initial") || !fz_strcasecmp(v->data, "unset")))
++				break;
++			for (i = 0; i < nelem(keywords); ++i)
++				if (!fz_strcasecmp(v->data, keywords[i]))
++					break;
++			if (i == nelem(keywords))
++				return;
++		}
++		else if (v->type != CSS_URI && v->type != CSS_LENGTH && v->type != CSS_PERCENT &&
++			v->type != CSS_NUMBER && v->type != '/')
++			return; /* Unsupported syntax must not replace a previous declaration. */
++	}
  	/* TODO: background-image, -origin, -size, -repeat */
- 	add_property(match, PRO_BACKGROUND_COLOR, value, spec);
+-	add_property(match, PRO_BACKGROUND_COLOR, value, spec);
++	add_property(match, PRO_BACKGROUND_COLOR, color, spec);
  }
