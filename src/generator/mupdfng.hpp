@@ -164,6 +164,7 @@ private:
     Config::OcrSettings ocrSettings() const;
     bool applyDocumentSettings(const Config::DocumentSettings& settings);
     void loadDocumentSettings(const QString& key);
+    [[nodiscard]] bool prepareDocumentOpen(const QString& settingsKey);
     [[nodiscard]] bool canImportXfdf() const;
     void importXfdf();
     void syncActions();
@@ -182,7 +183,7 @@ private:
     // Preserve the global settings dialog's restart notice. Compare layout
     // defaults with the startup snapshot, independently of document overrides;
     // NSS database initialization remains one-way per process.
-    void updateSettingRestartState(const Config::EpubSettings& freshEpub);
+    [[nodiscard]] bool requiresSettingsRestart() const;
     // Reports xref-repair state to the user, mirroring the poppler generator's
     // xrefReconstructionHandler.
     void warnIfRepairedDocument(const Model::DocumentMetadata& info);
@@ -324,13 +325,6 @@ private:
     bool m_hasUsedPagePlaceholder = false;
     Page::Placeholder m_pagePlaceholder;
 #endif
-
-    // Restart decision state: whether pending settings need an Okular restart.
-    struct RestartState {
-        bool required = false;
-    };
-
-    RestartState m_restartState;
 };
 
 } // namespace Mu::Generator

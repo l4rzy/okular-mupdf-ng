@@ -368,13 +368,12 @@ bool Main::reparseConfig()
     m_cancelObsoleteRenders = Config::readRenderCancellationEnabled();
     setFeature(SupportsCancelling, m_cancelObsoleteRenders.load());
 
-    // Document override and restart state.
+    // Document theme override.
     Config::WorkerSettings settings = Config::readWorkerSettings();
     if (m_document.settings.theme)
         settings.rendering.documentTheme = *m_document.settings.theme;
     if (!m_pageError.isActive() && settings.rendering.documentTheme != m_settings.rendering.documentTheme)
         updatePagePlaceholder(settings.rendering.documentTheme);
-    updateSettingRestartState(settings.startupEpub);
 
     // Rendering changes.
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
@@ -460,13 +459,13 @@ bool Main::updateSandboxGate()
     return true;
 }
 
-void Main::updateSettingRestartState(const Config::EpubSettings& freshEpub)
+bool Main::requiresSettingsRestart() const
 {
     // Compare global defaults, never the active document's layout override.
     const QString certDbPath = Config::readCertificateDatabasePath(Plugin::Crypto::defaultSystemNssDbPath());
     // The defaulted identity is fixed at generator construction, so a first
     // launch needs no restart.
-    m_restartState.required = freshEpub != m_startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
+    return Config::readEpubSettings() != m_startupEpub || !Plugin::Crypto::isNssDatabaseActive(certDbPath);
 }
 
 // =============================================================================
@@ -484,8 +483,7 @@ void Main::addPages(KConfigDialog* dialog)
                     i18n("MuPDF-NG Configuration"));
     w->updateCustomCssButtonText();
     connect(dialog, &KConfigDialog::settingsChanged, this, [this, w] {
-        updateSettingRestartState(Config::readEpubSettings());
-        if (!m_restartState.required)
+        if (!requiresSettingsRestart())
             return;
         QMessageBox::information(w, i18n("Restart needed"), i18n("You need to restart Okular to apply this change."));
     });
@@ -660,6 +658,23 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
     return Okular::Document::OpenSuccess;
 }
 
+// Apply open-time settings after source validation and before document transfer.
+bool Main::prepareDocumentOpen(const QString& settingsKey)
+{
+    if (m_pendingFormJavaScriptEnabled) {
+        m_settings.formJavaScriptEnabled = *m_pendingFormJavaScriptEnabled;
+        m_pendingFormJavaScriptEnabled.reset();
+    }
+
+    loadDocumentSettings(settingsKey);
+    refreshPaperColor();
+    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+        MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
+        return false;
+    }
+    return true;
+}
+
 // Okular Generator Func: opens a file and creates its Okular pages.
 Okular::Document::OpenResult
 Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& pages, const QString& password)
@@ -681,22 +696,11 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
         return Okular::Document::OpenError;
     }
 
-    if (m_pendingFormJavaScriptEnabled) {
-        m_settings.formJavaScriptEnabled = *m_pendingFormJavaScriptEnabled;
-        m_pendingFormJavaScriptEnabled.reset();
-    }
-
-    // Push render settings before the open round trip; the paper color is the
-    // only swapped value, refreshed immediately before the settings are built.
-    loadDocumentSettings(Config::documentSettingsKey(fileName));
-    refreshPaperColor();
-    QList<Plugin::WorkerClient::PageInfo> workerPages;
-    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
+    if (!prepareDocumentOpen(Config::documentSettingsKey(fileName)))
         return Okular::Document::OpenError;
-    }
 
     // Metadata and page geometry return in the same open round trip.
+    QList<Plugin::WorkerClient::PageInfo> workerPages;
     const auto openStatus = m_worker.open(fileName, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
         return Okular::Document::OpenNeedsPassword;
@@ -733,19 +737,10 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
         return Okular::Document::OpenError;
     }
 
-    if (m_pendingFormJavaScriptEnabled) {
-        m_settings.formJavaScriptEnabled = *m_pendingFormJavaScriptEnabled;
-        m_pendingFormJavaScriptEnabled.reset();
-    }
-
-    loadDocumentSettings(Config::documentSettingsKey(fileData));
-    refreshPaperColor();
-    QList<Plugin::WorkerClient::PageInfo> workerPages;
-    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
+    if (!prepareDocumentOpen(Config::documentSettingsKey(fileData)))
         return Okular::Document::OpenError;
-    }
 
+    QList<Plugin::WorkerClient::PageInfo> workerPages;
     const auto openStatus = m_worker.openData(fileData, password, workerPages, docType);
     if (openStatus == Model::OpenStatus::NeedsPassword)
         return Okular::Document::OpenNeedsPassword;
@@ -1195,15 +1190,6 @@ void Main::failClosed(const QString& message)
     closeWorkerDocument();
     clearPageErrorDerivedState();
     Q_EMIT error(message, 0);
-
-    const Okular::Document* currentDocument = document();
-    if (!currentDocument)
-        return;
-    const int page = static_cast<int>(currentDocument->currentPage());
-    if (page >= 0 && page < m_okularPages.size()) {
-        clearPageDisplayState(page);
-        const_cast<Okular::Document*>(currentDocument)->refreshPixmaps(page);
-    }
 }
 
 // Okular Generator Func: clears the current document and worker state.
