@@ -77,35 +77,40 @@ private slots:
         QVERIFY(!::Mu::Plugin::Caching::EPUB::Cache::load(m_documentPath, settings));
     }
 
-    void ignoresUnpatchedLayoutCache_data()
+    void isolatesLayoutRevisions_data()
     {
         QTest::addColumn<bool>("accelerator");
         QTest::addColumn<quint32>("revision");
-        QTest::newRow("original-accelerator") << true << quint32(0);
-        QTest::newRow("original-outline") << false << quint32(0);
-        QTest::newRow("pre-rem-accelerator") << true << quint32(1);
-        QTest::newRow("pre-rem-outline") << false << quint32(1);
-        QTest::newRow("pre-page-margins-accelerator") << true << quint32(2);
-        QTest::newRow("pre-page-margins-outline") << false << quint32(2);
-        QTest::newRow("pre-media-filter-accelerator") << true << quint32(3);
-        QTest::newRow("pre-media-filter-outline") << false << quint32(3);
-        QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5);
-        QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5);
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("original-accelerator") << true << quint32(0) << false;
+        QTest::newRow("original-outline") << false << quint32(0) << false;
+        QTest::newRow("pre-rem-accelerator") << true << quint32(1) << false;
+        QTest::newRow("pre-rem-outline") << false << quint32(1) << false;
+        QTest::newRow("pre-page-margins-accelerator") << true << quint32(2) << false;
+        QTest::newRow("pre-page-margins-outline") << false << quint32(2) << false;
+        QTest::newRow("pre-media-filter-accelerator") << true << quint32(3) << false;
+        QTest::newRow("pre-media-filter-outline") << false << quint32(3) << false;
+        QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5) << false;
+        QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5) << false;
+        QTest::newRow("current-accelerator") << true << quint32(9) << true;
+        QTest::newRow("current-outline") << false << quint32(9) << true;
     }
 
-    void ignoresUnpatchedLayoutCache()
+    void isolatesLayoutRevisions()
     {
         QFETCH(bool, accelerator);
         QFETCH(quint32, revision);
+        QFETCH(bool, accepted);
         clearCacheFiles();
         ::Mu::Model::DocumentSettings settings;
         QFile source(m_documentPath);
         QVERIFY(source.open(QIODevice::ReadOnly));
         const QByteArray bytes = source.readAll();
 
-        // Reproduce keys predating bundled layout fixes.
-        QByteArray legacyLayout;
-        QDataStream layoutStream(&legacyLayout, QIODevice::WriteOnly);
+        // Build a persisted key without the application release version. Old
+        // layout revisions miss, while compatible accelerators and outlines load.
+        QByteArray layout;
+        QDataStream layoutStream(&layout, QIODevice::WriteOnly);
         layoutStream.setVersion(QDataStream::Qt_6_0);
         if (revision != 0)
             layoutStream << revision;
@@ -116,20 +121,19 @@ private slots:
         QByteArray payload;
         QDataStream stream(&payload, QIODevice::WriteOnly);
         stream.setVersion(QDataStream::Qt_6_0);
-        stream << QByteArray(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size()))
-               << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
-               << static_cast<quint64>(bytes.size()) << bytes << bytes << legacyLayout;
-        const QString legacyPath = ::Mu::Plugin::Caching::directory(QStringLiteral("epub_accel")) + QLatin1Char('/')
+        stream << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
+               << static_cast<quint64>(bytes.size()) << bytes << bytes << layout;
+        const QString entryPath = ::Mu::Plugin::Caching::directory(QStringLiteral("epub_accel")) + QLatin1Char('/')
             + QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex())
             + QStringLiteral(".bin");
         using Cache = ::Mu::Plugin::Caching::EPUB::Cache;
         if (accelerator)
-            QVERIFY(Cache::saveAcceleratorAt(legacyPath, QByteArrayLiteral("old page counts")));
+            QVERIFY(Cache::saveAcceleratorAt(entryPath, QByteArrayLiteral("cached page counts")));
         else
-            QVERIFY(Cache::saveOutlineAt(legacyPath, { }));
-        QVERIFY(Cache::loadAt(legacyPath));
-        QVERIFY(Cache::cacheFilePath(m_documentPath, settings) != legacyPath);
-        QVERIFY(!Cache::load(m_documentPath, settings));
+            QVERIFY(Cache::saveOutlineAt(entryPath, { }));
+        QVERIFY(Cache::loadAt(entryPath));
+        QCOMPARE(Cache::cacheFilePath(m_documentPath, settings) == entryPath, accepted);
+        QCOMPARE(Cache::load(m_documentPath, settings).has_value(), accepted);
     }
 
     void preservesValidEmptyOutline()

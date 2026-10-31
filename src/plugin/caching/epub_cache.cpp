@@ -356,8 +356,8 @@ template <typename Update> bool updateEntry(const QString& cachePath, Update&& u
 QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings& settings)
 {
     // The cache is content-addressed: the filename binds the source bytes
-    // (bounded head/tail probes plus size), the EPUB layout settings, and the
-    // engine/compat versions, so any of those changing yields a distinct key.
+    // (bounded head/tail probes plus size), the EPUB layout settings/revision,
+    // and the MuPDF version. Application releases alone do not invalidate it.
     QFile source(path);
     if (!source.open(QIODevice::ReadOnly))
         return { };
@@ -382,8 +382,7 @@ QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings&
     QByteArray payload;
     QDataStream stream(&payload, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_6_0);
-    stream << QByteArray(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size()))
-           << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
+    stream << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
            << static_cast<quint64>(size) << head << tail << layoutFingerprint(settings);
     if (stream.status() != QDataStream::Ok)
         return { };
