@@ -27,6 +27,7 @@ namespace Timeout {
 inline constexpr int ControlReadMs = 30'000;
 inline constexpr int ControlWriteMs = 30'000;
 inline constexpr int GenericOpMs = 5'000;
+inline constexpr int PdfConversionMs = 30'000;
 inline constexpr int HandshakeMs = 30'000;
 inline constexpr int RenderMs = 15'000;
 inline constexpr int OcrMs = 45'000;

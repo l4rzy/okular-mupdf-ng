@@ -127,32 +127,6 @@ receiveRenderFrame(IPC::FdChannel& channel, quint64 transferId, const char* labe
 
 } // namespace
 
-int Util::requestTimeoutFor(const RequestPayload& payload)
-{
-    return std::visit(
-        [](const auto& value) {
-            using T = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<T, RenderRequest>)
-                return Timeout::RenderMs;
-            if constexpr (std::is_same_v<T, OcrPageRequest> || std::is_same_v<T, OcrResultRequest>)
-                return Timeout::OcrMs;
-            if constexpr (std::is_same_v<T, OpenRequest>)
-                return value.documentType == DocumentType::Kindle ? Timeout::ExportMs : Timeout::GenericOpMs;
-            if constexpr (std::is_same_v<T, SaveRequest>)
-                return value.exportEpub || value.exportAzw3 ? Timeout::ExportMs : Timeout::GenericOpMs;
-            if constexpr (std::is_same_v<T, ExportPdfAsyncRequest>)
-                // Only the job submission round-trip is bounded here; the
-                // export itself completes out-of-band via a notification.
-                return Timeout::GenericOpMs;
-            if constexpr (std::is_same_v<T, SynopsisRequest>)
-                return value.generateFallback ? 30'000 : Timeout::GenericOpMs;
-            if constexpr (std::is_same_v<T, SignRequest>)
-                return Timeout::SignMs;
-            return Timeout::GenericOpMs;
-        },
-        payload);
-}
-
 // =============================================================================
 // Shared Frame Slots & Lease Release
 // =============================================================================

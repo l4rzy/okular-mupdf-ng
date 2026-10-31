@@ -102,8 +102,9 @@ Main::Main(QObject* parent, const QVariantList& args)
 {
     // Step 1: Advertise only the Okular services implemented by this adapter.
     setFeature(Threaded);
-    // Printing spools PDF through FilePrinter (lpr/CUPS), not QPainter.
-    setFeature(PrintPostscript);
+    // Okular uses this feature to request PDF print previews. Our print()
+    // override writes PDF directly and submits physical jobs through lpr/CUPS.
+    setFeature(PrintNative);
     setFeature(TextExtraction);
     setFeature(ReadRawData);
     setFeature(FontInfo);
@@ -1882,19 +1883,24 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
             selectedPages.append(p - 1);
     }
 
+    // Print-to-file and preview use the worker's staged PDF write and atomic publication.
+    // Output is PDF regardless of filename suffix.
+    if (!printer.outputFileName().isEmpty()) {
+        return m_worker.savePdfToFile(printer.outputFileName(), selectedPages)
+            ? Okular::Document::NoPrintError
+            : Okular::Document::PrintToFilePrintError;
+    }
+
     const QString templatePath = Plugin::Util::tempDirectory() + QStringLiteral("/print-XXXXXX.pdf");
     QTemporaryFile tempFile(templatePath);
     if (!tempFile.open())
         return Okular::Document::TemporaryFileOpenPrintError;
 
     const QString fileName = tempFile.fileName();
-    tempFile.setAutoRemove(false);
     tempFile.close();
 
-    if (!m_worker.savePdfToFile(fileName, selectedPages)) {
-        QFile::remove(fileName);
+    if (!m_worker.savePdfToFile(fileName, selectedPages))
         return Okular::Document::FileConversionPrintError;
-    }
 
     QPageLayout::Orientation orientation = QPageLayout::Portrait;
     if (!m_okularPages.isEmpty() && m_okularPages.first()->width() > m_okularPages.first()->height()) {
@@ -1916,6 +1922,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
         ? Okular::FilePrinter::ScaleMode::NoScaling
         : Okular::FilePrinter::ScaleMode::FitToPrintArea;
 
+    tempFile.setAutoRemove(false);
     Okular::Document::PrintError err = Okular::FilePrinter::printFile(printer,
                                                                       fileName,
                                                                       orientation,

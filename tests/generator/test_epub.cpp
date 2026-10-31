@@ -11,9 +11,11 @@
 #include <QDateTime>
 #include <QFile>
 #include <QMimeDatabase>
+#include <QPrinter>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 #include <QUrl>
 
@@ -185,6 +187,87 @@ private slots:
         KConfigGroup(config, QStringLiteral("Advanced"))
             .writeEntry("CacheLastVacuum", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         config->sync();
+    }
+
+    void printsPdfWithoutPostScriptConversion_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("preview");
+        QTest::newRow("epub-preview") << QStringLiteral(TEST_EPUB_DIR "/sample.epub") << true;
+        QTest::newRow("pdf-preview") << QStringLiteral(TEST_PDF_PATH) << true;
+        QTest::newRow("epub-printer") << QStringLiteral(TEST_EPUB_DIR "/sample.epub") << false;
+        QTest::newRow("pdf-printer") << QStringLiteral(TEST_PDF_PATH) << false;
+    }
+
+    void printsPdfWithoutPostScriptConversion()
+    {
+        QFETCH(QString, source);
+        QFETCH(bool, preview);
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(source, QUrl::fromLocalFile(source), QMimeDatabase().mimeTypeForFile(source)),
+                 Okular::Document::OpenSuccess);
+        // Part::slotPrintPreview chooses a .pdf filename for NativePrinting.
+        QCOMPARE(document.printingSupport(), Okular::Document::NativePrinting);
+        const auto pageCount = document.pages();
+
+        QTemporaryDir commands;
+        QVERIFY(commands.isValid());
+        const QString receipt = commands.filePath("receipt");
+        const QString converted = commands.filePath("converted");
+        QFile spooler(commands.filePath("lpr-cups"));
+        QVERIFY(spooler.open(QIODevice::WriteOnly));
+        // Capture the submitted PDF without sending anything to a real printer.
+        const QByteArray spoolScript = "#!/bin/sh\nfor source do :; done\nIFS= read -r header < \"$source\"\n"
+                                       "printf '%s\\n%s\\n' \"$header\" \"$source\" > '"
+            + receipt.toUtf8() + "'\n";
+        QCOMPARE(spooler.write(spoolScript), spoolScript.size());
+        QVERIFY(spooler.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        spooler.close();
+        QFile converter(commands.filePath("pdf2ps"));
+        QVERIFY(converter.open(QIODevice::WriteOnly));
+        const QByteArray conversionScript = "#!/bin/sh\nprintf called > '" + converted.toUtf8() + "'\nexit 42\n";
+        QCOMPARE(converter.write(conversionScript), conversionScript.size());
+        QVERIFY(converter.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        converter.close();
+        const QByteArray oldPath = qgetenv("PATH");
+        const auto restorePath = qScopeGuard([&] { qputenv("PATH", oldPath); });
+        qputenv("PATH", commands.path().toUtf8());
+
+        QPrinter printer;
+        QTemporaryFile output(commands.filePath("okular_XXXXXX.pdf"));
+        if (preview) {
+            // Match Okular's preview setup: the filename selects PDF output.
+            QVERIFY(output.open());
+            printer.setOutputFileName(output.fileName());
+            output.close();
+            QCOMPARE(printer.outputFormat(), QPrinter::PdfFormat);
+        }
+        printer.setPageOrientation(document.orientation());
+        QCOMPARE(document.print(printer), Okular::Document::NoPrintError);
+        QVERIFY(!QFile::exists(converted));
+
+        QString printed;
+        if (preview) {
+            QVERIFY(!QFile::exists(receipt));
+            printed = output.fileName();
+        } else {
+            QFile captured(receipt);
+            QVERIFY(captured.open(QIODevice::ReadOnly));
+            QVERIFY(captured.readLine().startsWith("%PDF-"));
+            printed = QString::fromUtf8(captured.readLine()).trimmed();
+        }
+        // The mock spooler leaves its input behind; own cleanup on assertion failures too.
+        const auto removeSpool = qScopeGuard([&] {
+            if (!preview)
+                QFile::remove(printed);
+        });
+        qputenv("PATH", oldPath);
+        document.closeDocument();
+        QCOMPARE(document.openDocument(printed,
+                                       QUrl::fromLocalFile(printed),
+                                       QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"))),
+                 Okular::Document::OpenSuccess);
+        QCOMPARE(document.pages(), pageCount);
     }
 
     void firstTileHasStableNamedActions_data()

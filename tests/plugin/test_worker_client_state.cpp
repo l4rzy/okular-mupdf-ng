@@ -24,6 +24,10 @@ private Q_SLOTS:
         QTest::newRow("epub-export") << 2 << Mu::IPC::Timeout::ExportMs;
         QTest::newRow("azw3-export") << 3 << Mu::IPC::Timeout::ExportMs;
         QTest::newRow("ordinary-save") << 4 << Mu::IPC::Timeout::GenericOpMs;
+        QTest::newRow("pdf-print") << 5 << 30'000;
+        QTest::newRow("pdf-flatten") << 6 << 30'000;
+        QTest::newRow("pdf-with-references") << 7 << 30'000;
+        QTest::newRow("pdf-background-submission") << 8 << Mu::IPC::Timeout::GenericOpMs;
     }
 
     void bookRequestTimeouts()
@@ -35,11 +39,18 @@ private Q_SLOTS:
             Mu::Model::OpenRequest open;
             open.documentType = kind == 0 ? Mu::Model::DocumentType::Kindle : Mu::Model::DocumentType::Epub;
             payload = open;
-        } else {
+        } else if (kind < 5) {
             Mu::Model::SaveRequest save;
             save.exportEpub = kind == 2;
             save.exportAzw3 = kind == 3;
             payload = save;
+        } else if (kind < 8) {
+            Mu::Model::SavePdfRequest save;
+            save.flatten = kind == 6;
+            save.withReferences = kind == 7;
+            payload = save;
+        } else {
+            payload = Mu::Model::ExportPdfAsyncRequest { };
         }
         QCOMPARE(Mu::Plugin::Util::requestTimeoutFor(payload), timeout);
     }

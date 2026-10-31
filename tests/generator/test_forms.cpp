@@ -327,8 +327,19 @@ private slots:
         QCOMPARE(name->text(), QStringLiteral("Original"));
     }
 
+    void printsUnsavedValues_data()
+    {
+        QTest::addColumn<QString>("fileName");
+        QTest::addColumn<bool>("singlePage");
+        QTest::newRow("lowercase") << QStringLiteral("printed.pdf") << false;
+        QTest::newRow("uppercase-selected-page") << QStringLiteral("printed.PDF") << true;
+        QTest::newRow("no-suffix") << QStringLiteral("printed") << false;
+    }
+
     void printsUnsavedValues()
     {
+        QFETCH(QString, fileName);
+        QFETCH(bool, singlePage);
         Okular::Document document(nullptr);
         QCOMPARE(openDocument(document, QStringLiteral(TEST_FORM_DIR "/application.pdf")),
                  Okular::Document::OpenSuccess);
@@ -337,17 +348,54 @@ private slots:
         const QString value = QStringLiteral("Printed value");
         document.editFormText(0, name, value, static_cast<int>(value.size()), 0, 0, name->text());
         QCOMPARE(name->text(), value);
-        const QString printed = m_root.filePath("printed.pdf");
+        const QString printed = m_root.filePath(fileName);
+        QFile destination(printed);
+        QVERIFY(destination.open(QIODevice::WriteOnly));
+        QVERIFY(destination.write("existing destination") > 0);
+        destination.close();
+        const uint expectedPages = singlePage ? 1 : document.pages();
         QPrinter printer(QPrinter::HighResolution);
         printer.setOutputFormat(QPrinter::PdfFormat);
         printer.setOutputFileName(printed);
+        if (singlePage) {
+            printer.setFromTo(1, 1);
+            printer.setPrintRange(QPrinter::PageRange);
+        }
         QCOMPARE(document.print(printer), Okular::Document::NoPrintError);
+        QCOMPARE(printer.outputFileName(), printed);
+        QCOMPARE(printer.printRange(), singlePage ? QPrinter::PageRange : QPrinter::AllPages);
         QCOMPARE(name->text(), value);
         document.closeDocument();
         QCOMPARE(openDocument(document, printed), Okular::Document::OpenSuccess);
+        QCOMPARE(document.pages(), expectedPages);
         QVERIFY(document.page(0)->formFields().isEmpty());
         document.requestTextPage(0);
         QVERIFY(document.page(0)->text().contains(value));
+    }
+
+    void printToFilePublicationFailure()
+    {
+        Okular::Document document(nullptr);
+        QCOMPARE(openDocument(document, QStringLiteral(TEST_FORM_DIR "/application.pdf")),
+                 Okular::Document::OpenSuccess);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString target = directory.filePath("printed.PDF");
+        // Conversion/staging may succeed, but publishing over a directory must fail.
+        QVERIFY(QDir().mkdir(target));
+        QFile sentinel(target + QStringLiteral("/keep"));
+        QVERIFY(sentinel.open(QIODevice::WriteOnly));
+        QVERIFY(sentinel.write("existing destination") > 0);
+        sentinel.close();
+        QPrinter printer;
+        printer.setOutputFileName(target);
+        printer.setOutputFormat(QPrinter::PdfFormat);
+        QCOMPARE(document.print(printer), Okular::Document::PrintToFilePrintError);
+        QVERIFY(sentinel.open(QIODevice::ReadOnly));
+        QCOMPARE(sentinel.readAll(), QByteArray("existing destination"));
+        QVERIFY(QDir(directory.path())
+                    .entryList({ QStringLiteral(".mupdfng-worker-*") }, QDir::Files | QDir::Hidden)
+                    .isEmpty());
     }
 
     void discardsUnsavedEditsOnWorkerRecovery_data()
