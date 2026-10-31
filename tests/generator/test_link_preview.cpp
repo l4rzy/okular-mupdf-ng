@@ -901,13 +901,20 @@ private slots:
         QVERIFY(previews.showPreview(destination()));
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
-        const auto* pin = window->findChild<QToolButton*>(QStringLiteral("previewPin"));
+        auto* pin = window->findChild<QToolButton*>(QStringLiteral("previewPin"));
         const auto* header = window->findChild<QWidget*>(QStringLiteral("previewHeader"));
         QVERIFY(pin);
         QVERIFY(header);
         QVERIFY(pin->height() <= header->fontMetrics().height());
         QVERIFY(pin->iconSize().height() < pin->height());
         QVERIFY(header->rect().contains(pin->geometry()));
+        QVERIFY(pin->width() >= 2 * pin->height());
+        const int headerHeight = header->height();
+        QTest::mouseClick(pin, Qt::LeftButton, Qt::NoModifier, QPoint(1, pin->height() / 2));
+        QVERIFY(pin->isChecked());
+        QTest::mouseClick(pin, Qt::LeftButton, Qt::NoModifier, QPoint(pin->width() - 2, pin->height() / 2));
+        QVERIFY(!pin->isChecked());
+        QCOMPARE(header->height(), headerHeight);
     }
 
     void pinsPreview_data()

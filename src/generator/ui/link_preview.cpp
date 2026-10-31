@@ -342,9 +342,10 @@ private:
     {
         // Font propagation can finish on show, after the initial layout.
         // Sizes are logical pixels; Qt scales the button and themed icon for the display.
-        const int pinSize = std::min(18, m_header->fontMetrics().height());
-        const int iconSize = std::max(1, pinSize - 2);
-        m_pin->setFixedSize(pinSize, pinSize);
+        const int pinHeight = std::min(18, m_header->fontMetrics().height());
+        const int iconSize = std::max(1, pinHeight - 2);
+        // Widen the hit area without making the header taller.
+        m_pin->setFixedSize(36, pinHeight);
         m_pin->setIconSize(QSize(iconSize, iconSize));
     }
 
