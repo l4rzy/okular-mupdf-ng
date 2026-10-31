@@ -1,3 +1,15 @@
+okular-mupdf-ng (0.5.9-1) unstable; urgency=medium
+
+  * Update to version 0.5.9.
+  * Improve EPUB opening speed by loading links as needed.
+  * Fix floating image placement and text wrapping in ebooks.
+  * Prevent excessive memory use when loading corrupted table-of-contents caches.
+  * Make the link-preview pin button easier to click.
+  * Update Vietnamese translations.
+  * Improve source code readability.
+
+ -- l4rzy <me@23ro.org>  Fri, 30 Oct 2026 20:43:39 -0500
+
 okular-mupdf-ng (0.5.8-1) unstable; urgency=medium
 
   * Update to version 0.5.8.

@@ -2,7 +2,7 @@
 # Maintainer: rzy <me@23ro.org>
 
 pkgname=okular-mupdf-ng
-pkgver=0.5.8
+pkgver=0.5.9
 pkgrel=1
 pkgdesc="Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, and KFX"
 arch=('x86_64')

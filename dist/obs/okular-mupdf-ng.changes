@@ -1,4 +1,15 @@
 -------------------------------------------------------------------
+Sat Oct 31 01:43:39 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.5.9.
+- Improve EPUB opening speed by loading links as needed.
+- Fix floating image placement and text wrapping in ebooks.
+- Prevent excessive memory use when loading corrupted table-of-contents caches.
+- Make the link-preview pin button easier to click.
+- Update Vietnamese translations.
+- Improve source code readability.
+
+-------------------------------------------------------------------
 Fri Oct 30 02:09:32 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.8.

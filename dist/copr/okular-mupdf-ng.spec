@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.8
+Version:        0.5.9
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -110,6 +110,15 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Fri Oct 30 2026 l4rzy <me@23ro.org> - 0.5.9-1
+- Update to version 0.5.9.
+- Improve EPUB opening speed by loading links as needed.
+- Fix floating image placement and text wrapping in ebooks.
+- Prevent excessive memory use when loading corrupted table-of-contents caches.
+- Make the link-preview pin button easier to click.
+- Update Vietnamese translations.
+- Improve source code readability.
+
 * Thu Oct 29 2026 l4rzy <me@23ro.org> - 0.5.8-1
 - Update to version 0.5.8.
 - Add per-document theme, ebook layout, and OCR settings.

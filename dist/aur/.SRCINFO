@@ -1,6 +1,6 @@
 pkgbase = okular-mupdf-ng-git
 	pkgdesc = Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, and KFX
-	pkgver = 0.5.7
+	pkgver = 0.5.9
 	pkgrel = 1
 	url = https://github.com/l4rzy/okular-mupdf-ng
 	arch = x86_64
