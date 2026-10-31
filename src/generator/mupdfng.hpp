@@ -236,8 +236,7 @@ private:
     // annotations, links, and form proxies to the current worker session.
     // The load path retained the source and password beforehand; identity
     // members (type, hash, name) are derived here.
-    Okular::Document::OpenResult initPages(QVector<Okular::Page*>& pages,
-                                           QList<Plugin::WorkerClient::PageInfo>& pageInfos);
+    void initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::PageInfo>& pageInfos);
     // Schedules a throttled background vacuum of stale cache files. The scan
     // runs off the UI thread and records its timestamp when finished.
     void scheduleCacheVacuum();

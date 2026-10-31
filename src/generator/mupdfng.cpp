@@ -36,7 +36,6 @@
 #include <QUrl>
 #include <atomic>
 #include <functional>
-#include <unordered_map>
 
 #include "generator/config/settings.hpp"
 #include "generator/config/settingswidget.hpp"
@@ -46,13 +45,8 @@
 #include "generator/conversion/text.hpp"
 #include "generator/conversion/xfdf.hpp"
 #include "generator/proxy/annotation.hpp"
-#include "generator/proxy/form/checkbox.hpp"
-#include "generator/proxy/form/choice.hpp"
+#include "generator/proxy/form/construction.hpp"
 #include "generator/proxy/form/coordinator.hpp"
-#include "generator/proxy/form/push_button.hpp"
-#include "generator/proxy/form/radio_button.hpp"
-#include "generator/proxy/form/radio_grouping.hpp"
-#include "generator/proxy/form/text.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/caching/vacuum.hpp"
 #include "plugin/crypto/nss.hpp"
@@ -494,8 +488,7 @@ void Main::addPages(KConfigDialog* dialog)
 // =============================================================================
 
 // Converts worker page information into Okular pages and page metadata.
-Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
-                                             QList<Plugin::WorkerClient::PageInfo>& pageInfos)
+void Main::initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::PageInfo>& pageInfos)
 {
     // Phase 1: reset state scoped to the previous document generation.
     m_pageError.reset();
@@ -543,8 +536,6 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         else if (!m_document.sourceData.isEmpty() && signatureBuffer.open(QIODevice::ReadOnly))
             signatureSource = &signatureBuffer;
     }
-    std::vector<Proxy::Form::RadioGroupMember> radioMembers;
-    std::unordered_map<int, Proxy::Form::RadioButton*> radioProxies;
 
     const bool canValidateSignatures = signatureSource != nullptr;
     for (Plugin::WorkerClient::PageInfo& pageInfo : pageInfos) {
@@ -571,51 +562,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
             auto* sig = new Proxy::Form::Signature(sfd.objectNumber, std::move(sfd), &m_worker);
             formFields.append(sig);
         }
-        for (Model::FormField& field : pageInfo.formFields) {
-            switch (field.type) {
-            case Model::FormFieldType::Text: {
-                auto* proxy = new Proxy::Form::Text(field.pdfObjectNumber, std::move(field), m_formCoordinator.get());
-                m_formCoordinator->registerField(proxy->model().handle, proxy);
-                formFields.append(proxy);
-                break;
-            }
-            case Model::FormFieldType::CheckBox: {
-                auto* proxy =
-                    new Proxy::Form::CheckBox(field.pdfObjectNumber, std::move(field), m_formCoordinator.get());
-                m_formCoordinator->registerField(proxy->model().handle, proxy);
-                formFields.append(proxy);
-                break;
-            }
-            case Model::FormFieldType::RadioButton: {
-                auto* radio =
-                    new Proxy::Form::RadioButton(field.pdfObjectNumber, std::move(field), m_formCoordinator.get());
-                m_formCoordinator->registerField(radio->model().handle, radio);
-                formFields.append(radio);
-
-                radioMembers.push_back({ radio->id(),
-                                         radio->model().groupName,
-                                         radio->model().fieldObjectNumber,
-                                         radio->model().onState,
-                                         radio->model().radiosInUnison });
-                radioProxies.emplace(radio->id(), radio);
-                break;
-            }
-            case Model::FormFieldType::PushButton: {
-                auto* button =
-                    new Proxy::Form::PushButton(field.pdfObjectNumber, std::move(field), m_formCoordinator.get());
-                m_formCoordinator->registerField(button->model().handle, button);
-                formFields.append(button);
-                break;
-            }
-            case Model::FormFieldType::ComboBox:
-            case Model::FormFieldType::ListBox: {
-                auto* proxy = new Proxy::Form::Choice(field.pdfObjectNumber, std::move(field), m_formCoordinator.get());
-                m_formCoordinator->registerField(proxy->model().handle, proxy);
-                formFields.append(proxy);
-                break;
-            }
-            }
-        }
+        formFields.append(Proxy::Form::createFormFields(pageInfo.formFields, *m_formCoordinator));
 
         okularPage->setObjectRects(Conversion::objectRects(pageInfo.links, &m_linkPreview, pageInfo.number));
         if (!formFields.isEmpty()) {
@@ -625,17 +572,7 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         pages.append(okularPage);
     }
 
-    // Separate repeated in-unison options into UI groups; canonical worker
-    // responses synchronize every copy of the logical PDF field.
-    for (const auto& [id, siblings] : Proxy::Form::radioSiblingIds(radioMembers)) {
-        auto proxy = radioProxies.find(id);
-        if (proxy != radioProxies.end()) {
-            QList<int> siblingIds;
-            for (int sibling : siblings)
-                siblingIds.append(sibling);
-            proxy->second->setSiblings(siblingIds);
-        }
-    }
+    Proxy::Form::assignRadioSiblings(pages);
 
     loadLayers();
 
@@ -655,7 +592,6 @@ Okular::Document::OpenResult Main::initPages(QVector<Okular::Page*>& pages,
         const_cast<Okular::Document*>(document())->addObserver(this);
         m_observingVisiblePages = true;
     }
-    return Okular::Document::OpenSuccess;
 }
 
 // Apply open-time settings after source validation and before document transfer.
@@ -712,7 +648,8 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
     m_document.sourcePath = fileName;
     m_document.sourceData.clear();
 
-    return initPages(pages, workerPages);
+    initPages(pages, workerPages);
+    return Okular::Document::OpenSuccess;
 }
 
 // Okular Generator Func: opens memory data and creates its Okular pages.
@@ -751,7 +688,8 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
     m_document.sourcePath.clear();
     m_document.sourceData = fileData;
 
-    return initPages(pages, workerPages);
+    initPages(pages, workerPages);
+    return Okular::Document::OpenSuccess;
 }
 
 // =============================================================================

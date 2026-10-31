@@ -208,6 +208,7 @@ add_library(mupdf_generator_adapters STATIC
   generator/proxy/form/push_button.cpp
   generator/proxy/form/choice.cpp
   generator/proxy/form/coordinator.cpp
+  generator/proxy/form/construction.cpp
   generator/proxy/certificate_store.cpp
   generator/ui/printing.cpp
   generator/ui/layers_model.cpp

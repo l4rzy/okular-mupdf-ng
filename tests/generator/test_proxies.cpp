@@ -26,6 +26,7 @@
 #include "generator/proxy/embedded_file.hpp"
 #include "generator/proxy/form/checkbox.hpp"
 #include "generator/proxy/form/choice.hpp"
+#include "generator/proxy/form/construction.hpp"
 #include "generator/proxy/form/coordinator.hpp"
 #include "generator/proxy/form/push_button.hpp"
 #include "generator/proxy/form/radio_button.hpp"
@@ -1305,6 +1306,135 @@ private slots:
         coordinator.setAvailable(false);
         textProxy.setText(QStringLiteral("UnavailableEdit"));
         QCOMPARE(textProxy.text(), QStringLiteral("OriginalText"));
+    }
+
+    void constructsRegisteredFormFields_data()
+    {
+        QTest::addColumn<int>("type");
+        using Type = ::Mu::Model::FormFieldType;
+        QTest::newRow("text") << int(Type::Text);
+        QTest::newRow("checkbox") << int(Type::CheckBox);
+        QTest::newRow("radio") << int(Type::RadioButton);
+        QTest::newRow("push-button") << int(Type::PushButton);
+        QTest::newRow("combo") << int(Type::ComboBox);
+        QTest::newRow("list") << int(Type::ListBox);
+    }
+
+    void constructsRegisteredFormFields()
+    {
+        QFETCH(int, type);
+        namespace Form = ::Mu::Generator::Proxy::Form;
+        using Type = ::Mu::Model::FormFieldType;
+        Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
+        Okular::Page page(0, 600, 800, Okular::Rotation0);
+        std::vector<::Mu::Model::FormField> fields(2);
+        for (std::size_t i = 0; i < fields.size(); ++i) {
+            fields[i].type = static_cast<Type>(type);
+            fields[i].pdfObjectNumber = 41 + static_cast<int>(i);
+            fields[i].partialName = "field-" + std::to_string(i);
+            fields[i].handle = "original-worker-generation-field-" + std::to_string(i);
+        }
+        auto reopened = fields;
+        page.setFormFields(Form::createFormFields(fields, coordinator));
+        const auto proxies = page.formFields();
+        QCOMPARE(proxies.size(), 2);
+        std::vector<const ::Mu::Model::FormField*> snapshots;
+        for (std::size_t i = 0; i < fields.size(); ++i) {
+            auto* field = proxies.at(static_cast<qsizetype>(i));
+            QCOMPARE(field->id(), reopened[i].pdfObjectNumber);
+            QCOMPARE(field->name(), QString::fromStdString(reopened[i].partialName));
+            const ::Mu::Model::FormField* model = nullptr;
+            switch (static_cast<Type>(type)) {
+            case Type::Text:
+                if (auto* proxy = dynamic_cast<Form::Text*>(field))
+                    model = &proxy->model();
+                break;
+            case Type::CheckBox:
+                if (auto* proxy = dynamic_cast<Form::CheckBox*>(field))
+                    model = &proxy->model();
+                break;
+            case Type::RadioButton:
+                if (auto* proxy = dynamic_cast<Form::RadioButton*>(field))
+                    model = &proxy->model();
+                break;
+            case Type::PushButton:
+                if (auto* proxy = dynamic_cast<Form::PushButton*>(field))
+                    model = &proxy->model();
+                break;
+            case Type::ComboBox:
+            case Type::ListBox:
+                if (auto* proxy = dynamic_cast<Form::Choice*>(field))
+                    model = &proxy->model();
+                break;
+            }
+            QVERIFY(model);
+            QCOMPARE(model->type, static_cast<Type>(type));
+            QCOMPARE(model->handle, reopened[i].handle);
+            snapshots.push_back(model);
+            reopened[i].handle = "reopened-worker-generation-field-" + std::to_string(i);
+        }
+        // Recovery must find each proxy under its original handle even though
+        // construction consumes the input models.
+        coordinator.resetFields(reopened);
+        for (std::size_t i = 0; i < fields.size(); ++i)
+            QCOMPARE(snapshots[i]->handle, reopened[i].handle);
+    }
+
+    void assignsRadioSiblingsAcrossPages_data()
+    {
+        QTest::addColumn<bool>("named");
+        QTest::addColumn<bool>("inUnison");
+        QTest::newRow("named-exclusive") << true << false;
+        QTest::newRow("object-exclusive") << false << false;
+        QTest::newRow("named-unison") << true << true;
+        QTest::newRow("object-unison") << false << true;
+    }
+
+    void assignsRadioSiblingsAcrossPages()
+    {
+        QFETCH(bool, named);
+        QFETCH(bool, inUnison);
+        namespace Form = ::Mu::Generator::Proxy::Form;
+        Form::Coordinator coordinator(&::Mu::Plugin::s_formBackend);
+        Okular::Page first(0, 600, 800, Okular::Rotation0);
+        Okular::Page second(1, 600, 800, Okular::Rotation0);
+        QVector<Okular::Page*> pages { &first, &second };
+        for (int page = 0; page < 2; ++page) {
+            std::vector<::Mu::Model::FormField> fields(3);
+            for (int option = 0; option < 3; ++option) {
+                auto& field = fields[static_cast<std::size_t>(option)];
+                field.type = option < 2 ? ::Mu::Model::FormFieldType::RadioButton : ::Mu::Model::FormFieldType::Text;
+                field.pdfObjectNumber = page * 3 + option + 1;
+                field.handle = "field-" + std::to_string(field.pdfObjectNumber);
+                field.groupName = named ? "options" : "";
+                field.fieldObjectNumber = 42;
+                field.onState = option == 0 ? "A" : "B";
+                field.radiosInUnison = inUnison;
+            }
+            QList<Okular::FormField*> proxies;
+            if (page == 0)
+                proxies.append(new Form::Signature(100, { }));
+            proxies.append(Form::createFormFields(fields, coordinator));
+            pages[page]->setFormFields(proxies);
+        }
+        Form::assignRadioSiblings(pages);
+        QVERIFY(dynamic_cast<Form::Signature*>(first.formFields().first()));
+        const QList<int> radioIds { 1, 2, 4, 5 };
+        for (const auto* page : pages) {
+            for (auto* field : page->formFields()) {
+                const auto* radio = dynamic_cast<Form::RadioButton*>(field);
+                if (!radio)
+                    continue;
+                QList<int> expected;
+                if (inUnison)
+                    expected.append(radio->id() % 3 == 1 ? radio->id() + 1 : radio->id() - 1);
+                else {
+                    expected = radioIds;
+                    expected.removeAll(radio->id());
+                }
+                QCOMPARE(radio->siblings(), expected);
+            }
+        }
     }
 
     void documentWideRadioGroupingLinksAcrossPages()
