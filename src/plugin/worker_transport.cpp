@@ -1009,6 +1009,9 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     }
     m_export = PendingExport { std::move(file), target, job->jobId };
     m_exportTimer->start(Timeout::ExportMs);
+    // call() defers draining this request's buffered notifications until the
+    // returned job is registered. A fast export may already have completed.
+    processIncomingNotifications();
     return job->jobId;
 }
 
@@ -1113,6 +1116,7 @@ bool WorkerTransport::setSettings(const DocumentSettings& settings)
 
 std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, bool reportFailure)
 {
+    const bool deferNotifications = std::holds_alternative<ExportPdfAsyncRequest>(payload);
     // Phase 1: verify serialization preconditions. The protocol permits one
     // synchronous request at a time, so a disconnected transport bails out and a
     // reentrant or concurrent call aborts the session rather than interleaving.
@@ -1191,7 +1195,7 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
     }
 
     // Dispatch outside the guard destructor so exceptions can propagate normally.
-    if (m_notifier && isConnected())
+    if (!deferNotifications && m_notifier && isConnected())
         processIncomingNotifications();
     return response;
 }

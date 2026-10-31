@@ -37,7 +37,7 @@ bool FdChannel::listen(const std::string& path, std::string* error)
         return setError(error, std::strerror(errno));
     sockaddr_un address { };
     address.sun_family = AF_UNIX;
-    std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
+    std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
     // The endpoint is private to the current user; SOCK_CLOEXEC prevents it from
     // leaking into unrelated exec'ed processes.
     if (::bind(m_fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0
@@ -94,7 +94,7 @@ bool FdChannel::connect(const std::string& path, std::string* error, std::int64_
         return setError(error, std::strerror(errno));
     sockaddr_un address { };
     address.sun_family = AF_UNIX;
-    std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
+    std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
     if (::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
         const std::string why = std::strerror(errno);
         ::close(fd);

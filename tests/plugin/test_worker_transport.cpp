@@ -4,11 +4,15 @@
 #include "plugin/worker_transport.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 
+#include <QDir>
 #include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 
 #include <chrono>
 #include <sys/socket.h>
+#include <unistd.h>
 
 namespace Mu::Plugin {
 
@@ -16,6 +20,118 @@ class TestWorkerTransport : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    void exportCompletion_data()
+    {
+        QTest::addColumn<int>("scenario");
+        QTest::newRow("completion-during-submission") << 0;
+        QTest::newRow("later-completion") << 1;
+        QTest::newRow("submission-rejected") << 2;
+        QTest::newRow("early-conversion-failure") << 3;
+        QTest::newRow("publication-failure") << 4;
+        QTest::newRow("late-after-timeout") << 5;
+        QTest::newRow("stale-job-id") << 6;
+        QTest::newRow("late-after-close") << 7;
+        QTest::newRow("late-after-recovery") << 8;
+    }
+
+    void exportCompletion()
+    {
+        QFETCH(int, scenario);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString target = directory.filePath("export.pdf");
+        if (scenario == 4)
+            QVERIFY(QDir().mkdir(target));
+        QFile destination(scenario == 4 ? target + QStringLiteral("/keep") : target);
+        QVERIFY(destination.open(QIODevice::WriteOnly));
+        QCOMPARE(destination.write("original"), 8);
+        destination.close();
+        QTemporaryFile source(directory.filePath("source-XXXXXX"));
+        QVERIFY(source.open());
+        WorkerTransport transport;
+        QVERIFY(transport.start(QStringLiteral(WORKER_BUILD_PATH), { }, nullptr));
+        transport.m_sourceFile = std::make_unique<QFile>(source.fileName());
+        QVERIFY(transport.m_sourceFile->open(QIODevice::ReadOnly));
+        auto workerChannel = std::move(transport.m_ctrl);
+        int sockets[2];
+        QCOMPARE(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sockets), 0);
+        transport.m_ctrl = IPC::CtrlChannel(sockets[0]);
+        IPC::CtrlChannel peer(sockets[1]);
+        transport.m_notifier = std::make_unique<QSocketNotifier>(sockets[0], QSocketNotifier::Read);
+        transport.m_fd.close();
+        IPC::FdChannel descriptors;
+        const auto socketPath = QFile::encodeName(directory.filePath("fd.sock")).toStdString();
+        std::string error;
+        QVERIFY(descriptors.listen(socketPath, &error));
+        QVERIFY(transport.m_fd.connect(socketPath, &error));
+        QVERIFY(descriptors.accept(&error));
+        const auto transfer = transport.m_nextTransfer;
+        const QSignalSpy completions(&transport, &WorkerTransport::pdfExportFinished);
+        Model::ResponseMessage response { transport.m_nextId, Model::JobResponse { 42 }, std::nullopt };
+        if (scenario == 2) {
+            response.payload = std::monostate { };
+            response.error = Model::Error { Model::ErrorCode::InvalidRequest, "export", "rejected" };
+        }
+        const Model::NotificationMessage done { Model::ExportDoneNotification { 42, scenario != 3, "" } };
+        QVERIFY(IPC::ZppCodec::writeMessage(peer, response, 1000, &error));
+        // Queue both frames before submission so the old call() deterministically
+        // drains completion before startPdfExport() can register the job.
+        if (scenario == 0 || scenario == 3 || scenario == 4)
+            QVERIFY(IPC::ZppCodec::writeMessage(peer, done, 1000, &error));
+        const auto job = transport.startPdfExport(target, { });
+        QCOMPARE(job.has_value(), scenario != 2);
+        if (job)
+            QCOMPARE(*job, 42u);
+        const int outputFd = descriptors.receive(transfer, &error, 1000);
+        QVERIFY(outputFd >= 0);
+        ::close(outputFd);
+        const int inputFd = descriptors.receive(transfer + 1, &error, 1000);
+        QVERIFY(inputFd >= 0);
+        ::close(inputFd);
+        if (scenario == 1 || scenario >= 5) {
+            QVERIFY(transport.m_export);
+            QVERIFY(transport.m_exportTimer->isActive());
+            QCOMPARE(completions.size(), 0);
+            if (scenario == 5) {
+                // Exercise timeout cleanup directly, without waiting for a timer.
+                QVERIFY(QMetaObject::invokeMethod(transport.m_exportTimer.get(), "timeout", Qt::DirectConnection));
+            } else if (scenario == 8) {
+                transport.abort();
+            } else if (scenario == 7) {
+                QVERIFY(IPC::ZppCodec::writeMessage(
+                    peer,
+                    Model::ResponseMessage { transport.m_nextId, std::monostate { }, std::nullopt },
+                    1000,
+                    &error));
+                QVERIFY(transport.close());
+            } else if (scenario == 6) {
+                QVERIFY(transport.handleNotification(
+                    Model::NotificationMessage { Model::ExportDoneNotification { 41, true, "" } }, &error));
+                QCOMPARE(completions.size(), 0);
+                QVERIFY(transport.m_export);
+            }
+            QVERIFY(transport.handleNotification(done, &error));
+        }
+        const bool successful = scenario == 0 || scenario == 1 || scenario == 6;
+        const int expectedSignals = scenario == 2 || scenario == 7 ? 0 : 1;
+        QCOMPARE(completions.size(), expectedSignals);
+        if (expectedSignals) {
+            QCOMPARE(completions.front()[0].toULongLong(), 42u);
+            QCOMPARE(completions.front()[1].toBool(), successful);
+            QCOMPARE(completions.front()[2].toString().isEmpty(), successful);
+        }
+        QVERIFY(!transport.m_export);
+        QVERIFY(!transport.m_exportTimer || !transport.m_exportTimer->isActive());
+        QVERIFY(destination.open(QIODevice::ReadOnly));
+        // No engine runs in this protocol test: a successful staged file is empty.
+        QCOMPARE(destination.readAll(), successful ? QByteArray() : QByteArray("original"));
+        QVERIFY(QDir(directory.path())
+                    .entryList({ QStringLiteral(".mupdfng-worker-*") }, QDir::Files | QDir::Hidden)
+                    .isEmpty());
+        QVERIFY(transport.handleNotification(done, &error));
+        QCOMPARE(completions.size(), expectedSignals);
+    }
 
     void receiveResponse_data()
     {

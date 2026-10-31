@@ -1776,12 +1776,8 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
         }
         if (!Model::isReflowableDocument(m_document.type))
             return false;
-        // The background export runs in an isolated worker job, so the
-        // document stays fully usable while it completes. Without a source
-        // path (data-opened documents) the plugin cannot supply the fresh
-        // input descriptor the job needs; fall back to the synchronous path.
-        if (m_document.sourcePath.isEmpty())
-            return m_worker.savePdfToFile(fileName, { }, true);
+        // File- and data-opened documents both retain a source descriptor for
+        // the isolated background job, leaving the session document usable.
         Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
         return m_worker.startPdfExport(fileName, { }).has_value();
     }

@@ -1158,14 +1158,41 @@ private slots:
         QVERIFY(m_client.close());
     }
 
-    // End-to-end: async EPUB export submits immediately, the document stays
+    void epubExportPdfAsyncOverIpc_data()
+    {
+        QTest::addColumn<QString>("sourcePath");
+        QTest::addColumn<bool>("fromData");
+        QTest::addColumn<bool>("kindle");
+        for (const bool fromData : { false, true }) {
+            const QByteArray suffix = fromData ? "-data" : "-file";
+            QTest::newRow(("epub" + suffix).constData())
+                << QStringLiteral(TEST_EPUB_DIR "/sample.epub") << fromData << false;
+            QTest::newRow(("azw3" + suffix).constData())
+                << QStringLiteral(TEST_MOBI_DIR "/sample.azw3") << fromData << true;
+            QTest::newRow(("kfx" + suffix).constData())
+                << QStringLiteral(TEST_MOBI_DIR "/sample.kfx") << fromData << true;
+        }
+    }
+
+    // End-to-end: async ebook export submits immediately, the document stays
     // usable while the background job runs, and the target file appears when
     // the completion notification finalizes it.
     void epubExportPdfAsyncOverIpc()
     {
+        QFETCH(QString, sourcePath);
+        QFETCH(bool, fromData);
+        QFETCH(bool, kindle);
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
-        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        const auto type = kindle ? ::Mu::Model::DocumentType::Kindle : ::Mu::Model::DocumentType::Epub;
+        QFile source(sourcePath);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const auto status = fromData ? m_client.openData(source.readAll(), { }, pages, type)
+                                     : m_client.open(sourcePath, { }, pages, type);
+        source.close();
+        QCOMPARE(status, ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
+        const auto outline = m_client.synopsis();
+        QVERIFY(outline);
 
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
@@ -1195,6 +1222,8 @@ private slots:
         QVERIFY2(exported.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
         output.close();
         QCOMPARE(exported.pageCount(), pages.size());
+        QCOMPARE(exported.outline(&error).size(), outline->size());
+        QVERIFY2(error.empty(), error.c_str());
 
         QVERIFY(m_client.close());
     }
