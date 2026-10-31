@@ -6,12 +6,13 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
+  <a href="https://sonarcloud.io/project/overview?id=l4rzy_okular-mupdf-ng"><img src="https://sonarcloud.io/api/project_badges/measure?project=l4rzy_okular-mupdf-ng&metric=security_rating" alt="Sonarcloud Scan"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/actions"><img src="https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml" alt="GitHub Workflow Status"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
   <br>
   <a href="https://copr.fedorainfracloud.org/coprs/l4rzy/okular-mupdf-ng/"> <img src="https://img.shields.io/badge/Fedora_COPR-okular--mupdf--ng-3c6eb4?logo=fedora&logoColor=white" alt="Fedora COPR - okular-mupdf-ng"/></a>
-  <br>
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://build.opensuse.org/projects/home:23ro/packages/okular-mupdf-ng/badge.svg" alt="OBS packages - okular-mupdf-ng"/></a>
+  <br>
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/opensuse/73BA25" width="20" height="20" alt="openSUSE" title="openSUSE Tumbleweed and Slowroll"/></a>
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/archlinux/1793D1" width="20" height="20" alt="Arch Linux" title="Arch Linux"/></a>
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/debian/A81D33" width="20" height="20" alt="Debian" title="Debian Stable & Testing"/></a>
