@@ -118,7 +118,7 @@ jobs:
           merge-multiple: true
 
       - name: Attach packages to GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             release-assets/okular-mupdf-ng-[0-9]*.pkg.tar.zst
