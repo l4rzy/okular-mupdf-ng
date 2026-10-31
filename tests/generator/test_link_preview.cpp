@@ -801,8 +801,23 @@ private slots:
         QCOMPARE(calls.load(), 2); // The old destination is now a cached neighbor.
     }
 
+    void loadingNeighborPreservesMomentum_data()
+    {
+        QTest::addColumn<int>("fontSize");
+        QTest::newRow("default-font") << 0;
+        QTest::newRow("larger-font") << 18;
+    }
+
     void loadingNeighborPreservesMomentum()
     {
+        QFETCH(int, fontSize);
+        const QFont original = QApplication::font();
+        const auto restoreFont = qScopeGuard([&] { QApplication::setFont(original); });
+        if (fontSize > 0) {
+            QFont font = original;
+            font.setPointSize(fontSize);
+            QApplication::setFont(font);
+        }
         std::atomic_bool neighborStarted = false;
         std::atomic_bool releaseNeighbor = false;
         Generator::LinkPreview previews(
@@ -822,6 +837,11 @@ private slots:
         QTRY_VERIFY(!previewImage().isNull());
         auto* window = previewWindow();
         auto* scroll = previewScrollArea();
+        // The target image can arrive before the shorter ready-status text
+        // relayouts the header and changes the viewport's scroll range.
+        const auto* header = window->findChild<QWidget*>(QStringLiteral("previewHeader"));
+        QVERIFY(header);
+        QTRY_COMPARE(header->height(), header->heightForWidth(header->width()));
         QTest::mouseMove(scroll->viewport(), scroll->viewport()->rect().center());
         auto* bar = scroll->verticalScrollBar();
         auto* scroller = QScroller::scroller(scroll->viewport());
