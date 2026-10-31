@@ -13,6 +13,7 @@
 #include <limits>
 #include <optional>
 #include <utility>
+#include <zlib.h>
 
 #include "shared/compat.hpp"
 #include "shared/protocol/limits.hpp"
@@ -176,8 +177,9 @@ bool readOutlineNodes(QDataStream& stream,
 
 std::optional<std::vector<Model::OutlineNode>> deserializeOutline(const QByteArray& compressed)
 {
-    // qCompress stores the uncompressed size in a four-byte big-endian prefix;
-    // check it before decompressing to bound memory and CPU use.
+    // qCompress stores the uncompressed size in a four-byte big-endian prefix.
+    // Validate it before allocating a fixed output buffer: qUncompress treats
+    // this size as a hint and can grow beyond it on malformed input.
     if (compressed.size() < 4 || compressed.size() > MaxOutlineCompressedBytes)
         return std::nullopt;
     const auto* header = reinterpret_cast<const uchar*>(compressed.constData());
@@ -186,8 +188,12 @@ std::optional<std::vector<Model::OutlineNode>> deserializeOutline(const QByteArr
     if (rawSize == 0 || rawSize > MaxOutlineRawBytes)
         return std::nullopt;
 
-    const QByteArray raw = qUncompress(compressed);
-    if (raw.size() != static_cast<qsizetype>(rawSize))
+    QByteArray raw(static_cast<qsizetype>(rawSize), Qt::Uninitialized);
+    uLongf outputSize = rawSize;
+    const auto* source = reinterpret_cast<const Bytef*>(compressed.constData()) + 4;
+    const auto inputSize = static_cast<uLong>(compressed.size() - 4);
+    if (::uncompress(reinterpret_cast<Bytef*>(raw.data()), &outputSize, source, inputSize) != Z_OK
+        || outputSize != rawSize)
         return std::nullopt;
     QDataStream stream(raw);
     stream.setVersion(QDataStream::Qt_6_0);

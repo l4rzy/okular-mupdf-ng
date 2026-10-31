@@ -221,6 +221,64 @@ private slots:
         QCOMPARE(*cached->accelerator, QByteArray("stable"));
     }
 
+    void validatesCompressedOutline_data()
+    {
+        QTest::addColumn<QByteArray>("compressed");
+        QTest::addColumn<bool>("valid");
+
+        // An empty outline is encoded as a zero node count, not an empty payload.
+        const QByteArray emptyOutline = qCompress(QByteArray(4, '\0'));
+        const auto withSize = [](QByteArray bytes, quint32 size) {
+            bytes[0] = char(size >> 24);
+            bytes[1] = char(size >> 16);
+            bytes[2] = char(size >> 8);
+            bytes[3] = char(size);
+            return bytes;
+        };
+        QTest::newRow("valid-empty-outline") << emptyOutline << true;
+        QTest::newRow("short-header") << emptyOutline.first(3) << false;
+        QTest::newRow("missing-zlib-stream") << emptyOutline.first(4) << false;
+        QTest::newRow("zero-declared-size") << withSize(emptyOutline, 0) << false;
+        QTest::newRow("understated-size") << withSize(emptyOutline, 3) << false;
+        QTest::newRow("overstated-size") << withSize(emptyOutline, 5) << false;
+        QTest::newRow("oversized-declaration") << withSize(emptyOutline, 64 * 1024 * 1024 + 1) << false;
+        QTest::newRow("truncated-stream") << emptyOutline.first(emptyOutline.size() - 1) << false;
+        QByteArray corrupt = emptyOutline;
+        corrupt.back() = char(corrupt.back() ^ 1);
+        QTest::newRow("bad-checksum") << corrupt << false;
+        QTest::newRow("trailing-outline-data") << qCompress(QByteArray(5, '\0')) << false;
+        // The compressed section fits the disk limit while its true output
+        // exceeds the raw limit. The decoder must stop at the declared size.
+        const QByteArray bomb = qCompress(QByteArray(64 * 1024 * 1024 + 1, '\0'), 1);
+        QTest::newRow("understated-decompression-bomb") << withSize(bomb, 4) << false;
+    }
+
+    void validatesCompressedOutline()
+    {
+        QFETCH(QByteArray, compressed);
+        QFETCH(bool, valid);
+
+        QByteArray data;
+        QDataStream stream(&data, QIODevice::WriteOnly);
+        stream.setVersion(QDataStream::Qt_6_0);
+        stream << quint32(0x45504133) << quint32(3) << quint32(1) << quint32(8 + compressed.size());
+        stream << quint32(2) << quint32(compressed.size());
+        QCOMPARE(stream.writeRawData(compressed.constData(), compressed.size()), compressed.size());
+        const QString path = m_root.filePath(QStringLiteral("compressed-outline.bin"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(file.write(data), data.size());
+        file.close();
+
+        const auto entry = ::Mu::Plugin::Caching::EPUB::Cache::loadAt(path);
+        QCOMPARE(entry.has_value(), valid);
+        QCOMPARE(QFile::exists(path), valid);
+        if (valid) {
+            QVERIFY(entry->outline);
+            QVERIFY(entry->outline->empty());
+        }
+    }
+
     void rejectsOversizedPayload()
     {
         clearCacheFiles();
