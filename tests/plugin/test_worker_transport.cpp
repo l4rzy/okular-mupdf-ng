@@ -87,10 +87,12 @@ private Q_SLOTS:
         QTest::addColumn<int>("scenario");
         QTest::addColumn<bool>("reportFailure");
         QTest::addColumn<int>("errors");
-        QTest::newRow("open-generation") << 0 << false << 0;
-        QTest::newRow("reported-error") << 1 << true << 1;
-        QTest::newRow("silent-error") << 1 << false << 0;
-        QTest::newRow("cancelled-error") << 2 << true << 0;
+        QTest::addColumn<bool>("throwNotification");
+        QTest::newRow("open-generation") << 0 << false << 0 << false;
+        QTest::newRow("reported-error") << 1 << true << 1 << false;
+        QTest::newRow("silent-error") << 1 << false << 0 << false;
+        QTest::newRow("cancelled-error") << 2 << true << 0 << false;
+        QTest::newRow("notification-exception") << 0 << false << 0 << true;
     }
 
     void publishResponse()
@@ -98,6 +100,7 @@ private Q_SLOTS:
         QFETCH(int, scenario);
         QFETCH(bool, reportFailure);
         QFETCH(int, errors);
+        QFETCH(bool, throwNotification);
         WorkerTransport transport;
         QVERIFY(transport.start(QStringLiteral(WORKER_BUILD_PATH), { }, nullptr));
         // Retain the worker's actual channel while a scripted peer supplies the
@@ -129,9 +132,23 @@ private Q_SLOTS:
             "test"));
         transport.m_activeSignPassword = QStringLiteral("secret");
         const auto epoch = transport.documentEpoch();
-        const auto response = transport.call(Model::OpenRequest { }, reportFailure);
+
+        struct NotificationFailure { };
+
+        if (throwNotification) {
+            connect(&transport, &WorkerTransport::pageLinksReady, &transport, [&] {
+                QVERIFY(!transport.m_inFlight);
+                QVERIFY(transport.m_activeSignPassword.isEmpty());
+                QCOMPARE(transport.m_signingAuthorization.requestId, 0u);
+                QVERIFY(transport.m_notifier->isEnabled());
+                throw NotificationFailure { };
+            });
+            QVERIFY_THROWS_EXCEPTION(NotificationFailure, transport.call(Model::OpenRequest { }, reportFailure));
+        } else {
+            const auto response = transport.call(Model::OpenRequest { }, reportFailure);
+            QVERIFY(response);
+        }
         QCOMPARE(transport.documentEpoch(), epoch + 1);
-        QVERIFY(response);
         QCOMPARE(failures.size(), errors);
         QCOMPARE(links.size(), scenario == 0 ? 1 : 0);
         QCOMPARE(transport.m_linkGeneration, scenario == 0 ? 123u : 0u);

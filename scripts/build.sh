@@ -51,7 +51,7 @@ if ! compgen -G 'thirdparty/mupdf*/Makefile' > /dev/null; then
 fi
 
 echo "==> Configuring ($BUILD_TYPE) in $BUILD_DIR..."
-if [ "$1" = "gcc" ]; then
+if [[ "$1" = "gcc" ]]; then
   CC=gcc
   CXX=g++
 else
@@ -66,10 +66,10 @@ cmake_args=(
 "-DCMAKE_C_FLAGS=$WARNING_FLAGS"
 "-DCMAKE_CXX_FLAGS=$WARNING_FLAGS"
 )
-if [ "$BUILD_TYPE" = "Release" ]; then
+if [[ "$BUILD_TYPE" = "Release" ]]; then
   cmake_args+=(-DBUILD_TESTING=ON -DENABLE_LTO=ON -DENABLE_BUILD_TREE_WORKER=ON -DENABLE_MU_DEBUG=ON)
 fi
-if [ "$1" = "asan" ]; then
+if [[ "$1" = "asan" ]]; then
   # The worker's address-space limit conflicts with ASan's shadow mapping.
   cmake_args+=(-DENABLE_SANITIZERS=ON -DMUPDF_OPTIMIZED_BUILD=OFF -DDISABLE_WORKER_SANDBOX=ON)
 fi
@@ -77,7 +77,7 @@ fi
 # default linker is used unchanged.
 if command -v mold > /dev/null 2>&1; then
   cmake_version=$(cmake --version | awk 'NR==1{print $3}')
-  if [ "$(printf '%s\n3.29\n' "$cmake_version" | sort -V | head -1)" = "3.29" ]; then
+  if [[ "$(printf '%s\n3.29\n' "$cmake_version" | sort -V | head -1)" = "3.29" ]]; then
     cmake_args+=(-DCMAKE_LINKER_TYPE=MOLD)
   fi
 fi
@@ -86,7 +86,7 @@ cmake -B "$BUILD_DIR" -S . "${cmake_args[@]}" "${@:2}"
 echo "==> Building ($BUILD_TYPE)..."
 cmake --build "$BUILD_DIR" -j$(nproc)
 
-if [ "$RUN_TESTS" -eq 1 ]; then
+if [[ "$RUN_TESTS" -eq 1 ]]; then
   echo "==> Running tests..."
   ctest --test-dir "$BUILD_DIR" --output-on-failure --parallel "${CTEST_PARALLEL_LEVEL:-4}"
 fi

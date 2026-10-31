@@ -74,7 +74,7 @@ void normalizeAnnotationForWrite(Annotation& annotation)
     }
     if (annotation.extras.style.borderWidth) {
         const double value = *annotation.extras.style.borderWidth;
-        *annotation.extras.style.borderWidth = std::isfinite(value) ? std::max(0.0, value) : 0.0;
+        annotation.extras.style.borderWidth = std::isfinite(value) ? std::max(0.0, value) : 0.0;
     }
     if (annotation.extras.style.appearance) {
         auto& appearance = *annotation.extras.style.appearance;

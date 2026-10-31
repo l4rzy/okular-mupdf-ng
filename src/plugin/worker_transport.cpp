@@ -1151,69 +1151,74 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
         return { };
     }
 
-    // Phase 2: suspend idle dispatch and take in-flight ownership. Notifications
-    // stop being delivered out-of-band; the scope guard re-enables them and
-    // drains anything buffered once the exchange has fully restored the
-    // transport's serialized state, on every exit path.
-    if (m_notifier)
-        m_notifier->setEnabled(false);
+    std::optional<ResponseMessage> response;
+    {
+        // Phase 2: suspend idle dispatch and take in-flight ownership. Notifications
+        // stop being delivered out-of-band; the scope guard restores the
+        // transport's serialized state and re-enables them on every exit path.
+        if (m_notifier)
+            m_notifier->setEnabled(false);
 
-    m_inFlight = true;
+        m_inFlight = true;
 
-    struct InFlightGuard {
-        WorkerTransport* transport;
+        struct InFlightGuard {
+            WorkerTransport* transport;
 
-        ~InFlightGuard()
-        {
-            // Re-enable idle notifications only after the response exchange
-            // has fully restored the transport's serialized state.
-            transport->m_signingAuthorization = { };
-            transport->m_activeSignPassword.fill(u'\0');
-            transport->m_activeSignPassword.clear();
-            transport->m_inFlight = false;
-            if (transport->m_notifier && transport->isConnected()) {
-                transport->m_notifier->setEnabled(true);
-                transport->processIncomingNotifications();
+            ~InFlightGuard()
+            {
+                // Re-enable idle notifications only after the response exchange
+                // has fully restored the transport's serialized state.
+                transport->m_signingAuthorization = { };
+                transport->m_activeSignPassword.fill(u'\0');
+                transport->m_activeSignPassword.clear();
+                transport->m_inFlight = false;
+                if (transport->m_notifier && transport->isConnected())
+                    transport->m_notifier->setEnabled(true);
             }
+        } guard { this };
+
+        // Phase 3: build and write the request. The id comes from the monotonic
+        // counter used to correlate the upcoming response; the write itself is
+        // bounded by the control-write timeout.
+        if (std::holds_alternative<OpenRequest>(payload))
+            ++m_documentEpoch;
+        const auto id = m_nextId++;
+        RequestMessage request { id, std::move(payload) };
+        if (const auto* sign = std::get_if<SignRequest>(&request.payload))
+            m_signingAuthorization = { id, sign->certificateNickname };
+        MU_LOG(debug, "Plugin -> Worker", IPC::Debug::request(request, true));
+        std::string error;
+        if (!IPC::ZppCodec::writeMessage(m_ctrl, request, Timeout::ControlWriteMs, &error, "plugin")) {
+            MU_LOG(warning, "Mu::Plugin", "request write failed: " + error + "; aborting transport");
+            abort();
+            return { };
         }
-    } guard { this };
 
-    // Phase 3: build and write the request. The id comes from the monotonic
-    // counter used to correlate the upcoming response; the write itself is
-    // bounded by the control-write timeout.
-    if (std::holds_alternative<OpenRequest>(payload))
-        ++m_documentEpoch;
-    const auto id = m_nextId++;
-    RequestMessage request { id, std::move(payload) };
-    if (const auto* sign = std::get_if<SignRequest>(&request.payload))
-        m_signingAuthorization = { id, sign->certificateNickname };
-    MU_LOG(debug, "Plugin -> Worker", IPC::Debug::request(request, true));
-    std::string error;
-    if (!IPC::ZppCodec::writeMessage(m_ctrl, request, Timeout::ControlWriteMs, &error, "plugin")) {
-        MU_LOG(warning, "Mu::Plugin", "request write failed: " + error + "; aborting transport");
-        abort();
-        return { };
-    }
-
-    // Phase 4: receive the matching response, then publish it before the guard
-    // restores idle dispatch and drains queued notifications.
-    const auto started = std::chrono::steady_clock::now();
-    const auto deadline = started + std::chrono::milliseconds(Util::requestTimeoutFor(request.payload));
-    auto response = receiveResponse(id, deadline);
-    if (!response)
-        return { };
-    if (reportFailure && response->error && response->error->code != ErrorCode::Cancelled)
-        Q_EMIT operationFailed(QString::fromStdString(response->error->message), response->error->code);
-    if (!response->error && std::holds_alternative<OpenRequest>(request.payload)) {
-        // Publish the generation before the guard drains queued link notifications.
-        if (const auto* opened = std::get_if<OpenResponse>(&response->payload))
-            m_linkGeneration = opened->linkGeneration;
-    }
+        // Phase 4: receive the matching response, then publish it before the guard
+        // restores idle dispatch. Buffered notifications are drained afterward.
+        const auto started = std::chrono::steady_clock::now();
+        const auto deadline = started + std::chrono::milliseconds(Util::requestTimeoutFor(request.payload));
+        response = receiveResponse(id, deadline);
+        if (!response)
+            return { };
+        if (reportFailure && response->error && response->error->code != ErrorCode::Cancelled)
+            Q_EMIT operationFailed(QString::fromStdString(response->error->message), response->error->code);
+        if (!response->error && std::holds_alternative<OpenRequest>(request.payload)) {
+            // Publish the generation before draining queued link notifications.
+            if (const auto* opened = std::get_if<OpenResponse>(&response->payload))
+                m_linkGeneration = opened->linkGeneration;
+        }
 #ifdef MU_DEBUG_ENABLED
-    const auto elapsed =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
-    MU_LOG(debug, "Plugin <- Worker", IPC::Debug::response(*response, true) + " elapsedMs=" + std::to_string(elapsed));
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+        MU_LOG(
+            debug, "Plugin <- Worker", IPC::Debug::response(*response, true) + " elapsedMs=" + std::to_string(elapsed));
 #endif
+    }
+
+    // Dispatch outside the guard destructor so exceptions can propagate normally.
+    if (m_notifier && isConnected())
+        processIncomingNotifications();
     return response;
 }
 

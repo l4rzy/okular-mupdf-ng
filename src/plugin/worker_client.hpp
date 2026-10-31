@@ -172,9 +172,9 @@ private:
 
         [[nodiscard]] std::size_t recentRestarts() const noexcept { return restartTimes.size(); }
 
-        [[nodiscard]] State current() const noexcept { return state.load(std::memory_order_acquire); }
+        [[nodiscard]] State current() const noexcept { return state.load(); }
 
-        void setState(State value) noexcept { state.store(value, std::memory_order_release); }
+        void setState(State value) noexcept { state.store(value); }
 
     private:
         void prune() noexcept;
