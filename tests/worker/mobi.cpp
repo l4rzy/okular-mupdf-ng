@@ -337,10 +337,10 @@ private slots:
         QVERIFY2(epubText.find("Hello") != std::string::npos, epubText.c_str());
         const auto target = directory.filePath(QStringLiteral("export.pdf"));
         if (fromData) {
-            QVERIFY(client.savePdfToFile(target, { }, true));
+            QVERIFY(client.writePdfToFile(target, { }, Model::PdfOutputMode::WithReferences));
         } else {
             QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
-            QVERIFY(client.startPdfExport(target, { }));
+            QVERIFY(client.startPdfExportJob(target, { }));
             QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
             QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
         }
@@ -415,7 +415,7 @@ private slots:
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("styled.pdf"));
         QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
-        QVERIFY(client.startPdfExport(target, { }));
+        QVERIFY(client.startPdfExportJob(target, { }));
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
         QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
         QFile output(target);
@@ -830,7 +830,7 @@ private slots:
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("toc.pdf"));
         QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
-        QVERIFY(client.startPdfExport(target, { }));
+        QVERIFY(client.startPdfExportJob(target, { }));
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
         QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
         QFile file(target);
@@ -942,10 +942,10 @@ private slots:
         QTemporaryDir directory;
         const QString target = directory.filePath(QStringLiteral("export.pdf"));
         if (fromData) {
-            QVERIFY(client.savePdfToFile(target, { }, true));
+            QVERIFY(client.writePdfToFile(target, { }, Model::PdfOutputMode::WithReferences));
         } else {
             QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
-            const auto job = client.startPdfExport(target, { });
+            const auto job = client.startPdfExportJob(target, { });
             QVERIFY(job);
             QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
             QCOMPARE(finished.first().at(0).toULongLong(), *job);

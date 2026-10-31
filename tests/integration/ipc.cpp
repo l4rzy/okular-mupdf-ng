@@ -606,7 +606,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("output.pdf"));
-        QVERIFY(m_client.savePdfToFile(outputPath, { 0 }));
+        QVERIFY(m_client.writePdfToFile(outputPath, { 0 }, ::Mu::Model::PdfOutputMode::Printable));
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));
         QVERIFY(output.read(5) == "%PDF-");
@@ -616,14 +616,14 @@ private slots:
 
     void pdfOutputIsAtomicAndIncludesLiveAnnotations_data()
     {
-        QTest::addColumn<bool>("flatten");
-        QTest::newRow("flatten") << true;
-        QTest::newRow("print") << false;
+        QTest::addColumn<::Mu::Model::PdfOutputMode>("mode");
+        QTest::newRow("flatten") << ::Mu::Model::PdfOutputMode::Flattened;
+        QTest::newRow("print") << ::Mu::Model::PdfOutputMode::Printable;
     }
 
     void pdfOutputIsAtomicAndIncludesLiveAnnotations()
     {
-        QFETCH(bool, flatten);
+        QFETCH(::Mu::Model::PdfOutputMode, mode);
         QList<::Mu::Model::PageInfo> pages;
         QCOMPARE(m_client.open(m_pdf, QString(), pages), ::Mu::Model::OpenStatus::Success);
         ::Mu::Model::Annotation annotation;
@@ -649,9 +649,10 @@ private slots:
         sentinel.write("existing destination");
         sentinel.close();
         const auto savePdf = [&](const QVector<int>& selectedPages) {
-            return flatten ? m_client.flattenPdfToFile(target, selectedPages)
-                           : m_client.savePdfToFile(target, selectedPages);
+            return m_client.writePdfToFile(target, selectedPages, mode);
         };
+        // Invalid modes must be rejected before any FD can be queued.
+        QVERIFY(!m_client.writePdfToFile(target, { }, static_cast<::Mu::Model::PdfOutputMode>(255)));
         QVERIFY(!savePdf({ -1 }));
         QVERIFY(sentinel.open(QIODevice::ReadOnly));
         QCOMPARE(sentinel.readAll(), QByteArray("existing destination"));
@@ -700,7 +701,7 @@ private slots:
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-abandoned.pdf"));
         QSignalSpy spy(&transport, &::Mu::Plugin::WorkerTransport::pdfExportFinished);
-        const auto job = transport.startPdfExport(outputPath, { });
+        const auto job = transport.startPdfExportJob(outputPath, { });
         QVERIFY(job.has_value());
         if (completionQueued) {
             pid_t workerPid = -1;
@@ -761,7 +762,7 @@ private slots:
         QCOMPARE(transport.open(m_epub, { }, &pages, ::Mu::Model::DocumentType::Epub),
                  ::Mu::Model::OpenStatus::Success);
         std::optional<quint64> resumed;
-        for (int attempt = 0; attempt < 50 && !(resumed = transport.startPdfExport(outputPath, { })).has_value();
+        for (int attempt = 0; attempt < 50 && !(resumed = transport.startPdfExportJob(outputPath, { })).has_value();
              ++attempt)
             QTest::qWait(100);
         QVERIFY2(resumed.has_value(), "worker did not free the export slot after the abandoned job");
@@ -780,11 +781,12 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
-        QVERIFY(
-            !m_client.startPdfExport(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { }).has_value());
+        QVERIFY(!m_client.startPdfExportJob(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { })
+                     .has_value());
 
         // The FD channel must be clean: a synchronous FD-based operation works.
-        QVERIFY(m_client.savePdfToFile(outputDirectory.filePath(QStringLiteral("print.pdf")), { }));
+        QVERIFY(m_client.writePdfToFile(
+            outputDirectory.filePath(QStringLiteral("print.pdf")), { }, ::Mu::Model::PdfOutputMode::Printable));
         QVERIFY(QFile(outputDirectory.filePath(QStringLiteral("print.pdf"))).open(QIODevice::ReadOnly));
 
         // No export notification was queued by the failed submission.
@@ -835,7 +837,7 @@ private slots:
         if (exportPdf) {
             const QString outputPath = directory.filePath(QStringLiteral("export.pdf"));
             QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
-            const auto job = m_client.startPdfExport(outputPath, { });
+            const auto job = m_client.startPdfExportJob(outputPath, { });
             QVERIFY(job);
             QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
             QCOMPARE(spy.first().at(0).toULongLong(), *job);
@@ -1124,14 +1126,15 @@ private slots:
 
     void epubExportPdfOverIpc_data()
     {
-        QTest::addColumn<bool>("withReferences");
-        QTest::newRow("print") << false;
-        QTest::newRow("export") << true;
+        QTest::addColumn<::Mu::Model::PdfOutputMode>("mode");
+        QTest::newRow("print") << ::Mu::Model::PdfOutputMode::Printable;
+        QTest::newRow("export") << ::Mu::Model::PdfOutputMode::WithReferences;
     }
 
     void epubExportPdfOverIpc()
     {
-        QFETCH(bool, withReferences);
+        QFETCH(::Mu::Model::PdfOutputMode, mode);
+        const bool withReferences = mode == ::Mu::Model::PdfOutputMode::WithReferences;
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
@@ -1139,7 +1142,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export.pdf"));
-        QVERIFY(m_client.savePdfToFile(outputPath, { }, withReferences));
+        QVERIFY(m_client.writePdfToFile(outputPath, { }, mode));
 
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));
@@ -1158,7 +1161,7 @@ private slots:
         QVERIFY(m_client.close());
     }
 
-    void epubExportPdfAsyncOverIpc_data()
+    void ebookExportPdfAsyncOverIpc_data()
     {
         QTest::addColumn<QString>("sourcePath");
         QTest::addColumn<bool>("fromData");
@@ -1177,7 +1180,7 @@ private slots:
     // End-to-end: async ebook export submits immediately, the document stays
     // usable while the background job runs, and the target file appears when
     // the completion notification finalizes it.
-    void epubExportPdfAsyncOverIpc()
+    void ebookExportPdfAsyncOverIpc()
     {
         QFETCH(QString, sourcePath);
         QFETCH(bool, fromData);
@@ -1198,7 +1201,7 @@ private slots:
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-async.pdf"));
         QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
-        const auto job = m_client.startPdfExport(outputPath, { });
+        const auto job = m_client.startPdfExportJob(outputPath, { });
         QVERIFY(job.has_value());
 
         // The session document stays usable while the export job runs.

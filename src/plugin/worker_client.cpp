@@ -359,19 +359,14 @@ bool WorkerClient::exportAzw3ToFile(const QString& target)
     return sync([&](WorkerTransport* transport) { return transport->exportAzw3ToFile(target); });
 }
 
-bool WorkerClient::flattenPdfToFile(const QString& target, const QVector<int>& pages)
+bool WorkerClient::writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode)
 {
-    return sync([&](WorkerTransport* transport) { return transport->flattenPdfToFile(target, pages); });
+    return sync([&](WorkerTransport* transport) { return transport->writePdfToFile(target, pages, mode); });
 }
 
-bool WorkerClient::savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences)
+std::optional<quint64> WorkerClient::startPdfExportJob(const QString& target, const QVector<int>& pages) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->savePdfToFile(target, pages, withReferences); });
-}
-
-std::optional<quint64> WorkerClient::startPdfExport(const QString& target, const QVector<int>& pages) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->startPdfExport(target, pages); });
+    return sync([&](WorkerTransport* transport) { return transport->startPdfExportJob(target, pages); });
 }
 
 SignResponse WorkerClient::sign(const SignRequest& request, const QString& password, const QString& target)

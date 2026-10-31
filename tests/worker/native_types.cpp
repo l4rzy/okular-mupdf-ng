@@ -226,33 +226,88 @@ private slots:
         QCOMPARE(decodedOcr->page, 3);
     }
 
-    void savePdfModesRoundTrip_data()
+    void writePdfModesRoundTrip_data()
     {
-        QTest::addColumn<bool>("flatten");
-        QTest::addColumn<bool>("withReferences");
-        QTest::newRow("print") << false << false;
-        QTest::newRow("flatten") << true << false;
-        QTest::newRow("epub-export") << false << true;
+        QTest::addColumn<Mu::Model::PdfOutputMode>("mode");
+        QTest::newRow("print") << Mu::Model::PdfOutputMode::Printable;
+        QTest::newRow("flatten") << Mu::Model::PdfOutputMode::Flattened;
+        QTest::newRow("epub-export") << Mu::Model::PdfOutputMode::WithReferences;
     }
 
-    void savePdfModesRoundTrip()
+    void writePdfModesRoundTrip()
     {
-        QFETCH(bool, flatten);
-        QFETCH(bool, withReferences);
-        const Mu::Model::RequestMessage request {
-            48, Mu::Model::SavePdfRequest { { 19 }, { 2, 0 }, flatten, withReferences }
-        };
+        QFETCH(Mu::Model::PdfOutputMode, mode);
+        QVERIFY(Mu::Model::isValidPdfOutputMode(mode));
+        const Mu::Model::RequestMessage request { 48, Mu::Model::WritePdfRequest { { 19 }, { 2, 0 }, mode } };
         std::string error;
         const auto encoded = Mu::IPC::ZppCodec::encode(request, &error);
         QVERIFY2(encoded, error.c_str());
         Mu::Model::RequestMessage decoded;
         QVERIFY2(Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
-        const auto* result = std::get_if<Mu::Model::SavePdfRequest>(&decoded.payload);
+        const auto* result = std::get_if<Mu::Model::WritePdfRequest>(&decoded.payload);
         QVERIFY(result);
         QCOMPARE(result->file.transferId, std::uint64_t(19));
         QCOMPARE(result->pages, std::vector<std::int32_t>({ 2, 0 }));
-        QCOMPARE(result->flatten, flatten);
-        QCOMPARE(result->withReferences, withReferences);
+        QCOMPARE(result->mode, mode);
+    }
+
+    void pdfOutputModeValidation_data()
+    {
+        QTest::addColumn<int>("value");
+        QTest::addColumn<bool>("valid");
+        QTest::newRow("printable") << 0 << true;
+        QTest::newRow("flattened") << 1 << true;
+        QTest::newRow("with-references") << 2 << true;
+        QTest::newRow("unknown") << 3 << false;
+        QTest::newRow("maximum") << 255 << false;
+    }
+
+    void pdfOutputModeValidation()
+    {
+        QFETCH(int, value);
+        QFETCH(bool, valid);
+        const auto mode = static_cast<Mu::Model::PdfOutputMode>(value);
+        std::string_view reason;
+        QCOMPARE(Mu::Model::isValidPdfOutputMode(mode, &reason), valid);
+        if (valid)
+            return;
+        QCOMPARE(reason, std::string_view("invalid PDF output mode"));
+        // No descriptor channel: rejection must happen before FD receipt.
+        Mu::Worker::Runtime::CommandService service({ });
+        const auto response = service.dispatch({ 48, Mu::Model::WritePdfRequest { { 19 }, { }, mode } });
+        QVERIFY(response.error);
+        QCOMPARE(response.error->code, Mu::Model::ErrorCode::InvalidRequest);
+        QCOMPARE(response.error->operation, std::string("write_pdf"));
+        QCOMPARE(response.error->message, std::string(reason));
+    }
+
+    void fileOutputRequestValidation_data()
+    {
+        QTest::addColumn<Mu::Model::RequestPayload>("payload");
+        QTest::addColumn<QString>("operation");
+        QTest::newRow("document") << Mu::Model::RequestPayload { Mu::Model::WriteDocumentRequest { } }
+                                  << QStringLiteral("write_document");
+        for (const auto mode : { Mu::Model::PdfOutputMode::Printable,
+                                 Mu::Model::PdfOutputMode::Flattened,
+                                 Mu::Model::PdfOutputMode::WithReferences }) {
+            QTest::newRow(qPrintable(QStringLiteral("pdf-mode-%1").arg(static_cast<int>(mode))))
+                << Mu::Model::RequestPayload { Mu::Model::WritePdfRequest { { }, { }, mode } }
+                << QStringLiteral("write_pdf");
+        }
+        QTest::newRow("start-export") << Mu::Model::RequestPayload { Mu::Model::StartPdfExportJobRequest { } }
+                                      << QStringLiteral("start_pdf_export_job");
+    }
+
+    void fileOutputRequestValidation()
+    {
+        QFETCH(Mu::Model::RequestPayload, payload);
+        QFETCH(QString, operation);
+        Mu::Worker::Runtime::CommandService service({ });
+        const auto response = service.dispatch({ 49, payload });
+        QVERIFY(response.error);
+        QCOMPARE(response.error->code, Mu::Model::ErrorCode::InvalidRequest);
+        QCOMPARE(response.error->operation, operation.toStdString());
+        QCOMPARE(response.error->message, std::string("file transfer identifier is zero"));
     }
 
     void documentSettingsRoundTrip()

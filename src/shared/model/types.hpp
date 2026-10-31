@@ -950,29 +950,33 @@ struct SettingsRequest {
     DocumentSettings settings;
 };
 
-/// Saves the complete document to a transferred output descriptor.
-struct SaveRequest {
+/// Writes document edits or an EPUB/AZW3 conversion to a transferred descriptor.
+struct WriteDocumentRequest {
     FileTransfer file;
     bool exportEpub = false;
     bool exportAzw3 = false;
 };
 
-/// Saves selected pages to a transferred output descriptor as PDF.
-struct SavePdfRequest {
+/// Selects the content produced by PDF output.
+enum class PdfOutputMode : std::uint8_t {
+    Printable, ///< PDF or ebook pages prepared for printing, without references.
+    Flattened, ///< PDF copy with annotations and widgets baked into the pages.
+    WithReferences, ///< Ebook pages with links and bookmarks.
+};
+
+/// Writes selected pages to a transferred output descriptor using the PDF mode.
+struct WritePdfRequest {
     FileTransfer file;
     /// Empty selects all pages; otherwise zero-based pages in output order.
     std::vector<std::int32_t> pages;
-    /// True flattens PDF annotations and widgets; incompatible with withReferences.
-    bool flatten = false;
-    /// EPUB export includes links and bookmarks; printing leaves this false.
-    bool withReferences = false;
+    PdfOutputMode mode = PdfOutputMode::Printable;
 };
 
 /// Exports the open document to PDF in a background job using an isolated
 /// copy of the source file, writing to a transferred output descriptor.
 /// The session document is untouched; completion is reported asynchronously.
 /// EPUB export always includes pages, links, and the outline.
-struct ExportPdfAsyncRequest {
+struct StartPdfExportJobRequest {
     /// Output descriptor receiving the generated PDF.
     FileTransfer output;
     /// Fresh copy of the source document opened by the background job.
@@ -1050,13 +1054,13 @@ using RequestPayload = std::variant<PingRequest,
                                     AnnotationModifyRequest,
                                     AnnotationRemoveRequest,
                                     SettingsRequest,
-                                    SaveRequest,
-                                    SavePdfRequest,
+                                    WriteDocumentRequest,
+                                    WritePdfRequest,
                                     SignRequest,
                                     SignReply,
                                     FormUpdateRequest,
                                     FormResetRequest,
-                                    ExportPdfAsyncRequest,
+                                    StartPdfExportJobRequest,
                                     FormButtonClickRequest,
                                     LayersRequest,
                                     SetLayerRequest,

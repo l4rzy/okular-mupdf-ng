@@ -89,75 +89,75 @@ std::optional<ResponseMessage> validateInboundRequest(std::uint64_t id, const Re
 {
     std::string_view reason;
     std::string_view operation = "request";
-    const bool valid = std::visit(Overloaded {
-                                      [&](const OpenRequest& request) {
-                                          operation = "open";
-                                          return isValidFileTransfer(request.file, &reason);
-                                      },
-                                      [&](const SaveRequest& request) {
-                                          operation = "save";
-                                          return isValidFileTransfer(request.file, &reason);
-                                      },
-                                      [&](const SavePdfRequest& request) {
-                                          operation = request.flatten ? "flatten_pdf" : "save_pdf";
-                                          return isValidFileTransfer(request.file, &reason);
-                                      },
-                                      [&](const ExportPdfAsyncRequest& request) {
-                                          operation = "export_pdf_async";
-                                          return isValidFileTransfer(request.output, &reason)
-                                              && isValidFileTransfer(request.input, &reason);
-                                      },
-                                      [&](const RenderRequest& request) {
-                                          operation = "render";
-                                          return isValidRenderRequest(request, &reason);
-                                      },
-                                      [&](const Model::ResolveLinkRequest& request) {
-                                          operation = "resolve-link";
-                                          return isValidResolveLinkRequest(request, &reason);
-                                      },
-                                      [&](const TextBoxesRequest& request) {
-                                          operation = "text_boxes";
-                                          return isValidTextBoxesRequest(request, &reason);
-                                      },
-                                      [&](const OcrPageRequest& request) {
-                                          operation = "ocr_page";
-                                          return isValidOcrPageRequest(request, &reason);
-                                      },
-                                      [&](const AnnotationAddRequest& request) {
-                                          operation = "annot_add";
-                                          return isValidAnnotationAddRequest(request, &reason);
-                                      },
-                                      [&](const AnnotationModifyRequest& request) {
-                                          operation = "annot_modify";
-                                          return isValidAnnotationModifyRequest(request, &reason);
-                                      },
-                                      [&](const AnnotationRemoveRequest& request) {
-                                          operation = "annot_remove";
-                                          return isValidAnnotationRemoveRequest(request, &reason);
-                                      },
-                                      [&](const SettingsRequest& request) {
-                                          operation = "settings";
-                                          return isValidDocumentSettings(request.settings, &reason);
-                                      },
-                                      [&](const SignRequest& request) {
-                                          operation = "sign";
-                                          return isValidSignRequest(request, &reason);
-                                      },
-                                      [&](const FormUpdateRequest& request) {
-                                          operation = "form_update";
-                                          return isValidFormUpdateRequest(request, &reason);
-                                      },
-                                      [&](const FormResetRequest& request) {
-                                          operation = "form_reset";
-                                          return isValidFormResetRequest(request, &reason);
-                                      },
-                                      [&](const FormButtonClickRequest& request) {
-                                          operation = "form_button_click";
-                                          return isValidFormButtonClickRequest(request, &reason);
-                                      },
-                                      [&](const auto&) { return true; },
-                                  },
-                                  payload);
+    const bool valid = std::visit(
+        Overloaded {
+            [&](const OpenRequest& request) {
+                operation = "open";
+                return isValidFileTransfer(request.file, &reason);
+            },
+            [&](const WriteDocumentRequest& request) {
+                operation = "write_document";
+                return isValidFileTransfer(request.file, &reason);
+            },
+            [&](const WritePdfRequest& request) {
+                operation = "write_pdf";
+                return isValidFileTransfer(request.file, &reason) && isValidPdfOutputMode(request.mode, &reason);
+            },
+            [&](const StartPdfExportJobRequest& request) {
+                operation = "start_pdf_export_job";
+                return isValidFileTransfer(request.output, &reason) && isValidFileTransfer(request.input, &reason);
+            },
+            [&](const RenderRequest& request) {
+                operation = "render";
+                return isValidRenderRequest(request, &reason);
+            },
+            [&](const Model::ResolveLinkRequest& request) {
+                operation = "resolve-link";
+                return isValidResolveLinkRequest(request, &reason);
+            },
+            [&](const TextBoxesRequest& request) {
+                operation = "text_boxes";
+                return isValidTextBoxesRequest(request, &reason);
+            },
+            [&](const OcrPageRequest& request) {
+                operation = "ocr_page";
+                return isValidOcrPageRequest(request, &reason);
+            },
+            [&](const AnnotationAddRequest& request) {
+                operation = "annot_add";
+                return isValidAnnotationAddRequest(request, &reason);
+            },
+            [&](const AnnotationModifyRequest& request) {
+                operation = "annot_modify";
+                return isValidAnnotationModifyRequest(request, &reason);
+            },
+            [&](const AnnotationRemoveRequest& request) {
+                operation = "annot_remove";
+                return isValidAnnotationRemoveRequest(request, &reason);
+            },
+            [&](const SettingsRequest& request) {
+                operation = "settings";
+                return isValidDocumentSettings(request.settings, &reason);
+            },
+            [&](const SignRequest& request) {
+                operation = "sign";
+                return isValidSignRequest(request, &reason);
+            },
+            [&](const FormUpdateRequest& request) {
+                operation = "form_update";
+                return isValidFormUpdateRequest(request, &reason);
+            },
+            [&](const FormResetRequest& request) {
+                operation = "form_reset";
+                return isValidFormResetRequest(request, &reason);
+            },
+            [&](const FormButtonClickRequest& request) {
+                operation = "form_button_click";
+                return isValidFormButtonClickRequest(request, &reason);
+            },
+            [&](const auto&) { return true; },
+        },
+        payload);
 
     if (valid)
         return std::nullopt;
@@ -381,22 +381,17 @@ ResponseMessage CommandService::openRequestResponse(std::uint64_t requestId, int
 // Document Saving & Asynchronous Export
 // =============================================================================
 
-ResponseMessage CommandService::saveFdResponse(std::uint64_t id, int fd)
-{
-    Sys::FileDescriptor ownedFd(fd);
-    if (!hasOpenDocument()) {
-        return failure(id, ErrorCode::NotOpen, "save", "no document is open");
-    }
-    std::string error;
-    if (!m_document->saveFd(ownedFd.release(), &error))
-        return failure(id, ErrorCode::Internal, "save", error);
-
-    return success(id);
-}
-
-ResponseMessage CommandService::saveBookFdResponse(std::uint64_t id, const SaveRequest& payload, int fd)
+ResponseMessage CommandService::writeDocumentResponse(std::uint64_t id, const WriteDocumentRequest& payload, int fd)
 {
     Sys::FileDescriptor output(fd);
+    if (!payload.exportEpub && !payload.exportAzw3) {
+        if (!hasOpenDocument())
+            return failure(id, ErrorCode::NotOpen, "write_document", "no document is open");
+        std::string error;
+        if (!m_document->saveFd(output.release(), &error))
+            return failure(id, ErrorCode::Internal, "write_document", error);
+        return success(id);
+    }
     if (payload.exportAzw3) {
         if (payload.exportEpub || !hasOpenDocument() || m_document->type() != DocumentType::Epub)
             return failure(id, ErrorCode::InvalidRequest, "export_azw3", "EPUB document is not open");
@@ -414,33 +409,36 @@ ResponseMessage CommandService::saveBookFdResponse(std::uint64_t id, const SaveR
     return success(id);
 }
 
-ResponseMessage CommandService::savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd)
+ResponseMessage CommandService::writePdfResponse(std::uint64_t id, const WritePdfRequest& payload, int fd)
 {
-    const char* method = payload.flatten ? "flatten_pdf" : "save_pdf";
+    const char* method = "write_pdf";
     Sys::FileDescriptor ownedFd(fd);
     if (!hasOpenDocument()) {
         return failure(id, ErrorCode::NotOpen, method, "no document is open");
     }
-    if (payload.flatten && payload.withReferences)
-        return failure(id, ErrorCode::InvalidRequest, method, "flattening cannot include export references");
     std::string error;
     bool ok = false;
-    if (payload.flatten)
-        ok = m_document->flattenPdfFd(ownedFd.release(), payload.pages, &error);
-    else if (payload.withReferences)
-        ok = m_document->savePdfFdWithReferences(ownedFd.release(), payload.pages, &error);
-    else
+    switch (payload.mode) {
+    case PdfOutputMode::Printable:
         ok = m_document->savePdfFd(ownedFd.release(), payload.pages, &error);
+        break;
+    case PdfOutputMode::Flattened:
+        ok = m_document->flattenPdfFd(ownedFd.release(), payload.pages, &error);
+        break;
+    case PdfOutputMode::WithReferences:
+        ok = m_document->savePdfFdWithReferences(ownedFd.release(), payload.pages, &error);
+        break;
+    }
     if (!ok)
         return failure(id, ErrorCode::Internal, method, error);
 
     return success(id);
 }
 
-ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
-                                                       const ExportPdfAsyncRequest& payload,
-                                                       int outputFd,
-                                                       int inputFd)
+ResponseMessage CommandService::startPdfExportJobResponse(const RequestMessage& r,
+                                                          const StartPdfExportJobRequest& payload,
+                                                          int outputFd,
+                                                          int inputFd)
 {
     // Own both descriptors for every early return; ownership transfers only when
     // ExportJobs::submit adopts them. This keeps the eventfd-rejection path below
@@ -449,20 +447,21 @@ ResponseMessage CommandService::exportPdfAsyncResponse(const RequestMessage& r,
     Sys::FileDescriptor input(inputFd);
 
     if (!hasOpenDocument())
-        return failure(r.id, ErrorCode::NotOpen, "export_pdf_async", "no document is open");
+        return failure(r.id, ErrorCode::NotOpen, "start_pdf_export_job", "no document is open");
     // The background job re-opens the source file with the session's fixed
     // EPUB settings, which reproduce the live document's layout exactly.
     if (!isReflowableDocument(m_document->type()))
-        return failure(r.id, ErrorCode::Unavailable, "export_pdf_async", "async PDF export requires an ebook document");
+        return failure(
+            r.id, ErrorCode::Unavailable, "start_pdf_export_job", "async PDF export requires an ebook document");
 
     // A dead completion eventfd would strand the job silently, so reject the
     // request with an accurate diagnostic instead of the busy-slot message.
     if (m_exportJobs.eventFd() < 0)
-        return failure(r.id, ErrorCode::Internal, "export_pdf_async", "export completion channel is unavailable");
+        return failure(r.id, ErrorCode::Internal, "start_pdf_export_job", "export completion channel is unavailable");
 
     auto job = m_exportJobs.submit(input.release(), output.release(), m_settings, payload.pages, m_document->type());
     if (!job)
-        return failure(r.id, ErrorCode::ResourceLimit, "export_pdf_async", "another export is already running");
+        return failure(r.id, ErrorCode::ResourceLimit, "start_pdf_export_job", "another export is already running");
     return success(r.id, JobResponse { *job });
 }
 
@@ -1284,30 +1283,28 @@ ResponseMessage CommandService::dispatch(const RequestMessage& request)
                     return openRequestResponse(request.id, fd, payload);
                 });
             },
-            [&](const SaveRequest& payload) {
-                return dispatchWithFd("save", payload.file.transferId, [&](int fd) {
-                    if (!payload.exportEpub && !payload.exportAzw3)
-                        return saveFdResponse(request.id, fd);
-                    return saveBookFdResponse(request.id, payload, fd);
+            [&](const WriteDocumentRequest& payload) {
+                return dispatchWithFd("write_document", payload.file.transferId, [&](int fd) {
+                    return writeDocumentResponse(request.id, payload, fd);
                 });
             },
-            [&](const SavePdfRequest& payload) {
-                return dispatchWithFd(payload.flatten ? "flatten_pdf" : "save_pdf",
-                                      payload.file.transferId,
-                                      [&](int fd) { return savePdfFdResponse(request.id, payload, fd); });
+            [&](const WritePdfRequest& payload) {
+                return dispatchWithFd("write_pdf", payload.file.transferId, [&](int fd) {
+                    return writePdfResponse(request.id, payload, fd);
+                });
             },
-            [&](const ExportPdfAsyncRequest& payload) {
+            [&](const StartPdfExportJobRequest& payload) {
                 ResponseMessage outErr;
                 ResponseMessage inErr;
-                const int outputFd = receiveFd(request.id, "export_pdf_async", payload.output.transferId, &outErr);
+                const int outputFd = receiveFd(request.id, "start_pdf_export_job", payload.output.transferId, &outErr);
                 if (outputFd < 0)
                     return outErr;
-                const int inputFd = receiveFd(request.id, "export_pdf_async", payload.input.transferId, &inErr);
+                const int inputFd = receiveFd(request.id, "start_pdf_export_job", payload.input.transferId, &inErr);
                 if (inputFd < 0) {
                     ::close(outputFd);
                     return inErr;
                 }
-                return exportPdfAsyncResponse(request, payload, outputFd, inputFd);
+                return startPdfExportJobResponse(request, payload, outputFd, inputFd);
             },
             [&](const SignRequest& payload) {
                 return dispatchWithFd(

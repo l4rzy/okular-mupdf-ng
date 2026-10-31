@@ -24,15 +24,12 @@ inline int requestTimeoutFor(const Model::RequestPayload& payload)
             if constexpr (std::is_same_v<T, Model::OcrPageRequest> || std::is_same_v<T, Model::OcrResultRequest>)
                 return Timeout::OcrMs;
             if constexpr (std::is_same_v<T, Model::OpenRequest>)
+                // Boko conversion might take longer, thus longer wait time
                 return value.documentType == Model::DocumentType::Kindle ? Timeout::ExportMs : Timeout::GenericOpMs;
-            if constexpr (std::is_same_v<T, Model::SaveRequest>)
+            if constexpr (std::is_same_v<T, Model::WriteDocumentRequest>)
                 return value.exportEpub || value.exportAzw3 ? Timeout::ExportMs : Timeout::GenericOpMs;
-            if constexpr (std::is_same_v<T, Model::SavePdfRequest>)
+            if constexpr (std::is_same_v<T, Model::WritePdfRequest>)
                 return Timeout::PdfConversionMs;
-            if constexpr (std::is_same_v<T, Model::ExportPdfAsyncRequest>)
-                // Only the job submission round-trip is bounded here; the
-                // export itself completes out-of-band via a notification.
-                return Timeout::GenericOpMs;
             if constexpr (std::is_same_v<T, Model::SynopsisRequest>)
                 return value.generateFallback ? 30'000 : Timeout::GenericOpMs;
             if constexpr (std::is_same_v<T, Model::SignRequest>)

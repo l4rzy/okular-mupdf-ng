@@ -909,35 +909,41 @@ std::optional<FormUpdateResponse> WorkerTransport::clickFormButton(const FormBut
 
 bool WorkerTransport::saveToFile(const QString& target)
 {
-    return writeFile(SaveRequest { }, target);
+    return writeFile(WriteDocumentRequest { }, target);
 }
 
 bool WorkerTransport::exportEpubToFile(const QString& target)
 {
-    return writeFile(SaveRequest { { }, true }, target);
+    return writeFile(WriteDocumentRequest { { }, true }, target);
 }
 
 bool WorkerTransport::exportAzw3ToFile(const QString& target)
 {
-    return writeFile(SaveRequest { { }, false, true }, target);
+    return writeFile(WriteDocumentRequest { { }, false, true }, target);
 }
 
-bool WorkerTransport::flattenPdfToFile(const QString& target, const QVector<int>& pages)
+bool WorkerTransport::writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode)
 {
-    std::vector<std::int32_t> pageList(pages.begin(), pages.end());
-    return writeFile(SavePdfRequest { { }, std::move(pageList), true }, target);
+    if (!isValidPdfOutputMode(mode))
+        return false;
+    return writeFile(WritePdfRequest { { }, { pages.begin(), pages.end() }, mode }, target);
 }
 
-bool WorkerTransport::savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences)
+std::unique_ptr<QTemporaryFile> WorkerTransport::createOutputFile(const QString& target)
 {
-    std::vector<std::int32_t> pageList;
-    pageList.reserve(static_cast<std::size_t>(pages.size()));
-    for (int p : pages)
-        pageList.push_back(p);
-    return writeFile(SavePdfRequest { { }, std::move(pageList), false, withReferences }, target);
+    const QFileInfo info(target);
+    auto file = std::make_unique<QTemporaryFile>(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
+    if (!file->open()) {
+        MU_LOG(warning,
+               "Mu::Plugin",
+               "could not create temporary file for " + target.toStdString() + ": "
+                   + file->errorString().toStdString());
+        return { };
+    }
+    return file;
 }
 
-std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, const QVector<int>& pages)
+std::optional<quint64> WorkerTransport::startPdfExportJob(const QString& target, const QVector<int>& pages)
 {
     // One export at a time, using an independent reader of the opened source.
     if (!isConnected() || m_export || !m_sourceFile)
@@ -951,15 +957,9 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
         return std::nullopt;
     }
 
-    const QFileInfo info(target);
-    auto file = std::make_unique<QTemporaryFile>(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
-    if (!file->open()) {
-        MU_LOG(warning,
-               "Mu::Plugin",
-               "could not create temporary file for " + target.toStdString() + ": "
-                   + file->errorString().toStdString());
+    auto file = createOutputFile(target);
+    if (!file)
         return std::nullopt;
-    }
     const auto outputTransfer = m_nextTransfer++;
     std::string e;
     if (!m_fd.send(outputTransfer, file->handle(), &e)) {
@@ -979,12 +979,9 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
         return std::nullopt;
     }
 
-    std::vector<std::int32_t> pageList;
-    pageList.reserve(static_cast<std::size_t>(pages.size()));
-    for (int p : pages)
-        pageList.push_back(p);
+    std::vector<std::int32_t> pageList(pages.begin(), pages.end());
 
-    auto response = call(ExportPdfAsyncRequest { { outputTransfer }, { inputTransfer }, std::move(pageList) });
+    auto response = call(StartPdfExportJobRequest { { outputTransfer }, { inputTransfer }, std::move(pageList) });
     if (!response || response->error) {
         MU_LOG(warning,
                "Mu::Plugin",
@@ -1015,7 +1012,7 @@ std::optional<quint64> WorkerTransport::startPdfExport(const QString& target, co
     return job->jobId;
 }
 
-bool WorkerTransport::finalizeTempFile(QTemporaryFile& file, const QString& target, bool syncToDisk, QString* error)
+bool WorkerTransport::finalizeOutputFile(QTemporaryFile& file, const QString& target, QString* error)
 {
     const auto fail = [&](const QString& message) {
         if (error)
@@ -1027,7 +1024,7 @@ bool WorkerTransport::finalizeTempFile(QTemporaryFile& file, const QString& targ
         return fail(file.errorString());
     // Flush and fsync before publishing the destination name; a crash
     // between write and rename must not lose the previous good file.
-    if (syncToDisk && ::fsync(file.handle()) != 0)
+    if (::fsync(file.handle()) != 0)
         return fail(QString::fromStdString(std::strerror(errno)));
     file.setAutoRemove(false);
     if (::rename(QFile::encodeName(file.fileName()).constData(), QFile::encodeName(target).constData()) != 0)
@@ -1048,7 +1045,7 @@ void WorkerTransport::completePdfExport(bool success, QString error)
         // rename it into place only after the worker completed, so a failed
         // export cannot leave a partial destination.
         QString finalizeError;
-        delivered = finalizeTempFile(*m_export->file, m_export->target, /*syncToDisk=*/true, &finalizeError);
+        delivered = finalizeOutputFile(*m_export->file, m_export->target, &finalizeError);
         if (!delivered)
             MU_LOG(warning,
                    "Mu::Plugin",
@@ -1067,16 +1064,15 @@ void WorkerTransport::completePdfExport(bool success, QString error)
 
 SignResponse WorkerTransport::signToFile(SignRequest request, const QString& password, const QString& target)
 {
-    QFileInfo info(target);
-    QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
-    if (!file.open())
+    auto file = createOutputFile(target);
+    if (!file)
         return { SigningResult::WriteFailed, "could not create signing output" };
     const auto transfer = m_nextTransfer++;
     request.file.transferId = transfer;
     if (!isValidSignRequest(request))
         return { SigningResult::GenericError, "invalid signing request" };
     std::string error;
-    if (!m_fd.send(transfer, file.handle(), &error))
+    if (!m_fd.send(transfer, file->handle(), &error))
         return { SigningResult::WriteFailed, error };
     m_activeSignPassword = password;
     auto response = call(std::move(request));
@@ -1090,7 +1086,7 @@ SignResponse WorkerTransport::signToFile(SignRequest request, const QString& pas
         return { SigningResult::GenericError, "worker returned an invalid signing response" };
     if (result->result != SigningResult::Success)
         return *result;
-    if (!finalizeTempFile(file, target, /*syncToDisk=*/true, nullptr))
+    if (!finalizeOutputFile(*file, target, nullptr))
         return { SigningResult::WriteFailed, "could not finalize signing output" };
     return *result;
 }
@@ -1116,7 +1112,7 @@ bool WorkerTransport::setSettings(const DocumentSettings& settings)
 
 std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, bool reportFailure)
 {
-    const bool deferNotifications = std::holds_alternative<ExportPdfAsyncRequest>(payload);
+    const bool deferNotifications = std::holds_alternative<StartPdfExportJobRequest>(payload);
     // Phase 1: verify serialization preconditions. The protocol permits one
     // synchronous request at a time, so a disconnected transport bails out and a
     // reentrant or concurrent call aborts the session rather than interleaving.

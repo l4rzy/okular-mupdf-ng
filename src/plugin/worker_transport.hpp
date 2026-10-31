@@ -6,7 +6,6 @@
 
 #include <QByteArray>
 #include <QFile>
-#include <QFileInfo>
 #include <QImage>
 #include <QList>
 #include <QObject>
@@ -106,15 +105,14 @@ public:
     bool modifyAnnotation(int page, const QString& handle, const Model::Annotation& annotation, bool appearance);
     bool removeAnnotation(int page, const QString& handle);
     bool saveToFile(const QString& target);
-    bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    bool writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode);
     bool exportEpubToFile(const QString& target);
     bool exportAzw3ToFile(const QString& target);
-    bool flattenPdfToFile(const QString& target, const QVector<int>& pages = { });
     /// Submits an asynchronous background PDF export and returns its job id
     /// immediately; the output file is finalized when the worker reports
     /// completion via pdfExportFinished. Returns nullopt when no retained source
     /// exists, the transport is busy, or the submit failed.
-    std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages);
+    std::optional<quint64> startPdfExportJob(const QString& target, const QVector<int>& pages);
     Model::SignResponse signToFile(Model::SignRequest request, const QString& password, const QString& target);
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
@@ -146,29 +144,24 @@ private:
     /// temporary file, clears the pending export, and emits the result signal.
     void completePdfExport(bool success, QString error);
 
-    /// Flushes the staged temporary file and atomically moves it onto target.
-    /// The auto-remove flag is left enabled on failure so the staged data is
-    /// cleaned up. When syncToDisk is set the data is fsynced before the move,
-    /// which signing requires. Returns false and fills error on failure.
-    bool finalizeTempFile(QTemporaryFile& file, const QString& target, bool syncToDisk, QString* error);
+    /// Opens an automatically removed output beside target for atomic publication.
+    static std::unique_ptr<QTemporaryFile> createOutputFile(const QString& target);
+
+    /// Flushes, fsyncs, and atomically renames completed output onto target.
+    /// Failure retains automatic cleanup and fills error when provided.
+    static bool finalizeOutputFile(QTemporaryFile& file, const QString& target, QString* error);
 
     // File-producing requests use a temporary file and rename it only after
     // the worker has completed, so a failed or interrupted export cannot
     // leave a partial destination file.
     template <class Payload> bool writeFile(Payload payload, const QString& target)
     {
-        QFileInfo info(target);
-        QTemporaryFile file(info.absolutePath() + QStringLiteral("/.mupdfng-worker-XXXXXX"));
-        if (!file.open()) {
-            MU_LOG(warning,
-                   "Mu::Plugin",
-                   "could not create temporary file for " + target.toStdString() + ": "
-                       + file.errorString().toStdString());
+        auto file = createOutputFile(target);
+        if (!file)
             return false;
-        }
         const auto transfer = m_nextTransfer++;
         std::string e;
-        if (!m_fd.send(transfer, file.handle(), &e)) {
+        if (!m_fd.send(transfer, file->handle(), &e)) {
             MU_LOG(warning, "Mu::Plugin", "could not send output FD for " + target.toStdString() + ": " + e);
             return false;
         }
@@ -185,7 +178,7 @@ private:
             return false;
         }
         QString error;
-        if (!finalizeTempFile(file, target, /*syncToDisk=*/true, &error)) {
+        if (!finalizeOutputFile(*file, target, &error)) {
             MU_LOG(warning,
                    "Mu::Plugin",
                    "could not finalize output for " + target.toStdString() + ": " + error.toStdString());

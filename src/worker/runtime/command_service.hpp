@@ -37,7 +37,6 @@ using ::Mu::Model::AnnotationAddRequest;
 using ::Mu::Model::AnnotationModifyRequest;
 using ::Mu::Model::AnnotationRemoveRequest;
 using ::Mu::Model::DocumentType;
-using ::Mu::Model::ExportPdfAsyncRequest;
 using ::Mu::Model::FontsRequest;
 using ::Mu::Model::FormButtonClickRequest;
 using ::Mu::Model::FormResetRequest;
@@ -51,11 +50,12 @@ using ::Mu::Model::ReleaseFrameSlotRequest;
 using ::Mu::Model::RenderRequest;
 using ::Mu::Model::RequestMessage;
 using ::Mu::Model::ResponseMessage;
-using ::Mu::Model::SavePdfRequest;
 using ::Mu::Model::SettingsRequest;
 using ::Mu::Model::SignInput;
 using ::Mu::Model::SignRequest;
+using ::Mu::Model::StartPdfExportJobRequest;
 using ::Mu::Model::TextBoxesRequest;
+using ::Mu::Model::WritePdfRequest;
 
 using ::Mu::IPC::CtrlChannel;
 using ::Mu::IPC::FdChannel;
@@ -172,21 +172,19 @@ public:
     [[nodiscard]] ResponseMessage
     openRequestResponse(std::uint64_t requestId, int fd, const Model::OpenRequest& request);
 
-    /// Saves document modifications back to an output file descriptor.
-    [[nodiscard]] ResponseMessage saveFdResponse(std::uint64_t id, int fd);
-
-    /// Exports an ePUB or Kindle book to a transferred output descriptor.
-    [[nodiscard]] ResponseMessage saveBookFdResponse(std::uint64_t id, const Model::SaveRequest& payload, int fd);
+    /// Writes document edits or an EPUB/AZW3 conversion to a transferred descriptor.
+    [[nodiscard]] ResponseMessage
+    writeDocumentResponse(std::uint64_t id, const Model::WriteDocumentRequest& payload, int fd);
 
     /// Writes printable pages, a flattened PDF, or format-specific PDF export.
-    [[nodiscard]] ResponseMessage savePdfFdResponse(std::uint64_t id, const SavePdfRequest& payload, int fd);
+    [[nodiscard]] ResponseMessage writePdfResponse(std::uint64_t id, const WritePdfRequest& payload, int fd);
 
     /// Submits a background PDF export job using an isolated document copy.
     /// Consumes both descriptors on every path.
-    [[nodiscard]] ResponseMessage exportPdfAsyncResponse(const RequestMessage& request,
-                                                         const ExportPdfAsyncRequest& payload,
-                                                         int outputFd,
-                                                         int inputFd);
+    [[nodiscard]] ResponseMessage startPdfExportJobResponse(const RequestMessage& request,
+                                                            const StartPdfExportJobRequest& payload,
+                                                            int outputFd,
+                                                            int inputFd);
 
     /// Performs digital signature signing on a document page field.
     [[nodiscard]] ResponseMessage signFdResponse(const RequestMessage& request, const SignRequest& sign, int fd);

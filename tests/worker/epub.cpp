@@ -2025,7 +2025,7 @@ private slots:
         QVERIFY(service.document());
         QCOMPARE(service.document()->pageCount(), 1);
 
-        const auto saveResponse = service.saveFdResponse(1, -1);
+        const auto saveResponse = service.writeDocumentResponse(1, { }, -1);
         QVERIFY(saveResponse.error);
         QCOMPARE(saveResponse.error->code, ::Mu::Model::ErrorCode::Internal);
         QVERIFY(saveResponse.error->message.find("not supported") != std::string::npos);
@@ -2384,7 +2384,7 @@ private slots:
 
     void testExportPdfAsyncRejectionClosesDescriptors()
     {
-        // Every rejection path in exportPdfAsyncResponse must consume both
+        // Every rejection path in startPdfExportJobResponse must consume both
         // offered descriptors; the eventfd-rejection branch previously leaked
         // them when a dead completion channel was reported.
         ::Mu::Worker::Runtime::CommandService service({ });
@@ -2398,10 +2398,10 @@ private slots:
         QVERIFY(inFd >= 0);
 
         const auto response =
-            service.exportPdfAsyncResponse({ 1, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } } },
-                                           ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } },
-                                           outFd,
-                                           inFd);
+            service.startPdfExportJobResponse({ 1, ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } } },
+                                              ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } },
+                                              outFd,
+                                              inFd);
         QVERIFY2(response.error, "export without a document must be rejected");
 
         QVERIFY(::fcntl(outFd, F_GETFD) == -1 && errno == EBADF);
@@ -2462,7 +2462,7 @@ private slots:
         QVERIFY2(plainService.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error),
                  error.c_str());
         const auto noChannel =
-            plainService.dispatch({ 1, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } } });
+            plainService.dispatch({ 1, ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } } });
         QVERIFY(noChannel.error);
         QCOMPARE(noChannel.error->code, ::Mu::Model::ErrorCode::InvalidRequest);
 
@@ -2486,7 +2486,7 @@ private slots:
         QVERIFY(inFd >= 0);
         QVERIFY(sender.send(202, inFd, &error));
         ::close(inFd);
-        const auto response = service.dispatch({ 2, ::Mu::Model::ExportPdfAsyncRequest { { 201 }, { 202 }, { } } });
+        const auto response = service.dispatch({ 2, ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } } });
         QVERIFY2(!response.error, response.error ? response.error->message.c_str() : "");
         const auto* job = std::get_if<::Mu::Model::JobResponse>(&response.payload);
         QVERIFY(job);

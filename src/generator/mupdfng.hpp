@@ -108,7 +108,7 @@ public:
     bool save(const QString& fileName, SaveOptions options, QString* errorText) override;
     // Okular Generator Func: reports the supported export formats.
     Okular::ExportFormat::List exportFormats() const override;
-    // Okular Generator Func: exports the document text to a file.
+    // Okular Generator Func: exports the document to the selected format.
     bool exportTo(const QString& fileName, const Okular::ExportFormat& format) override;
     // Okular Generator Func: returns the annotation adapter used by Okular.
     Okular::AnnotationProxy* annotationProxy() const override;
@@ -145,6 +145,8 @@ protected:
     void addPages(KConfigDialog* dialog) override;
 
 private:
+    bool exportPdf(const QString& fileName);
+
     void notifySetup(const QList<Okular::Page*>& pages, int setupFlags) override;
     void notifyVisibleRectsChanged() override;
     void generatePixmap(Okular::PixmapRequest* request) override;

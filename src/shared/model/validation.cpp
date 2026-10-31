@@ -190,6 +190,17 @@ bool isValidNormalizedRect(const NormalizedRect& rect) noexcept
 // File Transfers & Document Settings
 // =============================================================================
 
+bool isValidPdfOutputMode(PdfOutputMode mode, std::string_view* reason) noexcept
+{
+    switch (mode) {
+    case PdfOutputMode::Printable:
+    case PdfOutputMode::Flattened:
+    case PdfOutputMode::WithReferences:
+        return true;
+    }
+    return failWith("invalid PDF output mode", reason);
+}
+
 bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason) noexcept
 {
     return transfer.transferId != 0 || failWith("file transfer identifier is zero", reason);

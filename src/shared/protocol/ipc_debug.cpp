@@ -69,7 +69,7 @@ inline std::string_view forType(std::string_view type) noexcept
         return Magenta;
     if (type == "cancel-ocr")
         return DimMagenta;
-    if (type == "save" || type == "save-pdf")
+    if (type == "write-document" || type == "write-pdf" || type == "start-pdf-export-job")
         return BrightWhite;
     if (type == "error")
         return BoldRed;
@@ -364,17 +364,16 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "epubPageSize", static_cast<std::uint8_t>(value.settings.epub.pageSize));
                 field(out, "epubFontFamily", static_cast<std::uint8_t>(value.settings.epub.fontFamily));
                 field(out, "epubCustomCssBase64Bytes", value.settings.epub.customCssBase64.size());
-            } else if constexpr (std::is_same_v<T, Model::SaveRequest>) {
-                out << "save";
+            } else if constexpr (std::is_same_v<T, Model::WriteDocumentRequest>) {
+                out << "write-document";
                 field(out, "transfer", value.file.transferId);
                 field(out, "exportEpub", value.exportEpub);
                 field(out, "exportAzw3", value.exportAzw3);
-            } else if constexpr (std::is_same_v<T, Model::SavePdfRequest>) {
-                out << (value.flatten ? "flatten-pdf" : "save-pdf");
+            } else if constexpr (std::is_same_v<T, Model::WritePdfRequest>) {
+                out << "write-pdf";
                 field(out, "transfer", value.file.transferId);
                 field(out, "pages", value.pages.size());
-                field(out, "flatten", value.flatten);
-                field(out, "withReferences", value.withReferences);
+                field(out, "mode", static_cast<unsigned int>(value.mode));
             } else if constexpr (std::is_same_v<T, Model::SignRequest>) {
                 out << "sign";
                 field(out, "transfer", value.file.transferId);
@@ -428,8 +427,8 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
             } else if constexpr (std::is_same_v<T, Model::FormResetRequest>) {
                 out << "form-reset";
                 field(out, "handle", value.handle);
-            } else if constexpr (std::is_same_v<T, Model::ExportPdfAsyncRequest>) {
-                out << "export-pdf-async";
+            } else if constexpr (std::is_same_v<T, Model::StartPdfExportJobRequest>) {
+                out << "start-pdf-export-job";
                 field(out, "outputTransfer", value.output.transferId);
                 field(out, "inputTransfer", value.input.transferId);
                 field(out, "pages", value.pages.size());

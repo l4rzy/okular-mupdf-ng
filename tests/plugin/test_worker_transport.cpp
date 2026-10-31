@@ -76,10 +76,10 @@ private Q_SLOTS:
         const Model::NotificationMessage done { Model::ExportDoneNotification { 42, scenario != 3, "" } };
         QVERIFY(IPC::ZppCodec::writeMessage(peer, response, 1000, &error));
         // Queue both frames before submission so the old call() deterministically
-        // drains completion before startPdfExport() can register the job.
+        // drains completion before startPdfExportJob() can register the job.
         if (scenario == 0 || scenario == 3 || scenario == 4)
             QVERIFY(IPC::ZppCodec::writeMessage(peer, done, 1000, &error));
-        const auto job = transport.startPdfExport(target, { });
+        const auto job = transport.startPdfExportJob(target, { });
         QCOMPARE(job.has_value(), scenario != 2);
         if (job)
             QCOMPARE(*job, 42u);

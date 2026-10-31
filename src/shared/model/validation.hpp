@@ -28,6 +28,9 @@ bool isValidOcrDpi(float dpi) noexcept;
 /// Validates a descriptor transfer identifier before it reaches the FD channel.
 bool isValidFileTransfer(const FileTransfer& transfer, std::string_view* reason = nullptr) noexcept;
 
+/// Rejects unsupported PDF output modes before descriptor transfer or receipt.
+bool isValidPdfOutputMode(PdfOutputMode mode, std::string_view* reason = nullptr) noexcept;
+
 /// Validates optional link metadata independently from the surrounding image.
 bool isValidRenderLinks(const RenderLinks& links) noexcept;
 /// Validates URI bounds and generation shape; the worker checks the active generation.

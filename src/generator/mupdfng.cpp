@@ -1765,22 +1765,8 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
             Q_EMIT notice(i18n("Export to ePUB finished."), NoticeMs);
         return success;
     }
-    if (format.mimeType().inherits(QStringLiteral("application/pdf"))) {
-        if (!workerReady())
-            return false;
-        if (m_document.type == Model::DocumentType::Pdf) {
-            const bool success = m_worker.flattenPdfToFile(fileName);
-            if (success)
-                Q_EMIT notice(i18n("Export to flattened PDF finished."), NoticeMs);
-            return success;
-        }
-        if (!Model::isReflowableDocument(m_document.type))
-            return false;
-        // File- and data-opened documents both retain a source descriptor for
-        // the isolated background job, leaving the session document usable.
-        Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
-        return m_worker.startPdfExport(fileName, { }).has_value();
-    }
+    if (format.mimeType().inherits(QStringLiteral("application/pdf")))
+        return exportPdf(fileName);
 
     if (format.mimeType().name() == QLatin1String("application/xml")) {
         // Annotations are exported from the live Okular pages, so unsaved
@@ -1835,6 +1821,25 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
     return stream.status() == QTextStream::Ok && file.commit();
 }
 
+// Routes PDF export by document type; ebooks always use the isolated background job.
+bool Main::exportPdf(const QString& fileName)
+{
+    if (!workerReady())
+        return false;
+    if (m_document.type == Model::DocumentType::Pdf) {
+        const bool success = m_worker.writePdfToFile(fileName, { }, Model::PdfOutputMode::Flattened);
+        if (success)
+            Q_EMIT notice(i18n("Export to flattened PDF finished."), NoticeMs);
+        return success;
+    }
+    if (!Model::isReflowableDocument(m_document.type))
+        return false;
+    // File- and data-opened documents both retain a source descriptor for
+    // the isolated background job, leaving the session document usable.
+    Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
+    return m_worker.startPdfExportJob(fileName, { }).has_value();
+}
+
 // =============================================================================
 // Annotation Actions & Printing
 // =============================================================================
@@ -1863,7 +1868,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     if (!workerReady())
         return Okular::Document::FileConversionPrintError;
 
-    const int totalPages = !m_okularPages.isEmpty() ? static_cast<int>(m_okularPages.size()) : 0;
+    const int totalPages = static_cast<int>(m_okularPages.size());
     if (totalPages <= 0)
         return Okular::Document::NoFileToPrintError;
 
@@ -1882,7 +1887,7 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     // Print-to-file and preview use the worker's staged PDF write and atomic publication.
     // Output is PDF regardless of filename suffix.
     if (!printer.outputFileName().isEmpty()) {
-        return m_worker.savePdfToFile(printer.outputFileName(), selectedPages)
+        return m_worker.writePdfToFile(printer.outputFileName(), selectedPages, Model::PdfOutputMode::Printable)
             ? Okular::Document::NoPrintError
             : Okular::Document::PrintToFilePrintError;
     }
@@ -1895,15 +1900,12 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     const QString fileName = tempFile.fileName();
     tempFile.close();
 
-    if (!m_worker.savePdfToFile(fileName, selectedPages))
+    if (!m_worker.writePdfToFile(fileName, selectedPages, Model::PdfOutputMode::Printable))
         return Okular::Document::FileConversionPrintError;
 
-    QPageLayout::Orientation orientation = QPageLayout::Portrait;
-    if (!m_okularPages.isEmpty() && m_okularPages.first()->width() > m_okularPages.first()->height()) {
-        orientation = QPageLayout::Landscape;
-    } else {
-        orientation = printer.pageLayout().orientation();
-    }
+    const auto orientation = m_okularPages.first()->width() > m_okularPages.first()->height()
+        ? QPageLayout::Landscape
+        : printer.pageLayout().orientation();
 
     const QString bookmarkedRange = document() ? document()->bookmarkedPageRange() : QString();
 

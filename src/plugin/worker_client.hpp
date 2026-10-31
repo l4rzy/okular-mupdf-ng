@@ -99,13 +99,12 @@ public:
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request) const;
     bool setSettings(const Model::DocumentSettings& settings);
     bool saveToFile(const QString& target);
-    bool savePdfToFile(const QString& target, const QVector<int>& pages, bool withReferences = false);
+    bool writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode);
     bool exportEpubToFile(const QString& target);
     bool exportAzw3ToFile(const QString& target);
-    bool flattenPdfToFile(const QString& target, const QVector<int>& pages = { });
     /// Submits an asynchronous background PDF export; returns the job id
     /// immediately. Completion arrives via the pdfExportFinished signal.
-    std::optional<quint64> startPdfExport(const QString& target, const QVector<int>& pages) const;
+    std::optional<quint64> startPdfExportJob(const QString& target, const QVector<int>& pages) const;
     Model::SignResponse sign(const Model::SignRequest& request, const QString& password, const QString& target);
     std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation) const;
     bool
