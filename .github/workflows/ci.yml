@@ -14,6 +14,13 @@ permissions:
   contents: read
 
 jobs:
+  sonarqube:
+    name: LLVM coverage and SonarQube
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/coverage.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   check-build:
     name: Check whether to build
     runs-on: ubuntu-26.04

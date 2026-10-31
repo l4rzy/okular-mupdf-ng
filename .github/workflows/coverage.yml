@@ -1,0 +1,147 @@
+name: LLVM Coverage
+
+on:
+  workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: LLVM coverage and SonarQube
+    runs-on: ubuntu-26.04
+    container:
+      image: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CC: clang-21
+      CXX: clang++-21
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang-21
+      LLVM_COV: llvm-cov-21
+      LLVM_PROFDATA: llvm-profdata-21
+      LLVM_READOBJ: llvm-readobj-21
+      QT_QPA_PLATFORM: offscreen
+      QT_QPA_PLATFORMTHEME: generic
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            ca-certificates \
+            clang-21 \
+            cmake \
+            curl \
+            dirmngr \
+            dpkg-dev \
+            extra-cmake-modules \
+            file \
+            gcc \
+            git \
+            gpg \
+            libbrotli-dev \
+            libclang-rt-21-dev \
+            libfreetype-dev \
+            libjpeg-dev \
+            libkf6config-dev \
+            libkf6configwidgets-dev \
+            libkf6coreaddons-dev \
+            libkf6i18n-dev \
+            libkf6kio-dev \
+            libnss3-dev \
+            libnss3-tools \
+            libseccomp-dev \
+            llvm-21 \
+            ninja-build \
+            okular-dev \
+            openssl \
+            patch \
+            pkg-config \
+            python3 \
+            qt6-base-dev \
+            rustup \
+            tesseract-ocr-eng \
+            unzip \
+            zlib1g-dev
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Download bundled MuPDF source
+        run: python3 ./scripts/download-mupdf.py
+
+      - name: Configure coverage build
+        run: |
+          "$CC" --version
+          "$LLVM_COV" --version
+          "$LLVM_PROFDATA" --version
+          cmake -S . -B build-coverage -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DBUILD_TESTING=ON \
+            -DENABLE_COVERAGE=ON \
+            -DENABLE_SANITIZERS=OFF \
+            -DENABLE_LTO=OFF \
+            -DENABLE_BUILD_TREE_WORKER=ON \
+            -DDISABLE_WORKER_SANDBOX=ON \
+            -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
+
+      - name: Build
+        run: cmake --build build-coverage --parallel 4
+
+      - name: Run all test suites with continuous profiling
+        run: |
+          mkdir -p "$PWD/build-coverage/profiles"
+          # %p separates processes, %m separates loaded binaries, and %c keeps
+          # worker counters even when a test terminates the process by signal.
+          export LLVM_PROFILE_FILE="$PWD/build-coverage/profiles/%p-%m%c.profraw"
+          ctest --test-dir build-coverage --output-on-failure --parallel 4 \
+            --output-junit "$PWD/build-coverage/coverage-tests.xml"
+
+      - name: Generate coverage reports
+        run: |
+          python3 scripts/coverage-report.py build-coverage
+          {
+            echo '## LLVM coverage'
+            echo '```text'
+            cat build-coverage/coverage/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: llvm-coverage
+          path: |
+            build-coverage/coverage/
+            build-coverage/coverage-tests.xml
+            build-coverage/Testing/Temporary/LastTest.log
+            build-coverage/compile_commands.json
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            --define sonar.cfamily.compile-commands=build-coverage/compile_commands.json
+            --define sonar.cfamily.llvm-cov.reportPath=build-coverage/coverage/llvm-cov.txt

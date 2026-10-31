@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(BUILD_OKULAR_GENERATOR "Build the Okular generator and KDE integration" ON)
 option(ENABLE_SANITIZERS "Enable Address/LeakSanitizer instrumentation" OFF)
+option(ENABLE_COVERAGE "Enable LLVM source-based coverage instrumentation" OFF)
 option(ENABLE_LTO "Enable supported LTO in optimized CMake configurations" ON)
 option(DISABLE_WORKER_SANDBOX "Disable worker sandboxing for diagnostic builds" OFF)
 add_compile_definitions(MU_DISABLE_WORKER_SANDBOX=$<BOOL:${DISABLE_WORKER_SANDBOX}>)
@@ -41,10 +42,23 @@ else()
 endif()
 include(CTest)
 
+if(ENABLE_COVERAGE)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "ENABLE_COVERAGE requires Clang for both C and C++")
+    endif()
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    # Directory options instrument our CMake targets, without forwarding flags
+    # into the external MuPDF/Rust builds. Counter relocation supports LLVM's
+    # continuous profiling on Linux, retaining coverage from killed workers.
+    add_compile_options(-fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic
+        "SHELL:-mllvm -runtime-counter-relocation")
+    add_link_options(-fprofile-instr-generate)
+endif()
+
 # Keep Debug/sanitizer builds and packaging's None configuration under their
 # existing flag policy. IPO applies to CMake targets, not MuPDF's external Make build.
 set(MU_LTO_ENABLED OFF)
-if(ENABLE_LTO AND NOT ENABLE_SANITIZERS AND
+if(ENABLE_LTO AND NOT ENABLE_SANITIZERS AND NOT ENABLE_COVERAGE AND
    (CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$"))
     include(CheckIPOSupported)
     if(POLICY CMP0138)
@@ -156,6 +170,7 @@ install(FILES
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "LTO for optimized configurations: ${MU_LTO_ENABLED}")
+message(STATUS "LLVM coverage instrumentation: ${ENABLE_COVERAGE}")
 message(STATUS "MuPDF build profile: ${MUPDF_BUILD_PROFILE}")
 message(STATUS "MuPDF CJK fallback: ${MUPDF_CJK_FALLBACK}")
 message(STATUS "PDF form JavaScript: ${ENABLE_FORM_JAVASCRIPT}")

@@ -3,6 +3,7 @@ build/
 build-release/
 build-asan/
 build-gcc/
+build-coverage/
 reference/
 thirdparty/mupdf-*/
 dist/*
