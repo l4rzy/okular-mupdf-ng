@@ -140,7 +140,7 @@ mod tests {
             let mut entry = zip.by_index(i).unwrap();
             let mut content = Vec::new();
             entry.read_to_end(&mut content).unwrap();
-            entries.insert(entry.name().to_string(), content);
+            entries.insert(entry.name().unwrap().into_owned(), content);
         }
         let mut ids = HashMap::new();
         for (path, content) in &entries {
