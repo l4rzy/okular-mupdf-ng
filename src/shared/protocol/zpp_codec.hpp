@@ -44,22 +44,6 @@ bool decode(std::span<const std::byte> bytes, Model::RequestMessage* value, std:
 bool decode(std::span<const std::byte> bytes, Model::ResponseMessage* value, std::string* error = nullptr);
 bool decode(std::span<const std::byte> bytes, Model::NotificationMessage* value, std::string* error = nullptr);
 
-/// Convenience overload that decodes bytes owned by a vector.
-inline bool decode(const std::vector<std::byte>& bytes, Model::RequestMessage* value, std::string* error = nullptr)
-{
-    return decode(std::span<const std::byte>(bytes), value, error);
-}
-
-inline bool decode(const std::vector<std::byte>& bytes, Model::ResponseMessage* value, std::string* error = nullptr)
-{
-    return decode(std::span<const std::byte>(bytes), value, error);
-}
-
-inline bool decode(const std::vector<std::byte>& bytes, Model::NotificationMessage* value, std::string* error = nullptr)
-{
-    return decode(std::span<const std::byte>(bytes), value, error);
-}
-
 /// Encodes and sends one framed message through the control channel.
 ///
 /// `debugSide`, when non-empty, is used only as a logging label; message

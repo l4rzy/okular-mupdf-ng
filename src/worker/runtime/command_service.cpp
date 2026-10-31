@@ -796,7 +796,7 @@ ResponseMessage CommandService::signFdResponse(const RequestMessage& request, co
             return { SigningResult::GenericError, error, { } };
 
         if (auto* reply = std::get_if<SignReply>(&incoming.payload)) {
-            if (reply->jobId != input.jobId || reply->nonce != input.nonce || incoming.id == 0) {
+            if (reply->jobId != input.jobId || reply->nonce != input.nonce) {
                 MU_LOG(critical,
                        "Mu::Worker",
                        "signing protocol violation: expected jobId=" + std::to_string(input.jobId)

@@ -66,12 +66,18 @@ bool isValidText(std::string_view value,
     return true;
 }
 
-bool isValidHandle(std::string_view handle, std::string_view field, std::string_view* reason) noexcept
+bool isValidHandle(std::string_view handle,
+                   std::string_view field,
+                   std::string_view* reason,
+                   std::string_view encodingMessage = { }) noexcept
 {
     if (handle.empty() || handle.size() > Limit::MaxHandleBytes)
         return failWith(field, reason);
-    return isValidText(
-        handle, "handle exceeds limit", "handle contains invalid UTF-8", "handle contains embedded NUL", reason);
+    return isValidText(handle,
+                       "handle exceeds limit",
+                       encodingMessage.empty() ? "handle contains invalid UTF-8" : encodingMessage,
+                       encodingMessage.empty() ? "handle contains embedded NUL" : encodingMessage,
+                       reason);
 }
 
 } // namespace
@@ -554,48 +560,22 @@ bool isValidFormUpdateRequest(const FormUpdateRequest& request, std::string_view
 {
     // Validate the target handle before inspecting the replacement value so an
     // update cannot address an invalid or unbounded form field identifier.
-    const auto fail = [reason](std::string_view value) {
-        if (reason)
-            *reason = value;
-        return false;
-    };
-
-    if (request.handle.empty() || request.handle.size() > Limit::MaxFormFieldHandleBytes)
-        return fail("invalid form update handle length");
-    if (!isValidUtf8(request.handle) || !hasNoEmbeddedNul(request.handle))
-        return fail("invalid form update handle encoding");
-    return isValidFormValue(request.value, reason);
+    return isValidHandle(
+               request.handle, "invalid form update handle length", reason, "invalid form update handle encoding")
+        && isValidFormValue(request.value, reason);
 }
 
 bool isValidFormResetRequest(const FormResetRequest& request, std::string_view* reason)
 {
     // Reset requests carry no value, so only their target handle needs checking.
-    if (request.handle.empty() || request.handle.size() > Limit::MaxFormFieldHandleBytes) {
-        if (reason)
-            *reason = "invalid form reset handle length";
-        return false;
-    }
-    if (!isValidUtf8(request.handle) || !hasNoEmbeddedNul(request.handle)) {
-        if (reason)
-            *reason = "invalid form reset handle encoding";
-        return false;
-    }
-    return true;
+    return isValidHandle(
+        request.handle, "invalid form reset handle length", reason, "invalid form reset handle encoding");
 }
 
 bool isValidFormButtonClickRequest(const FormButtonClickRequest& request, std::string_view* reason)
 {
-    if (request.handle.empty() || request.handle.size() > Limit::MaxFormFieldHandleBytes) {
-        if (reason)
-            *reason = "invalid form button handle length";
-        return false;
-    }
-    if (!isValidUtf8(request.handle) || !hasNoEmbeddedNul(request.handle)) {
-        if (reason)
-            *reason = "invalid form button handle encoding";
-        return false;
-    }
-    return true;
+    return isValidHandle(
+        request.handle, "invalid form button handle length", reason, "invalid form button handle encoding");
 }
 
 // =============================================================================

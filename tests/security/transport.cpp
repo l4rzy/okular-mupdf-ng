@@ -680,6 +680,43 @@ private slots:
         QCOMPARE(decField.multiSelect, field.multiSelect);
     }
 
+    void validatesFormRequestHandles_data()
+    {
+        QTest::addColumn<QByteArray>("handle");
+        QTest::addColumn<QString>("failure");
+        QTest::newRow("valid") << QByteArray("widget-1") << QString();
+        QTest::newRow("maximum-length") << QByteArray(static_cast<qsizetype>(::Mu::Limit::MaxFormFieldHandleBytes), 'h')
+                                        << QString();
+        QTest::newRow("empty") << QByteArray() << QStringLiteral("length");
+        QTest::newRow("oversized") << QByteArray(static_cast<qsizetype>(::Mu::Limit::MaxFormFieldHandleBytes + 1), 'h')
+                                   << QStringLiteral("length");
+        QTest::newRow("invalid-utf8") << QByteArray::fromHex("c328") << QStringLiteral("encoding");
+        QTest::newRow("embedded-nul") << QByteArray("a\0b", 3) << QStringLiteral("encoding");
+    }
+
+    void validatesFormRequestHandles()
+    {
+        QFETCH(QByteArray, handle);
+        QFETCH(QString, failure);
+        const std::string value(handle.constData(), static_cast<std::size_t>(handle.size()));
+        const auto check = [&](const auto& request, auto validate, const QString& operation) {
+            std::string_view reason = "unchanged";
+            const bool accepted = failure.isEmpty();
+            QCOMPARE(validate(request, &reason), accepted);
+            const QString expected = accepted ? QStringLiteral("unchanged")
+                                              : QStringLiteral("invalid form %1 handle %2").arg(operation, failure);
+            QCOMPARE(QString::fromUtf8(reason.data(), static_cast<qsizetype>(reason.size())), expected);
+            QCOMPARE(validate(request, nullptr), accepted);
+        };
+        check(::Mu::Model::FormUpdateRequest { value, ::Mu::Model::FormTextValue { "text" } },
+              ::Mu::Model::isValidFormUpdateRequest,
+              QStringLiteral("update"));
+        check(::Mu::Model::FormResetRequest { value }, ::Mu::Model::isValidFormResetRequest, QStringLiteral("reset"));
+        check(::Mu::Model::FormButtonClickRequest { value },
+              ::Mu::Model::isValidFormButtonClickRequest,
+              QStringLiteral("button"));
+    }
+
     void formFieldValidationRejectsMalformedInput()
     {
         // Malformed UTF-8 in the field name
