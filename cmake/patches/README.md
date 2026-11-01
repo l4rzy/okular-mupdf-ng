@@ -35,6 +35,26 @@ and opens synthetic HTML directly without plugin CSS overrides.
 The plugin's EPUB layout cache revision also changes so cached page counts and
 outline positions from the unpatched engine are not reused.
 
+Table cell widths resolve percentages against the available table width, and
+font-relative lengths against the cell's font size. Explicit widths retain the
+minimum content width, including padding and borders; later rows cannot shrink
+an earlier cell's minimum. This prevents narrow percentage columns from drawing
+headers over adjacent cells. Synthetic tests cover automatic, percentage and
+fixed widths with both separate and collapsed borders. The EPUB layout cache
+revision changes so old pagination is not reused. These corrections share the
+layout patch because its `rem` conversions touch the same table sizing code.
+
+Static and relatively positioned `inline-block` elements use atomic flow nodes
+with their own formatting context, rather than interrupting the surrounding
+paragraph as ordinary blocks. Layout resolves explicit or shrink-to-fit widths,
+padding and borders, and aligns the last internal line to the surrounding
+baseline. Nested links and anchor targets retain their positioned geometry.
+Tests cover zero-line-height labels, superscripts, automatic/relative widths,
+alignment, multiline and nested content, and pagination. This fixes hanging
+footnote labels without publisher-specific CSS overrides. Positioned and floating
+elements retain the existing block positioning path. The EPUB cache revision
+changes to invalidate pagination from before inline-block support.
+
 The same patch preserves CSS `rem` as a distinct unit until layout, resolving
 it against the computed font size of the document element rather than a fixed
 16 points. The root's own `rem` font size uses the initial layout font size.
@@ -125,6 +145,14 @@ Attribute namespaces and the explicit `i`/`s` case flags remain unsupported.
 
 `mupdf-1.28.5-css-calc.patch` is retained for reference but is not applied by
 CMake. CSS `calc()` and viewport units remain unsupported by this build.
+
+`mupdf-1.28.5-html-table-pagination.patch` reapplies collapsed-border cell
+alignment after moving a table row to the next page. The second layout pass
+resets cells to their content heights; without alignment, shorter cells paint
+their backgrounds and bottom borders above the row bottom. Tests compare stripe
+coverage in short and tall cells for both border models, with and without a page
+break, and with top/middle/bottom alignment. A spanning first column also checks
+that a stripe does not incorrectly fill cells originating in an unshaded row.
 
 CMake applies the patches with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
 verifies an already-applied patch using a reverse dry run. Unexpected source changes

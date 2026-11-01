@@ -87,8 +87,10 @@ private slots:
         // Explicit stale revisions share one key format; revision 0 omits it.
         QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5) << false;
         QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5) << false;
-        QTest::newRow("current-accelerator") << true << quint32(9) << true;
-        QTest::newRow("current-outline") << false << quint32(9) << true;
+        QTest::newRow("pre-table-widths-accelerator") << true << quint32(9) << false;
+        QTest::newRow("pre-table-widths-outline") << false << quint32(9) << false;
+        QTest::newRow("current-accelerator") << true << quint32(10) << true;
+        QTest::newRow("current-outline") << false << quint32(10) << true;
     }
 
     void isolatesLayoutRevisions()

@@ -1,0 +1,8 @@
+--- a/source/html/html-layout.c
++++ b/source/html/html-layout.c
+@@ -2848,2 +2848,5 @@
+ 						layout_table_row(ctx, ld, table, y, row, ncol, colw, spacing, border_collapse ? &bci : NULL);
++						/* Relayout resets cell heights; stretch their backgrounds and borders again. */
++						if (border_collapse)
++							fixup_collapsed_cell_bottoms_for_row(ctx, table, y, box);
+ 					}

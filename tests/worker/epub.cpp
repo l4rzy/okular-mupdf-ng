@@ -231,6 +231,537 @@ private slots:
         QCOMPARE(inspection.lines.value(QStringLiteral("Control")).size, 18.0f);
     }
 
+    void testInlineBlockLabels_data()
+    {
+        QTest::addColumn<QString>("tag");
+        QTest::addColumn<QString>("width");
+        QTest::addColumn<QString>("alignment");
+        for (const auto& tag : { QStringLiteral("span"), QStringLiteral("sup"), QStringLiteral("a") }) {
+            for (const auto& width : { QStringLiteral("auto"), QStringLiteral("2em"), QStringLiteral("10%") }) {
+                for (const auto& alignment : { QStringLiteral("left"), QStringLiteral("right") }) {
+                    const auto name = (tag + '-' + width + '-' + alignment).toLatin1();
+                    QTest::newRow(name.constData()) << tag << width << alignment;
+                }
+            }
+        }
+    }
+
+    void testInlineBlockLabels()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for bundled MuPDF inline-block layout");
+#endif
+        QFETCH(QString, tag);
+        QFETCH(QString, width);
+        QFETCH(QString, alignment);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("inline-block.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto marker = [&tag](const char* number) {
+            const auto text = QString::fromLatin1(number);
+            return QStringLiteral("<%1 class='label' %2>%3</%1>")
+                .arg(tag,
+                     tag == QStringLiteral("a") ? QStringLiteral("href='#target'") : QString(),
+                     tag == QStringLiteral("a") ? text : QStringLiteral("<a href='#target'>%1</a>").arg(text));
+        };
+        const auto content =
+            QStringLiteral("<html><head><style>@page { margin: 12pt; } body { margin: 0; font-size: 12pt; }"
+                           "p { margin: 0 0 8pt 30pt; text-indent: -24pt; line-height: 1.4; }"
+                           ".label { display: inline-block; width: %1; padding-right: 6pt; text-align: %2; "
+                           "font-size: 100%; line-height: 0; text-indent: 0; }"
+                           "</style></head><body><p>%3 "
+                           "Alpha is a long explanation with enough words to wrap onto another line.</p>"
+                           "<p>%4 Beta is another explanation.</p>"
+                           "<p id='target'>Target</p></body></html>")
+                .arg(width, alignment, marker("1"), marker("2"))
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 260, 180, 12);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const std::array labels { "1", "Alpha", "2", "Beta" };
+        std::array<fz_rect, 4> bounds;
+        for (std::size_t index = 0; index < labels.size(); ++index) {
+            fz_quad quad;
+            QCOMPARE(fz_search_page_number(context, document, 0, labels[index], nullptr, &quad, 1), 1);
+            bounds[index] = fz_rect_from_quad(quad);
+        }
+        for (std::size_t index : { 0u, 2u }) {
+            QVERIFY(bounds[index].x1 < bounds[index + 1].x0);
+            // A superscript may rise, but the marker still belongs to the text's line.
+            QVERIFY(std::abs(bounds[index].y0 - bounds[index + 1].y0) < 5.0f);
+        }
+        QVERIFY(bounds[2].y0 > bounds[1].y1);
+        if (width == QStringLiteral("2em") && alignment == QStringLiteral("left"))
+            QVERIFY(bounds[1].x0 - bounds[0].x0 >= 30.0f);
+        fz_page* page = fz_load_page(context, document, 0);
+        fz_link* links = fz_load_links(context, page);
+        const auto dropLinks = qScopeGuard([&] {
+            fz_drop_link(context, links);
+            fz_drop_page(context, page);
+        });
+        int count = 0;
+        for (const auto* link = links; link; link = link->next)
+            ++count;
+        QCOMPARE(count, 2);
+    }
+
+    void testInlineBlockContents_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<bool>("multiline");
+        QTest::addColumn<int>("height");
+        QTest::addColumn<bool>("pageBreak");
+        for (const bool pageBreak : { false, true }) {
+            const auto add = [pageBreak](const char* name, const char* content, bool multiline, int height = 0) {
+                const auto tag = QByteArray(name) + (pageBreak ? "-next-page" : "-same-page");
+                QTest::newRow(tag.constData()) << QString::fromLatin1(content) << multiline << height << pageBreak;
+            };
+            add("plain", "<a id='inside' href='#outside'>Label</a>", false);
+            add("styled", "<b><a id='inside' href='#outside'>Label</a></b>", false);
+            add("line-break", "<a id='inside' href='#outside'>Label</a><br/>Inside", true);
+            add("block-children", "<p><a id='inside' href='#outside'>Label</a></p><p>Inside</p>", true);
+            add("nested-inline-block",
+                "<span style='display: inline-block; width: 40pt'><a id='inside' href='#outside'>Label</a></span>",
+                false);
+            add("explicit-height", "<a id='inside' href='#outside'>Label</a>", false, 40);
+        }
+    }
+
+    void testInlineBlockContents()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for bundled MuPDF inline-block layout");
+#endif
+        QFETCH(QString, content);
+        QFETCH(bool, multiline);
+        QFETCH(int, height);
+        QFETCH(bool, pageBreak);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("inline-content.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto source =
+            QStringLiteral(
+                "<html><head><style>@page { margin: 0; } body { margin: 0; font-size: 12pt; }"
+                "p, .paragraph { margin: 0; line-height: 1.2; } .box { display: inline-block; width: 60pt; height: %1; "
+                "background: #336699; padding: 2pt; border: 1pt solid black; }"
+                "</style></head><body><div style='height: %2pt'></div>"
+                "<div class='paragraph'>Before <span class='box'>%3</span> After</div><p "
+                "id='outside'>End</p></body></html>")
+                .arg(height ? QString::number(height) + QStringLiteral("pt") : QStringLiteral("auto"))
+                .arg(pageBreak ? 190 : 0)
+                .arg(content)
+                .toUtf8();
+        QCOMPARE(html.write(source), source.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 220, 200, 12);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const int pageNumber = pageBreak ? 1 : 0;
+        const std::array needles { "Before", "Label", "After", "End" };
+        std::array<fz_rect, 4> bounds;
+        for (std::size_t index = 0; index < needles.size(); ++index) {
+            fz_quad quad;
+            QCOMPARE(fz_search_page_number(context, document, pageNumber, needles[index], nullptr, &quad, 1), 1);
+            bounds[index] = fz_rect_from_quad(quad);
+        }
+        QVERIFY(bounds[0].x1 < bounds[1].x0);
+        QVERIFY(bounds[1].x1 < bounds[2].x0);
+        QVERIFY(std::abs(bounds[0].y0 - bounds[2].y0) < 0.1f);
+        if (multiline) {
+            fz_quad quad;
+            QCOMPARE(fz_search_page_number(context, document, pageNumber, "Inside", nullptr, &quad, 1), 1);
+            const auto last = fz_rect_from_quad(quad);
+            QVERIFY(last.y0 - bounds[1].y0 >= 12.0f);
+            QVERIFY(std::abs(last.y0 - bounds[2].y0) < 0.1f);
+        } else {
+            QVERIFY(std::abs(bounds[1].y0 - bounds[2].y0) < 0.1f);
+        }
+        QVERIFY(bounds[3].y0 - bounds[2].y0 >= 12.0f);
+        const auto target = fz_resolve_link(context, document, "#inside", nullptr, nullptr);
+        QCOMPARE(target.page, pageNumber);
+        fz_page* page = fz_load_page(context, document, pageNumber);
+        fz_link* links = fz_load_links(context, page);
+        const auto dropLinks = qScopeGuard([&] {
+            fz_drop_link(context, links);
+            fz_drop_page(context, page);
+        });
+        QVERIFY(links);
+        QVERIFY(!links->next);
+        QVERIFY(links->rect.x0 <= bounds[1].x0);
+        QVERIFY(links->rect.x1 >= bounds[1].x1);
+    }
+
+    void testInlineBlockStory_data()
+    {
+        QTest::addColumn<QString>("width");
+        QTest::addColumn<bool>("multiline");
+        for (const auto& width : { QStringLiteral("auto"), QStringLiteral("3em"), QStringLiteral("30%") }) {
+            for (const bool multiline : { false, true }) {
+                const auto name = width.toLatin1() + (multiline ? "-multiline" : "-single-line");
+                QTest::newRow(name.constData()) << width << multiline;
+            }
+        }
+    }
+
+    void testInlineBlockStory()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for bundled MuPDF inline-block layout");
+#endif
+        QFETCH(QString, width);
+        QFETCH(bool, multiline);
+        const auto content =
+            QStringLiteral(
+                "<html><head><style>body { margin: 0; } p, h2 { margin: 0; font-size: 12pt; line-height: 1.2; }"
+                ".label { display: inline-block; width: %1; padding: 2pt; border: 1pt solid black; }"
+                "</style></head><body><h2 id='heading'>Before <span class='label'>"
+                "<a id='inside' href='#outside'>Label</a>%2</span> After</h2><p id='outside'>End</p></body></html>")
+                .arg(width, multiline ? QStringLiteral("<br/>Inside") : QString())
+                .toUtf8();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_buffer* buffer = nullptr;
+        fz_story* story = nullptr;
+        fz_display_list* list = nullptr;
+        fz_device* device = nullptr;
+        fz_stext_page* text = nullptr;
+        fz_var(buffer);
+        fz_var(story);
+        fz_var(list);
+        fz_var(device);
+        fz_var(text);
+        QString error;
+
+        struct Positions {
+            QString heading;
+            int inside = 0;
+            int outside = 0;
+        } positions;
+
+        const auto collect = [](fz_context*, void* user, const fz_story_element_position* position) {
+            auto& found = *static_cast<Positions*>(user);
+            if (!(position->open_close & 1) || !position->id)
+                return;
+            const QByteArray id(position->id);
+            if (id == "heading" && position->text)
+                found.heading = QString::fromUtf8(position->text);
+            // Story callbacks include a zero-width anchor as well as glyphs.
+            if (id == "inside" && position->rect.x1 > position->rect.x0)
+                ++found.inside;
+            if (id == "outside")
+                ++found.outside;
+        };
+        const auto cleanup = qScopeGuard([&] {
+            fz_drop_stext_page(context, text);
+            fz_drop_device(context, device);
+            fz_drop_display_list(context, list);
+            fz_drop_story(context, story);
+            fz_drop_buffer(context, buffer);
+        });
+        fz_try(context)
+        {
+            buffer = fz_new_buffer_from_copied_data(context,
+                                                    reinterpret_cast<const unsigned char*>(content.constData()),
+                                                    static_cast<std::size_t>(content.size()));
+            story = fz_new_story(context, buffer, nullptr, 12, nullptr);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        // Reusing the story at different widths must not accumulate offsets.
+        for (const float pageWidth : { 220.0f, 160.0f, 220.0f }) {
+            positions = { };
+            int labelHits = 0;
+            int placements = 0;
+            int more = 1;
+            fz_var(labelHits);
+            fz_var(placements);
+            fz_var(more);
+            fz_try(context)
+            {
+                fz_reset_story(context, story);
+                const fz_rect bounds { 0, 0, pageWidth, 40 };
+                while (more && placements < 8) {
+                    fz_rect filled;
+                    more = fz_place_story(context, story, bounds, &filled);
+                    fz_story_positions(context, story, collect, &positions);
+                    list = fz_new_display_list(context, bounds);
+                    device = fz_new_list_device(context, list);
+                    fz_draw_story(context, story, device, fz_identity);
+                    fz_close_device(context, device);
+                    fz_drop_device(context, device);
+                    device = nullptr;
+                    text = fz_new_stext_page_from_display_list(context, list, nullptr);
+                    fz_quad quad;
+                    labelHits += fz_search_stext_page(context, text, "Label", nullptr, &quad, 1);
+                    fz_drop_stext_page(context, text);
+                    text = nullptr;
+                    fz_drop_display_list(context, list);
+                    list = nullptr;
+                    ++placements;
+                }
+            }
+            fz_catch(context)
+            {
+                error = QString::fromUtf8(fz_caught_message(context));
+            }
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            QCOMPARE(more, 0);
+            QCOMPARE(labelHits, 1);
+            QCOMPARE(positions.inside, 1);
+            QCOMPARE(positions.outside, 1);
+            QVERIFY(positions.heading.contains(QStringLiteral("Label")));
+        }
+    }
+
+    void testInlineBlockOutline()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for bundled MuPDF inline-block layout");
+#endif
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("inline-outline.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const QByteArray content =
+            "<html><head><style>.label { display: inline-block; width: 2em; }</style></head><body>"
+            "<h2>Before <span class='label'>One</span> Middle "
+            "<span class='label'><b>Two</b></span> After</h2></body></html>";
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        QVERIFY(html.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(html.handle()), "inline-outline.html", &error), error.c_str());
+        const auto outline = document.outline(&error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(outline.size(), std::size_t(1));
+        QCOMPARE(outline.front().title, std::string("Before One Middle Two After"));
+    }
+
+    void testTableCellWidths_data()
+    {
+        QTest::addColumn<QString>("headerWidth");
+        QTest::addColumn<QString>("bodyWidth");
+        QTest::addColumn<bool>("collapsed");
+        QTest::addColumn<int>("tableWidth");
+        for (const int tableWidth : { 240, 360 }) {
+            for (const bool collapsed : { false, true }) {
+                const auto add = [collapsed, tableWidth](const char* name, const char* header, const char* body) {
+                    const auto tag =
+                        QByteArray(name) + (collapsed ? "-collapsed-" : "-separate-") + QByteArray::number(tableWidth);
+                    QTest::newRow(tag.constData())
+                        << QString::fromLatin1(header) << QString::fromLatin1(body) << collapsed << tableWidth;
+                };
+                add("auto", "auto", "auto");
+                add("percent-header", "5%", "auto");
+                add("percent-body", "auto", "5%");
+                add("narrow-fixed", "1pt", "1pt");
+                add("wide-header", "70pt", "1pt");
+                add("wide-body", "1pt", "70pt");
+                add("percent-reference", "30%", "30%");
+                add("cell-font-reference", "6em", "1pt");
+            }
+        }
+    }
+
+    void testTableCellWidths()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF table width patch");
+#endif
+        QFETCH(QString, headerWidth);
+        QFETCH(QString, bodyWidth);
+        QFETCH(bool, collapsed);
+        QFETCH(int, tableWidth);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("table-widths.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto content =
+            QStringLiteral("<html><head><style>@page { margin: 0; } body { margin: 0; font-size: 12pt; }"
+                           "table { width: %4pt; border-spacing: 0; border-collapse: %1; }"
+                           "th, td { padding: 4pt; text-align: left; border: 1pt solid black; }"
+                           "th { font-size: 18pt; }"
+                           "th.narrow { width: %2; } td.narrow { width: %3; } p { margin: 0; }"
+                           "</style></head><body><table><thead><tr><th class='narrow'>Activity</th>"
+                           "<th>Description</th><th class='narrow'>CSIRT</th></tr></thead><tbody><tr>"
+                           "<td class='narrow'><p>1.</p></td><td><p>Review results from event records associated with "
+                           "the incident.</p>"
+                           "</td><td class='narrow'><p>2.</p></td></tr></tbody></table></body></html>")
+                .arg(collapsed ? QStringLiteral("collapse") : QStringLiteral("separate"), headerWidth, bodyWidth)
+                .arg(tableWidth)
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 420, 600, 12);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        std::array<fz_rect, 3> bounds;
+        const std::array headers { "Activity", "Description", "CSIRT" };
+        for (std::size_t index = 0; index < headers.size(); ++index) {
+            fz_quad quad;
+            QCOMPARE(fz_search_page_number(context, document, 0, headers[index], nullptr, &quad, 1), 1);
+            bounds[index] = fz_rect_from_quad(quad);
+        }
+        for (std::size_t index = 1; index < bounds.size(); ++index) {
+            const auto left = bounds[index - 1];
+            const auto right = bounds[index];
+            QVERIFY2(left.x1 < right.x0,
+                     qPrintable(QStringLiteral("Header overlap: %1 >= %2").arg(left.x1).arg(right.x0)));
+        }
+        if (headerWidth == QStringLiteral("30%")) {
+            QVERIFY(bounds[1].x0 - bounds[0].x0 >= 0.3f * static_cast<float>(tableWidth));
+        }
+        if (headerWidth == QStringLiteral("6em"))
+            QVERIFY(bounds[1].x0 - bounds[0].x0 >= 108.0f);
+        if (headerWidth == QStringLiteral("70pt") || bodyWidth == QStringLiteral("70pt"))
+            QVERIFY(bounds[1].x0 - bounds[0].x0 >= 70.0f);
+    }
+
+    void testTableRowBackgrounds_data()
+    {
+        QTest::addColumn<bool>("collapsed");
+        QTest::addColumn<bool>("pageBreak");
+        QTest::addColumn<QString>("alignment");
+        for (const bool collapsed : { false, true }) {
+            for (const bool pageBreak : { false, true }) {
+                for (const auto& alignment :
+                     { QStringLiteral("top"), QStringLiteral("middle"), QStringLiteral("bottom") }) {
+                    const auto tag = alignment.toLatin1() + (collapsed ? "-collapsed" : "-separate")
+                        + (pageBreak ? "-next-page" : "-same-page");
+                    QTest::newRow(tag.constData()) << collapsed << pageBreak << alignment;
+                }
+            }
+        }
+    }
+
+    void testTableRowBackgrounds()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for bundled MuPDF table row pagination");
+#endif
+        QFETCH(bool, collapsed);
+        QFETCH(bool, pageBreak);
+        QFETCH(QString, alignment);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile html(directory.filePath(QStringLiteral("row-backgrounds.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const auto content =
+            QStringLiteral(
+                "<html><head><style>@page { margin: 0; } body { margin: 0; background: white; font-size: 12pt; }"
+                "table { width: 240pt; border-spacing: 0; border-collapse: %1; }"
+                "td { padding: 4pt; vertical-align: %2; border-bottom: 1pt solid black; background: inherit; }"
+                "tr:nth-child(even) { background: #336699; }"
+                "</style></head><body><div style='height: %3pt'></div>"
+                "<table><tr><td rowspan='2'>Group</td><td>First</td><td>Row</td></tr>"
+                "<tr><td>Short</td><td><div style='height: 80pt'>Detail</div></td></tr></table></body></html>")
+                .arg(collapsed ? QStringLiteral("collapse") : QStringLiteral("separate"), alignment)
+                .arg(pageBreak ? 120 : 0)
+                .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_pixmap* pixmap = nullptr;
+        fz_var(document);
+        fz_var(pixmap);
+        QString error;
+        std::array<fz_quad, 2> quads;
+        std::array<int, 2> hits { };
+        const int page = pageBreak ? 1 : 0;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+            fz_layout_document(context, document, 300, 200, 12);
+            hits[0] = fz_search_page_number(context, document, page, "Short", nullptr, &quads[0], 1);
+            hits[1] = fz_search_page_number(context, document, page, "Detail", nullptr, &quads[1], 1);
+            pixmap = fz_new_pixmap_from_page_number(context, document, page, fz_identity, fz_device_rgb(context), 0);
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] {
+            fz_drop_pixmap(context, pixmap);
+            fz_drop_document(context, document);
+        });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(hits[0], 1);
+        QCOMPARE(hits[1], 1);
+        const auto* samples = fz_pixmap_samples(context, pixmap);
+        const int stride = fz_pixmap_stride(context, pixmap);
+        const int components = fz_pixmap_components(context, pixmap);
+        const auto striped = [&](int x, int y) {
+            const auto* pixel = samples + y * stride + x * components;
+            return pixel[0] == 0x33 && pixel[1] == 0x66 && pixel[2] == 0x99;
+        };
+        // Sample inside left padding, away from text and cell borders. Both
+        // cells must paint the entire row even when only one has tall content.
+        const int shortX = static_cast<int>(fz_rect_from_quad(quads[0]).x0) - 2;
+        const int detailX = static_cast<int>(fz_rect_from_quad(quads[1]).x0) - 2;
+        int stripeHeight = 0;
+        for (int y = 0; y < fz_pixmap_height(context, pixmap); ++y) {
+            QCOMPARE(striped(shortX, y), striped(detailX, y));
+            if (striped(detailX, y)) {
+                ++stripeHeight;
+                QVERIFY(!striped(2, y)); // The spanning first column stays unshaded.
+            }
+        }
+        QVERIFY(stripeHeight >= 80);
+    }
+
     void testTableBackground_data()
     {
         QTest::addColumn<QString>("background");
