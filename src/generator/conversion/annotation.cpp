@@ -96,8 +96,6 @@ static Model::AnnotationType annotationTypeFor(const Okular::Annotation* annotat
         return Model::AnnotationType::Stamp;
     if (dynamic_cast<const Okular::CaretAnnotation*>(annotation))
         return Model::AnnotationType::Caret;
-    if (dynamic_cast<const Okular::FileAttachmentAnnotation*>(annotation))
-        return Model::AnnotationType::Unknown;
     return Model::AnnotationType::Unknown;
 }
 

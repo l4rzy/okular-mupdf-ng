@@ -161,8 +161,7 @@ Command parseOcr(const QStringList& args)
         return command;
     }
     options.tessData = parser.value("tessdata").toStdString();
-    if (!readSharedOptions(parser, options.shared, command.error))
-        return command;
+    readSharedOptions(parser, options.shared, command.error);
     return command;
 }
 
@@ -207,8 +206,7 @@ Command parseExport(const QStringList& args)
         command.error = "--flatten requires PDF output and cannot be combined with --use-layout";
         return command;
     }
-    if (!readSharedOptions(parser, options.shared, command.error))
-        return command;
+    readSharedOptions(parser, options.shared, command.error);
     return command;
 }
 
@@ -236,8 +234,7 @@ Command parseImport(const QStringList& args)
     options.xfdf = files.at(1).toStdString();
     if (!resolveOutput(files, 2, parser, options.output, command.error))
         return command;
-    if (!readSharedOptions(parser, options.shared, command.error))
-        return command;
+    readSharedOptions(parser, options.shared, command.error);
     return command;
 }
 
