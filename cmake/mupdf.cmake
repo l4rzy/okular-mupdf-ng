@@ -108,7 +108,7 @@ else()
         set(MUPDF_BUILD_PROFILE debug)
     endif()
 
-    set(MUPDF_BUILD_DIR "${CMAKE_BINARY_DIR}/mupdf/${MUPDF_BUILD_PROFILE}")
+    set(MUPDF_BUILD_DIR "${CMAKE_BINARY_DIR}/mupdf/${MUPDF_REQUIRED_VERSION}/${MUPDF_BUILD_PROFILE}")
     if(ENABLE_FORM_JAVASCRIPT)
         set(MUPDF_USE_MUJS yes)
         # Keep JS and non-JS archives separate so toggling the option cannot
