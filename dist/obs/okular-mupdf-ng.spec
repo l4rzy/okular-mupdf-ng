@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Keep these values in sync with cmake/mupdf.version and dist/obs/_service.
-%global mupdf_version 1.28.5
-%global mupdf_sha256 98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934
+%global mupdf_version 1.28.6
+%global mupdf_sha256 dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
 %global __builddir build
 %global __builder ninja
 %global tessdata_dir %{_datadir}/tessdata
@@ -11,7 +11,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.9
+Version:        0.6.0
 Release:        0%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1

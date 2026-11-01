@@ -1,25 +1,28 @@
-## 0.5.0
-
-Changes from 0.4.0 through 0.4.9.
+Changes since 0.5.0.
 
 ### Highlights
 
-- Added Twilight, Dusk, and Dark document themes, with image-aware colors and
-  optimized dark-theme rendering.
-- Added image stamp annotations, PDF form date hints, and certificate trust
-  management.
-- Improved error messages, menus across tabs and windows, themed page previews,
-  and OCR completion notifications.
+- Added experimental support for DRM-free AZW3 and single-container KFX books,
+  with ebook export options in Okular and the command-line tool.
+- Added configurable previews for internal links, including resizable and
+  pinnable preview windows.
+- Added per-document theme, ebook layout, and PDF OCR settings, with an option
+  to restore global defaults.
+- Added XFDF/XML annotation import with undo and redo support.
 
 ### Fixes
 
-- Corrected EPUB CSS margins, `rem` sizing, and media rules; improved MOBI outlines.
-- Fixed PDF form font sizing, radio-button grouping, and field synchronization.
-- Made PDF saves atomic and retained source files for OCR and PDF export.
-- Improved outline and embedded-file error handling.
+- Improved ebook opening speed, image and text layout, navigation, and
+  asynchronous PDF export.
+- Fixed tiled rendering artifacts and improved native PDF printing.
+- Preserved passwords when reopening encrypted documents after sandbox changes.
+- Improved cache handling and resource cleanup in ebook export, PDF signing,
+  OCR, and sandbox setup.
 
 ### Build and documentation
 
-- Added Debian/Ubuntu OBS builds as well as openSUSE OBS and Fedora COPR recipes.
-- Added a user guide and launcher script, and expanded rendering, forms, OCR,
-  and worker integration coverage.
+- Added Arch Linux OBS packaging and Rust dependencies for Kindle support.
+- Added LLVM coverage reports and SonarCloud analysis, and expanded CI and
+  regression tests.
+- Updated distribution recipes, documentation, and translations. Debian and
+  Ubuntu packages are now distributed through OBS.

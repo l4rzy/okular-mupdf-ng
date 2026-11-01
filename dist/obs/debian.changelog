@@ -1,3 +1,13 @@
+okular-mupdf-ng (0.6.0-1) unstable; urgency=medium
+
+  * Update to version 0.6.0.
+  * Enable native PDF print previews and direct PDF print-to-file output.
+  * Keep ebook PDF export asynchronous for documents opened from data.
+  * Preserve EPUB layout caches across unrelated application releases.
+  * Fix resource cleanup on export, signing, OCR, and sandbox error paths.
+
+ -- l4rzy <me@23ro.org>  Sun, 01 Nov 2026 14:13:29 -0500
+
 okular-mupdf-ng (0.5.9-1) unstable; urgency=medium
 
   * Update to version 0.5.9.

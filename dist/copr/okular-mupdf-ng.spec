@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Keep these values in sync with cmake/mupdf.version.
-%global mupdf_version 1.28.5
-%global mupdf_sha256 98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934
+%global mupdf_version 1.28.6
+%global mupdf_sha256 dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
 %global _vpath_builddir build
 %global tessdata_dir %{_datadir}/tesseract/tessdata
 
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.5.9
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -110,6 +110,13 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Sun Nov 01 2026 l4rzy <me@23ro.org> - 0.6.0-1
+- Update to version 0.6.0.
+- Enable native PDF print previews and direct PDF print-to-file output.
+- Keep ebook PDF export asynchronous for documents opened from data.
+- Preserve EPUB layout caches across unrelated application releases.
+- Fix resource cleanup on export, signing, OCR, and sandbox error paths.
+
 * Fri Oct 30 2026 l4rzy <me@23ro.org> - 0.5.9-1
 - Update to version 0.5.9.
 - Improve EPUB opening speed by loading links as needed.

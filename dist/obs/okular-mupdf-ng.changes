@@ -1,4 +1,13 @@
 -------------------------------------------------------------------
+Sun Nov 01 19:13:29 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.6.0.
+- Enable native PDF print previews and direct PDF print-to-file output.
+- Keep ebook PDF export asynchronous for documents opened from data.
+- Preserve EPUB layout caches across unrelated application releases.
+- Fix resource cleanup on export, signing, OCR, and sandbox error paths.
+
+-------------------------------------------------------------------
 Sat Oct 31 01:43:39 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.5.9.

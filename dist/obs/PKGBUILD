@@ -2,7 +2,7 @@
 # Maintainer: rzy <me@23ro.org>
 
 pkgname=okular-mupdf-ng
-pkgver=0.5.9
+pkgver=0.6.0
 pkgrel=1
 pkgdesc="Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, and KFX"
 arch=('x86_64')
@@ -19,7 +19,7 @@ optdepends=('tesseract-data-eng: English OCR language data; install other tesser
 conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
 
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version and _service.
-_mupdfver=1.28.5
+_mupdfver=1.28.6
 source=("$pkgname-$pkgver.tar.gz"
         "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz"
         "vendor.tar.gz")
@@ -27,7 +27,7 @@ noextract=('vendor.tar.gz')
 # The source services generate the project and vendor archives.
 # The downloaded MuPDF archive is checksum-pinned.
 sha256sums=('SKIP'
-            '98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934'
+            'dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101'
             'SKIP')
 
 prepare() {
