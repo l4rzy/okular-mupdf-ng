@@ -193,9 +193,10 @@ private slots:
 
     void helpVersionAndUnknownCommands()
     {
-        QCOMPARE(Cli::parseArgs({ "mupdfng-cli" }).kind, Cli::Command::Kind::Help);
+        const Cli::Command missing = Cli::parseArgs({ "mupdfng-cli" });
+        QCOMPARE(missing.kind, Cli::Command::Kind::Help);
         QCOMPARE(Cli::parseArgs({ "mupdfng-cli", "--help" }).kind, Cli::Command::Kind::Help);
-        QVERIFY(!Cli::parseArgs({ "mupdfng-cli" }).error.empty());
+        QVERIFY(!missing.error.empty());
 
         const Cli::Command ocrHelp = Cli::parseArgs({ "mupdfng-cli", "ocr", "--help" });
         QCOMPARE(ocrHelp.kind, Cli::Command::Kind::Ocr);

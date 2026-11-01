@@ -4,12 +4,15 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <fcntl.h>
 #include <memory>
 #include <sys/mman.h>
@@ -478,6 +481,177 @@ private slots:
         // The malformed frame already closed the channel.
         writer.close();
         QCOMPARE(::Mu::IPC::tryReadFrame(reader, &frame, nullptr), ::Mu::IPC::ReadStatus::Error);
+    }
+
+    void blockingReaderRejectsClosedTruncatedFrames_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QByteArray>("diagnostic");
+        QTest::newRow("partial-header") << QByteArray::fromHex("0000") << QByteArray("closed during a frame");
+        QTest::newRow("partial-payload") << QByteArray::fromHex("0000000478") << QByteArray("closed during a frame");
+    }
+
+    void blockingReaderRejectsClosedTruncatedFrames()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(QByteArray, diagnostic);
+        int fds[2] { -1, -1 };
+        QCOMPARE(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds), 0);
+        ::Mu::IPC::CtrlChannel writer(fds[0]);
+        ::Mu::IPC::CtrlChannel reader(fds[1]);
+        const int ownedFd = reader.fd();
+        QCOMPARE(::write(writer.fd(), bytes.constData(), static_cast<std::size_t>(bytes.size())),
+                 ssize_t(bytes.size()));
+        writer.close();
+        std::vector<std::byte> frame { std::byte { 42 } };
+        std::string error;
+        QVERIFY(!::Mu::IPC::readFrame(reader, &frame, 0, &error));
+        QVERIFY2(error.find(diagnostic.constData()) != std::string::npos, error.c_str());
+        QVERIFY(frame.empty());
+        QVERIFY(!reader.valid());
+        const int descriptorFlags = ::fcntl(ownedFd, F_GETFD);
+        const int descriptorError = errno;
+        QCOMPARE(descriptorFlags, -1);
+        QCOMPARE(descriptorError, EBADF);
+        QVERIFY(!::Mu::IPC::readFrame(reader, &frame, 0, &error));
+        QCOMPARE(error, std::string("control socket is not connected"));
+    }
+
+    void blockingWriterRejectsClosedPeer()
+    {
+        int fds[2] { -1, -1 };
+        QCOMPARE(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds), 0);
+        ::Mu::IPC::CtrlChannel writer(fds[0]);
+        ::Mu::IPC::CtrlChannel peer(fds[1]);
+        const int ownedFd = writer.fd();
+        peer.close();
+        std::string error;
+        const std::array payload { std::byte { 42 } };
+        QVERIFY(!::Mu::IPC::writeFrame(writer, payload, 0, &error));
+        QVERIFY(!error.empty());
+        QVERIFY(!writer.valid());
+        const int descriptorFlags = ::fcntl(ownedFd, F_GETFD);
+        const int descriptorError = errno;
+        QCOMPARE(descriptorFlags, -1);
+        QCOMPARE(descriptorError, EBADF);
+    }
+
+    void rejectsMalformedFdPacketsAndClosesDescriptors_data()
+    {
+        QTest::addColumn<int>("descriptorCount");
+        QTest::addColumn<int>("payloadSize");
+        QTest::newRow("missing-descriptor") << 0 << 8;
+        QTest::newRow("multiple-descriptors") << 2 << 8;
+        QTest::newRow("truncated-ancillary-data") << 32 << 8;
+        QTest::newRow("short-transfer-id") << 1 << 4;
+        QTest::newRow("oversized-payload") << 1 << 9;
+    }
+
+    void rejectsMalformedFdPacketsAndClosesDescriptors()
+    {
+        QFETCH(int, descriptorCount);
+        QFETCH(int, payloadSize);
+        constexpr int MaxDescriptors = 32;
+        QVERIFY(descriptorCount >= 0 && descriptorCount <= MaxDescriptors);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = QFile::encodeName(directory.filePath(QStringLiteral("fd.sock"))).toStdString();
+        ::Mu::IPC::FdChannel receiver;
+        ::Mu::IPC::FdChannel sender;
+        std::string error;
+        QVERIFY2(receiver.listen(path, &error), error.c_str());
+        QVERIFY2(sender.connect(path, &error, ::getpid()), error.c_str());
+        QVERIFY2(receiver.accept(&error, ::getpid()), error.c_str());
+        QVERIFY(receiver.valid());
+        QVERIFY(sender.isConnected());
+        int pipeFds[2] { -1, -1 };
+        QCOMPARE(::pipe2(pipeFds, O_CLOEXEC | O_NONBLOCK), 0);
+        const auto closePipe = qScopeGuard([&] {
+            ::close(pipeFds[0]);
+            if (pipeFds[1] >= 0)
+                ::close(pipeFds[1]);
+        });
+        const std::uint64_t transferId = 7;
+        std::array<std::byte, 9> payload { };
+        QVERIFY(payloadSize >= 0 && static_cast<std::size_t>(payloadSize) <= payload.size());
+        std::memcpy(payload.data(), &transferId, sizeof(transferId));
+        iovec iov { payload.data(), static_cast<std::size_t>(payloadSize) };
+        alignas(cmsghdr) std::array<char, CMSG_SPACE(sizeof(int) * MaxDescriptors)> control { };
+        msghdr message { };
+        message.msg_iov = &iov;
+        message.msg_iovlen = 1;
+        if (descriptorCount > 0) {
+            const auto descriptorBytes = sizeof(int) * static_cast<std::size_t>(descriptorCount);
+            message.msg_control = control.data();
+            message.msg_controllen = CMSG_SPACE(descriptorBytes);
+            auto* header = CMSG_FIRSTHDR(&message);
+            QVERIFY(header);
+            header->cmsg_level = SOL_SOCKET;
+            header->cmsg_type = SCM_RIGHTS;
+            header->cmsg_len = CMSG_LEN(descriptorBytes);
+            for (int index = 0; index < descriptorCount; ++index)
+                std::memcpy(
+                    CMSG_DATA(header) + sizeof(int) * static_cast<std::size_t>(index), &pipeFds[1], sizeof(int));
+        }
+        QCOMPARE(::sendmsg(sender.fd(), &message, MSG_NOSIGNAL), ssize_t(payloadSize));
+        const int writeFd = std::exchange(pipeFds[1], -1);
+        QCOMPARE(::close(writeFd), 0);
+        // A following valid packet must survive the rejection of its predecessor.
+        QFile source(QStringLiteral("/dev/null"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QVERIFY2(sender.send(transferId, source.handle(), &error), error.c_str());
+        QCOMPARE(receiver.receive(transferId, &error, 0), -1);
+        QCOMPARE(error, std::string("invalid FD channel packet"));
+        char byte = 0;
+        // Any leaked duplicate write descriptor would produce EAGAIN, not EOF.
+        QCOMPARE(::read(pipeFds[0], &byte, 1), ssize_t(0));
+        const int received = receiver.receive(transferId, &error, 0);
+        QVERIFY2(received >= 0, error.c_str());
+        const auto closeReceived = qScopeGuard([received] { ::close(received); });
+        const int receivedFlags = ::fcntl(received, F_GETFD);
+        QVERIFY(receivedFlags >= 0);
+        QVERIFY((receivedFlags & FD_CLOEXEC) != 0);
+        QVERIFY(::fcntl(source.handle(), F_GETFD) >= 0);
+    }
+
+    void staleFdPacketsReleaseTheirDescriptors()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = QFile::encodeName(directory.filePath(QStringLiteral("fd.sock"))).toStdString();
+        ::Mu::IPC::FdChannel receiver;
+        ::Mu::IPC::FdChannel sender;
+        std::string error;
+        QVERIFY2(receiver.listen(path, &error), error.c_str());
+        QVERIFY2(sender.connect(path, &error, ::getpid()), error.c_str());
+        QVERIFY2(receiver.accept(&error, ::getpid()), error.c_str());
+        int pipeFds[2] { -1, -1 };
+        QCOMPARE(::pipe2(pipeFds, O_CLOEXEC | O_NONBLOCK), 0);
+        const auto closePipe = qScopeGuard([&] {
+            ::close(pipeFds[0]);
+            if (pipeFds[1] >= 0)
+                ::close(pipeFds[1]);
+        });
+        QVERIFY2(sender.send(1, pipeFds[1], &error), error.c_str());
+        const int writeFd = std::exchange(pipeFds[1], -1);
+        QCOMPARE(::close(writeFd), 0);
+        QFile source(QStringLiteral("/dev/null"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QVERIFY2(sender.send(2, source.handle(), &error), error.c_str());
+        const int received = receiver.receive(2, &error, 5000);
+        QVERIFY2(received >= 0, error.c_str());
+        const auto closeReceived = qScopeGuard([received] { ::close(received); });
+        char byte = 0;
+        QCOMPARE(::read(pipeFds[0], &byte, 1), ssize_t(0));
+        const int receivedFlags = ::fcntl(received, F_GETFD);
+        QVERIFY(receivedFlags >= 0);
+        QVERIFY((receivedFlags & FD_CLOEXEC) != 0);
+        sender.close();
+        QVERIFY(!sender.isConnected());
+        receiver.close();
+        QVERIFY(!receiver.valid());
+        // The transferred descriptor is owned independently of its channel.
+        QVERIFY(::fcntl(received, F_GETFD) >= 0);
     }
 
     void fdChannelTransfersDescriptorAndSkipsStaleTransfers()

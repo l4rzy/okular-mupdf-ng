@@ -278,6 +278,140 @@ private slots:
         QCOMPARE(proxy.signatureInfo().certificateInfo().nickName(), QStringLiteral("Ada signing"));
     }
 
+    void signatureStatuses_data()
+    {
+        QTest::addColumn<int>("value");
+        QTest::addColumn<int>("expected");
+        using Value = ::Mu::Model::SignatureStatus;
+        using Info = Okular::SignatureInfo;
+        QTest::newRow("Unknown") << int(Value::Unknown) << int(Info::SignatureStatusUnknown);
+        QTest::newRow("Valid") << int(Value::Valid) << int(Info::SignatureValid);
+        QTest::newRow("Invalid") << int(Value::Invalid) << int(Info::SignatureInvalid);
+        QTest::newRow("DigestMismatch") << int(Value::DigestMismatch) << int(Info::SignatureDigestMismatch);
+        QTest::newRow("DecodingError") << int(Value::DecodingError) << int(Info::SignatureDecodingError);
+        QTest::newRow("GenericError") << int(Value::GenericError) << int(Info::SignatureGenericError);
+        QTest::newRow("NotFound") << int(Value::NotFound) << int(Info::SignatureNotFound);
+        QTest::newRow("NotVerified") << int(Value::NotVerified) << int(Info::SignatureNotVerified);
+    }
+
+    void signatureStatuses()
+    {
+        QFETCH(int, value);
+        QFETCH(int, expected);
+        ::Mu::Model::SignatureField source;
+        source.signatureStatus = static_cast<::Mu::Model::SignatureStatus>(value);
+        ::Mu::Generator::Proxy::Form::Signature proxy(1, source);
+        QCOMPARE(int(proxy.signatureInfo().signatureStatus()), expected);
+    }
+
+    void certificateStatuses_data()
+    {
+        QTest::addColumn<int>("value");
+        QTest::addColumn<int>("expected");
+        using Value = ::Mu::Model::CertificateStatus;
+        using Info = Okular::SignatureInfo;
+        QTest::newRow("Unknown") << int(Value::Unknown) << int(Info::CertificateStatusUnknown);
+        QTest::newRow("Trusted") << int(Value::Trusted) << int(Info::CertificateTrusted);
+        QTest::newRow("UntrustedIssuer") << int(Value::UntrustedIssuer) << int(Info::CertificateUntrustedIssuer);
+        QTest::newRow("UnknownIssuer") << int(Value::UnknownIssuer) << int(Info::CertificateUnknownIssuer);
+        QTest::newRow("Revoked") << int(Value::Revoked) << int(Info::CertificateRevoked);
+        QTest::newRow("Expired") << int(Value::Expired) << int(Info::CertificateExpired);
+        QTest::newRow("GenericError") << int(Value::GenericError) << int(Info::CertificateGenericError);
+        QTest::newRow("NotVerified") << int(Value::NotVerified) << int(Info::CertificateNotVerified);
+        QTest::newRow("VerificationInProgress")
+            << int(Value::VerificationInProgress) << int(Info::CertificateVerificationInProgress);
+    }
+
+    void certificateStatuses()
+    {
+        QFETCH(int, value);
+        QFETCH(int, expected);
+        ::Mu::Model::SignatureField source;
+        source.certificateStatus = static_cast<::Mu::Model::CertificateStatus>(value);
+        ::Mu::Generator::Proxy::Form::Signature proxy(1, source);
+        QCOMPARE(int(proxy.signatureInfo().certificateStatus()), expected);
+    }
+
+    void signatureHashAlgorithms_data()
+    {
+        QTest::addColumn<int>("value");
+        QTest::addColumn<int>("expected");
+        using Value = ::Mu::Model::HashAlgorithm;
+        using Info = Okular::SignatureInfo;
+        QTest::newRow("Unknown") << int(Value::Unknown) << int(Info::HashAlgorithmUnknown);
+        QTest::newRow("Md2") << int(Value::Md2) << int(Info::HashAlgorithmMd2);
+        QTest::newRow("Md5") << int(Value::Md5) << int(Info::HashAlgorithmMd5);
+        QTest::newRow("Sha1") << int(Value::Sha1) << int(Info::HashAlgorithmSha1);
+        QTest::newRow("Sha256") << int(Value::Sha256) << int(Info::HashAlgorithmSha256);
+        QTest::newRow("Sha384") << int(Value::Sha384) << int(Info::HashAlgorithmSha384);
+        QTest::newRow("Sha512") << int(Value::Sha512) << int(Info::HashAlgorithmSha512);
+        QTest::newRow("Sha224") << int(Value::Sha224) << int(Info::HashAlgorithmSha224);
+    }
+
+    void signatureHashAlgorithms()
+    {
+        QFETCH(int, value);
+        QFETCH(int, expected);
+        ::Mu::Model::SignatureField source;
+        source.hashAlgorithm = static_cast<::Mu::Model::HashAlgorithm>(value);
+        ::Mu::Generator::Proxy::Form::Signature proxy(1, source);
+        QCOMPARE(int(proxy.signatureInfo().hashAlgorithm()), expected);
+    }
+
+    void signatureSubfilters_data()
+    {
+        QTest::addColumn<bool>("signedField");
+        QTest::addColumn<QByteArray>("subfilter");
+        QTest::addColumn<int>("expected");
+        using Signature = Okular::FormFieldSignature;
+        QTest::newRow("unsigned") << false << QByteArray("adbe.pkcs7.detached") << int(Signature::UnsignedSignature);
+        QTest::newRow("pkcs7-sha1") << true << QByteArray("adbe.pkcs7.sha1") << int(Signature::AdbePkcs7sha1);
+        QTest::newRow("pkcs7-detached") << true << QByteArray("adbe.pkcs7.detached")
+                                        << int(Signature::AdbePkcs7detached);
+        QTest::newRow("cades-detached") << true << QByteArray("ETSI.CAdES.detached")
+                                        << int(Signature::EtsiCAdESdetached);
+        QTest::newRow("unknown") << true << QByteArray("unsupported") << int(Signature::UnknownType);
+    }
+
+    void signatureSubfilters()
+    {
+        QFETCH(bool, signedField);
+        QFETCH(QByteArray, subfilter);
+        QFETCH(int, expected);
+        ::Mu::Model::SignatureField source;
+        source.signedField = signedField;
+        source.subFilter = subfilter.toStdString();
+        ::Mu::Generator::Proxy::Form::Signature proxy(1, source);
+        QCOMPARE(int(proxy.signatureType()), expected);
+    }
+
+    void signatureRejectsUnavailableBackend_data()
+    {
+        QTest::addColumn<bool>("nullBackend");
+        QTest::newRow("missing") << true;
+        QTest::newRow("disconnected") << false;
+    }
+
+    void signatureRejectsUnavailableBackend()
+    {
+        QFETCH(bool, nullBackend);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("signed.pdf"));
+        ::Mu::Plugin::WorkerClient backend;
+        QVERIFY(!backend.isConnected());
+        ::Mu::Generator::Proxy::Form::Signature proxy(1, { }, nullBackend ? nullptr : &backend);
+        const Okular::NewSignatureData data;
+#if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
+        const auto result = proxy.sign(data, path);
+        QCOMPARE(result.first, Okular::GenericSigningError);
+        QVERIFY(!result.second.isEmpty());
+#else
+        QVERIFY(!proxy.sign(data, path));
+#endif
+        QVERIFY(!QFile::exists(path));
+    }
+
     void signatureInfoRejectsOverflowingByteRanges()
     {
         ::Mu::Model::SignatureField source;
@@ -1008,39 +1142,16 @@ private slots:
         ::Mu::Generator::Conversion::rebuildPageAnnotations(nullptr, { clean });
     }
 
-    void coordinatorIgnoresIncompatibleCanonicalValues()
-    {
-        auto* dummyBackend = &::Mu::Plugin::s_formBackend;
-        std::vector<Okular::FormField*> refreshedFields;
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(
-            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&, bool) {
-                refreshedFields = fields;
-            });
-
-        ::Mu::Model::FormField field;
-        field.handle = "h-text-incompatible";
-        field.type = ::Mu::Model::FormFieldType::Text;
-        field.text = "OriginalText";
-        ::Mu::Generator::Proxy::Form::Text textProxy(202, field, &coordinator);
-        coordinator.registerField(field.handle, &textProxy);
-
-        ::Mu::Plugin::s_mockUpdateForm =
-            [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
-            ::Mu::Model::FormUpdateResponse response;
-            response.affectedFields = { { "h-text-incompatible", ::Mu::Model::FormCheckValue { true } } };
-            return response;
-        };
-
-        textProxy.setText(QStringLiteral("RequestedText"));
-
-        QCOMPARE(textProxy.text(), QStringLiteral("OriginalText"));
-        QVERIFY(refreshedFields.empty());
-    }
-
     void coordinatorUpdateFieldReportsWhetherAnyProxyChanged()
     {
         auto* dummyBackend = &::Mu::Plugin::s_formBackend;
-        ::Mu::Generator::Proxy::Form::Coordinator coordinator(dummyBackend);
+        std::vector<Okular::FormField*> refreshedFields;
+        bool dirty = false;
+        ::Mu::Generator::Proxy::Form::Coordinator coordinator(
+            dummyBackend, [&](const std::vector<Okular::FormField*>& fields, const std::vector<int>&, bool changed) {
+                refreshedFields = fields;
+                dirty = changed;
+            });
 
         ::Mu::Model::FormField field;
         field.handle = "h-text-status";
@@ -1053,6 +1164,8 @@ private slots:
         ::Mu::Plugin::s_mockUpdateForm = ::Mu::Plugin::echoFormUpdate;
         QVERIFY(coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Applied" }));
         QCOMPARE(textProxy.text(), QStringLiteral("Applied"));
+        QCOMPARE(refreshedFields, std::vector<Okular::FormField*>({ &textProxy }));
+        QVERIFY(dirty);
 
         // Incompatible canonical value applies to nothing: no dirty, false.
         ::Mu::Plugin::s_mockUpdateForm =
@@ -1063,6 +1176,8 @@ private slots:
         };
         QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
         QCOMPARE(textProxy.text(), QStringLiteral("Applied"));
+        QVERIFY(refreshedFields.empty());
+        QVERIFY(!dirty);
 
         // Unknown handle applies to nothing: false.
         ::Mu::Plugin::s_mockUpdateForm =
@@ -1080,12 +1195,15 @@ private slots:
         };
         QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
 
-        // Transport failure stays false.
+        // Transport failure preserves the previously applied value.
         ::Mu::Plugin::s_mockUpdateForm =
             [](const ::Mu::Model::FormUpdateRequest&) -> std::optional<::Mu::Model::FormUpdateResponse> {
             return std::nullopt;
         };
         QVERIFY(!coordinator.updateField(field.handle, ::Mu::Model::FormTextValue { "Requested" }));
+        QCOMPARE(textProxy.text(), QStringLiteral("Applied"));
+        QVERIFY(refreshedFields.empty());
+        QVERIFY(!dirty);
     }
 
     void coordinatorIgnoresUnchangedCanonicalValues()

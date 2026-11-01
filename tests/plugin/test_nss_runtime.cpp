@@ -7,6 +7,7 @@
 #include "plugin/crypto/nss_internal.hpp"
 
 #include <QBuffer>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -14,6 +15,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 #pragma push_macro("slots")
 #undef slots
@@ -384,6 +386,51 @@ private slots:
         QString error;
         QVERIFY(::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(database, &error).isEmpty());
         QVERIFY2(error.isEmpty(), qPrintable(error));
+    }
+
+    void signingAuthenticationFailures()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("certutil")).isEmpty())
+            QSKIP("certutil is required for the NSS authentication test");
+        QTemporaryDir database;
+        QVERIFY(database.isValid());
+        QVERIFY(initializeEmptyDatabase(database.path()));
+        QCOMPARE(::Mu::Plugin::Crypto::initializeNss(database.path()), ::Mu::Plugin::Crypto::NssRuntimeMode::ReadWrite);
+        using namespace ::Mu::Plugin::Crypto;
+        CertificateDatabase::SelfSignedCertificateOptions options;
+        options.nickname = QStringLiteral("authentication-test");
+        options.commonName = QStringLiteral("Authentication Test");
+        options.validFrom = QDateTime(QDate(2020, 1, 1), QTime(0, 0), QTimeZone::UTC);
+        options.validUntil = QDateTime(QDate(2100, 1, 1), QTime(0, 0), QTimeZone::UTC);
+        options.signingKey = CertificateDatabase::SigningKey::EcdsaP256;
+        QString error;
+        QVERIFY2(CertificateDatabase::createSelfSignedCertificate(database.path(), options, &error), qPrintable(error));
+        std::array<std::uint8_t, 32> digest { };
+        digest.fill(0x5a);
+        const auto missing = createDetachedCmsFromDigest(QStringLiteral("missing-certificate"), { }, digest);
+        QCOMPARE(missing.result, ::Mu::Model::SigningResult::KeyMissing);
+        QVERIFY(missing.cms.isEmpty());
+        QVERIFY(!missing.details.isEmpty());
+        NssSlot slot(PK11_GetInternalKeySlot());
+        QVERIFY(slot);
+        // This runtime mode is a separate CTest process with its own database.
+        // Changing the temporary token PIN cannot affect another test mode.
+        QCOMPARE(PK11_ChangePW(slot.get(), "", "correct-test-pin"), SECSuccess);
+        QCOMPARE(PK11_Logout(slot.get()), SECSuccess);
+        QVERIFY(!PK11_IsLoggedIn(slot.get(), nullptr));
+        const auto rejected = createDetachedCmsFromDigest(options.nickname, QStringLiteral("wrong-test-pin"), digest);
+        QCOMPARE(rejected.result, ::Mu::Model::SigningResult::BadPassphrase);
+        QVERIFY(rejected.cms.isEmpty());
+        QVERIFY(!rejected.details.contains(QStringLiteral("wrong-test-pin")));
+        QVERIFY(!checkSigningCertificatePassword(options.nickname, QStringLiteral("wrong-test-pin")));
+        // A correct token login restores signing after the failed attempts.
+        QCOMPARE(PK11_CheckUserPassword(slot.get(), "correct-test-pin"), SECSuccess);
+        QVERIFY(checkSigningCertificatePassword(options.nickname, QStringLiteral("correct-test-pin")));
+        const auto signedDigest =
+            createDetachedCmsFromDigest(options.nickname, QStringLiteral("correct-test-pin"), digest);
+        QCOMPARE(signedDigest.result, ::Mu::Model::SigningResult::Success);
+        QVERIFY(!signedDigest.cms.isEmpty());
+        QVERIFY(signedDigest.details.isEmpty());
     }
 
     void urlSchemeDatabasePath()

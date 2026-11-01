@@ -94,7 +94,17 @@ class TestToolsCliXfdf : public QObject {
 
 private slots:
 
-    void checksPdfRotation_data() { addXfdfRotationRows(); }
+    void checksPdfRotation_data()
+    {
+        // Generator tests own the full worker rotation matrix. Here verify
+        // CLI dispatch and destination preservation for each policy outcome.
+        QTest::addColumn<int>("rotation");
+        QTest::addColumn<bool>("inherited");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("unrotated") << 0 << false << true;
+        QTest::newRow("90") << 90 << false << false;
+        QTest::newRow("inherited-90") << 90 << true << false;
+    }
 
     void checksPdfRotation()
     {

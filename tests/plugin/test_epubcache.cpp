@@ -84,12 +84,7 @@ private slots:
         QTest::addColumn<bool>("accepted");
         QTest::newRow("original-accelerator") << true << quint32(0) << false;
         QTest::newRow("original-outline") << false << quint32(0) << false;
-        QTest::newRow("pre-rem-accelerator") << true << quint32(1) << false;
-        QTest::newRow("pre-rem-outline") << false << quint32(1) << false;
-        QTest::newRow("pre-page-margins-accelerator") << true << quint32(2) << false;
-        QTest::newRow("pre-page-margins-outline") << false << quint32(2) << false;
-        QTest::newRow("pre-media-filter-accelerator") << true << quint32(3) << false;
-        QTest::newRow("pre-media-filter-outline") << false << quint32(3) << false;
+        // Explicit stale revisions share one key format; revision 0 omits it.
         QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5) << false;
         QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5) << false;
         QTest::newRow("current-accelerator") << true << quint32(9) << true;

@@ -12,9 +12,13 @@
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDataStream>
 #include <QFile>
+#include <QMap>
 #include <QPainter>
 #include <QProcess>
+#include <QScopeGuard>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -28,12 +32,17 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <utility>
 #pragma push_macro("slots")
 #undef slots
 #include <cert.h>
 #include <certdb.h>
 #include <ocsp.h>
+#include <p12.h>
 #include <pk11pub.h>
+#include <prerror.h>
+#include <secerr.h>
 #pragma pop_macro("slots")
 #include <cstring>
 #include <fcntl.h>
@@ -43,6 +52,24 @@
 #ifndef TEST_SIGNATURE_PDF_DIR
 #define TEST_SIGNATURE_PDF_DIR "."
 #endif
+
+namespace {
+
+thread_local bool failPkcs12ImportAfterWrite = false;
+
+}
+
+extern "C" SECStatus __real_SEC_PKCS12DecoderImportBags(SEC_PKCS12DecoderContext* decoder);
+
+extern "C" SECStatus __wrap_SEC_PKCS12DecoderImportBags(SEC_PKCS12DecoderContext* decoder)
+{
+    const SECStatus result = __real_SEC_PKCS12DecoderImportBags(decoder);
+    if (result == SECSuccess && std::exchange(failPkcs12ImportAfterWrite, false)) {
+        PR_SetError(SEC_ERROR_IO, 0);
+        return SECFailure;
+    }
+    return result;
+}
 
 using Mu::Generator::Config::SignatureEmblem;
 
@@ -178,6 +205,69 @@ auto findManagedCertificate(const QList<::Mu::Plugin::Crypto::CertificateDatabas
     });
 }
 
+struct CertificateDatabaseSnapshot {
+    QMap<QByteArray, QByteArray> certificates;
+    QSet<QByteArray> privateKeys;
+};
+
+// Snapshot every persistent slot certificate, including keyless certificates,
+// plus key identities. Counts alone would miss replacement or trust changes.
+std::optional<CertificateDatabaseSnapshot> snapshotCertificateDatabase()
+{
+    using namespace ::Mu::Plugin::Crypto;
+    std::lock_guard lock(Internal::nssMutex());
+    NssSlot slot(PK11_GetInternalKeySlot());
+    if (!slot)
+        return std::nullopt;
+    NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
+    if (!certificates)
+        return std::nullopt;
+    CertificateDatabaseSnapshot result;
+    for (auto* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
+         node = CERT_LIST_NEXT(node)) {
+        CERTCertTrust trust { };
+        if (CERT_GetCertTrust(node->cert, &trust) != SECSuccess)
+            return std::nullopt;
+        const QByteArray der(reinterpret_cast<const char*>(node->cert->derCert.data), node->cert->derCert.len);
+        QByteArray state;
+        QDataStream stream(&state, QIODevice::WriteOnly);
+        stream << der << QByteArray(node->cert->nickname ? node->cert->nickname : "") << quint32(trust.sslFlags)
+               << quint32(trust.emailFlags) << quint32(trust.objectSigningFlags);
+        result.certificates.insert(QCryptographicHash::hash(der, QCryptographicHash::Sha256), state);
+    }
+    std::unique_ptr<SECKEYPrivateKeyList, decltype(&SECKEY_DestroyPrivateKeyList)> keys(
+        PK11_ListPrivateKeysInSlot(slot.get()), SECKEY_DestroyPrivateKeyList);
+    if (!keys)
+        return std::nullopt;
+    for (auto* node = PRIVKEY_LIST_HEAD(keys.get()); !PRIVKEY_LIST_END(node, keys.get());
+         node = PRIVKEY_LIST_NEXT(node)) {
+        SECItem* identity = PK11_GetLowLevelKeyIDForPrivateKey(node->key);
+        if (!identity)
+            return std::nullopt;
+        const auto freeIdentity = qScopeGuard([identity] { SECITEM_FreeItem(identity, PR_TRUE); });
+        result.privateKeys.insert(QByteArray(reinterpret_cast<const char*>(identity->data), identity->len));
+    }
+    return result;
+}
+
+// A failed assertion must not leave newly imported identities in the shared
+// suite database. Existing fingerprints are never cleanup targets.
+void removeNewSigningCertificates(const QString& databasePath, const CertificateDatabaseSnapshot& before)
+{
+    using namespace ::Mu::Plugin::Crypto::CertificateDatabase;
+    QString error;
+    const auto records = listCertificates(databasePath, &error);
+    if (!error.isEmpty()) {
+        qWarning("Could not inspect import fixture during cleanup: %s", qPrintable(error));
+        return;
+    }
+    for (const auto& record : records) {
+        if (!before.certificates.contains(record.identity.sha256Fingerprint)
+            && !deleteCertificate(databasePath, record.identity, &error))
+            qWarning("Could not remove imported test certificate: %s", qPrintable(error));
+    }
+}
+
 } // namespace
 
 class TestSignatureValidation : public QObject {
@@ -241,6 +331,49 @@ class TestSignatureValidation : public QObject {
             process.kill();
         }
         return success;
+    }
+
+    std::optional<QByteArray> createPkcs12Bundle(const QString& nickname, const QString& commonName)
+    {
+        QTemporaryDir source;
+        if (!source.isValid())
+            return std::nullopt;
+        const QString key = source.filePath(QStringLiteral("key.pem"));
+        const QString certificate = source.filePath(QStringLiteral("certificate.pem"));
+        const QString path = source.filePath(QStringLiteral("certificate.p12"));
+        if (!runOpenSsl({ "req",
+                          "-x509",
+                          "-newkey",
+                          "ec",
+                          "-pkeyopt",
+                          "ec_paramgen_curve:P-256",
+                          "-nodes",
+                          "-keyout",
+                          key,
+                          "-out",
+                          certificate,
+                          "-subj",
+                          "/CN=" + commonName,
+                          "-days",
+                          "1",
+                          "-sha256" })
+            || !runOpenSsl({ "pkcs12",
+                             "-export",
+                             "-inkey",
+                             key,
+                             "-in",
+                             certificate,
+                             "-out",
+                             path,
+                             "-name",
+                             nickname,
+                             "-passout",
+                             "pass:password" }))
+            return std::nullopt;
+        QFile bundle(path);
+        if (!bundle.open(QIODevice::ReadOnly))
+            return std::nullopt;
+        return bundle.readAll();
     }
 
 private slots:
@@ -1268,9 +1401,16 @@ private slots:
                     { QStringLiteral("-D"), QStringLiteral("-n"), sourceNickname, QStringLiteral("-d"), database }),
                 "certutil could not remove the source certificate");
 
+            const auto beforeFailure = snapshotCertificateDatabase();
+            QVERIFY(beforeFailure);
             QVERIFY2(!::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
                          m_nssDb.path(), data, QStringLiteral("wrong-password"), &error),
                      "an incorrect PKCS#12 password was accepted");
+            QVERIFY(!error.isEmpty());
+            const auto afterFailure = snapshotCertificateDatabase();
+            QVERIFY(afterFailure);
+            QCOMPARE(afterFailure->certificates, beforeFailure->certificates);
+            QCOMPARE(afterFailure->privateKeys, beforeFailure->privateKeys);
             QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(
                          m_nssDb.path(), data, QStringLiteral("päss-密码"), &error),
                      qPrintable(error));
@@ -1348,6 +1488,123 @@ private slots:
                          m_nssDb.path(), certificate->identity, &error),
                      qPrintable(error));
         }
+    }
+
+    void rejectsMalformedPkcs12WithoutChangingDatabase_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::newRow("empty") << 0;
+        QTest::newRow("invalid-der") << 1;
+        QTest::newRow("truncated-bundle") << 2;
+        QTest::newRow("corrupted-integrity") << 3;
+    }
+
+    void rejectsMalformedPkcs12WithoutChangingDatabase()
+    {
+        QFETCH(int, kind);
+        QTemporaryDir source;
+        QVERIFY(source.isValid());
+        QByteArray data;
+        if (kind == 1) {
+            data = "not a PKCS#12 bundle";
+        } else if (kind >= 2) {
+            const QString path = source.filePath(QStringLiteral("source.p12"));
+            QVERIFY(runPk12util(
+                { "-o", path, "-n", "okular-mupdf-test", "-d", "sql:" + m_nssDb.path(), "-K", "", "-W", "password" }));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            data = file.readAll();
+            QVERIFY(data.size() > 32);
+            if (kind == 2)
+                data.chop(data.size() / 2);
+            else
+                data[data.size() - 8] = char(data.at(data.size() - 8) ^ 0x5a);
+        }
+        const auto before = snapshotCertificateDatabase();
+        QVERIFY(before);
+        const auto cleanupImports = qScopeGuard([&] { removeNewSigningCertificates(m_nssDb.path(), *before); });
+        QString error;
+        QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(m_nssDb.path(), data, "password", &error));
+        QVERIFY(!error.isEmpty());
+        const auto after = snapshotCertificateDatabase();
+        QVERIFY(after);
+        QCOMPARE(after->certificates, before->certificates);
+        QCOMPARE(after->privateKeys, before->privateKeys);
+    }
+
+    void resolvesPkcs12NicknameCollisionWithoutReplacingIdentity()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
+            QSKIP("openssl is required to generate a distinct key with a colliding nickname");
+        const auto bytes =
+            createPkcs12Bundle(QStringLiteral("okular-mupdf-test"), QStringLiteral("Imported Collision Signer"));
+        QVERIFY(bytes && !bytes->isEmpty());
+        const auto before = snapshotCertificateDatabase();
+        QVERIFY(before);
+        const auto cleanupImports = qScopeGuard([&] { removeNewSigningCertificates(m_nssDb.path(), *before); });
+        QString error;
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(m_nssDb.path(), *bytes, "password", &error),
+                 qPrintable(error));
+        const auto after = snapshotCertificateDatabase();
+        QVERIFY(after);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        for (auto it = before->certificates.cbegin(); it != before->certificates.cend(); ++it)
+            QCOMPARE(after->certificates.value(it.key()), it.value());
+        for (const auto& identity : before->privateKeys)
+            QVERIFY(after->privateKeys.contains(identity));
+        QCOMPARE(after->certificates.size(), before->certificates.size() + 1);
+        QCOMPARE(after->privateKeys.size(), before->privateKeys.size() + 1);
+        const auto records = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto incoming = std::find_if(records.cbegin(), records.cend(), [&](const auto& record) {
+            return !before->certificates.contains(record.identity.sha256Fingerprint);
+        });
+        QVERIFY(incoming != records.cend());
+        QVERIFY(incoming->certificate.nickname != "okular-mupdf-test");
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), incoming->identity, &error),
+            qPrintable(error));
+        const auto restored = snapshotCertificateDatabase();
+        QVERIFY(restored);
+        QCOMPARE(restored->certificates, before->certificates);
+        QCOMPARE(restored->privateKeys, before->privateKeys);
+    }
+
+    void rollsBackPkcs12ObjectsAfterImportFailure()
+    {
+        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
+            QSKIP("openssl is required for the PKCS#12 rollback fixture");
+        const auto bytes = createPkcs12Bundle(QStringLiteral("rollback-import"), QStringLiteral("Rollback Import"));
+        QVERIFY(bytes && !bytes->isEmpty());
+        const auto before = snapshotCertificateDatabase();
+        QVERIFY(before);
+        const auto cleanupImports = qScopeGuard([&] { removeNewSigningCertificates(m_nssDb.path(), *before); });
+        // Fail only after the real NSS call stored the new certificate and key.
+        // The production import adapter must remove both while preserving old objects.
+        failPkcs12ImportAfterWrite = true;
+        const auto resetFailure = qScopeGuard([] { failPkcs12ImportAfterWrite = false; });
+        QString error;
+        QVERIFY(!::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(m_nssDb.path(), *bytes, "password", &error));
+        QVERIFY(!failPkcs12ImportAfterWrite);
+        QVERIFY2(error.contains(QStringLiteral("could not be imported")), qPrintable(error));
+        const auto after = snapshotCertificateDatabase();
+        QVERIFY(after);
+        QCOMPARE(after->certificates, before->certificates);
+        QCOMPARE(after->privateKeys, before->privateKeys);
+        // The injected failure is one-shot: retrying must succeed without leftovers.
+        QVERIFY2(::Mu::Plugin::Crypto::CertificateDatabase::importPkcs12(m_nssDb.path(), *bytes, "password", &error),
+                 qPrintable(error));
+        const auto records = ::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(m_nssDb.path(), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto incoming = findManagedCertificate(records, "rollback-import");
+        QVERIFY(incoming != records.cend());
+        QVERIFY2(
+            ::Mu::Plugin::Crypto::CertificateDatabase::deleteCertificate(m_nssDb.path(), incoming->identity, &error),
+            qPrintable(error));
+        const auto restored = snapshotCertificateDatabase();
+        QVERIFY(restored);
+        QCOMPARE(restored->certificates, before->certificates);
+        QCOMPARE(restored->privateKeys, before->privateKeys);
     }
 
     void rejectsInactiveCertificateDatabase()

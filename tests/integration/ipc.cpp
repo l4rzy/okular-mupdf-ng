@@ -157,6 +157,25 @@ private slots:
         QCOMPARE(client.restartCount(), quint64(2));
     }
 
+    void fontsFlowThroughIpc()
+    {
+        using namespace Mu::Model;
+        QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
+        QCOMPARE(m_client.open(m_pdf, { }, pages), OpenStatus::Success);
+        QCOMPARE(pages.size(), 1);
+        const auto fonts = m_client.fonts(-1);
+        QCOMPARE(fonts.size(), std::size_t(1));
+        QCOMPARE(fonts.front().name, std::string("Helvetica"));
+        QCOMPARE(fonts.front().type, FontType::Type1);
+        QCOMPARE(fonts.front().embedType, FontEmbedType::NotEmbedded);
+        QVERIFY(fonts.front().file.empty());
+        const auto pageFonts = m_client.fonts(0);
+        QCOMPARE(pageFonts.size(), fonts.size());
+        QCOMPARE(pageFonts.front().name, fonts.front().name);
+        QCOMPARE(pageFonts.front().type, fonts.front().type);
+        QCOMPARE(pageFonts.front().embedType, fonts.front().embedType);
+    }
+
     // End-to-end: a document MuPDF had to repair is reported across IPC.
     // End-to-end: the Okular paper color reaches the worker renderer.
     void layersFlowThroughIpc()

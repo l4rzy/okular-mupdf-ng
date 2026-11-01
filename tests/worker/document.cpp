@@ -172,6 +172,195 @@ class TestDocument : public QObject {
     Q_OBJECT
 private slots:
 
+    void enumeratesFontResources_data()
+    {
+        QTest::addColumn<QByteArray>("dictionary");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<int>("type");
+        QTest::addColumn<int>("embedding");
+        using Type = ::Mu::Model::FontType;
+        using Embed = ::Mu::Model::FontEmbedType;
+        QTest::newRow("Type1") << QByteArray("<< /BaseFont /TestFont /Subtype /Type1 >>") << QStringLiteral("TestFont")
+                               << int(Type::Type1) << int(Embed::NotEmbedded);
+        QTest::newRow("Type1C") << QByteArray("<< /BaseFont /TestFont /Subtype /Type1C >>")
+                                << QStringLiteral("TestFont") << int(Type::Type1C) << int(Embed::NotEmbedded);
+        QTest::newRow("MMType1") << QByteArray("<< /BaseFont /TestFont /Subtype /MMType1 >>")
+                                 << QStringLiteral("TestFont") << int(Type::Type1C) << int(Embed::NotEmbedded);
+        QTest::newRow("TrueType") << QByteArray("<< /BaseFont /TestFont /Subtype /TrueType >>")
+                                  << QStringLiteral("TestFont") << int(Type::TrueType) << int(Embed::NotEmbedded);
+        QTest::newRow("OpenType") << QByteArray("<< /BaseFont /TestFont /Subtype /OpenType >>")
+                                  << QStringLiteral("TestFont") << int(Type::TrueTypeOT) << int(Embed::NotEmbedded);
+        QTest::newRow("CIDFontType0") << QByteArray("<< /BaseFont /TestFont /Subtype /CIDFontType0 >>")
+                                      << QStringLiteral("TestFont") << int(Type::CIDType0) << int(Embed::NotEmbedded);
+        QTest::newRow("CIDFontType0C") << QByteArray("<< /BaseFont /TestFont /Subtype /CIDFontType0C >>")
+                                       << QStringLiteral("TestFont") << int(Type::CIDType0) << int(Embed::NotEmbedded);
+        QTest::newRow("CIDFontType2") << QByteArray("<< /BaseFont /TestFont /Subtype /CIDFontType2 >>")
+                                      << QStringLiteral("TestFont") << int(Type::CIDTrueType)
+                                      << int(Embed::NotEmbedded);
+        QTest::newRow("Other") << QByteArray("<< /BaseFont /TestFont /Subtype /Other >>") << QStringLiteral("TestFont")
+                               << int(Type::Unknown) << int(Embed::NotEmbedded);
+        QTest::newRow("type3-intrinsically-embedded")
+            << QByteArray("<< /BaseFont /Glyphs /Subtype /Type3 >>") << QStringLiteral("Glyphs") << int(Type::Type3)
+            << int(Embed::FullyEmbedded);
+        QTest::newRow("name-fallback") << QByteArray("<< /Name /Fallback /Subtype /Type1 >>")
+                                       << QStringLiteral("Fallback") << int(Type::Type1) << int(Embed::NotEmbedded);
+        QTest::newRow("missing-name") << QByteArray("<< /Subtype /Type1 >>") << QString() << int(Type::Unknown)
+                                      << int(Embed::NotEmbedded);
+        QTest::newRow("missing-subtype") << QByteArray("<< /BaseFont /Mystery >>") << QStringLiteral("Mystery")
+                                         << int(Type::Unknown) << int(Embed::NotEmbedded);
+        QTest::newRow("font-file") << QByteArray(
+            "<< /BaseFont /Full /Subtype /Type1 /FontDescriptor << /FontFile 4 0 R >> >>")
+                                   << QStringLiteral("Full") << int(Type::Type1) << int(Embed::FullyEmbedded);
+        QTest::newRow("font-file2-subset")
+            << QByteArray("<< /BaseFont /ABCDEF+Subset /Subtype /TrueType /FontDescriptor << /FontFile2 4 0 R >> >>")
+            << QStringLiteral("ABCDEF+Subset") << int(Type::TrueType) << int(Embed::EmbeddedSubset);
+        QTest::newRow("font-file3-non-uppercase-tag")
+            << QByteArray("<< /BaseFont /abcDEF+Full /Subtype /OpenType /FontDescriptor << /FontFile3 4 0 R >> >>")
+            << QStringLiteral("abcDEF+Full") << int(Type::TrueTypeOT) << int(Embed::FullyEmbedded);
+        QTest::newRow("short-subset-tag")
+            << QByteArray("<< /BaseFont /ABCDE+Full /Subtype /Type1 /FontDescriptor << /FontFile 4 0 R >> >>")
+            << QStringLiteral("ABCDE+Full") << int(Type::Type1) << int(Embed::FullyEmbedded);
+        QTest::newRow("subset-tag-without-font-name")
+            << QByteArray("<< /BaseFont /ABCDEF+ /Subtype /Type1 /FontDescriptor << /FontFile 4 0 R >> >>")
+            << QStringLiteral("ABCDEF+") << int(Type::Type1) << int(Embed::FullyEmbedded);
+        QTest::newRow("type0-descendant")
+            << QByteArray("<< /BaseFont /ABCDEF+Composite /Subtype /Type0 /DescendantFonts [<< /Subtype /CIDFontType2 "
+                          "/FontDescriptor << /FontFile2 4 0 R >> >>] >>")
+            << QStringLiteral("ABCDEF+Composite") << int(Type::CIDTrueType) << int(Embed::EmbeddedSubset);
+        QTest::newRow("type0-inherits-parent-descriptor")
+            << QByteArray("<< /BaseFont /Composite /Subtype /Type0 /FontDescriptor << /FontFile3 4 0 R >> "
+                          "/DescendantFonts [<< /Subtype /CIDFontType0 >>] >>")
+            << QStringLiteral("Composite") << int(Type::CIDType0) << int(Embed::FullyEmbedded);
+        QTest::newRow("type0-missing-descendants")
+            << QByteArray("<< /BaseFont /Composite /Subtype /Type0 >>") << QStringLiteral("Composite")
+            << int(Type::Unknown) << int(Embed::NotEmbedded);
+        QTest::newRow("type0-empty-descendants")
+            << QByteArray("<< /BaseFont /Composite /Subtype /Type0 /DescendantFonts [] >>")
+            << QStringLiteral("Composite") << int(Type::Unknown) << int(Embed::NotEmbedded);
+        QTest::newRow("type0-missing-descendant-subtype") << QByteArray(
+            "<< /BaseFont /Composite /Subtype /Type0 /DescendantFonts [<< /FontDescriptor << /FontFile 4 0 R >> >>] >>")
+                                                          << QStringLiteral("Composite") << int(Type::Unknown)
+                                                          << int(Embed::FullyEmbedded);
+    }
+
+    void enumeratesFontResources()
+    {
+        QFETCH(QByteArray, dictionary);
+        QFETCH(QString, name);
+        QFETCH(int, type);
+        QFETCH(int, embedding);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("fonts.pdf"));
+        QVERIFY(writePdfObjects(path,
+                                { "<< /Type /Catalog /Pages 2 0 R >>",
+                                  "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                                  "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /F1 "
+                                      + dictionary + " >> >> >>",
+                                  "<< /Length 0 >>\nstream\nendstream" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "fonts.pdf", &error), error.c_str());
+        const auto fonts = document.fonts({ 0 }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        if (name.isEmpty()) {
+            QVERIFY(fonts.empty());
+            return;
+        }
+        QCOMPARE(fonts.size(), std::size_t(1));
+        QCOMPARE(fonts.front().name, name.toStdString());
+        QVERIFY(fonts.front().file.empty());
+        QCOMPARE(int(fonts.front().type), type);
+        QCOMPARE(int(fonts.front().embedType), embedding);
+    }
+
+    void selectsAndDeduplicatesFonts_data()
+    {
+        QTest::addColumn<QList<int>>("pages");
+        QTest::addColumn<QStringList>("names");
+        QTest::addColumn<int>("sharedType");
+        QTest::addColumn<bool>("valid");
+        using Type = ::Mu::Model::FontType;
+        QTest::newRow("no-selection") << QList<int> { } << QStringList { } << int(Type::Unknown) << true;
+        QTest::newRow("empty-resources") << QList<int> { 2 } << QStringList { } << int(Type::Unknown) << true;
+        QTest::newRow("missing-font-dictionary") << QList<int> { 3 } << QStringList { } << int(Type::Unknown) << true;
+        QTest::newRow("same-page-aliases") << QList<int> { 0 } << QStringList { "Shared" } << int(Type::Type1) << true;
+        QTest::newRow("cross-page-first-wins")
+            << QList<int> { 0, 1, 0 } << QStringList { "Shared", "Other" } << int(Type::Type1) << true;
+        QTest::newRow("reverse-page-order")
+            << QList<int> { 1, 0 } << QStringList { "Other", "Shared" } << int(Type::TrueType) << true;
+        QTest::newRow("negative-index") << QList<int> { -1 } << QStringList { } << int(Type::Unknown) << false;
+        QTest::newRow("past-last-page") << QList<int> { 4 } << QStringList { } << int(Type::Unknown) << false;
+        QTest::newRow("discard-partial-results")
+            << QList<int> { 0, 4 } << QStringList { } << int(Type::Unknown) << false;
+    }
+
+    void selectsAndDeduplicatesFonts()
+    {
+        QFETCH(QList<int>, pages);
+        QFETCH(QStringList, names);
+        QFETCH(int, sharedType);
+        QFETCH(bool, valid);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("pages.pdf"));
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R >>",
+              "<< /Type /Pages /Count 4 /Kids [3 0 R 4 0 R 5 0 R 6 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /A << /BaseFont /Shared "
+              "/Subtype /Type1 >> /B << /BaseFont /Shared /Subtype /TrueType >> >> >> >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /A << /BaseFont /Other "
+              "/Subtype /OpenType >> /B << /BaseFont /Shared /Subtype /TrueType >> >> >> >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << >> >> >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> >>" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "pages.pdf", &error), error.c_str());
+        const auto fonts = document.fonts(std::vector<int>(pages.begin(), pages.end()), &error);
+        QCOMPARE(error.empty(), valid);
+        if (!valid)
+            QCOMPARE(error, std::string("page is unavailable"));
+        QStringList actualNames;
+        for (const auto& font : fonts) {
+            actualNames.push_back(QString::fromStdString(font.name));
+            QCOMPARE(font.embedType, ::Mu::Model::FontEmbedType::NotEmbedded);
+            QCOMPARE(int(font.type), font.name == "Shared" ? sharedType : int(::Mu::Model::FontType::TrueTypeOT));
+        }
+        QCOMPARE(actualNames, names);
+    }
+
+    void rejectsFontEnumerationWithoutAvailableDocument_data()
+    {
+        QTest::addColumn<bool>("locked");
+        QTest::newRow("unopened") << false;
+        QTest::newRow("locked") << true;
+    }
+
+    void rejectsFontEnumerationWithoutAvailableDocument()
+    {
+        QFETCH(bool, locked);
+        ::Mu::Worker::Engine::PdfDocument document;
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        std::string error;
+        if (locked) {
+            const QString path = directory.filePath(QStringLiteral("locked.pdf"));
+            createEncryptedPDF(document.context(), path, QStringLiteral("password"));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QVERIFY2(document.openFd(::dup(file.handle()), "locked.pdf", &error), error.c_str());
+            QVERIFY(document.isLocked());
+        }
+        QVERIFY(document.fonts({ 0 }, &error).empty());
+        QCOMPARE(error, std::string("document is unavailable"));
+        QVERIFY(document.fonts({ 0 }, nullptr).empty());
+    }
+
     void generatedOutlineWithoutHeadings_data()
     {
         QTest::addColumn<QByteArray>("content");

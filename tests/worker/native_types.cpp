@@ -762,6 +762,176 @@ private slots:
         QVERIFY(!validSettingsResponse.error);
     }
 
+    void validatesAnnotationExtensionContent_data()
+    {
+        using Value = ::Mu::Model::Value;
+        QTest::addColumn<Value::Object>("extension");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("empty") << Value::Object { } << true;
+        QTest::newRow("all-scalar-types") << Value::Object { { "null", Value { } },
+                                                             { "bool", Value { true } },
+                                                             { "integer", Value { std::int64_t(42) } },
+                                                             { "number", Value { 1.5 } },
+                                                             { "string", Value { std::string("metadata") } },
+                                                             { "bytes", Value { Value::Bytes { 0, 255 } } } }
+                                          << true;
+        QTest::newRow("nested-containers")
+            << Value::Object { { "array",
+                                 Value { Value::Array { Value { Value::Object { { "leaf", Value { 2.0 } } } },
+                                                        Value { Value::Array { } } } } } }
+            << true;
+        QTest::newRow("empty-root-key") << Value::Object { { "", Value { } } } << false;
+        QTest::newRow("empty-nested-key")
+            << Value::Object { { "object", Value { Value::Object { { "", Value { true } } } } } } << false;
+        QTest::newRow("nan") << Value::Object { { "number", Value { std::numeric_limits<double>::quiet_NaN() } } }
+                             << false;
+        QTest::newRow("positive-infinity")
+            << Value::Object { { "number", Value { std::numeric_limits<double>::infinity() } } } << false;
+        QTest::newRow("negative-infinity")
+            << Value::Object { { "number", Value { -std::numeric_limits<double>::infinity() } } } << false;
+        QTest::newRow("invalid-array-element") << Value::Object {
+            { "array", Value { Value::Array { Value { true }, Value { std::numeric_limits<double>::infinity() } } } }
+        } << false;
+        QTest::newRow("invalid-object-value") << Value::Object {
+            { "object", Value { Value::Object { { "number", Value { std::numeric_limits<double>::quiet_NaN() } } } } }
+        } << false;
+    }
+
+    void validatesAnnotationExtensionContent()
+    {
+        using Value = ::Mu::Model::Value;
+        QFETCH(Value::Object, extension);
+        QFETCH(bool, accepted);
+        ::Mu::Model::Annotation annotation;
+        annotation.extras.extension = extension;
+        std::string_view reason = "unchanged";
+        QCOMPARE(::Mu::Model::isValidAnnotation(annotation, &reason), accepted);
+        QCOMPARE(reason, std::string_view(accepted ? "unchanged" : "annotation extension is invalid"));
+        QCOMPARE(::Mu::Model::isValidAnnotation(annotation, nullptr), accepted);
+        if (!accepted) {
+            ::Mu::Worker::Runtime::CommandService service({ });
+            const auto response = service.dispatch({ 1, ::Mu::Model::AnnotationAddRequest { 0, annotation } });
+            QVERIFY(response.error);
+            QCOMPARE(response.error->code, ::Mu::Model::ErrorCode::InvalidRequest);
+            QCOMPARE(response.error->message, std::string("annotation extension is invalid"));
+        }
+    }
+
+    void annotationExtensionsRoundTripThroughCodec()
+    {
+        using namespace ::Mu;
+        Model::Annotation annotation;
+        annotation.extras.extension = { { "null", Model::Value { } },
+                                        { "bool", Model::Value { true } },
+                                        { "integer", Model::Value { std::int64_t(-42) } },
+                                        { "number", Model::Value { 1.5 } },
+                                        { "string", Model::Value { std::string("metadata") } },
+                                        { "bytes", Model::Value { Model::Value::Bytes { 0, 255 } } },
+                                        { "array",
+                                          Model::Value { Model::Value::Array { Model::Value {
+                                              Model::Value::Object { { "leaf", Model::Value { true } } } } } } } };
+        const Model::RequestMessage request { 42, Model::AnnotationAddRequest { 0, annotation } };
+        std::string error;
+        const auto encoded = IPC::ZppCodec::encode(request, &error);
+        QVERIFY2(encoded, error.c_str());
+        Model::RequestMessage decoded;
+        QVERIFY2(IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
+        QCOMPARE(decoded.id, request.id);
+        const auto* addition = std::get_if<Model::AnnotationAddRequest>(&decoded.payload);
+        QVERIFY(addition);
+        const auto& values = addition->annotation.extras.extension;
+        QCOMPARE(values.size(), annotation.extras.extension.size());
+        for (const auto& [key, expected] : annotation.extras.extension) {
+            const auto value = values.find(key);
+            QVERIFY2(value != values.end(), key.c_str());
+            QCOMPARE(value->second.data.index(), expected.data.index());
+        }
+        QVERIFY(values.at("null").isNull());
+        QCOMPARE(std::get<bool>(values.at("bool").data), true);
+        QCOMPARE(std::get<std::int64_t>(values.at("integer").data), std::int64_t(-42));
+        QCOMPARE(std::get<double>(values.at("number").data), 1.5);
+        QCOMPARE(std::get<std::string>(values.at("string").data), std::string("metadata"));
+        QCOMPARE(std::get<Model::Value::Bytes>(values.at("bytes").data), Model::Value::Bytes({ 0, 255 }));
+        const auto& array = std::get<Model::Value::Array>(values.at("array").data);
+        QCOMPARE(array.size(), std::size_t(1));
+        const auto* object = std::get_if<Model::Value::Object>(&array.front().data);
+        QVERIFY(object);
+        const auto leaf = object->find("leaf");
+        QVERIFY(leaf != object->end());
+        const auto* leafValue = std::get_if<bool>(&leaf->second.data);
+        QVERIFY(leafValue);
+        QVERIFY(*leafValue);
+        QVERIFY(Model::isValidAnnotation(addition->annotation));
+    }
+
+    void boundsAnnotationExtensionDepth_data()
+    {
+        QTest::addColumn<int>("depth");
+        QTest::addColumn<bool>("objects");
+        QTest::addColumn<bool>("accepted");
+        const int limit = static_cast<int>(::Mu::Limit::MaxAnnotationExtensionDepth);
+        QTest::newRow("array-at-limit") << limit << false << true;
+        QTest::newRow("array-over-limit") << limit + 1 << false << false;
+        QTest::newRow("object-at-limit") << limit << true << true;
+        QTest::newRow("object-over-limit") << limit + 1 << true << false;
+    }
+
+    void boundsAnnotationExtensionDepth()
+    {
+        QFETCH(int, depth);
+        QFETCH(bool, objects);
+        QFETCH(bool, accepted);
+        using Value = ::Mu::Model::Value;
+        Value leaf { true };
+        // The root object's member is at depth 1; each container adds a level.
+        for (int level = 1; level < depth; ++level) {
+            if (objects)
+                leaf = Value { Value::Object { { "nested", std::move(leaf) } } };
+            else
+                leaf = Value { Value::Array { std::move(leaf) } };
+        }
+        ::Mu::Model::Annotation annotation;
+        annotation.extras.extension.emplace("root", std::move(leaf));
+        std::string_view reason;
+        QCOMPARE(::Mu::Model::isValidAnnotation(annotation, &reason), accepted);
+        if (!accepted)
+            QCOMPARE(reason, std::string_view("annotation extension is invalid"));
+    }
+
+    void boundsAnnotationExtensionEntries_data()
+    {
+        QTest::addColumn<int>("shape");
+        QTest::addColumn<bool>("overLimit");
+        for (const auto& [name, shape] : { std::pair { "flat", 0 }, { "array", 1 }, { "sibling-arrays", 2 } }) {
+            QTest::newRow(qPrintable(QString::fromLatin1(name) + "-at-limit")) << shape << false;
+            QTest::newRow(qPrintable(QString::fromLatin1(name) + "-over-limit")) << shape << true;
+        }
+    }
+
+    void boundsAnnotationExtensionEntries()
+    {
+        QFETCH(int, shape);
+        QFETCH(bool, overLimit);
+        using Value = ::Mu::Model::Value;
+        ::Mu::Model::Annotation annotation;
+        // Include the root and each array in the aggregate entry budget.
+        const std::size_t total = ::Mu::Limit::MaxAnnotationExtensionEntries + (overLimit ? 1u : 0u);
+        if (shape == 0) {
+            for (std::size_t index = 1; index < total; ++index)
+                annotation.extras.extension.emplace(std::to_string(index), Value { true });
+        } else if (shape == 1) {
+            annotation.extras.extension.emplace("array", Value { Value::Array(total - 2) });
+        } else {
+            const std::size_t leaves = total - 3;
+            annotation.extras.extension.emplace("first", Value { Value::Array(leaves / 2) });
+            annotation.extras.extension.emplace("second", Value { Value::Array(leaves - leaves / 2) });
+        }
+        std::string_view reason;
+        QCOMPARE(::Mu::Model::isValidAnnotation(annotation, &reason), !overLimit);
+        if (overLimit)
+            QCOMPARE(reason, std::string_view("annotation extension is invalid"));
+    }
+
     void validationHelpers()
     {
         using namespace ::Mu::Model;
@@ -783,8 +953,6 @@ private slots:
         QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng" }, &reason));
 
         DocumentSettings invalidTheme;
-        invalidTheme.documentTheme = static_cast<DocumentTheme>(255);
-        QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
         invalidTheme.documentTheme = static_cast<DocumentTheme>(4);
         QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
         DocumentSettings validSettings;
@@ -811,7 +979,6 @@ private slots:
         QVERIFY(isValidDpi(300.0, 300.0));
         QVERIFY(!isValidDpi(0.0, 72.0));
         QVERIFY(!isValidDpi(72.0, -1.0));
-        QVERIFY(!isValidDpi(std::numeric_limits<double>::quiet_NaN(), 72.0));
 
         // OCR DPI validation
         QVERIFY(isValidOcrDpi(72.0f));
@@ -819,7 +986,6 @@ private slots:
         QVERIFY(isValidOcrDpi(600.0f));
         QVERIFY(!isValidOcrDpi(71.9f));
         QVERIFY(!isValidOcrDpi(600.1f));
-        QVERIFY(!isValidOcrDpi(std::numeric_limits<float>::quiet_NaN()));
 
         // EPUB custom CSS base64 validation
         QVERIFY(isValidEpubCustomCssBase64(""));

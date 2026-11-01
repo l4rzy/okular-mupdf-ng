@@ -40,6 +40,7 @@ endif()
 
 add_executable(test_mupdf
     test_runner.cpp
+    worker/test_main.cpp
     worker/document.cpp
     worker/page.cpp
     worker/signature.cpp
@@ -95,9 +96,12 @@ target_compile_definitions(test_mupdf PRIVATE
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_mupdf PRIVATE MU_DEBUG_ENABLED)
 endif()
+# Exercise certificate/key rollback after NSS has written persistent objects.
+target_link_options(test_mupdf PRIVATE "LINKER:--wrap=SEC_PKCS12DecoderImportBags")
 add_dependencies(test_mupdf mupdfng-worker mupdfng-cli test_render_worker)
 
 set(MUPDF_TEST_SUITES
+    "test_worker_main|worker,security"
     "test_worker_document|worker"
     "test_worker_page|worker"
     "test_worker_signature|worker,signature"
@@ -221,6 +225,10 @@ add_layer_test(test_plugin_renderimage plugin/test_render_image.cpp plugin)
 target_include_directories(test_plugin_renderimage PRIVATE ../src)
 target_link_libraries(test_plugin_renderimage PRIVATE Qt6::Gui mupdf_plugin_util)
 
+add_layer_test(test_plugin_signatureimage plugin/test_signature_image.cpp plugin)
+target_include_directories(test_plugin_signatureimage PRIVATE ../src)
+target_link_libraries(test_plugin_signatureimage PRIVATE Qt6::Gui mupdf_plugin_util)
+
 add_layer_test(test_plugin_signingauthorization plugin/test_signing_authorization.cpp plugin)
 target_include_directories(test_plugin_signingauthorization PRIVATE ../src)
 
@@ -245,7 +253,8 @@ foreach(runtime_test IN ITEMS
         readOnlyMode
         noDbMode
         freshDatabaseMode
-        urlSchemeDatabasePath)
+        urlSchemeDatabasePath
+        signingAuthenticationFailures)
     add_test(NAME test_nss_runtime_${runtime_test} COMMAND test_nss_runtime ${runtime_test})
     set_tests_properties(test_nss_runtime_${runtime_test} PROPERTIES
         LABELS "plugin;signature;security"

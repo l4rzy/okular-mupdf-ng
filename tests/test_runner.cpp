@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+int runTestWorkerMain(int argc, char** argv);
 int runTestWorkerDocument(int argc, char** argv);
 int runTestWorkerPage(int argc, char** argv);
 int runTestWorkerSignature(int argc, char** argv);
@@ -30,6 +31,7 @@ struct TestEntry {
 };
 
 constexpr std::array tests {
+    TestEntry { "test_worker_main", runTestWorkerMain },
     TestEntry { "test_worker_document", runTestWorkerDocument },
     TestEntry { "test_worker_page", runTestWorkerPage },
     TestEntry { "test_worker_signature", runTestWorkerSignature },

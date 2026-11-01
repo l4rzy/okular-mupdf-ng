@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Okular-24.12%2B-1d99f3?logo=kde" alt="Okular 24.12+">
-  <a href="https://sonarcloud.io/project/overview?id=l4rzy_okular-mupdf-ng"><img src="https://sonarcloud.io/api/project_badges/measure?project=l4rzy_okular-mupdf-ng&metric=security_rating" alt="Sonarcloud Scan"></a>
+  <a href="https://sonarcloud.io/project/overview?id=l4rzy_okular-mupdf-ng"><img src="https://sonarcloud.io/api/project_badges/measure?project=l4rzy_okular-mupdf-ng&metric=coverage" alt="Code Coverage"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/actions"><img src="https://img.shields.io/github/actions/workflow/status/l4rzy/okular-mupdf-ng/ci.yml" alt="GitHub Workflow Status"></a>
   <a href="https://github.com/l4rzy/okular-mupdf-ng/releases"><img src="https://img.shields.io/github/v/release/l4rzy/okular-mupdf-ng" alt="Github Release"></a>
   <br>
