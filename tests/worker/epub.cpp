@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <future>
 #include <iterator>
+#include <new>
 #include <poll.h>
 #include <string>
 #include <sys/mman.h>
@@ -2153,6 +2154,49 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(hashOnlyMeta.values.size(), size_t(1));
         QCOMPARE(hashOnlyMeta.values.at("hash"), allMeta.values.at("hash"));
+    }
+
+    void testExportPdfPreparationExceptionClosesStream_data()
+    {
+        QTest::addColumn<bool>("withReferences");
+        QTest::newRow("print") << false;
+        QTest::newRow("export") << true;
+    }
+
+    void testExportPdfPreparationExceptionClosesStream()
+    {
+        QFETCH(bool, withReferences);
+
+        class ThrowingMetadataDocument final : public ::Mu::Worker::Engine::EpubDocument {
+        public:
+            bool throwOnMetadata = false;
+
+            ::Mu::Model::DocumentMetadata metadata(const std::vector<std::string>& keys,
+                                                   std::string* error) const override
+            {
+                if (throwOnMetadata)
+                    throw std::bad_alloc();
+                return EpubDocument::metadata(keys, error);
+            }
+        } document;
+
+        QFile source(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY2(document.openFd(::dup(source.handle()), "sample.epub", &error), error.c_str());
+        document.throwOnMetadata = true;
+        const int fd = ::open("/dev/null", O_WRONLY | O_CLOEXEC);
+        QVERIFY(fd >= 0);
+        QVERIFY_THROWS_EXCEPTION(std::bad_alloc,
+                                 static_cast<void>(withReferences ? document.savePdfFdWithReferences(fd, { }, &error)
+                                                                  : document.savePdfFd(fd, { }, &error)));
+        errno = 0;
+        const int flags = ::fcntl(fd, F_GETFD);
+        const int fdError = errno;
+        if (flags >= 0)
+            ::close(fd);
+        QCOMPARE(flags, -1);
+        QCOMPARE(fdError, EBADF);
     }
 
     void testExportPdfRendersPagesAndLinks_data()

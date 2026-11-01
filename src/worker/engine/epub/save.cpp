@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <string_view>
 #include <unistd.h>
 #include <unordered_map>
@@ -191,8 +192,8 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
         }
     }
 
-    FILE* volatile file = ::fdopen(fd, "wb");
-    if (!file) {
+    std::unique_ptr<FILE, decltype(&::fclose)> stream(::fdopen(fd, "wb"), &::fclose);
+    if (!stream) {
         ::close(fd);
         return fail(error, "could not adopt output FD");
     }
@@ -268,7 +269,7 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
     const std::string producer = "Okular/okular-mupdf-ng " + std::string(::Mu::IPC::COMPAT);
 
     fz_output* volatile output = nullptr;
-    FILE* const outputFile = file; // Borrowed until the output is dropped.
+    FILE* const outputFile = stream.get(); // Borrowed until the output is dropped.
     pdf_document* volatile destination = nullptr;
     fz_page* volatile page = nullptr;
     pdf_page* volatile destinationPage = nullptr;
@@ -282,6 +283,9 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
     std::string pageError;
     std::vector<Link> links;
 
+    // Preparation above may throw C++ exceptions. Transfer ownership only
+    // when MuPDF's error boundary can handle output construction failures.
+    FILE* volatile file = stream.release();
     fz_try(m_context)
     {
         output = takeOutputFile(m_context, file);
@@ -475,8 +479,10 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
         }
         fz_drop_output(m_context, output);
         output = nullptr;
-        if (file)
+        if (file) {
             ::fclose(file);
+            file = nullptr;
+        }
         fail(error, fz_caught_message(m_context));
     }
 

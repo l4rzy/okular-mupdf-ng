@@ -12,6 +12,7 @@
 #include <QTest>
 
 #include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <fcntl.h>
 #include <limits>
@@ -275,6 +276,35 @@ private slots:
     {
         const auto result = Mu::Worker::Engine::runOcr(-1, { }, 0, "eng", 225.0f);
         QCOMPARE(result.status, Mu::Model::OcrStatus::Failed);
+        QVERIFY(result.boxes.empty());
+    }
+
+    void testRejectedOcrClosesInput_data()
+    {
+        QTest::addColumn<int>("page");
+        QTest::addColumn<float>("dpi");
+        QTest::addColumn<bool>("cancelled");
+        QTest::newRow("invalid-page") << -1 << 225.0f << false;
+        QTest::newRow("invalid-dpi") << 0 << 0.0f << false;
+        QTest::newRow("cancelled") << 0 << 225.0f << true;
+        QTest::newRow("malformed-document") << 0 << 225.0f << false;
+    }
+
+    void testRejectedOcrClosesInput()
+    {
+        QFETCH(int, page);
+        QFETCH(float, dpi);
+        QFETCH(bool, cancelled);
+        const int fd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+        QVERIFY(fd >= 0);
+        Mu::Worker::Engine::CancellationCookie cookie;
+        if (cancelled)
+            cookie.cancel();
+        const auto result = Mu::Worker::Engine::runOcr(fd, { }, page, "eng_300dpi.traineddata", dpi, &cookie);
+        errno = 0;
+        QCOMPARE(::fcntl(fd, F_GETFD), -1);
+        QCOMPARE(errno, EBADF);
+        QCOMPARE(result.status, cancelled ? Mu::Model::OcrStatus::Cancelled : Mu::Model::OcrStatus::Failed);
         QVERIFY(result.boxes.empty());
     }
 

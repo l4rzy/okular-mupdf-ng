@@ -64,9 +64,11 @@ bool writeProcFile(Status& status, const char* path, std::string_view name, std:
         if (count < 0 && errno == EINTR)
             continue;
         if (count <= 0) {
-            recordErrno(status, std::string("Writing ") + std::string(name));
+            // Diagnostics allocate strings, so close before constructing them.
+            const int writeError = errno;
             ::close(fd);
-            return false;
+            errno = writeError;
+            return recordErrno(status, std::string("Writing ") + std::string(name));
         }
         written += static_cast<std::size_t>(count);
     }

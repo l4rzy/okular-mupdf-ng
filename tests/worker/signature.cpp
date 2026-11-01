@@ -10,7 +10,9 @@
 #include <QTest>
 
 #include <array>
+#include <cerrno>
 #include <cstdint>
+#include <fcntl.h>
 #include <string>
 #include <unistd.h>
 
@@ -119,8 +121,16 @@ private slots:
         QCOMPARE(QString::fromStdString(formatSignatureDate(0)), QStringLiteral("Dec 31, 1969 18:00 CST"));
     }
 
+    void failingCmsCleansUpAppearanceState_data()
+    {
+        QTest::addColumn<bool>("customDisplayDate");
+        QTest::newRow("generated-date") << false;
+        QTest::newRow("supplied-date") << true;
+    }
+
     void failingCmsCleansUpAppearanceState()
     {
+        QFETCH(bool, customDisplayDate);
         // A CMS callback failure throws after the worker has built the
         // signature appearance text; the owning strings must be destroyed on
         // that longjmp path (LeakSanitizer catches a regression here).
@@ -151,6 +161,8 @@ private slots:
 
         QTemporaryFile output;
         QVERIFY(output.open());
+        const int outputFd = ::dup(output.handle());
+        QVERIFY(outputFd >= 0);
         ::Mu::Model::SigningResult signingResult;
         const bool signedPdf = document.signFd(
             ::Mu::Model::SignRequest {
@@ -163,14 +175,17 @@ private slots:
                 .appearance = { .elements = ::Mu::Model::SignatureElementSimple,
                                 .reason = "Rejected approval",
                                 .location = "Winnipeg",
-                                .signingDisplayDate = { },
+                                .signingDisplayDate = customDisplayDate ? std::string(128, 'x') : std::string(),
                                 .backgroundImage = { } },
             },
             failingCms,
-            ::dup(output.handle()),
+            outputFd,
             &signingResult,
             &error);
         QVERIFY2(!signedPdf, "signing must fail when the CMS callback is rejected");
+        errno = 0;
+        QCOMPARE(::fcntl(outputFd, F_GETFD), -1);
+        QCOMPARE(errno, EBADF);
         QCOMPARE(signingResult, ::Mu::Model::SigningResult::GenericError);
         QVERIFY(!error.empty());
         error.clear();

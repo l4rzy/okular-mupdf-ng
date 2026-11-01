@@ -346,6 +346,8 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
         result.status = ::Mu::Model::OcrStatus::Cancelled;
         return result;
     }
+    // Normalize while the input FD is still scoped and no Fitz resources exist.
+    const std::string lang = tessdataLanguage(language);
     fz_context* context = createContext(FZ_STORE_DEFAULT);
     if (!context) {
         return result;
@@ -365,7 +367,6 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
     CancellationCookie fallbackCookie;
     CancellationCookie* activeCookie = cookie ? cookie : &fallbackCookie;
     volatile bool failed = false;
-    const std::string lang = tessdataLanguage(language);
 
     fz_try(context)
     {

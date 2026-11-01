@@ -430,10 +430,9 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
     // MuPDF must seek back and read the serialized PDF to calculate the
     // signature byte ranges before invoking the CMS callback.
-    // Adopt the caller-owned descriptor exactly once. From this point, every
-    // failure path must close file, unless MuPDF output takes ownership below.
-    FILE* volatile file = ::fdopen(outputFd, "w+b");
-    if (!file) {
+    // Keep scoped ownership while preparing strings that may throw.
+    std::unique_ptr<FILE, decltype(&::fclose)> stream(::fdopen(outputFd, "w+b"), &::fclose);
+    if (!stream) {
         ::close(outputFd);
         return fail(error, "could not adopt output FD");
     }
@@ -451,13 +450,6 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     volatile bool createdWidget = false;
     volatile bool widgetMutationComplete = false;
 
-    try {
-        signer = createSigner(request.certificateNickname, request.certificateSubjectCommonName, std::move(callback));
-    } catch (...) {
-        ::fclose(file);
-        return fail(error, "could not create signer");
-    }
-
     std::array<unsigned char, Constant::FileCopyChunkBytes> copyBuffer { };
 
     // Hoisted above the MuPDF error domain: fz_try/fz_catch is setjmp/longjmp,
@@ -470,6 +462,15 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     std::string signatureText;
     const std::string signatureFontPath =
         std::string(SIGNATURE_FONT_DIR) + '/' + Constant::SignatureAppearanceFontFileName;
+
+    // Create the signer only after C++ preparation has finished; subsequent
+    // resources are covered by the MuPDF error boundary below.
+    try {
+        signer = createSigner(request.certificateNickname, request.certificateSubjectCommonName, std::move(callback));
+    } catch (...) {
+        return fail(error, "could not create signer");
+    }
+    FILE* volatile file = stream.release();
 
     fz_try(m_context)
     {
