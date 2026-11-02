@@ -4,6 +4,7 @@ build-release/
 build-asan/
 build-gcc/
 build-coverage/
+build-ipc-fuzz/
 reference/
 thirdparty/mupdf-*/
 dist/*
