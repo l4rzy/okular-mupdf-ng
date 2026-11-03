@@ -7,6 +7,7 @@
 #include "engine/kindle/document.hpp"
 #include "engine/mobi/document.hpp"
 #include "engine/pdf/document.hpp"
+#include "engine/xps/document.hpp"
 
 namespace Mu::Worker::Engine {
 
@@ -15,6 +16,8 @@ std::unique_ptr<DocumentBase> createDocument(Model::DocumentType type, std::size
     switch (type) {
     case Model::DocumentType::Pdf:
         return std::make_unique<PdfDocument>(storeSize);
+    case Model::DocumentType::Xps:
+        return std::make_unique<XpsDocument>(storeSize);
     case Model::DocumentType::Epub:
         return std::make_unique<EpubDocument>(storeSize);
     case Model::DocumentType::Mobi:

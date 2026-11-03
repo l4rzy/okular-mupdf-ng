@@ -17,6 +17,7 @@ int runTestPluginSignature(int argc, char** argv);
 int runTestWorkerOcr(int argc, char** argv);
 int runTestWorkerEpub(int argc, char** argv);
 int runTestWorkerMobi(int argc, char** argv);
+int runTestWorkerXps(int argc, char** argv);
 int runTestWorkerNativeTypes(int argc, char** argv);
 int runTestWorkerNativeRuntime(int argc, char** argv);
 int runTestIntegrationIpc(int argc, char** argv);
@@ -39,6 +40,7 @@ constexpr std::array tests {
     TestEntry { "test_worker_ocr", runTestWorkerOcr },
     TestEntry { "test_worker_epub", runTestWorkerEpub },
     TestEntry { "test_worker_mobi", runTestWorkerMobi },
+    TestEntry { "test_worker_xps", runTestWorkerXps },
     TestEntry { "test_worker_native_types", runTestWorkerNativeTypes },
     TestEntry { "test_worker_native_runtime", runTestWorkerNativeRuntime },
     TestEntry { "test_integration_ipc", runTestIntegrationIpc },

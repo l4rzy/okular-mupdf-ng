@@ -29,8 +29,8 @@ std::uint32_t readFirstRecordOffset(const QByteArray& database)
     return qFromBigEndian<quint32>(database.constData() + 78);
 }
 
-// ZIP-based types that carry no document information on their own. EPUB
-// archives are ZIP containers, so these defer to the file suffix; a real
+// ZIP-based types that carry no document information on their own. EPUB and
+// XPS archives defer to the file suffix; a real
 // .zip/.jar remains Unknown.
 bool isZipContainerMime(const QString& mime) noexcept
 {
@@ -71,6 +71,10 @@ Model::DocumentType documentTypeForData(const QByteArray& data)
     buffer.setData(data);
     if (!buffer.open(QIODevice::ReadOnly))
         return Model::DocumentType::Unknown;
+    // Qt reports XPS bytes as generic ZIP data. Let the sandboxed XPS
+    // opener validate that candidate; do not parse ZIP contents in the host.
+    if (isZipContainerMime(QMimeDatabase().mimeTypeForData(&buffer).name()))
+        return Model::DocumentType::Xps;
     return detectDocumentType(buffer);
 }
 
@@ -82,8 +86,8 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
         return fromContent;
 
     // Recognized non-document MIME types cannot use suffix fallbacks.
-    // Unidentified binary content permits EPUB, MOBI and Kindle suffixes;
-    // ZIP containers permit only the EPUB fallback.
+    // Unidentified binary content permits supported document suffixes;
+    // ZIP containers permit EPUB and XPS fallbacks.
     const bool isUnidentifiedBinary = contentMime == QStringLiteral("application/octet-stream");
     if (!isUnidentifiedBinary && !isZipContainerMime(contentMime)) {
         MU_LOG(critical, "Mu::Plugin", "Unsupported common container type; aborting");
@@ -96,6 +100,11 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
     if (suffixLower == QStringLiteral("epub")) {
         MU_LOG(warning, "Mu::Plugin", "Falling back to epub suffix");
         return Model::DocumentType::Epub;
+    }
+
+    if (suffixLower == QStringLiteral("xps") || suffixLower == QStringLiteral("oxps")) {
+        MU_LOG(warning, "Mu::Plugin", "Falling back to xps/oxps suffix");
+        return Model::DocumentType::Xps;
     }
 
     if (isUnidentifiedBinary) {
