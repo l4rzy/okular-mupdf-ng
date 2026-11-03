@@ -470,7 +470,7 @@ int CommandService::exportCompletionFd() const noexcept
     return m_exportJobs.eventFd();
 }
 
-std::vector<ExportJobs::Notification> CommandService::drainExportNotifications()
+std::vector<Model::ExportProgressNotification> CommandService::drainExportNotifications()
 {
     return m_exportJobs.drainNotifications();
 }

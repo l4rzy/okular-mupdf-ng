@@ -3,6 +3,7 @@
 
 #include "plugin/worker_transport.hpp"
 #include "shared/protocol/zpp_codec.hpp"
+#include "support/export_progress.hpp"
 
 #include <QDir>
 #include <QSignalSpy>
@@ -16,10 +17,68 @@
 
 namespace Mu::Plugin {
 
+using Mu::Test::exportCompletions;
+
 class TestWorkerTransport : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    void exportProgress_data()
+    {
+        QTest::addColumn<quint64>("jobId");
+        QTest::addColumn<int>("completed");
+        QTest::addColumn<int>("total");
+        QTest::addColumn<bool>("finalizing");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("pages") << quint64(42) << 2 << 10 << false << true;
+        QTest::newRow("finalizing") << quint64(42) << 10 << 10 << true << true;
+        QTest::newRow("stale") << quint64(41) << 2 << 10 << false << false;
+        QTest::newRow("negative") << quint64(42) << -1 << 10 << false << false;
+        QTest::newRow("empty") << quint64(42) << 0 << 0 << true << false;
+        QTest::newRow("over-total") << quint64(42) << 11 << 10 << false << false;
+        QTest::newRow("premature-finalizing") << quint64(42) << 2 << 10 << true << false;
+        QTest::newRow("missing-finalizing") << quint64(42) << 10 << 10 << false << false;
+    }
+
+    void exportProgress()
+    {
+        QFETCH(quint64, jobId);
+        QFETCH(int, completed);
+        QFETCH(int, total);
+        QFETCH(bool, finalizing);
+        QFETCH(bool, accepted);
+        WorkerTransport transport;
+        transport.m_export = WorkerTransport::PendingExport { nullptr, { }, 42 };
+        QSignalSpy progress(&transport, &WorkerTransport::pdfExportProgress);
+        const Model::NotificationMessage notification { Model::ExportProgressNotification {
+            jobId,
+            completed,
+            total,
+            finalizing ? Model::ExportPhase::Finalizing : Model::ExportPhase::CreatingPages,
+            { } } };
+        // Exercise the wire representation as well as transport validation.
+        const auto bytes = IPC::ZppCodec::encode(notification);
+        QVERIFY(bytes);
+        Model::NotificationMessage decoded;
+        QVERIFY(IPC::ZppCodec::decode(*bytes, &decoded));
+        std::string error;
+        QVERIFY(transport.handleNotification(decoded, &error));
+        QCOMPARE(progress.size(), accepted ? 1 : 0);
+        if (accepted) {
+            const auto update = progress.front().front().value<Model::ExportProgressNotification>();
+            QCOMPARE(update.jobId, jobId);
+            QCOMPARE(update.completed, completed);
+            QCOMPARE(update.total, total);
+            QCOMPARE(update.phase == Model::ExportPhase::Finalizing, finalizing);
+        }
+        transport.completePdfExport(false, QStringLiteral("test failure"));
+        QCOMPARE(exportCompletions(progress).size(), 1);
+        QCOMPARE(exportCompletions(progress).front().phase, Model::ExportPhase::Failed);
+        QCOMPARE(exportCompletions(progress).front().error, std::string("test failure"));
+        QVERIFY(transport.handleNotification(notification, &error));
+        QCOMPARE(progress.size(), accepted ? 2 : 1);
+    }
 
     void exportCompletion_data()
     {
@@ -67,19 +126,33 @@ private Q_SLOTS:
         QVERIFY(transport.m_fd.connect(socketPath, &error));
         QVERIFY(descriptors.accept(&error));
         const auto transfer = transport.m_nextTransfer;
-        const QSignalSpy completions(&transport, &WorkerTransport::pdfExportFinished);
+        const QSignalSpy updates(&transport, &WorkerTransport::pdfExportProgress);
         Model::ResponseMessage response { transport.m_nextId, Model::JobResponse { 42 }, std::nullopt };
         if (scenario == 2) {
             response.payload = std::monostate { };
             response.error = Model::Error { Model::ErrorCode::InvalidRequest, "export", "rejected" };
         }
-        const Model::NotificationMessage done { Model::ExportDoneNotification { 42, scenario != 3, "" } };
+        const Model::NotificationMessage done { Model::ExportProgressNotification {
+            42, 0, 0, scenario != 3 ? Model::ExportPhase::Succeeded : Model::ExportPhase::Failed, { } } };
         QVERIFY(IPC::ZppCodec::writeMessage(peer, response, 1000, &error));
+        if (scenario == 0) {
+            QVERIFY(IPC::ZppCodec::writeMessage(peer,
+                                                Model::NotificationMessage { Model::ExportProgressNotification {
+                                                    42, 2, 10, Model::ExportPhase::CreatingPages, { } } },
+                                                1000,
+                                                &error));
+            QVERIFY(IPC::ZppCodec::writeMessage(peer,
+                                                Model::NotificationMessage { Model::ExportProgressNotification {
+                                                    42, 10, 10, Model::ExportPhase::Finalizing, { } } },
+                                                1000,
+                                                &error));
+        }
         // Queue both frames before submission so the old call() deterministically
         // drains completion before startPdfExportJob() can register the job.
         if (scenario == 0 || scenario == 3 || scenario == 4)
             QVERIFY(IPC::ZppCodec::writeMessage(peer, done, 1000, &error));
         const auto job = transport.startPdfExportJob(target, { });
+        QCOMPARE(updates.size(), scenario == 0 ? 3 : (scenario == 3 || scenario == 4 ? 1 : 0));
         QCOMPARE(job.has_value(), scenario != 2);
         if (job)
             QCOMPARE(*job, 42u);
@@ -92,7 +165,7 @@ private Q_SLOTS:
         if (scenario == 1 || scenario >= 5) {
             QVERIFY(transport.m_export);
             QVERIFY(transport.m_exportTimer->isActive());
-            QCOMPARE(completions.size(), 0);
+            QCOMPARE(exportCompletions(updates).size(), 0);
             if (scenario == 5) {
                 // Exercise timeout cleanup directly, without waiting for a timer.
                 QVERIFY(QMetaObject::invokeMethod(transport.m_exportTimer.get(), "timeout", Qt::DirectConnection));
@@ -106,20 +179,21 @@ private Q_SLOTS:
                     &error));
                 QVERIFY(transport.close());
             } else if (scenario == 6) {
-                QVERIFY(transport.handleNotification(
-                    Model::NotificationMessage { Model::ExportDoneNotification { 41, true, "" } }, &error));
-                QCOMPARE(completions.size(), 0);
+                QVERIFY(transport.handleNotification(Model::NotificationMessage { Model::ExportProgressNotification {
+                                                         41, 0, 0, Model::ExportPhase::Succeeded, { } } },
+                                                     &error));
+                QCOMPARE(exportCompletions(updates).size(), 0);
                 QVERIFY(transport.m_export);
             }
             QVERIFY(transport.handleNotification(done, &error));
         }
         const bool successful = scenario == 0 || scenario == 1 || scenario == 6;
         const int expectedSignals = scenario == 2 || scenario == 7 ? 0 : 1;
-        QCOMPARE(completions.size(), expectedSignals);
+        QCOMPARE(exportCompletions(updates).size(), expectedSignals);
         if (expectedSignals) {
-            QCOMPARE(completions.front()[0].toULongLong(), 42u);
-            QCOMPARE(completions.front()[1].toBool(), successful);
-            QCOMPARE(completions.front()[2].toString().isEmpty(), successful);
+            QCOMPARE(exportCompletions(updates).front().jobId, 42u);
+            QCOMPARE(exportCompletions(updates).front().phase == Model::ExportPhase::Succeeded, successful);
+            QCOMPARE(exportCompletions(updates).front().error.empty(), successful);
         }
         QVERIFY(!transport.m_export);
         QVERIFY(!transport.m_exportTimer || !transport.m_exportTimer->isActive());
@@ -130,7 +204,7 @@ private Q_SLOTS:
                     .entryList({ QStringLiteral(".mupdfng-worker-*") }, QDir::Files | QDir::Hidden)
                     .isEmpty());
         QVERIFY(transport.handleNotification(done, &error));
-        QCOMPARE(completions.size(), expectedSignals);
+        QCOMPARE(exportCompletions(updates).size(), expectedSignals);
     }
 
     void receiveResponse_data()

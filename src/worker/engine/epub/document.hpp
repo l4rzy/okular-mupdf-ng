@@ -108,11 +108,17 @@ public:
     [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
     [[nodiscard]] bool exportAzw3Fd(int fd, std::string* error = nullptr) const;
 
-    [[nodiscard]] bool
-    savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
+    [[nodiscard]] bool savePdfFdWithReferences(int fd,
+                                               const std::vector<int>& pages,
+                                               std::string* error = nullptr,
+                                               const ExportProgressCallback& progress = { }) override;
 
 private:
-    [[nodiscard]] bool writePdfFd(int fd, const std::vector<int>& pages, bool withReferences, std::string* error);
+    [[nodiscard]] bool writePdfFd(int fd,
+                                  const std::vector<int>& pages,
+                                  bool withReferences,
+                                  std::string* error,
+                                  const ExportProgressCallback& progress = { });
 
     struct LayoutGeometry {
         float paperWidth = 0;

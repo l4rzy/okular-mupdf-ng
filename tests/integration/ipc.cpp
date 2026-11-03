@@ -1,3 +1,5 @@
+#include "support/export_progress.hpp"
+
 #include "engine/pdf/document.hpp"
 #include "generator/conversion/annotation.hpp"
 #include "generator/proxy/annotation.hpp"
@@ -29,6 +31,7 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <future>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <sys/ioctl.h>
@@ -42,6 +45,8 @@
 #include "shared/transport/common.hpp"
 #include "shared/transport/frame_buffer.hpp"
 #include "sys/sys.hpp"
+
+using Mu::Test::exportCompletions;
 
 extern "C" {
 #include <mupdf/pdf.h>
@@ -719,7 +724,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-abandoned.pdf"));
-        QSignalSpy spy(&transport, &::Mu::Plugin::WorkerTransport::pdfExportFinished);
+        QSignalSpy spy(&transport, &::Mu::Plugin::WorkerTransport::pdfExportProgress);
         const auto job = transport.startPdfExportJob(outputPath, { });
         QVERIFY(job.has_value());
         if (completionQueued) {
@@ -747,8 +752,8 @@ private slots:
                     ::Mu::Model::NotificationMessage notification;
                     const std::span frame(reinterpret_cast<const std::byte*>(bytes.constData() + offset), length);
                     if (::Mu::IPC::ZppCodec::decode(frame, &notification)) {
-                        const auto* done = std::get_if<::Mu::Model::ExportDoneNotification>(&notification.payload);
-                        if (done && done->jobId == *job)
+                        const auto* done = std::get_if<::Mu::Model::ExportProgressNotification>(&notification.payload);
+                        if (done && done->done() && done->jobId == *job)
                             return true;
                     }
                     offset += length;
@@ -765,9 +770,9 @@ private slots:
         // Process late notifications after the document boundary. They must
         // neither emit a completion signal nor publish the target file.
         const auto hasAbandonedJob = [&]() {
-            return std::any_of(spy.cbegin(), spy.cend(), [&](const QList<QVariant>& arguments) {
-                return arguments.at(0).toULongLong() == *job;
-            });
+            const auto results = exportCompletions(spy);
+            return std::any_of(
+                results.cbegin(), results.cend(), [&](const auto& result) { return result.jobId == *job; });
         };
         for (int attempt = 0; attempt < 10 && !hasAbandonedJob(); ++attempt)
             spy.wait(100);
@@ -799,7 +804,7 @@ private slots:
 
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
-        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportProgress);
         QVERIFY(!m_client.startPdfExportJob(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { })
                      .has_value());
 
@@ -855,12 +860,13 @@ private slots:
 
         if (exportPdf) {
             const QString outputPath = directory.filePath(QStringLiteral("export.pdf"));
-            QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+            QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportProgress);
             const auto job = m_client.startPdfExportJob(outputPath, { });
             QVERIFY(job);
-            QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
-            QCOMPARE(spy.first().at(0).toULongLong(), *job);
-            QVERIFY2(spy.first().at(1).toBool(), qPrintable(spy.first().at(2).toString()));
+            QTRY_VERIFY_WITH_TIMEOUT(!exportCompletions(spy).isEmpty(), 10000);
+            QCOMPARE(exportCompletions(spy).first().jobId, *job);
+            QVERIFY2(exportCompletions(spy).first().phase == ::Mu::Model::ExportPhase::Succeeded,
+                     exportCompletions(spy).first().error.c_str());
             QFile output(outputPath);
             QVERIFY(output.open(QIODevice::ReadOnly));
             ::Mu::Worker::Engine::PdfDocument exported;
@@ -1219,7 +1225,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-async.pdf"));
-        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportFinished);
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportProgress);
         const auto job = m_client.startPdfExportJob(outputPath, { });
         QVERIFY(job.has_value());
 
@@ -1227,14 +1233,25 @@ private slots:
         QVERIFY(!m_client.render(0, 100, 100).isNull());
 
         const auto hasJob = [&]() {
-            return std::any_of(spy.cbegin(), spy.cend(), [&](const QList<QVariant>& arguments) {
-                return arguments.at(0).toULongLong() == *job && arguments.at(1).toBool();
+            const auto results = exportCompletions(spy);
+            return std::any_of(results.cbegin(), results.cend(), [&](const auto& result) {
+                return result.jobId == *job && result.phase == ::Mu::Model::ExportPhase::Succeeded;
             });
         };
         // Arrival, not speed: keep the budget generous for loaded CI.
         for (int attempt = 0; attempt < 50 && !hasJob(); ++attempt)
             spy.wait(100);
         QVERIFY2(hasJob(), "Timed out waiting for async PDF export completion");
+        const auto finalizing = std::find_if(spy.cbegin(), spy.cend(), [](const auto& arguments) {
+            return arguments.front().template value<::Mu::Model::ExportProgressNotification>().phase
+                == ::Mu::Model::ExportPhase::Finalizing;
+        });
+        QVERIFY(finalizing != spy.cend());
+        const auto update = finalizing->front().value<::Mu::Model::ExportProgressNotification>();
+        QCOMPARE(update.jobId, *job);
+        QCOMPARE(update.completed, pages.size());
+        QCOMPARE(update.total, pages.size());
+        QVERIFY(finalizing != std::prev(spy.cend()));
 
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));

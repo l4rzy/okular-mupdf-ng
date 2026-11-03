@@ -134,8 +134,10 @@ public:
     /// jobs complete.
     [[nodiscard]] int exportCompletionFd() const noexcept;
 
-    /// Drains all completed background PDF export notifications.
-    [[nodiscard]] std::vector<ExportJobs::Notification> drainExportNotifications();
+    /// Samples progress and drains terminal PDF export notifications.
+    [[nodiscard]] std::vector<Model::ExportProgressNotification> drainExportNotifications();
+
+    [[nodiscard]] bool hasActiveExport() const { return m_exportJobs.active(); }
 
     /// Extracts one page per event-loop turn and returns a generation-tagged aggregate
     /// only after every page succeeds or a terminal error is reached.

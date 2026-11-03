@@ -51,7 +51,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     checkDecode(bytes,
                 Mu::Model::ResponseMessage {
                     42, std::monostate { }, Mu::Model::Error { Mu::Model::ErrorCode::Internal, "open", "failure" } });
-    checkDecode(bytes, Mu::Model::NotificationMessage { Mu::Model::ExportDoneNotification { 42, false, "failure" } });
+    checkDecode(bytes,
+                Mu::Model::NotificationMessage {
+                    Mu::Model::ExportProgressNotification { 42, 0, 0, Mu::Model::ExportPhase::Failed, "failure" } });
+    checkDecode(bytes,
+                Mu::Model::NotificationMessage {
+                    Mu::Model::ExportProgressNotification { 42, 2, 10, Mu::Model::ExportPhase::CreatingPages, { } } });
     return 0;
 }
 #else

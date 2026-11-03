@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace {
 
@@ -534,6 +535,11 @@ private slots:
                 });
             };
             QTRY_VERIFY_WITH_TIMEOUT(completed(), 20000);
+            const auto finalizing = std::find_if(notices.cbegin(), notices.cend(), [](const auto& notice) {
+                return notice.front().toString() == QStringLiteral("Finalizing PDF…");
+            });
+            QVERIFY(finalizing != notices.cend());
+            QVERIFY(finalizing != std::prev(notices.cend()));
             document.closeDocument();
             const auto inspection = inspectPdf(output);
             QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));

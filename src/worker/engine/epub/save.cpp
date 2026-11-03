@@ -165,12 +165,19 @@ bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string*
     return writePdfFd(fd, pages, false, error);
 }
 
-bool EpubDocument::savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error)
+bool EpubDocument::savePdfFdWithReferences(int fd,
+                                           const std::vector<int>& pages,
+                                           std::string* error,
+                                           const ExportProgressCallback& progress)
 {
-    return writePdfFd(fd, pages, true, error);
+    return writePdfFd(fd, pages, true, error, progress);
 }
 
-bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withReferences, std::string* error)
+bool EpubDocument::writePdfFd(int fd,
+                              const std::vector<int>& pages,
+                              bool withReferences,
+                              std::string* error,
+                              const ExportProgressCallback& progress)
 {
     if (fd < 0)
         return fail(error, "output FD is invalid");
@@ -317,6 +324,8 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
 
         // Pass 1: render every requested page into the destination. Links are
         // deliberately not created here.
+        int completedPages = 0;
+        bool reportProgress = static_cast<bool>(progress);
         for (const int pageNumber : targetPages) {
             fz_rect bounds { };
             pageError.clear();
@@ -361,6 +370,15 @@ bool EpubDocument::writePdfFd(int fd, const std::vector<int>& pages, bool withRe
             resources = nullptr;
             fz_drop_buffer(m_context, contents);
             contents = nullptr;
+            ++completedPages;
+            if (reportProgress) {
+                try {
+                    progress(completedPages, static_cast<int>(targetPages.size()));
+                } catch (...) {
+                    // Optional telemetry must not bypass MuPDF's cleanup boundary.
+                    reportProgress = false;
+                }
+            }
         }
 
         if (withReferences) {

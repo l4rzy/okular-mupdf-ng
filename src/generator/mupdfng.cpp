@@ -260,19 +260,24 @@ Main::Main(QObject* parent, const QVariantList& args)
         Qt::QueuedConnection);
     connect(
         &m_worker,
-        &Plugin::WorkerClient::pdfExportFinished,
+        &Plugin::WorkerClient::pdfExportProgress,
         this,
-        [this](quint64 jobId, bool success, QString error) {
-            // The background export leaves the document untouched, so there is
-            // nothing to resume; failures surface as warnings, successes as a
-            // transient status notice.
-            Q_UNUSED(jobId);
-            if (!success) {
-                MU_LOG(warning, "Mu::Generator::Main", std::string("PDF export failed: ") + error.toStdString());
-                Q_EMIT warning(i18n("Export to PDF failed: %1", error), LongWarningMs);
-            } else {
+        [this](const Model::ExportProgressNotification& progress) {
+            switch (progress.phase) {
+            case Model::ExportPhase::CreatingPages:
+                Q_EMIT notice(i18n("Creating PDF pages: %1 of %2…", progress.completed, progress.total), NoticeMs);
+                break;
+            case Model::ExportPhase::Finalizing:
+                Q_EMIT notice(i18n("Finalizing PDF…"), NoticeMs);
+                break;
+            case Model::ExportPhase::Succeeded:
                 MU_LOG(debug, "Mu::Generator::Main", "PDF export completed");
                 Q_EMIT notice(i18n("Export to PDF finished."), NoticeMs);
+                break;
+            case Model::ExportPhase::Failed:
+                MU_LOG(warning, "Mu::Generator::Main", "PDF export failed: " + progress.error);
+                Q_EMIT warning(i18n("Export to PDF failed: %1", QString::fromStdString(progress.error)), LongWarningMs);
+                break;
             }
         },
         Qt::QueuedConnection);

@@ -1055,7 +1055,8 @@ void WorkerTransport::completePdfExport(bool success, QString error)
     if (!delivered && error.isEmpty())
         error = QStringLiteral("export failed");
     m_export.reset();
-    Q_EMIT pdfExportFinished(jobId, delivered, error);
+    Q_EMIT pdfExportProgress(ExportProgressNotification {
+        jobId, 0, 0, delivered ? ExportPhase::Succeeded : ExportPhase::Failed, error.toStdString() });
 }
 
 // =============================================================================
@@ -1262,13 +1263,18 @@ bool WorkerTransport::handleNotification(const NotificationMessage& notification
         Q_EMIT ocrDone(done->jobId, done->page);
         return true;
     }
-    if (auto* exportDone = std::get_if<ExportDoneNotification>(&notification.payload)) {
-        // A late notification after a timeout or teardown no longer matches a
-        // pending export and is ignored; the job result is discarded.
-        if (m_export && m_export->jobId == exportDone->jobId)
-            completePdfExport(exportDone->success, QString::fromStdString(exportDone->error));
-        else
+    if (const auto* progress = std::get_if<ExportProgressNotification>(&notification.payload)) {
+        if (!m_export || m_export->jobId != progress->jobId) {
             MU_LOG(debug, "Mu::Plugin", "ignoring stale export notification");
+            return true;
+        }
+        if (progress->done()) {
+            completePdfExport(progress->phase == ExportPhase::Succeeded, QString::fromStdString(progress->error));
+        } else if ((progress->phase == ExportPhase::CreatingPages || progress->phase == ExportPhase::Finalizing)
+                   && progress->total > 0 && progress->completed > 0 && progress->completed <= progress->total
+                   && (progress->phase == ExportPhase::Finalizing) == (progress->completed == progress->total)) {
+            Q_EMIT pdfExportProgress(*progress);
+        }
         return true;
     }
     if (auto* links = std::get_if<PageLinksNotification>(&notification.payload)) {

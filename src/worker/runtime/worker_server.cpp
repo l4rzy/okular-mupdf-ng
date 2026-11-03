@@ -3,6 +3,7 @@
 
 #include "runtime/worker_server.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -26,7 +27,6 @@ using ::Mu::IPC::FdChannel;
 using ::Mu::IPC::MonotonicDeadline;
 using ::Mu::IPC::PollLoop;
 namespace Timeout = ::Mu::IPC::Timeout;
-using ::Mu::Model::ExportDoneNotification;
 using ::Mu::Model::NotificationMessage;
 using ::Mu::Model::OcrDoneNotification;
 using ::Mu::Model::RequestMessage;
@@ -207,10 +207,8 @@ bool WorkerServer::writeOcrNotifications(std::string* error)
 
 bool WorkerServer::writeExportNotifications(std::string* error)
 {
-    // Drain all queued completion events from the background export thread
     for (const auto& notification : m_commandService->drainExportNotifications()) {
-        const NotificationMessage message { ExportDoneNotification {
-            notification.id, notification.success, notification.error } };
+        const NotificationMessage message { notification };
 
         MU_LOG(debug, "Worker -> Plugin", IPC::Debug::notification(message, true));
         if (!ZppCodec::writeMessage(*m_client, message, Timeout::ControlWriteMs, error, "worker")) {
@@ -271,6 +269,7 @@ bool WorkerServer::writePageLinks(std::string* error)
 // not an error.
 int WorkerServer::run(std::string* error)
 {
+    std::chrono::milliseconds idleDuration { 0 };
     for (;;) {
         // Step 1: Ensure active client connection
         if (!m_client) {
@@ -336,14 +335,8 @@ int WorkerServer::run(std::string* error)
         }
 
         if (m_commandService->exportCompletionFd() >= 0) {
-            loop.watch(m_commandService->exportCompletionFd(), POLLIN, [&](short revents) {
-                if (revents & POLLIN) {
-                    std::string notificationError;
-                    if (!writeExportNotifications(&notificationError)) {
-                        disconnected = true;
-                    }
-                }
-            });
+            // Wake for phase changes; drain alongside periodic progress below.
+            loop.watch(m_commandService->exportCompletionFd(), POLLIN, [](short) { });
         }
 
         // Step 4: Run single poll cycle. Idle polls time out so accumulated
@@ -351,18 +344,26 @@ int WorkerServer::run(std::string* error)
         // the hot path. The quantum follows the configured idle
         // trim, which can change live via SettingsRequest.
         const auto pollStart = std::chrono::steady_clock::now();
-        auto deadline = m_commandService->hasPendingPageLinks()
-            ? MonotonicDeadline::fromMilliseconds(0)
-            : MonotonicDeadline::fromMilliseconds(m_commandService->idleTrimPollMs());
+        const int idlePollMs = m_commandService->idleTrimPollMs();
+        const int pollMs = m_commandService->hasActiveExport() ? std::min(idlePollMs, 2000) : idlePollMs;
+        auto deadline = m_commandService->hasPendingPageLinks() ? MonotonicDeadline::fromMilliseconds(0)
+                                                                : MonotonicDeadline::fromMilliseconds(pollMs);
         const int ready = loop.runOnce(deadline, error);
         if (ready < 0) {
             return 1;
         }
+        // Sample the latest count without waking the loop for each page.
+        // Phase changes wake this same path immediately.
+        if (!disconnected && !writeExportNotifications(error))
+            disconnected = true;
         if (ready == 0 && !m_commandService->hasPendingPageLinks()) {
-            const auto idleDuration =
-                std::chrono::ceil<std::chrono::milliseconds>(std::chrono::steady_clock::now() - pollStart);
+            // Sampling wakes must not prevent the normal idle-trim threshold
+            // from being reached when it exceeds the two-second poll interval.
+            idleDuration += std::chrono::ceil<std::chrono::milliseconds>(std::chrono::steady_clock::now() - pollStart);
             const Sys::OperationBudget budget;
             m_commandService->maybeIdleTrim(idleDuration);
+        } else {
+            idleDuration = std::chrono::milliseconds { 0 };
         }
 
         // Step 5: Handle session termination
