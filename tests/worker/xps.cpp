@@ -192,12 +192,17 @@ private slots:
         QTest::addColumn<QString>("name");
         QTest::addColumn<int>("page");
         QTest::addColumn<int>("theme");
-        for (const auto theme : { Model::DocumentTheme::Default, Model::DocumentTheme::Dark }) {
-            QTest::newRow(theme == Model::DocumentTheme::Default ? "graphics" : "graphics-dark")
-                << QStringLiteral("graphics.xps") << 0 << static_cast<int>(theme);
-            QTest::newRow(theme == Model::DocumentTheme::Default ? "landscape" : "landscape-dark")
-                << QStringLiteral("mixed-pages.xps") << 1 << static_cast<int>(theme);
-        }
+        QTest::addColumn<int>("width");
+        // Fractional scales exercise rounding when themed images are composited.
+        for (const int width : { 240, 234, 245, 250 })
+            for (const auto theme : { Model::DocumentTheme::Default, Model::DocumentTheme::Dark }) {
+                const auto suffix =
+                    QStringLiteral("%1-%2").arg(theme == Model::DocumentTheme::Dark ? "dark" : "default").arg(width);
+                QTest::newRow(qPrintable(QStringLiteral("graphics-") + suffix))
+                    << QStringLiteral("graphics.xps") << 0 << static_cast<int>(theme) << width;
+                QTest::newRow(qPrintable(QStringLiteral("landscape-") + suffix))
+                    << QStringLiteral("mixed-pages.xps") << 1 << static_cast<int>(theme) << width;
+            }
     }
 
     void rendersTiles()
@@ -205,6 +210,7 @@ private slots:
         QFETCH(QString, name);
         QFETCH(int, page);
         QFETCH(int, theme);
+        QFETCH(int, width);
         Plugin::WorkerClient client;
         QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
         Model::DocumentSettings settings;
@@ -213,14 +219,15 @@ private slots:
         QList<Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(client.open(QStringLiteral(TEST_XPS_DIR "/") + name, { }, pages, Model::DocumentType::Xps),
                  Model::OpenStatus::Success);
-        const auto full = client.render(page, 240, 320);
+        const auto full = client.render(page, width, 320);
         QVERIFY(!full.isNull());
         const QRect tile(35, 45, 140, 190);
-        const auto cropped = client.render(page, 240, 320, tile);
+        const auto cropped = client.render(page, width, 320, tile);
         QVERIFY(!cropped.isNull());
         const auto expected = full.copy(tile);
         QCOMPARE(cropped.size(), expected.size());
         int maxDelta = 0;
+        QPoint maxDeltaPosition;
         for (int y = 0; y < cropped.height(); ++y) {
             for (int x = 0; x < cropped.width(); ++x) {
                 const auto actualPixel = cropped.pixelColor(x, y);
@@ -229,13 +236,20 @@ private slots:
                                              std::abs(actualPixel.green() - expectedPixel.green()),
                                              std::abs(actualPixel.blue() - expectedPixel.blue()),
                                              std::abs(actualPixel.alpha() - expectedPixel.alpha()) });
-                maxDelta = std::max(maxDelta, delta);
+                if (delta > maxDelta) {
+                    maxDelta = delta;
+                    maxDeltaPosition = QPoint(x, y) + tile.topLeft();
+                }
             }
         }
         // MuPDF gradient shading and image resampling can round differently
         // at tile boundaries. Other fixtures should match exactly.
         const int tolerance = name == QStringLiteral("graphics.xps") ? 2 : 0;
-        QVERIFY2(maxDelta <= tolerance, qPrintable(QStringLiteral("Maximum channel difference: %1").arg(maxDelta)));
+        QVERIFY2(maxDelta <= tolerance,
+                 qPrintable(QStringLiteral("Maximum channel difference: %1 at (%2, %3)")
+                                .arg(maxDelta)
+                                .arg(maxDeltaPosition.x())
+                                .arg(maxDeltaPosition.y())));
     }
 
     void printsMixedPages_data()

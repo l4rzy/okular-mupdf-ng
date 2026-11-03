@@ -109,9 +109,12 @@ bool XpsDocument::renderToBuffer(const RenderRequest& request,
                            static_cast<float>((paperColor >> 8) & 0xFF) / 255.0f,
                            static_cast<float>(paperColor & 0xFF) / 255.0f };
         fz_fill_pixmap_with_color(m_context, pix, fz_device_rgb(m_context), paper, fz_default_color_params);
-        dev = fz_new_draw_device(m_context, ctm, pix);
+        // Apply the page transform during replay so themed rasters stay in
+        // device coordinates without an inverse-transform round trip.
+        dev = fz_new_draw_device(m_context, fz_identity, pix);
         if (themePlan.useDevice) {
-            auto* themed = newThemeDevice(m_context, dev, ctm, bbox, request.cookie, theme, themePlan.recolorVectors);
+            auto* themed =
+                newThemeDevice(m_context, dev, fz_identity, bbox, request.cookie, theme, themePlan.recolorVectors);
             fz_drop_device(m_context, dev);
             dev = themed;
         }
@@ -121,13 +124,12 @@ bool XpsDocument::renderToBuffer(const RenderRequest& request,
                 list = fz_new_display_list_from_page(m_context, page);
             if (request.cookie->abort)
                 fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
-            // Replay uses page coordinates; include a pixel of antialiasing
-            // margin when culling commands outside the destination tile.
-            const fz_rect scissor =
-                fz_transform_rect(fz_expand_rect(fz_rect_from_irect(bbox), 1), fz_invert_matrix(ctm));
-            fz_run_display_list(m_context, list, dev, fz_identity, scissor, request.cookie);
+            // Replay and culling use device coordinates, with a pixel of
+            // antialiasing margin around the destination tile.
+            const fz_rect scissor = fz_expand_rect(fz_rect_from_irect(bbox), 1);
+            fz_run_display_list(m_context, list, dev, ctm, scissor, request.cookie);
         } else {
-            fz_run_page(m_context, page, dev, fz_identity, nullptr);
+            fz_run_page(m_context, page, dev, ctm, nullptr);
         }
         if (request.cookie && request.cookie->abort)
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
