@@ -599,9 +599,10 @@ std::string notification(const Model::NotificationMessage& message, bool coloriz
                 out << Color::tag("sign-input", colorize) << " job=" << value.jobId;
                 Detail::field(out, "nonce", value.nonce);
                 Detail::field(out, "certificate", value.certificateNickname);
-            } else if constexpr (std::is_same_v<T, Model::ExportDoneNotification>)
-                out << Color::tag("export-done", colorize) << " job=" << value.jobId << " ok=" << value.success
-                    << " error=" << std::quoted(value.error);
+            } else if constexpr (std::is_same_v<T, Model::ExportProgressNotification>)
+                out << Color::tag("export-progress", colorize) << " job=" << value.jobId
+                    << " completed=" << value.completed << " total=" << value.total
+                    << " phase=" << static_cast<int>(value.phase) << " error=" << std::quoted(value.error);
         },
         message.payload);
     return out.str();

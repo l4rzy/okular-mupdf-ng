@@ -16,6 +16,7 @@
 #include <QImage>
 #include <QScopeGuard>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 #include <algorithm>
 #include <array>
@@ -27,6 +28,7 @@
 #include <iterator>
 #include <new>
 #include <poll.h>
+#include <stdexcept>
 #include <string>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -65,30 +67,34 @@ void verifyPdfFile(const QString& path)
 
 /// Polls the export completion eventfd and drains notifications until at
 /// least `count` arrive or the deadline passes. Returns whatever arrived.
-std::vector<::Mu::Worker::Engine::ExportJobs::Notification>
-waitForExportNotifications(::Mu::Worker::Engine::ExportJobs& jobs, std::size_t count)
+std::vector<::Mu::Model::ExportProgressNotification> waitForExportNotifications(::Mu::Worker::Engine::ExportJobs& jobs,
+                                                                                std::size_t count)
 {
     const int fd = jobs.eventFd();
-    std::vector<::Mu::Worker::Engine::ExportJobs::Notification> result;
+    std::vector<::Mu::Model::ExportProgressNotification> result;
     for (int tick = 0; tick < 300 && result.size() < count && fd >= 0; ++tick) {
         pollfd pollSet { fd, POLLIN, 0 };
         ::poll(&pollSet, 1, 100);
         auto drained = jobs.drainNotifications();
-        result.insert(result.end(), drained.begin(), drained.end());
+        std::copy_if(drained.begin(), drained.end(), std::back_inserter(result), [](const auto& update) {
+            return update.done();
+        });
     }
     return result;
 }
 
-std::vector<::Mu::Worker::Engine::ExportJobs::Notification>
+std::vector<::Mu::Model::ExportProgressNotification>
 waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::size_t count)
 {
     const int fd = service.exportCompletionFd();
-    std::vector<::Mu::Worker::Engine::ExportJobs::Notification> result;
+    std::vector<::Mu::Model::ExportProgressNotification> result;
     for (int tick = 0; tick < 300 && result.size() < count && fd >= 0; ++tick) {
         pollfd pollSet { fd, POLLIN, 0 };
         ::poll(&pollSet, 1, 100);
         auto drained = service.drainExportNotifications();
-        result.insert(result.end(), drained.begin(), drained.end());
+        std::copy_if(drained.begin(), drained.end(), std::back_inserter(result), [](const auto& update) {
+            return update.done();
+        });
     }
     return result;
 }
@@ -98,6 +104,92 @@ waitForExportNotifications(::Mu::Worker::Runtime::CommandService& service, std::
 class TestEpub : public QObject {
     Q_OBJECT
 private slots:
+
+    void testExportProgressSampling_data()
+    {
+        QTest::addColumn<int>("elapsedMs");
+        QTest::addColumn<int>("completed");
+        QTest::addColumn<bool>("reported");
+        QTest::newRow("one-second-is-too-soon") << 1000 << 2 << false;
+        QTest::newRow("before-first-probe") << 1999 << 2 << false;
+        QTest::newRow("first-probe") << 2000 << 2 << true;
+        QTest::newRow("later-probe") << 2500 << 2 << true;
+        QTest::newRow("finalizing-immediately") << 1 << 10 << true;
+    }
+
+    void testExportProgressSampling()
+    {
+        QFETCH(int, elapsedMs);
+        QFETCH(int, completed);
+        QFETCH(bool, reported);
+        using Progress = ::Mu::Worker::Engine::ExportProgress;
+        const auto start = Progress::Clock::time_point { };
+        Progress progress(42, start);
+        progress.update(1, 10);
+        progress.update(completed, 10); // Coalesces earlier page counts.
+        const auto now = start + std::chrono::milliseconds(elapsedMs);
+        const auto snapshot = progress.take(now);
+        QCOMPARE(snapshot.has_value(), reported);
+        if (snapshot) {
+            QCOMPARE(snapshot->jobId, std::uint64_t(42));
+            QCOMPARE(snapshot->completed, completed);
+            QCOMPARE(snapshot->total, 10);
+            QCOMPARE(snapshot->phase == ::Mu::Model::ExportPhase::Finalizing, completed == 10);
+            QVERIFY(!progress.take(now)); // No duplicate without an update.
+        }
+        if (completed != 10) {
+            progress.update(3, 10);
+            if (reported)
+                QVERIFY(!progress.take(now + std::chrono::milliseconds(1999)));
+            QVERIFY(progress.take(now + std::chrono::seconds(2)));
+            progress.update(10, 10);
+            const auto final = progress.take(now + std::chrono::seconds(2));
+            QVERIFY(final && final->phase == ::Mu::Model::ExportPhase::Finalizing);
+        }
+    }
+
+    void testExportPageProgress_data()
+    {
+        QTest::addColumn<int>("callbackFailure");
+        QTest::newRow("record-progress") << 0;
+        QTest::newRow("standard-exception") << 1;
+        QTest::newRow("nonstandard-exception") << 2;
+    }
+
+    void testExportPageProgress()
+    {
+        QFETCH(int, callbackFailure);
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QFile source(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QVERIFY(document.openFd(::dup(source.handle()), "sample.epub", &error));
+        QTemporaryFile output;
+        QVERIFY(output.open());
+        std::vector<std::pair<int, int>> progress;
+        QVERIFY2(document.savePdfFdWithReferences(::dup(output.handle()),
+                                                  { },
+                                                  &error,
+                                                  [&](int completed, int total) {
+                                                      progress.emplace_back(completed, total);
+                                                      if (callbackFailure == 1)
+                                                          throw std::runtime_error("progress unavailable");
+                                                      if (callbackFailure == 2)
+                                                          throw 42;
+                                                  }),
+                 error.c_str());
+        QVERIFY(!progress.empty());
+        const auto total = document.pageCount();
+        QCOMPARE(progress.size(), callbackFailure ? std::size_t(1) : static_cast<std::size_t>(total));
+        for (std::size_t i = 0; i < progress.size(); ++i) {
+            QCOMPARE(progress[i].first, static_cast<int>(i) + 1);
+            QCOMPARE(progress[i].second, total);
+        }
+        ::Mu::Worker::Engine::PdfDocument exported;
+        QVERIFY(output.seek(0));
+        QVERIFY(exported.openFd(::dup(output.handle()), "export.pdf", &error));
+        QCOMPARE(exported.pageCount(), total);
+    }
 
     void testAttributeSelectors_data()
     {
@@ -3000,11 +3092,20 @@ private slots:
         const auto jobId = jobs.submit(::dup(file.handle()), outFd, settings, { });
         QVERIFY(jobId.has_value());
 
-        const auto completed = waitForExportNotifications(jobs, 1);
-        QCOMPARE(completed.size(), std::size_t(1));
-        QCOMPARE(completed.front().id, *jobId);
-        QVERIFY(completed.front().success);
-        QVERIFY(completed.front().error.empty());
+        // Leave both phase changes pending to exercise the atomic drain.
+        QTRY_VERIFY_WITH_TIMEOUT(!jobs.active(), 30000);
+        QTemporaryFile rejectedOutput;
+        QVERIFY(rejectedOutput.open());
+        QVERIFY(!jobs.submit(::dup(file.handle()), ::dup(rejectedOutput.handle()), settings, { }));
+        const auto completed = jobs.drainNotifications();
+        QCOMPARE(completed.size(), std::size_t(2));
+        QCOMPARE(completed.front().jobId, *jobId);
+        QCOMPARE(completed.front().phase, ::Mu::Model::ExportPhase::Finalizing);
+        QCOMPARE(completed.front().completed, completed.front().total);
+        QCOMPARE(completed.back().jobId, *jobId);
+        QCOMPARE(completed.back().phase, ::Mu::Model::ExportPhase::Succeeded);
+        QVERIFY(completed.back().error.empty());
+        QVERIFY(jobs.drainNotifications().empty());
         verifyPdfFile(outputPath);
 
         // A finished job frees the single in-flight slot for the next export.
@@ -3017,8 +3118,8 @@ private slots:
 
         const auto secondCompleted = waitForExportNotifications(jobs, 1);
         QCOMPARE(secondCompleted.size(), std::size_t(1));
-        QCOMPARE(secondCompleted.front().id, *secondJob);
-        QVERIFY(secondCompleted.front().success);
+        QCOMPARE(secondCompleted.front().jobId, *secondJob);
+        QCOMPARE(secondCompleted.front().phase, ::Mu::Model::ExportPhase::Succeeded);
         QVERIFY(secondCompleted.front().error.empty());
         verifyPdfFile(jobPath);
     }
@@ -3069,8 +3170,8 @@ private slots:
 
         const auto notifications = waitForExportNotifications(service, 1);
         QCOMPARE(notifications.size(), std::size_t(1));
-        QCOMPARE(notifications.front().id, job->jobId);
-        QVERIFY(notifications.front().success);
+        QCOMPARE(notifications.front().jobId, job->jobId);
+        QCOMPARE(notifications.front().phase, ::Mu::Model::ExportPhase::Succeeded);
         QVERIFY(notifications.front().error.empty());
         verifyPdfFile(outputPath);
 

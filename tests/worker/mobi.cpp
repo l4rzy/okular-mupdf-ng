@@ -7,6 +7,7 @@
 #include "engine/pdf/document.hpp"
 #include "plugin/util/document_type.hpp"
 #include "plugin/worker_client.hpp"
+#include "support/export_progress.hpp"
 
 #include <QFile>
 #include <QScopeGuard>
@@ -22,6 +23,7 @@
 #include <unistd.h>
 
 using namespace Mu;
+using Mu::Test::exportCompletions;
 
 #if TEST_BUNDLED_MOBI_TOC
 extern "C" fz_archive* fz_extract_html_from_mobi(fz_context*, fz_buffer*);
@@ -339,10 +341,11 @@ private slots:
         if (fromData) {
             QVERIFY(client.writePdfToFile(target, { }, Model::PdfOutputMode::WithReferences));
         } else {
-            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
+            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
             QVERIFY(client.startPdfExportJob(target, { }));
-            QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
-            QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+            QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
+            QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
+                     exportCompletions(finished).first().error.c_str());
         }
         QFile output(target);
         QVERIFY(output.open(QIODevice::ReadOnly));
@@ -414,10 +417,11 @@ private slots:
 
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("styled.pdf"));
-        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
+        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
         QVERIFY(client.startPdfExportJob(target, { }));
-        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
-        QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+        QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
+        QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
+                 exportCompletions(finished).first().error.c_str());
         QFile output(target);
         QVERIFY(output.open(QIODevice::ReadOnly));
         Worker::Engine::PdfDocument pdf;
@@ -829,10 +833,11 @@ private slots:
         QCOMPARE((*outline)[0].children.size(), std::size_t { 1 });
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("toc.pdf"));
-        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
+        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
         QVERIFY(client.startPdfExportJob(target, { }));
-        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
-        QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+        QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
+        QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
+                 exportCompletions(finished).first().error.c_str());
         QFile file(target);
         QVERIFY(file.open(QIODevice::ReadOnly));
         Worker::Engine::PdfDocument pdf;
@@ -944,12 +949,13 @@ private slots:
         if (fromData) {
             QVERIFY(client.writePdfToFile(target, { }, Model::PdfOutputMode::WithReferences));
         } else {
-            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportFinished);
+            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
             const auto job = client.startPdfExportJob(target, { });
             QVERIFY(job);
-            QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 30000);
-            QCOMPARE(finished.first().at(0).toULongLong(), *job);
-            QVERIFY2(finished.first().at(1).toBool(), qPrintable(finished.first().at(2).toString()));
+            QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
+            QCOMPARE(exportCompletions(finished).first().jobId, *job);
+            QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
+                     exportCompletions(finished).first().error.c_str());
         }
         QFile output(target);
         QVERIFY(output.open(QIODevice::ReadOnly));

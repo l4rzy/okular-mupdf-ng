@@ -1196,17 +1196,24 @@ struct OcrDoneNotification {
     std::int32_t page = -1;
 };
 
-/// Notification that an asynchronous PDF export job has finished.
-struct ExportDoneNotification {
+enum class ExportPhase : std::uint8_t { CreatingPages, Finalizing, Succeeded, Failed };
+
+/// Ebook export lifecycle. Page counts apply to CreatingPages and Finalizing.
+/// Worker success means the descriptor holds a complete PDF; host success is
+/// emitted only after publishing the destination file.
+struct ExportProgressNotification {
     std::uint64_t jobId = 0;
-    /// True when the output descriptor received a complete PDF.
-    bool success = false;
-    /// Failure diagnostic; empty on success.
+    std::int32_t completed = 0;
+    std::int32_t total = 0;
+    ExportPhase phase = ExportPhase::CreatingPages;
     std::string error;
+
+    [[nodiscard]] bool done() const { return phase == ExportPhase::Succeeded || phase == ExportPhase::Failed; }
 };
 
 /// Uncorrelated event body alternatives sent outside request/response matching.
-using NotificationPayload = std::variant<OcrDoneNotification, PageLinksNotification, SignInput, ExportDoneNotification>;
+using NotificationPayload =
+    std::variant<OcrDoneNotification, PageLinksNotification, SignInput, ExportProgressNotification>;
 
 /// Uncorrelated event sent by the worker or plugin.
 struct NotificationMessage {

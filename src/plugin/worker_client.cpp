@@ -27,6 +27,7 @@ WorkerClient::WorkerClient(QObject* parent)
 {
     qRegisterMetaType<std::vector<Model::PageLinks>>();
     qRegisterMetaType<Model::ErrorCode>();
+    qRegisterMetaType<Model::ExportProgressNotification>();
     // Keep the transport event loop independent from the generator event
     // loop. This prevents socket waits and worker notifications from blocking
     // UI-facing plugin calls.
@@ -54,7 +55,7 @@ WorkerClient::WorkerClient(QObject* parent)
     connect(m_transport, &WorkerTransport::ocrDone, this, &WorkerClient::ocrDone, Qt::QueuedConnection);
     connect(m_transport, &WorkerTransport::pageLinksReady, this, &WorkerClient::pageLinksReady, Qt::QueuedConnection);
     connect(
-        m_transport, &WorkerTransport::pdfExportFinished, this, &WorkerClient::pdfExportFinished, Qt::QueuedConnection);
+        m_transport, &WorkerTransport::pdfExportProgress, this, &WorkerClient::pdfExportProgress, Qt::QueuedConnection);
     m_thread->start();
 }
 

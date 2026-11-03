@@ -110,7 +110,7 @@ public:
     bool exportAzw3ToFile(const QString& target);
     /// Submits an asynchronous background PDF export and returns its job id
     /// immediately; the output file is finalized when the worker reports
-    /// completion via pdfExportFinished. Returns nullopt when no retained source
+    /// completion via pdfExportProgress. Returns nullopt when no retained source
     /// exists, the transport is busy, or the submit failed.
     std::optional<quint64> startPdfExportJob(const QString& target, const QVector<int>& pages);
     Model::SignResponse signToFile(Model::SignRequest request, const QString& password, const QString& target);
@@ -124,7 +124,7 @@ signals:
     void processExited(int);
     void ocrDone(quint64, int);
     void pageLinksReady(quint64, std::vector<Model::PageLinks>, bool, QString);
-    void pdfExportFinished(quint64 jobId, bool success, QString error);
+    void pdfExportProgress(Model::ExportProgressNotification progress);
 
 private:
     friend class TestWorkerTransport;

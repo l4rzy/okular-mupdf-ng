@@ -59,10 +59,11 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
         std::lock_guard lock(m_state->mutex);
         // Without a completion eventfd the notification could never be pumped
         // to the event loop, so accepting the job would strand it.
-        if (m_state->active || m_state->event.get() < 0)
+        if (m_state->active || m_state->completion || m_state->event.get() < 0)
             return std::nullopt;
         id = m_state->nextId++;
         m_state->active = true;
+        m_state->progress.emplace(id);
     }
 
     auto state = m_state;
@@ -93,7 +94,15 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                     // savePdfFdWithReferences adopts and closes the output
                     // descriptor on every exit path, so ownership simply moves
                     // to the engine.
-                    success = document->savePdfFdWithReferences(outputFd, pages, &error);
+                    success =
+                        document->savePdfFdWithReferences(outputFd, pages, &error, [state](int completed, int total) {
+                            std::lock_guard lock(state->mutex);
+                            state->progress->update(completed, total);
+                            // Page counts are sampled by the event loop. Wake it
+                            // immediately only when the finalization phase starts.
+                            if (completed == total)
+                                (void)::eventfd_write(state->event.get(), 1);
+                        });
                 } else {
                     // Opening consumed the input fd; the output fd is still
                     // ours.
@@ -108,7 +117,9 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
             {
                 std::lock_guard lock(state->mutex);
                 state->active = false;
-                state->notifications.push_back({ id, success, std::move(error) });
+                state->completion = Model::ExportProgressNotification {
+                    id, 0, 0, success ? Model::ExportPhase::Succeeded : Model::ExportPhase::Failed, std::move(error)
+                };
             }
             if (state->event.get() >= 0)
                 (void)::eventfd_write(state->event.get(), 1);
@@ -120,6 +131,7 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
         MU_LOG(warning, "Mu::Worker::Export", std::string("could not start export thread: ") + e.what());
         std::lock_guard lock(m_state->mutex);
         m_state->active = false;
+        m_state->progress.reset();
         return std::nullopt;
     }
     worker.detach();
@@ -134,17 +146,31 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
 // Notification Draining
 // =============================================================================
 
-std::vector<ExportJobs::Notification> ExportJobs::drainNotifications()
+std::vector<Model::ExportProgressNotification> ExportJobs::drainNotifications()
 {
     std::lock_guard lock(m_state->mutex);
-    // eventfd coalesces wakeups, so consume its counter before draining every
-    // queued completion notification under the same synchronization boundary.
+    // A single lock orders finalization before completion, including when the
+    // export finishes between eventfd wakeup and sampling.
     eventfd_t value = 0;
     while (m_state->event.get() >= 0 && ::eventfd_read(m_state->event.get(), &value) == 0) { }
 
-    std::vector<Notification> result(m_state->notifications.begin(), m_state->notifications.end());
-    m_state->notifications.clear();
+    std::vector<Model::ExportProgressNotification> result;
+    if (m_state->progress) {
+        if (auto progress = m_state->progress->take())
+            result.push_back(std::move(*progress));
+    }
+    if (m_state->completion) {
+        result.push_back(std::move(*m_state->completion));
+        m_state->completion.reset();
+        m_state->progress.reset();
+    }
     return result;
+}
+
+bool ExportJobs::active() const
+{
+    std::lock_guard lock(m_state->mutex);
+    return m_state->active;
 }
 
 } // namespace Mu::Worker::Engine

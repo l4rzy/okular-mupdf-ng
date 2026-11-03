@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -194,8 +195,12 @@ public:
     [[nodiscard]] virtual bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr);
 
     /// Exports EPUB pages with links and bookmarks; consumes fd on every path.
-    [[nodiscard]] virtual bool
-    savePdfFdWithReferences(int fd, const std::vector<int>& pages, std::string* error = nullptr);
+    /// Progress reports inserted pages; disabled if the callback throws.
+    using ExportProgressCallback = std::function<void(int completed, int total)>;
+    [[nodiscard]] virtual bool savePdfFdWithReferences(int fd,
+                                                       const std::vector<int>& pages,
+                                                       std::string* error = nullptr,
+                                                       const ExportProgressCallback& progress = { });
 
     /// Flattens annotations and widgets into a PDF copy; consumes fd on every path.
     [[nodiscard]] virtual bool flattenPdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr);

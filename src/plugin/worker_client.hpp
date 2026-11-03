@@ -103,7 +103,7 @@ public:
     bool exportEpubToFile(const QString& target);
     bool exportAzw3ToFile(const QString& target);
     /// Submits an asynchronous background PDF export; returns the job id
-    /// immediately. Completion arrives via the pdfExportFinished signal.
+    /// immediately. Completion arrives via the pdfExportProgress signal.
     std::optional<quint64> startPdfExportJob(const QString& target, const QVector<int>& pages) const;
     Model::SignResponse sign(const Model::SignRequest& request, const QString& password, const QString& target);
     std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation) const;
@@ -128,7 +128,7 @@ signals:
     void workerUnavailable();
     void ocrDone(quint64 jobId, int page);
     void pageLinksReady(quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, const QString& error);
-    void pdfExportFinished(quint64 jobId, bool success, const QString& error);
+    void pdfExportProgress(Model::ExportProgressNotification progress);
 
 private:
     // Everything tied to the worker process lifecycle: launch configuration,
