@@ -199,7 +199,10 @@ bool EpubDocument::writePdfFd(int fd,
         }
     }
 
-    std::unique_ptr<FILE, decltype(&::fclose)> stream(::fdopen(fd, "wb"), &::fclose);
+    const auto closeFile = [](FILE* file) {
+        ::fclose(file);
+    };
+    std::unique_ptr<FILE, decltype(closeFile)> stream(::fdopen(fd, "wb"), closeFile);
     if (!stream) {
         ::close(fd);
         return fail(error, "could not adopt output FD");

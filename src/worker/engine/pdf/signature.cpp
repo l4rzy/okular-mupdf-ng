@@ -431,7 +431,10 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     // MuPDF must seek back and read the serialized PDF to calculate the
     // signature byte ranges before invoking the CMS callback.
     // Keep scoped ownership while preparing strings that may throw.
-    std::unique_ptr<FILE, decltype(&::fclose)> stream(::fdopen(outputFd, "w+b"), &::fclose);
+    const auto closeFile = [](FILE* file) {
+        ::fclose(file);
+    };
+    std::unique_ptr<FILE, decltype(closeFile)> stream(::fdopen(outputFd, "w+b"), closeFile);
     if (!stream) {
         ::close(outputFd);
         return fail(error, "could not adopt output FD");
