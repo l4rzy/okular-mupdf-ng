@@ -12,6 +12,11 @@ dist/*
 !dist/mupdfng.svg
 !dist/obs/
 !dist/copr/
+!dist/aur/
 dist/aur/*
-!dist/aur/PKGBUILD
-!dist/aur/.SRCINFO
+!dist/aur/okular-mupdf-ng-git/
+!dist/aur/okular-mupdf-ng/
+!dist/aur/okular-mupdf-ng-dynamic/
+dist/aur/*/*
+!dist/aur/*/PKGBUILD
+!dist/aur/*/.SRCINFO

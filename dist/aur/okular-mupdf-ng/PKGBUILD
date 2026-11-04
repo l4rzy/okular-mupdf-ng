@@ -1,6 +1,6 @@
 # Maintainer: rzy <me@23ro.org>
-pkgbase=okular-mupdf-ng-git
-pkgname=okular-mupdf-ng-git
+pkgbase=okular-mupdf-ng
+pkgname=okular-mupdf-ng
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.6
@@ -18,39 +18,27 @@ depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
 makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext' 'git'
              'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools' 'cargo')
 checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
-provides=('okular-mupdf-ng')
-conflicts=('okular-mupdf-ng')
-source=("$_pkgname::git+$url.git"
+conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
+source=("$_pkgname::git+$url.git#tag=v$pkgver"
         "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
 sha256sums=('SKIP'
             'dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101')
 
-pkgver() {
-  cd "$srcdir/$_pkgname"
-  ( set -o pipefail
-    git describe --long --tags --abbrev=7 2>/dev/null | sed -e 's/^v//' -e 's/\([^-]*-g\)/r\1/;s/-/./g' ||
-    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
-  )
-}
-
 build() {
+  export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$srcdir=/usr/src/debug/$pkgname"
   cmake -B "$srcdir/build" -S "$srcdir/$_pkgname" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKDE_INSTALL_LIBDIR=lib \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
-    -DUSE_SYSTEM_MUPDF=OFF \
     -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
     -DBUILD_TESTING=ON \
-    -DENABLE_BUILD_TREE_WORKER=OFF \
-    -DENABLE_MU_DEBUG=OFF \
-    -DDISABLE_WORKER_SANDBOX=OFF \
     -DTESSDATA_DIR=/usr/share/tessdata
   cmake --build "$srcdir/build"
 }
 
 check() {
-  QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
+  QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure --parallel 4
 }
 
 package() {

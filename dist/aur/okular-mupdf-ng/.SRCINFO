@@ -1,0 +1,49 @@
+pkgbase = okular-mupdf-ng
+	pkgdesc = Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, and KFX
+	pkgver = 0.6.0
+	pkgrel = 1
+	url = https://github.com/l4rzy/okular-mupdf-ng
+	arch = x86_64
+	license = AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
+	checkdepends = openssl
+	checkdepends = tesseract-data-eng
+	checkdepends = ttf-dejavu
+	makedepends = cmake>=3.20
+	makedepends = extra-cmake-modules>=6.3.0
+	makedepends = gcc
+	makedepends = gettext
+	makedepends = git
+	makedepends = make
+	makedepends = ninja
+	makedepends = patch
+	makedepends = pkgconf
+	makedepends = python
+	makedepends = qt6-tools
+	makedepends = cargo
+	depends = brotli
+	depends = freetype2
+	depends = glibc
+	depends = kconfig
+	depends = kconfigwidgets
+	depends = kcoreaddons
+	depends = ki18n
+	depends = kio
+	depends = kwidgetsaddons
+	depends = kxmlgui
+	depends = libjpeg-turbo
+	depends = libgcc
+	depends = libseccomp
+	depends = libstdc++
+	depends = nspr
+	depends = nss
+	depends = okular
+	depends = qt6-base
+	depends = zlib
+	conflicts = okular-mupdf-ng-dynamic
+	conflicts = okular-mupdf-ng-git
+	source = okular-mupdf-ng::git+https://github.com/l4rzy/okular-mupdf-ng.git#tag=v0.6.0
+	source = https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/1.28.6/mupdf-1.28.6-source.tar.gz
+	sha256sums = SKIP
+	sha256sums = dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
+
+pkgname = okular-mupdf-ng
