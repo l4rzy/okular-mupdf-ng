@@ -218,7 +218,7 @@ else()
             build=${MUPDF_BUILD_PROFILE}
             mujs=${MUPDF_USE_MUJS}
             tesseract=yes
-            xps=no
+            xps=yes
             extract=no
             archive=no
             barcode=no

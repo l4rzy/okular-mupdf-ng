@@ -522,6 +522,7 @@ void Main::initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::
     } else {
         m_document.name = m_document.type == Model::DocumentType::Mobi ? QStringLiteral("document.mobi")
             : m_document.type == Model::DocumentType::Epub             ? QStringLiteral("document.epub")
+            : m_document.type == Model::DocumentType::Xps              ? QStringLiteral("document.xps")
                                                                        : QStringLiteral("document.pdf");
     }
 

@@ -767,7 +767,7 @@ struct SignReply {
 };
 
 /// Document formats supported by the worker.
-enum class DocumentType : std::uint8_t { Pdf = 0, Epub = 1, Mobi = 2, Kindle = 3, Unknown = 255 };
+enum class DocumentType : std::uint8_t { Pdf = 0, Epub = 1, Mobi = 2, Kindle = 3, Xps = 4, Unknown = 255 };
 
 inline bool isReflowableDocument(DocumentType type) noexcept
 {
@@ -786,12 +786,14 @@ inline std::string documentTypeToMime(DocumentType type)
         return "application/vnd.amazon.mobi8-ebook";
     case DocumentType::Pdf:
         return "application/pdf";
+    case DocumentType::Xps:
+        return "application/vnd.ms-xpsdocument";
     default:
         return "application/octet-stream";
     }
 }
 
-/// Converts a PDF/EPUB MIME type to a document type.
+/// Converts a supported MIME type to a document type.
 inline DocumentType documentTypeFromMime(const std::string& mime)
 {
     if (mime == "application/epub+zip")
@@ -802,6 +804,8 @@ inline DocumentType documentTypeFromMime(const std::string& mime)
         return DocumentType::Kindle;
     if (mime == "application/pdf" || mime == "application/x-pdf")
         return DocumentType::Pdf;
+    if (mime == "application/vnd.ms-xpsdocument" || mime == "application/xps" || mime == "application/oxps")
+        return DocumentType::Xps;
     return DocumentType::Unknown;
 }
 

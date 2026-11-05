@@ -19,7 +19,7 @@
   <a href="https://software.opensuse.org/download.html?project=home%3A23ro&package=okular-mupdf-ng"><img src="https://cdn.simpleicons.org/ubuntu/E95420" width="20" height="20" alt="Ubuntu" title="Ubuntu"/></a>
 </p>
 
-A MuPDF-based **secure**[^security] and **fast**[^speed] backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, legacy MOBI, and DRM-free AZW3 and single-container KFX books.
+A MuPDF-based **secure**[^security] and **fast**[^speed] backend for Okular. Document rendering is moved to an isolated and hardened worker process. This reduces the impact of MuPDF vulnerabilities while keeping Okular's desktop integration seamless. Supports PDF, ePUB, legacy MOBI, DRM-free AZW3 and single-container KFX books, and XPS/OpenXPS.
 
 [![Screenshot](docs/assets/screenshot.png)](https://l4rzy.github.io/okular-mupdf-ng/#demo)
 
@@ -65,7 +65,7 @@ and the source-tree layout.
 | **PDF Heuristic Outline** | Outline generation for PDFs that don't have embedded outline | ✓ | ✗ |
 | **ePUB/MOBI export** | Export ePUB/MOBI to PDF, preserving links and TOC | ✓ (via MuPDF rendering) | ✗ (document print) |
 | **Signature Profiles** | PDF Signature profiles and customisations | ✓ | ✗ |
-| **Formats** | PDF, ePUB, MOBI, AZW3, KFX | ✓ | ✗ (PDF and basic ePUB/MOBI support)  |
+| **Formats** | PDF, ePUB, MOBI, AZW3, KFX, XPS | ✓ | ✗ (PDF and basic ePUB/MOBI/XPS support)  |
 | **PDF Forms** | AcroForm text inputs, checkboxes, radio buttons, choices, and push buttons | ✓ (AcroForm; XFA detected only) | ✓ (AcroForm; XFA detected only) |
 | **PDF form JavaScript** | Calculations and button/field-event actions | ✓ (MuPDF/MuJS executes in the sandboxed worker; experimental, opt-in) | ✓ (Poppler passes scripts to Okular, which executes them in QJSEngine) |
 | **Annotations** | Text, highlight, line, shape, ink, stamp, caret | ✓ | ✓ (plus sound, movie & file-attachment annotations) |

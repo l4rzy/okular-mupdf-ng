@@ -47,6 +47,7 @@ add_executable(test_mupdf
     worker/ocr.cpp
     worker/epub.cpp
     worker/mobi.cpp
+    worker/xps.cpp
     worker/native_types.cpp
     worker/native_runtime.cpp
     ../src/worker/runtime/worker_server.cpp
@@ -81,6 +82,7 @@ target_compile_definitions(test_mupdf PRIVATE
     TEST_SYSTEM_MUPDF=$<BOOL:${USE_SYSTEM_MUPDF}>
     TEST_FORM_JAVASCRIPT=$<BOOL:${ENABLE_FORM_JAVASCRIPT}>
     HAVE_NEW_SIGNATURE_API=1
+    TEST_XPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/xps"
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
     TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi"
     TEST_BUNDLED_MOBI_TOC=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
@@ -109,6 +111,7 @@ set(MUPDF_TEST_SUITES
     "test_worker_ocr|worker"
     "test_worker_epub|worker"
     "test_worker_mobi|worker"
+    "test_worker_xps|worker"
     "test_worker_native_types|worker"
     "test_worker_native_runtime|worker,security"
     "test_integration_ipc|integration,plugin,worker")

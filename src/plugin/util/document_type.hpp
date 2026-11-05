@@ -20,7 +20,8 @@ inline Model::DocumentType documentTypeForMime(const QString& mime)
 /// Detects the document type of a file by content, with a suffix fallback.
 Model::DocumentType documentTypeForFile(const QString& fileName);
 
-/// Detects the document type of in-memory data; no suffix is available.
+/// Selects a document type for in-memory data; ZIP candidates are validated
+/// as XPS by the worker because no suffix is available.
 Model::DocumentType documentTypeForData(const QByteArray& data);
 
 /**

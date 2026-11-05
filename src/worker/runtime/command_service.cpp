@@ -238,7 +238,7 @@ bool CommandService::openFd(int fd,
                             const std::vector<std::uint8_t>& epubAccelerator)
 {
     if (type != DocumentType::Pdf && type != DocumentType::Epub && type != DocumentType::Mobi
-        && type != DocumentType::Kindle) {
+        && type != DocumentType::Kindle && type != DocumentType::Xps) {
         ::close(fd);
         if (error)
             *error = "document type is unknown";
