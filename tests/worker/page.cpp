@@ -1100,10 +1100,13 @@ private slots:
         std::vector<std::uint8_t> original(height * stride);
         QVERIFY2(document->renderToBuffer({ 0, width, height, std::nullopt }, original.data(), stride, &error),
                  error.c_str());
-        // Printing uses savePdfFd rather than the themed viewing renderer.
+        // The print export profile uses the original page colors.
         const auto renderPrintOutput = [&](std::vector<std::uint8_t>& pixels) {
             QTemporaryFile output;
-            if (!output.open() || !document->savePdfFd(::dup(output.handle()), { 0 }, &error) || !output.seek(0))
+            if (!output.open()
+                || !document->exportFd(
+                    ::dup(output.handle()), { "pdf", ::Mu::Model::ExportProfileId::Print, { 0 } }, false, &error)
+                || !output.seek(0))
                 return false;
             PdfDocument printed;
             if (!printed.openFd(::dup(output.handle()), "print.pdf", &error))
@@ -1412,7 +1415,7 @@ private slots:
         const QString saved = m_tempDir.filePath(QStringLiteral("layers-saved.pdf"));
         QFile output(saved);
         QVERIFY(output.open(QIODevice::ReadWrite));
-        QVERIFY(document.saveFd(::dup(output.handle())));
+        QVERIFY(document.exportFd(::dup(output.handle()), { "pdf", ::Mu::Model::ExportProfileId::Native }, false));
         output.close();
         Mu::Worker::Engine::PdfDocument reopened;
         QVERIFY(openDocument(reopened, saved));
@@ -1640,7 +1643,8 @@ private slots:
         const QString saved = m_tempDir.filePath("cache-save.pdf");
         QFile savedFile(saved);
         QVERIFY(savedFile.open(QIODevice::WriteOnly));
-        QVERIFY2(document.saveFd(savedFile.handle(), &error), error.c_str());
+        QVERIFY2(document.exportFd(savedFile.handle(), { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
         savedFile.close();
         for (int page = 0; page < 3; ++page)
             QVERIFY(!document.isPageCached(page));

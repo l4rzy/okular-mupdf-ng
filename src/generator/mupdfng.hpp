@@ -145,8 +145,6 @@ protected:
     void addPages(KConfigDialog* dialog) override;
 
 private:
-    bool exportPdf(const QString& fileName);
-
     void notifySetup(const QList<Okular::Page*>& pages, int setupFlags) override;
     void notifyVisibleRectsChanged() override;
     void generatePixmap(Okular::PixmapRequest* request) override;

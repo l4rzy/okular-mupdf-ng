@@ -15,6 +15,7 @@
 #include "engine/signer.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
+#include "sys/sys.hpp"
 
 namespace Mu::Worker::Engine {
 
@@ -188,23 +189,16 @@ public:
     /// Removes an annotation from a page (PDF only).
     [[nodiscard]] virtual bool removeAnnotation(int page, std::int32_t objectNumber, std::string* error = nullptr);
 
-    /// Saves document modifications to an output file descriptor (PDF only).
-    [[nodiscard]] virtual bool saveFd(int fd, std::string* error = nullptr);
-
-    /// Builds printable PDF pages without links or bookmarks.
-    [[nodiscard]] virtual bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr);
-
-    /// Exports EPUB pages with links and bookmarks; consumes fd on every path.
-    /// Progress reports inserted pages; disabled if the callback throws.
+    /// Reports background export page creation and finalization.
     using ExportProgressCallback = std::function<void(int completed, int total)>;
-    [[nodiscard]] virtual bool savePdfFdWithReferences(int fd,
-                                                       const std::vector<int>& pages,
-                                                       std::string* error = nullptr,
-                                                       const ExportProgressCallback& progress = { });
 
-    /// Flattens annotations and widgets into a PDF copy; consumes fd on every path.
-    [[nodiscard]] virtual bool flattenPdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr);
-
+    [[nodiscard]] std::vector<Model::OutputFormatInfo> outputFormats() const;
+    /// Consumes fd on every path; validates the exact advertised profile before dispatch.
+    [[nodiscard]] bool exportFd(int fd,
+                                const Model::ExportOptions& options,
+                                bool asynchronous,
+                                std::string* error = nullptr,
+                                const ExportProgressCallback& progress = { });
     /// Digitally signs a signature field or rectangle on a page (PDF only).
     [[nodiscard]] virtual bool signFd(const Model::SignRequest& request,
                                       CmsCallback callback,
@@ -243,6 +237,13 @@ public:
     embeddedFiles(std::size_t maxBytes, std::size_t maxFiles, bool* resourceLimit, std::string* error = nullptr) const;
 
 protected:
+    /// Receives a valid, owned descriptor and validated options. Backends only
+    /// implement writing; public exportFd owns validation and failure cleanup.
+    [[nodiscard]] virtual bool writeExport(Sys::FileDescriptor output,
+                                           const Model::ExportOptions& options,
+                                           std::string* error,
+                                           const ExportProgressCallback& progress) = 0;
+
     /// Helper to populate an error string pointer and return false.
     static bool fail(std::string* error, const char* message);
     static bool fail(std::string* error, std::string_view message);

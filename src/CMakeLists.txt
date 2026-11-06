@@ -9,6 +9,7 @@ add_library(mupdf_shared STATIC
   shared/transport/poll.cpp
   shared/logging.cpp
   shared/model/validation.cpp
+  shared/model/export.cpp
   shared/protocol/zpp_codec.cpp
 )
 set_target_properties(mupdf_shared PROPERTIES
@@ -272,6 +273,7 @@ endif()
 
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
+  generator/export.cpp
   generator/ui/actions.cpp
   generator/ui/document_settings.cpp
   generator/ui/xfdf_import.cpp

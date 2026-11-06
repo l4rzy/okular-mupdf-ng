@@ -160,53 +160,30 @@ private:
 // EPUB-to-PDF Printing and Export
 // =============================================================================
 
-bool EpubDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string* error)
+bool EpubDocument::writeExport(Sys::FileDescriptor output,
+                               const Model::ExportOptions& options,
+                               std::string* error,
+                               const ExportProgressCallback& progress)
 {
-    return writePdfFd(fd, pages, false, error);
+    if (options.profileId == Model::ExportProfileId::Converted)
+        return writeAzw3(std::move(output), error);
+    return writePdf(
+        std::move(output), options.pages, options.profileId != Model::ExportProfileId::Print, error, progress);
 }
 
-bool EpubDocument::savePdfFdWithReferences(int fd,
-                                           const std::vector<int>& pages,
-                                           std::string* error,
-                                           const ExportProgressCallback& progress)
+bool EpubDocument::writePdf(Sys::FileDescriptor outputFd,
+                            const std::vector<int>& pages,
+                            bool withReferences,
+                            std::string* error,
+                            const ExportProgressCallback& progress)
 {
-    return writePdfFd(fd, pages, true, error, progress);
-}
-
-bool EpubDocument::writePdfFd(int fd,
-                              const std::vector<int>& pages,
-                              bool withReferences,
-                              std::string* error,
-                              const ExportProgressCallback& progress)
-{
-    if (fd < 0)
-        return fail(error, "output FD is invalid");
-    // A selection longer than the page count must contain duplicates, which
-    // only multiply graft work and output size. Reject it before copying.
-    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
-        ::close(fd);
-        return fail(error, "export page selection is too large");
-    }
-
-    if (!m_document || !m_context) {
-        ::close(fd);
-        return fail(error, "document cannot be exported to PDF");
-    }
-    for (const int pageNumber : pages) {
-        if (pageNumber < 0 || pageNumber >= m_pageCount) {
-            ::close(fd);
-            return fail(error, "export page is out of range");
-        }
-    }
-
     const auto closeFile = [](FILE* file) {
         ::fclose(file);
     };
-    std::unique_ptr<FILE, decltype(closeFile)> stream(::fdopen(fd, "wb"), closeFile);
-    if (!stream) {
-        ::close(fd);
+    std::unique_ptr<FILE, decltype(closeFile)> stream(::fdopen(outputFd.get(), "wb"), closeFile);
+    if (!stream)
         return fail(error, "could not adopt output FD");
-    }
+    (void)outputFd.release();
 
     std::vector<int> targetPages = pages;
     if (targetPages.empty()) {

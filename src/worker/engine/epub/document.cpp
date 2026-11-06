@@ -177,10 +177,9 @@ bool EpubDocument::openFd(int fd, std::string displayName, std::string* error)
     return openFdWithAccelerator(fd, std::move(displayName), { }, error);
 }
 
-bool EpubDocument::exportAzw3Fd(int fd, std::string* error) const
+bool EpubDocument::writeAzw3(Sys::FileDescriptor output, std::string* error) const
 {
-    Sys::FileDescriptor output(fd);
-    if (!isOpen() || !m_input || !output)
+    if (!m_input)
         return fail(error, "EPUB document is not open");
     if (mupdfng_epub_convert(::fileno(m_input), output.get()) != 0)
         return fail(error, "could not convert EPUB to AZW3");

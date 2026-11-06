@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 
 namespace Mu::Plugin {
@@ -50,7 +51,7 @@ private Q_SLOTS:
         QFETCH(bool, accepted);
         WorkerTransport transport;
         transport.m_export = WorkerTransport::PendingExport { nullptr, { }, 42 };
-        QSignalSpy progress(&transport, &WorkerTransport::pdfExportProgress);
+        QSignalSpy progress(&transport, &WorkerTransport::exportProgress);
         const Model::NotificationMessage notification { Model::ExportProgressNotification {
             jobId,
             completed,
@@ -72,7 +73,7 @@ private Q_SLOTS:
             QCOMPARE(update.total, total);
             QCOMPARE(update.phase == Model::ExportPhase::Finalizing, finalizing);
         }
-        transport.completePdfExport(false, QStringLiteral("test failure"));
+        transport.completeExport(false, QStringLiteral("test failure"));
         QCOMPARE(exportCompletions(progress).size(), 1);
         QCOMPARE(exportCompletions(progress).front().phase, Model::ExportPhase::Failed);
         QCOMPARE(exportCompletions(progress).front().error, std::string("test failure"));
@@ -126,32 +127,61 @@ private Q_SLOTS:
         QVERIFY(transport.m_fd.connect(socketPath, &error));
         QVERIFY(descriptors.accept(&error));
         const auto transfer = transport.m_nextTransfer;
-        const QSignalSpy updates(&transport, &WorkerTransport::pdfExportProgress);
-        Model::ResponseMessage response { transport.m_nextId, Model::JobResponse { 42 }, std::nullopt };
+        const QSignalSpy updates(&transport, &WorkerTransport::exportProgress);
+        const Model::ResponseMessage discovery { transport.m_nextId,
+                                                 Model::OutputFormatsResponse {
+                                                     { { "pdf",
+                                                         "application/pdf",
+                                                         { "pdf" },
+                                                         { { .id = ::Mu::Model::ExportProfileId::SourceWithReferences,
+                                                             .synchronous = false,
+                                                             .asynchronous = true } } } } },
+                                                 std::nullopt };
+        QVERIFY(IPC::ZppCodec::writeMessage(peer, discovery, 1000, &error));
+        Model::ResponseMessage response { transport.m_nextId + 1, Model::JobResponse { 42 }, std::nullopt };
         if (scenario == 2) {
             response.payload = std::monostate { };
             response.error = Model::Error { Model::ErrorCode::InvalidRequest, "export", "rejected" };
         }
         const Model::NotificationMessage done { Model::ExportProgressNotification {
             42, 0, 0, scenario != 3 ? Model::ExportPhase::Succeeded : Model::ExportPhase::Failed, { } } };
-        QVERIFY(IPC::ZppCodec::writeMessage(peer, response, 1000, &error));
+        // Deliver the submission response and its notifications in one write,
+        // after discovery has finished, to exercise completion already buffered
+        // when startExport registers the returned job.
+        std::vector<std::byte> frames;
+        const auto appendMessage = [&](const auto& message) {
+            const auto bytes = IPC::ZppCodec::encode(message);
+            QVERIFY(bytes);
+            const auto length = static_cast<std::uint32_t>(bytes->size());
+            for (int shift : { 24, 16, 8, 0 })
+                frames.push_back(static_cast<std::byte>((length >> shift) & 0xff));
+            frames.insert(frames.end(), bytes->begin(), bytes->end());
+        };
+        appendMessage(response);
         if (scenario == 0) {
-            QVERIFY(IPC::ZppCodec::writeMessage(peer,
-                                                Model::NotificationMessage { Model::ExportProgressNotification {
-                                                    42, 2, 10, Model::ExportPhase::CreatingPages, { } } },
-                                                1000,
-                                                &error));
-            QVERIFY(IPC::ZppCodec::writeMessage(peer,
-                                                Model::NotificationMessage { Model::ExportProgressNotification {
-                                                    42, 10, 10, Model::ExportPhase::Finalizing, { } } },
-                                                1000,
-                                                &error));
+            appendMessage(Model::NotificationMessage {
+                Model::ExportProgressNotification { 42, 2, 10, Model::ExportPhase::CreatingPages, { } } });
+            appendMessage(Model::NotificationMessage {
+                Model::ExportProgressNotification { 42, 10, 10, Model::ExportPhase::Finalizing, { } } });
         }
-        // Queue both frames before submission so the old call() deterministically
-        // drains completion before startPdfExportJob() can register the job.
         if (scenario == 0 || scenario == 3 || scenario == 4)
-            QVERIFY(IPC::ZppCodec::writeMessage(peer, done, 1000, &error));
-        const auto job = transport.startPdfExportJob(target, { });
+            appendMessage(done);
+        bool replied = false;
+        std::jthread responder([&] {
+            Model::RequestMessage discoveryRequest, exportRequest;
+            if (!IPC::ZppCodec::readMessage(peer, &discoveryRequest, 1000)
+                || !IPC::ZppCodec::readMessage(peer, &exportRequest, 1000))
+                return;
+            if (!std::holds_alternative<Model::OutputFormatsRequest>(discoveryRequest.payload)
+                || !std::holds_alternative<Model::ExportRequest>(exportRequest.payload))
+                return;
+            replied =
+                ::send(peer.fd(), frames.data(), frames.size(), MSG_NOSIGNAL) == static_cast<ssize_t>(frames.size());
+        });
+        const auto job =
+            transport.startExport(target, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } });
+        responder.join();
+        QVERIFY(replied);
         QCOMPARE(updates.size(), scenario == 0 ? 3 : (scenario == 3 || scenario == 4 ? 1 : 0));
         QCOMPARE(job.has_value(), scenario != 2);
         if (job)

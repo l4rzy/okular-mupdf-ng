@@ -396,7 +396,7 @@ private slots:
         QCOMPARE(failures.last().at(1).value<Model::ErrorCode>(), Model::ErrorCode::InvalidRequest);
         QCOMPARE(imageHash(m_client.render(0, 612, 792)), imageHash(rendered));
         const QString snapshotPath = directory.filePath(QStringLiteral("snapshot.pdf"));
-        QVERIFY(m_client.saveToFile(snapshotPath));
+        QVERIFY(m_client.exportDocument(snapshotPath, { "pdf", ::Mu::Model::ExportProfileId::Native }));
         QVERIFY(imagesMatch(m_client.render(0, 612, 792), rendered));
         Worker::Engine::PdfDocument snapshot;
         std::string error;
@@ -417,7 +417,7 @@ private slots:
         const QImage moved = m_client.render(0, 612, 792);
         QVERIFY(imageHash(moved) != imageHash(rendered));
         const QString saved = directory.filePath(QStringLiteral("saved.pdf"));
-        QVERIFY(m_client.saveToFile(saved));
+        QVERIFY(m_client.exportDocument(saved, { "pdf", ::Mu::Model::ExportProfileId::Native }));
         QVERIFY(m_client.close());
         proxy.setAvailable(false);
         QCOMPARE(m_client.open(saved, { }, pages), Model::OpenStatus::Success);
@@ -450,7 +450,7 @@ private slots:
         QCOMPARE(replaced.pixelColor(300, 525), QColor(Qt::blue));
         proxy.notifyRemoval(reloadedStamp, 0);
         QCOMPARE(mutations, 7);
-        QVERIFY(m_client.saveToFile(snapshotPath));
+        QVERIFY(m_client.exportDocument(snapshotPath, { "pdf", ::Mu::Model::ExportProfileId::Native }));
         snapshot.close();
         QVERIFY2(snapshot.openFd(::open(QFile::encodeName(snapshotPath).constData(), O_RDONLY), "snapshot.pdf", &error),
                  error.c_str());
@@ -516,10 +516,10 @@ private slots:
         const auto failedTarget = directory.filePath("existing-directory");
         QVERIFY(QDir().mkdir(failedTarget));
         // Staging and worker serialization succeed; renaming onto a directory fails.
-        QVERIFY(!m_client.saveToFile(failedTarget));
+        QVERIFY(!m_client.exportDocument(failedTarget, { "pdf", ::Mu::Model::ExportProfileId::Native }));
         QVERIFY(QFileInfo(failedTarget).isDir());
         const auto target = directory.filePath("retry.pdf");
-        QVERIFY(m_client.saveToFile(target));
+        QVERIFY(m_client.exportDocument(target, { "pdf", ::Mu::Model::ExportProfileId::Native }));
         QFile output(target);
         QVERIFY(output.open(QIODevice::ReadOnly));
         ::Mu::Worker::Engine::PdfDocument reloaded;
@@ -635,7 +635,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("output.pdf"));
-        QVERIFY(m_client.writePdfToFile(outputPath, { 0 }, ::Mu::Model::PdfOutputMode::Printable));
+        QVERIFY(m_client.exportDocument(outputPath, { "pdf", ::Mu::Model::ExportProfileId::Print, { 0 } }));
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));
         QVERIFY(output.read(5) == "%PDF-");
@@ -645,14 +645,14 @@ private slots:
 
     void pdfOutputIsAtomicAndIncludesLiveAnnotations_data()
     {
-        QTest::addColumn<::Mu::Model::PdfOutputMode>("mode");
-        QTest::newRow("flatten") << ::Mu::Model::PdfOutputMode::Flattened;
-        QTest::newRow("print") << ::Mu::Model::PdfOutputMode::Printable;
+        QTest::addColumn<Mu::Model::ExportProfileId>("mode");
+        QTest::newRow("flatten") << ::Mu::Model::ExportProfileId::Flattened;
+        QTest::newRow("print") << ::Mu::Model::ExportProfileId::Print;
     }
 
     void pdfOutputIsAtomicAndIncludesLiveAnnotations()
     {
-        QFETCH(::Mu::Model::PdfOutputMode, mode);
+        QFETCH(Mu::Model::ExportProfileId, mode);
         QList<::Mu::Model::PageInfo> pages;
         QCOMPARE(m_client.open(m_pdf, QString(), pages), ::Mu::Model::OpenStatus::Success);
         ::Mu::Model::Annotation annotation;
@@ -678,10 +678,10 @@ private slots:
         sentinel.write("existing destination");
         sentinel.close();
         const auto savePdf = [&](const QVector<int>& selectedPages) {
-            return m_client.writePdfToFile(target, selectedPages, mode);
+            return m_client.exportDocument(target, { "pdf", mode, { selectedPages.begin(), selectedPages.end() } });
         };
         // Invalid modes must be rejected before any FD can be queued.
-        QVERIFY(!m_client.writePdfToFile(target, { }, static_cast<::Mu::Model::PdfOutputMode>(255)));
+        QVERIFY(!m_client.exportDocument(target, { "pdf", static_cast<::Mu::Model::ExportProfileId>(255), { } }));
         QVERIFY(!savePdf({ -1 }));
         QVERIFY(sentinel.open(QIODevice::ReadOnly));
         QCOMPARE(sentinel.readAll(), QByteArray("existing destination"));
@@ -729,8 +729,9 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-abandoned.pdf"));
-        QSignalSpy spy(&transport, &::Mu::Plugin::WorkerTransport::pdfExportProgress);
-        const auto job = transport.startPdfExportJob(outputPath, { });
+        QSignalSpy spy(&transport, &::Mu::Plugin::WorkerTransport::exportProgress);
+        const auto job =
+            transport.startExport(outputPath, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } });
         QVERIFY(job.has_value());
         if (completionQueued) {
             pid_t workerPid = -1;
@@ -791,7 +792,10 @@ private slots:
         QCOMPARE(transport.open(m_epub, { }, &pages, ::Mu::Model::DocumentType::Epub),
                  ::Mu::Model::OpenStatus::Success);
         std::optional<quint64> resumed;
-        for (int attempt = 0; attempt < 50 && !(resumed = transport.startPdfExportJob(outputPath, { })).has_value();
+        for (int attempt = 0; attempt < 50
+             && !(resumed = transport.startExport(outputPath,
+                                                  { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } }))
+                     .has_value();
              ++attempt)
             QTest::qWait(100);
         QVERIFY2(resumed.has_value(), "worker did not free the export slot after the abandoned job");
@@ -809,13 +813,15 @@ private slots:
 
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
-        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportProgress);
-        QVERIFY(!m_client.startPdfExportJob(outputDirectory.filePath(QStringLiteral("missing/export.pdf")), { })
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::exportProgress);
+        QVERIFY(!m_client
+                     .startExport(outputDirectory.filePath(QStringLiteral("missing/export.pdf")),
+                                  { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } })
                      .has_value());
 
         // The FD channel must be clean: a synchronous FD-based operation works.
-        QVERIFY(m_client.writePdfToFile(
-            outputDirectory.filePath(QStringLiteral("print.pdf")), { }, ::Mu::Model::PdfOutputMode::Printable));
+        QVERIFY(m_client.exportDocument(outputDirectory.filePath(QStringLiteral("print.pdf")),
+                                        { "pdf", ::Mu::Model::ExportProfileId::Print, { } }));
         QVERIFY(QFile(outputDirectory.filePath(QStringLiteral("print.pdf"))).open(QIODevice::ReadOnly));
 
         // No export notification was queued by the failed submission.
@@ -865,8 +871,9 @@ private slots:
 
         if (exportPdf) {
             const QString outputPath = directory.filePath(QStringLiteral("export.pdf"));
-            QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportProgress);
-            const auto job = m_client.startPdfExportJob(outputPath, { });
+            QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::exportProgress);
+            const auto job =
+                m_client.startExport(outputPath, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } });
             QVERIFY(job);
             QTRY_VERIFY_WITH_TIMEOUT(!exportCompletions(spy).isEmpty(), 10000);
             QCOMPARE(exportCompletions(spy).first().jobId, *job);
@@ -1109,7 +1116,8 @@ private slots:
         const QString saved = m_fixtureRoot.filePath("embedded-outline-saved.pdf");
         const int output = ::open(QFile::encodeName(saved).constData(), O_CREAT | O_TRUNC | O_RDWR, 0600);
         QVERIFY(output >= 0);
-        QVERIFY2(document.saveFd(output, &error), error.c_str());
+        QVERIFY2(document.exportFd(output, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
         QFile input(saved);
         QVERIFY(input.open(QIODevice::ReadOnly));
         const QString cachePath = ::Mu::Plugin::Caching::PDF::tocCachePath(input.handle());
@@ -1156,15 +1164,15 @@ private slots:
 
     void epubExportPdfOverIpc_data()
     {
-        QTest::addColumn<::Mu::Model::PdfOutputMode>("mode");
-        QTest::newRow("print") << ::Mu::Model::PdfOutputMode::Printable;
-        QTest::newRow("export") << ::Mu::Model::PdfOutputMode::WithReferences;
+        QTest::addColumn<Mu::Model::ExportProfileId>("mode");
+        QTest::newRow("print") << ::Mu::Model::ExportProfileId::Print;
+        QTest::newRow("export") << ::Mu::Model::ExportProfileId::WithReferences;
     }
 
     void epubExportPdfOverIpc()
     {
-        QFETCH(::Mu::Model::PdfOutputMode, mode);
-        const bool withReferences = mode == ::Mu::Model::PdfOutputMode::WithReferences;
+        QFETCH(Mu::Model::ExportProfileId, mode);
+        const bool withReferences = mode == ::Mu::Model::ExportProfileId::WithReferences;
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
         QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
         QVERIFY(!pages.isEmpty());
@@ -1172,7 +1180,7 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export.pdf"));
-        QVERIFY(m_client.writePdfToFile(outputPath, { }, mode));
+        QVERIFY(m_client.exportDocument(outputPath, { "pdf", mode, { } }));
 
         QFile output(outputPath);
         QVERIFY(output.open(QIODevice::ReadOnly));
@@ -1230,8 +1238,9 @@ private slots:
         QTemporaryDir outputDirectory;
         QVERIFY(outputDirectory.isValid());
         const QString outputPath = outputDirectory.filePath(QStringLiteral("export-async.pdf"));
-        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::pdfExportProgress);
-        const auto job = m_client.startPdfExportJob(outputPath, { });
+        QSignalSpy spy(&m_client, &::Mu::Plugin::WorkerClient::exportProgress);
+        const auto job =
+            m_client.startExport(outputPath, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } });
         QVERIFY(job.has_value());
 
         // The session document stays usable while the export job runs.

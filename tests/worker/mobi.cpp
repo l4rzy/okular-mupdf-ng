@@ -264,11 +264,11 @@ private slots:
         QVERIFY(existing.open(QIODevice::WriteOnly));
         QCOMPARE(existing.write("unchanged"), qint64(9));
         existing.close();
-        QVERIFY(!client.exportEpubToFile(rejected));
+        QVERIFY(!client.exportDocument(rejected, { "epub", ::Mu::Model::ExportProfileId::Converted }));
         QVERIFY(existing.open(QIODevice::ReadOnly));
         QCOMPARE(existing.readAll(), QByteArray("unchanged"));
         const auto output = directory.filePath(QStringLiteral("book.azw3"));
-        QVERIFY(client.exportAzw3ToFile(output));
+        QVERIFY(client.exportDocument(output, { "azw3", ::Mu::Model::ExportProfileId::Converted }));
         QFile result(output);
         QVERIFY(result.open(QIODevice::ReadOnly));
         QCOMPARE(Plugin::Util::documentTypeForData(result.readAll()), Model::DocumentType::Kindle);
@@ -320,11 +320,11 @@ private slots:
         QVERIFY(existing.open(QIODevice::WriteOnly));
         QCOMPARE(existing.write("unchanged"), qint64(9));
         existing.close();
-        QVERIFY(!client.exportAzw3ToFile(rejected));
+        QVERIFY(!client.exportDocument(rejected, { "azw3", ::Mu::Model::ExportProfileId::Converted }));
         QVERIFY(existing.open(QIODevice::ReadOnly));
         QCOMPARE(existing.readAll(), QByteArray("unchanged"));
         const auto epubTarget = directory.filePath(QStringLiteral("export.epub"));
-        QVERIFY(client.exportEpubToFile(epubTarget));
+        QVERIFY(client.exportDocument(epubTarget, { "epub", ::Mu::Model::ExportProfileId::Converted }));
         QFile epubFile(epubTarget);
         QVERIFY(epubFile.open(QIODevice::ReadOnly));
         QCOMPARE(Plugin::Util::documentTypeForData(epubFile.readAll()), Model::DocumentType::Epub);
@@ -339,10 +339,10 @@ private slots:
         QVERIFY2(epubText.find("Hello") != std::string::npos, epubText.c_str());
         const auto target = directory.filePath(QStringLiteral("export.pdf"));
         if (fromData) {
-            QVERIFY(client.writePdfToFile(target, { }, Model::PdfOutputMode::WithReferences));
+            QVERIFY(client.exportDocument(target, { "pdf", ::Mu::Model::ExportProfileId::WithReferences, { } }));
         } else {
-            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
-            QVERIFY(client.startPdfExportJob(target, { }));
+            QSignalSpy finished(&client, &Plugin::WorkerClient::exportProgress);
+            QVERIFY(client.startExport(target, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } }));
             QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
             QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
                      exportCompletions(finished).first().error.c_str());
@@ -417,8 +417,8 @@ private slots:
 
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("styled.pdf"));
-        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
-        QVERIFY(client.startPdfExportJob(target, { }));
+        QSignalSpy finished(&client, &Plugin::WorkerClient::exportProgress);
+        QVERIFY(client.startExport(target, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } }));
         QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
         QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
                  exportCompletions(finished).first().error.c_str());
@@ -833,8 +833,8 @@ private slots:
         QCOMPARE((*outline)[0].children.size(), std::size_t { 1 });
         QTemporaryDir directory;
         const auto target = directory.filePath(QStringLiteral("toc.pdf"));
-        QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
-        QVERIFY(client.startPdfExportJob(target, { }));
+        QSignalSpy finished(&client, &Plugin::WorkerClient::exportProgress);
+        QVERIFY(client.startExport(target, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } }));
         QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
         QVERIFY2(exportCompletions(finished).first().phase == Model::ExportPhase::Succeeded,
                  exportCompletions(finished).first().error.c_str());
@@ -947,10 +947,11 @@ private slots:
         QTemporaryDir directory;
         const QString target = directory.filePath(QStringLiteral("export.pdf"));
         if (fromData) {
-            QVERIFY(client.writePdfToFile(target, { }, Model::PdfOutputMode::WithReferences));
+            QVERIFY(client.exportDocument(target, { "pdf", ::Mu::Model::ExportProfileId::WithReferences, { } }));
         } else {
-            QSignalSpy finished(&client, &Plugin::WorkerClient::pdfExportProgress);
-            const auto job = client.startPdfExportJob(target, { });
+            QSignalSpy finished(&client, &Plugin::WorkerClient::exportProgress);
+            const auto job =
+                client.startExport(target, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences, { } });
             QVERIFY(job);
             QTRY_COMPARE_WITH_TIMEOUT(exportCompletions(finished).count(), 1, 30000);
             QCOMPARE(exportCompletions(finished).first().jobId, *job);

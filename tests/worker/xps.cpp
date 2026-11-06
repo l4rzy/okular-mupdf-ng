@@ -284,7 +284,8 @@ private slots:
         QVERIFY(dir.isValid());
         const auto output = dir.filePath(QStringLiteral("print.pdf"));
         const QVector<int> selected = subset ? QVector<int> { 2, 0 } : QVector<int> { };
-        QVERIFY(client.writePdfToFile(output, selected, Model::PdfOutputMode::Printable));
+        QVERIFY(client.exportDocument(
+            output, { "pdf", ::Mu::Model::ExportProfileId::Print, { selected.begin(), selected.end() } }));
         QList<Plugin::WorkerClient::PageInfo> printed;
         QCOMPARE(client.open(output, { }, printed, Model::DocumentType::Pdf), Model::OpenStatus::Success);
         QCOMPARE(printed.size(), subset ? 2 : 3);
@@ -524,7 +525,9 @@ private slots:
         error.clear();
         QFile output(dir.filePath(QStringLiteral("print.pdf")));
         QVERIFY(output.open(QIODevice::WriteOnly));
-        QCOMPARE(document.savePdfFd(::dup(output.handle()), { }, &error), valid);
+        QCOMPARE(document.exportFd(
+                     ::dup(output.handle()), { "pdf", ::Mu::Model::ExportProfileId::Print, { } }, false, &error),
+                 valid);
         QCOMPARE(error.empty(), valid);
     }
 
@@ -946,13 +949,13 @@ private slots:
         QVERIFY(output.open(QIODevice::WriteOnly));
         const int fd = ::dup(output.handle());
         QVERIFY(fd >= 0);
-        QVERIFY(!document.savePdfFd(fd, { page }, &error));
-        QCOMPARE(error, std::string(closed ? "document or output FD is unavailable" : "page is unavailable"));
+        QVERIFY(!document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Print, { page } }, false, &error));
+        QCOMPARE(error, std::string(page < 0 ? "negative export page" : "export page selection is out of range"));
         errno = 0;
         QCOMPARE(::fcntl(fd, F_GETFD), -1);
         QCOMPARE(errno, EBADF);
         QCOMPARE(output.size(), 0);
-        QVERIFY(!document.savePdfFd(-1, { }, nullptr));
+        QVERIFY(!document.exportFd(-1, { "pdf", ::Mu::Model::ExportProfileId::Print, { } }, false, nullptr));
     }
 
     void probesZipDataInWorker()

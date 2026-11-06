@@ -3,7 +3,7 @@
 
 #include "engine/constants.hpp"
 #include "engine/epub/document.hpp"
-#include "engine/epub/export_jobs.hpp"
+#include "engine/export/jobs.hpp"
 #include "engine/pdf/document.hpp"
 #include "runtime/command_service.hpp"
 #include "shared/compat.hpp"
@@ -167,16 +167,17 @@ private slots:
         QTemporaryFile output;
         QVERIFY(output.open());
         std::vector<std::pair<int, int>> progress;
-        QVERIFY2(document.savePdfFdWithReferences(::dup(output.handle()),
-                                                  { },
-                                                  &error,
-                                                  [&](int completed, int total) {
-                                                      progress.emplace_back(completed, total);
-                                                      if (callbackFailure == 1)
-                                                          throw std::runtime_error("progress unavailable");
-                                                      if (callbackFailure == 2)
-                                                          throw 42;
-                                                  }),
+        QVERIFY2(document.exportFd(::dup(output.handle()),
+                                   { "pdf", ::Mu::Model::ExportProfileId::WithReferences, { } },
+                                   false,
+                                   &error,
+                                   [&](int completed, int total) {
+                                       progress.emplace_back(completed, total);
+                                       if (callbackFailure == 1)
+                                           throw std::runtime_error("progress unavailable");
+                                       if (callbackFailure == 2)
+                                           throw 42;
+                                   }),
                  error.c_str());
         QVERIFY(!progress.empty());
         const auto total = document.pageCount();
@@ -2152,7 +2153,8 @@ private slots:
         const QString fullPath = directory.filePath(QStringLiteral("full.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        QVERIFY2(document.savePdfFd(fullFd, { }, &error), error.c_str());
+        QVERIFY2(document.exportFd(fullFd, { "pdf", ::Mu::Model::ExportProfileId::Print, { } }, false, &error),
+                 error.c_str());
 
         QFile fullFile(fullPath);
         QVERIFY(fullFile.open(QIODevice::ReadOnly));
@@ -2165,7 +2167,8 @@ private slots:
         const QString selectedPath = directory.filePath(QStringLiteral("selected.pdf"));
         const int selectedFd = ::open(selectedPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(selectedFd >= 0);
-        QVERIFY2(document.savePdfFd(selectedFd, { 0 }, &error), error.c_str());
+        QVERIFY2(document.exportFd(selectedFd, { "pdf", ::Mu::Model::ExportProfileId::Print, { 0 } }, false, &error),
+                 error.c_str());
 
         QFile selectedFile(selectedPath);
         QVERIFY(selectedFile.open(QIODevice::ReadOnly));
@@ -2629,8 +2632,11 @@ private slots:
         QVERIFY(!doc.addAnnotation(0, annot, &obj, &error));
         QVERIFY(error.find("not supported") != std::string::npos);
 
-        QVERIFY(!doc.saveFd(-1, &error));
-        QVERIFY(error.find("not supported") != std::string::npos);
+        const int outputFd = ::open("/dev/null", O_WRONLY | O_CLOEXEC);
+        QVERIFY(outputFd >= 0);
+        QVERIFY(!doc.exportFd(outputFd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error));
+        QCOMPARE(error, std::string("unsupported export profile"));
+        QVERIFY(::fcntl(outputFd, F_GETFD) == -1 && errno == EBADF);
 
         QVERIFY(!doc.signFd(::Mu::Model::SignRequest { }, nullptr, -1, nullptr, &error));
         QVERIFY(error.find("not supported") != std::string::npos);
@@ -2649,10 +2655,11 @@ private slots:
         QVERIFY(service.document());
         QCOMPARE(service.document()->pageCount(), 1);
 
-        const auto saveResponse = service.writeDocumentResponse(1, { }, -1);
+        const auto saveResponse =
+            service.exportResponse(1, { { }, { }, { "pdf", ::Mu::Model::ExportProfileId::Native } }, -1);
         QVERIFY(saveResponse.error);
-        QCOMPARE(saveResponse.error->code, ::Mu::Model::ErrorCode::Internal);
-        QVERIFY(saveResponse.error->message.find("not supported") != std::string::npos);
+        QCOMPARE(saveResponse.error->code, ::Mu::Model::ErrorCode::Unavailable);
+        QVERIFY(saveResponse.error->message.find("unsupported export profile") != std::string::npos);
     }
 
     void testOcrIsRejectedForEpub()
@@ -2810,9 +2817,14 @@ private slots:
         document.throwOnMetadata = true;
         const int fd = ::open("/dev/null", O_WRONLY | O_CLOEXEC);
         QVERIFY(fd >= 0);
-        QVERIFY_THROWS_EXCEPTION(std::bad_alloc,
-                                 static_cast<void>(withReferences ? document.savePdfFdWithReferences(fd, { }, &error)
-                                                                  : document.savePdfFd(fd, { }, &error)));
+        QVERIFY_THROWS_EXCEPTION(
+            std::bad_alloc,
+            static_cast<void>(document.exportFd(
+                fd,
+                { "pdf",
+                  withReferences ? ::Mu::Model::ExportProfileId::WithReferences : ::Mu::Model::ExportProfileId::Print },
+                false,
+                &error)));
         errno = 0;
         const int flags = ::fcntl(fd, F_GETFD);
         const int fdError = errno;
@@ -2845,8 +2857,12 @@ private slots:
         const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        const bool saved = withReferences ? document.savePdfFdWithReferences(fullFd, { }, &error)
-                                          : document.savePdfFd(fullFd, { }, &error);
+        const bool saved = document.exportFd(
+            fullFd,
+            { "pdf",
+              withReferences ? ::Mu::Model::ExportProfileId::WithReferences : ::Mu::Model::ExportProfileId::Print },
+            false,
+            &error);
         QVERIFY2(saved, error.c_str());
 
         QFile fullFile(fullPath);
@@ -2924,7 +2940,9 @@ private slots:
         const QString fullPath = directory.filePath(QStringLiteral("exported.pdf"));
         const int fullFd = ::open(fullPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fullFd >= 0);
-        QVERIFY2(document.savePdfFdWithReferences(fullFd, pages, &error), error.c_str());
+        QVERIFY2(
+            document.exportFd(fullFd, { "pdf", ::Mu::Model::ExportProfileId::WithReferences, pages }, false, &error),
+            error.c_str());
 
         QFile fullFile(fullPath);
         QVERIFY(fullFile.open(QIODevice::ReadOnly));
@@ -2975,7 +2993,9 @@ private slots:
         const QString subsetPath = directory.filePath(QStringLiteral("subset.pdf"));
         const int subsetFd = ::open(subsetPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(subsetFd >= 0);
-        QVERIFY2(document.savePdfFdWithReferences(subsetFd, { 0 }, &error), error.c_str());
+        QVERIFY2(
+            document.exportFd(subsetFd, { "pdf", ::Mu::Model::ExportProfileId::WithReferences, { 0 } }, false, &error),
+            error.c_str());
 
         QFile subsetFile(subsetPath);
         QVERIFY(subsetFile.open(QIODevice::ReadOnly));
@@ -2992,13 +3012,16 @@ private slots:
 
         // Invalid descriptors and out-of-range selections must fail cleanly.
         error.clear();
-        QVERIFY(!document.savePdfFdWithReferences(-1, { }, &error));
+        QVERIFY(!document.exportFd(-1, { "pdf", ::Mu::Model::ExportProfileId::WithReferences, { } }, false, &error));
         QVERIFY(!error.empty());
 
         const QString rejectPath = directory.filePath(QStringLiteral("rejected.pdf"));
         const int rejectFd = ::open(rejectPath.toUtf8().constData(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
         QVERIFY(rejectFd >= 0);
-        QVERIFY(!document.savePdfFdWithReferences(rejectFd, { document.pageCount() }, &error));
+        QVERIFY(!document.exportFd(rejectFd,
+                                   { "pdf", ::Mu::Model::ExportProfileId::WithReferences, { document.pageCount() } },
+                                   false,
+                                   &error));
         QVERIFY(!error.empty());
     }
 
@@ -3018,7 +3041,11 @@ private slots:
         const int outFd = ::open("/dev/null", O_WRONLY);
         QVERIFY(inFd >= 0);
         QVERIFY(outFd >= 0);
-        QVERIFY(!jobs.submit(inFd, outFd, { }, { }, static_cast<::Mu::Model::DocumentType>(type)));
+        QVERIFY(!jobs.submit(inFd,
+                             outFd,
+                             { },
+                             { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences },
+                             static_cast<::Mu::Model::DocumentType>(type)));
         QVERIFY(::fcntl(inFd, F_GETFD) == -1 && errno == EBADF);
         QVERIFY(::fcntl(outFd, F_GETFD) == -1 && errno == EBADF);
     }
@@ -3040,7 +3067,8 @@ private slots:
         QVERIFY(outFd >= 0);
         int inFd = ::dup(file.handle());
         QVERIFY(inFd >= 0);
-        QVERIFY(!jobs.submit(inFd, outFd, { }, { }).has_value());
+        QVERIFY(
+            !jobs.submit(inFd, outFd, { }, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences }).has_value());
         // Rejection consumed both descriptors.
         const bool inClosed = ::fcntl(inFd, F_GETFD) == -1 && errno == EBADF;
         QVERIFY(inClosed);
@@ -3051,7 +3079,7 @@ private slots:
 
     void testExportPdfAsyncRejectionClosesDescriptors()
     {
-        // Every rejection path in startPdfExportJobResponse must consume both
+        // Every rejection path in exportResponse must consume both
         // offered descriptors; the eventfd-rejection branch previously leaked
         // them when a dead completion channel was reported.
         ::Mu::Worker::Runtime::CommandService service({ });
@@ -3064,11 +3092,12 @@ private slots:
         const int inFd = ::open("/dev/null", O_RDONLY);
         QVERIFY(inFd >= 0);
 
-        const auto response =
-            service.startPdfExportJobResponse({ 1, ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } } },
-                                              ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } },
-                                              outFd,
-                                              inFd);
+        const auto response = service.exportResponse(
+            1,
+            ::Mu::Model::ExportRequest {
+                { 201 }, { 202 }, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences }, true },
+            outFd,
+            inFd);
         QVERIFY2(response.error, "export without a document must be rejected");
 
         QVERIFY(::fcntl(outFd, F_GETFD) == -1 && errno == EBADF);
@@ -3089,14 +3118,18 @@ private slots:
         const QString outputPath = directory.filePath(QStringLiteral("job.pdf"));
         int outFd = ::open(outputPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outFd >= 0);
-        const auto jobId = jobs.submit(::dup(file.handle()), outFd, settings, { });
+        const auto jobId = jobs.submit(
+            ::dup(file.handle()), outFd, settings, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences });
         QVERIFY(jobId.has_value());
 
         // Leave both phase changes pending to exercise the atomic drain.
         QTRY_VERIFY_WITH_TIMEOUT(!jobs.active(), 30000);
         QTemporaryFile rejectedOutput;
         QVERIFY(rejectedOutput.open());
-        QVERIFY(!jobs.submit(::dup(file.handle()), ::dup(rejectedOutput.handle()), settings, { }));
+        QVERIFY(!jobs.submit(::dup(file.handle()),
+                             ::dup(rejectedOutput.handle()),
+                             settings,
+                             { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences }));
         const auto completed = jobs.drainNotifications();
         QCOMPARE(completed.size(), std::size_t(2));
         QCOMPARE(completed.front().jobId, *jobId);
@@ -3112,7 +3145,8 @@ private slots:
         const QString jobPath = directory.filePath(QStringLiteral("job2.pdf"));
         outFd = ::open(jobPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outFd >= 0);
-        const auto secondJob = jobs.submit(::dup(file.handle()), outFd, settings, { });
+        const auto secondJob = jobs.submit(
+            ::dup(file.handle()), outFd, settings, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences });
         QVERIFY(secondJob.has_value());
         file.close();
 
@@ -3137,8 +3171,10 @@ private slots:
         ::Mu::Worker::Runtime::CommandService plainService({ });
         QVERIFY2(plainService.openFd(::dup(file.handle()), "sample.epub", ::Mu::Model::DocumentType::Epub, &error),
                  error.c_str());
-        const auto noChannel =
-            plainService.dispatch({ 1, ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } } });
+        const auto noChannel = plainService.dispatch(
+            { 1,
+              ::Mu::Model::ExportRequest {
+                  { 201 }, { 202 }, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences }, true } });
         QVERIFY(noChannel.error);
         QCOMPARE(noChannel.error->code, ::Mu::Model::ErrorCode::InvalidRequest);
 
@@ -3162,7 +3198,10 @@ private slots:
         QVERIFY(inFd >= 0);
         QVERIFY(sender.send(202, inFd, &error));
         ::close(inFd);
-        const auto response = service.dispatch({ 2, ::Mu::Model::StartPdfExportJobRequest { { 201 }, { 202 }, { } } });
+        const auto response = service.dispatch(
+            { 2,
+              ::Mu::Model::ExportRequest {
+                  { 201 }, { 202 }, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences }, true } });
         QVERIFY2(!response.error, response.error ? response.error->message.c_str() : "");
         const auto* job = std::get_if<::Mu::Model::JobResponse>(&response.payload);
         QVERIFY(job);

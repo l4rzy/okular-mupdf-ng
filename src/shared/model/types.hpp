@@ -932,38 +932,61 @@ struct SettingsRequest {
     DocumentSettings settings;
 };
 
-/// Writes document edits or an EPUB/AZW3 conversion to a transferred descriptor.
-struct WriteDocumentRequest {
-    FileTransfer file;
-    bool exportEpub = false;
-    bool exportAzw3 = false;
+enum class ExportRepresentation : std::uint8_t { Native, Vector, Raster, Text, OriginalSource };
+enum class ExportContent : std::uint8_t { LiveDocument, OriginalSource };
+enum class ExportCancellation : std::uint8_t { QueuedOnly, ActiveCooperative, DrainAndDiscard };
+enum class ExportFlag : std::uint32_t {
+    PageSelection = 1U << 0,
+    IncludeAnnotations = 1U << 1,
+    FlattenAnnotations = 1U << 2,
+    IncludeReferences = 1U << 3
 };
 
-/// Selects the content produced by PDF output.
-enum class PdfOutputMode : std::uint8_t {
-    Printable, ///< PDF or ebook pages prepared for printing, without references.
-    Flattened, ///< PDF copy with annotations and widgets baked into the pages.
-    WithReferences, ///< Ebook pages with links and bookmarks.
+/// Identifies an exact export operation independently of user-facing labels.
+enum class ExportProfileId : std::uint8_t {
+    Invalid = 0,
+    Native = 1,
+    Print = 2,
+    Flattened = 3,
+    WithReferences = 4,
+    SourceWithReferences = 5,
+    Converted = 6
 };
 
-/// Writes selected pages to a transferred output descriptor using the PDF mode.
-struct WritePdfRequest {
-    FileTransfer file;
-    /// Empty selects all pages; otherwise zero-based pages in output order.
-    std::vector<std::int32_t> pages;
-    PdfOutputMode mode = PdfOutputMode::Printable;
+struct ExportProfile {
+    ExportProfileId id = ExportProfileId::Invalid;
+    ExportRepresentation representation = ExportRepresentation::Native;
+    ExportContent content = ExportContent::LiveDocument;
+    std::uint32_t supportedFlags = 0;
+    bool includesUnsavedChanges = false;
+    bool synchronous = true;
+    bool asynchronous = false;
+    ExportCancellation cancellation = ExportCancellation::QueuedOnly;
 };
 
-/// Exports the open document to PDF in a background job using an isolated
-/// copy of the source file, writing to a transferred output descriptor.
-/// The session document is untouched; completion is reported asynchronously.
-/// EPUB export always includes pages, links, and the outline.
-struct StartPdfExportJobRequest {
-    /// Output descriptor receiving the generated PDF.
+struct OutputFormatInfo {
+    std::string id;
+    std::string mimeType;
+    std::vector<std::string> extensions;
+    std::vector<ExportProfile> profiles;
+};
+
+struct ExportOptions {
+    std::string formatId;
+    ExportProfileId profileId = ExportProfileId::Invalid;
+    std::vector<std::int32_t> pages { }; // Empty selects all; otherwise ordered zero-based indices.
+    std::uint32_t flags = 0; // Requirements; never silently ignored or approximated.
+};
+
+/// Discovers the output profiles available for the active document.
+struct OutputFormatsRequest { };
+
+/// Transfers an output descriptor and, for background export, a fresh source reader.
+struct ExportRequest {
     FileTransfer output;
-    /// Fresh copy of the source document opened by the background job.
     FileTransfer input;
-    std::vector<std::int32_t> pages;
+    ExportOptions options;
+    bool asynchronous = false;
 };
 
 /// Elements rendered into the signature appearance stream (bitmask).
@@ -1020,6 +1043,8 @@ struct SignRequest {
 
 /// All request body alternatives supported by the worker protocol.
 using RequestPayload = std::variant<PingRequest,
+                                    OutputFormatsRequest,
+                                    ExportRequest,
                                     OpenRequest,
                                     CloseRequest,
                                     RenderRequest,
@@ -1036,13 +1061,10 @@ using RequestPayload = std::variant<PingRequest,
                                     AnnotationModifyRequest,
                                     AnnotationRemoveRequest,
                                     SettingsRequest,
-                                    WriteDocumentRequest,
-                                    WritePdfRequest,
                                     SignRequest,
                                     SignReply,
                                     FormUpdateRequest,
                                     FormResetRequest,
-                                    StartPdfExportJobRequest,
                                     FormButtonClickRequest,
                                     LayersRequest,
                                     SetLayerRequest,
@@ -1084,6 +1106,11 @@ struct RenderLinks {
 struct RenderResponse {
     RenderFrame frame;
     std::optional<RenderLinks> links;
+};
+
+/// Output profiles currently available in the active document.
+struct OutputFormatsResponse {
+    std::vector<OutputFormatInfo> formats;
 };
 
 /// Identifier of an asynchronous worker job.
@@ -1143,6 +1170,7 @@ struct SignResponse {
 
 /// All successful response body alternatives supported by the worker protocol.
 using ResponsePayload = std::variant<std::monostate,
+                                     OutputFormatsResponse,
                                      OpenResponse,
                                      RenderResponse,
                                      JobResponse,

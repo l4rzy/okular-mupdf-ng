@@ -17,9 +17,14 @@ public:
 
     [[nodiscard]] bool openFd(int fd, std::string displayName, std::string* error = nullptr) override;
     void close() noexcept override;
-    [[nodiscard]] bool exportEpubFd(int fd, std::string* error = nullptr) const;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
+
+protected:
+    [[nodiscard]] bool writeExport(Sys::FileDescriptor output,
+                                   const Model::ExportOptions& options,
+                                   std::string* error,
+                                   const ExportProgressCallback& progress) override;
 
 private:
     Sys::FileDescriptor m_epub;

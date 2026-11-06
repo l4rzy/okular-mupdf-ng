@@ -20,6 +20,7 @@
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
 #include "shared/compat.hpp"
+#include "shared/model/export.hpp"
 #include "tools/cli/cli_args.hpp"
 #include "tools/cli/layout_config.hpp"
 
@@ -265,76 +266,51 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
 // PDF & XFDF Export
 // =============================================================================
 
-int runExportBook(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
+int runExportDocument(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
 {
-    const QString file = QString::fromStdString(options.file);
-    const bool azw3 = options.format == ExportFormat::Azw3;
-    const auto inputType = azw3 ? Mu::Model::DocumentType::Epub : Mu::Model::DocumentType::Kindle;
-    if (Mu::Plugin::Util::documentTypeForFile(file) != inputType) {
-        reportError(azw3 ? QStringLiteral("AZW3 export only supports ePUB documents")
-                         : QStringLiteral("ePUB export only supports Kindle documents"));
-        return ExitJobFailed;
-    }
-    if (openDocument(client, file, QString::fromStdString(options.shared.password), inputType) < 0)
-        return ExitJobFailed;
-    const QString output = QString::fromStdString(options.output);
-    if (!(azw3 ? client.exportAzw3ToFile(output) : client.exportEpubToFile(output))) {
-        reportError(QStringLiteral("book export failed"));
-        return ExitJobFailed;
-    }
-    ok(QStringLiteral("Exported %1 to %2").arg(azw3 ? QStringLiteral("AZW3") : QStringLiteral("ePUB"), output));
-    out().flush();
-    return ExitOk;
-}
-
-int runExportPdf(Mu::Plugin::WorkerClient& client, const ExportOptions& options)
-{
-    const QString file = QString::fromStdString(options.file);
-    const auto type = Mu::Plugin::Util::documentTypeForFile(file);
-    if (options.flatten ? type != Mu::Model::DocumentType::Pdf : !Mu::Model::isReflowableDocument(type)) {
-        reportError(options.flatten
-                        ? QStringLiteral("flattened PDF export only supports PDF documents")
-                        : QStringLiteral(
-                              "PDF export only supports ePUB and legacy MOBI documents; use --flatten for PDF input"));
+    Mu::Model::ExportOptions exportOptions;
+    switch (options.format) {
+    case ExportFormat::Pdf:
+        exportOptions = { "pdf",
+                          options.flatten ? ::Mu::Model::ExportProfileId::Flattened
+                                          : ::Mu::Model::ExportProfileId::WithReferences,
+                          options.pages };
+        break;
+    case ExportFormat::Epub:
+        exportOptions = { "epub", ::Mu::Model::ExportProfileId::Converted };
+        break;
+    case ExportFormat::Azw3:
+        exportOptions = { "azw3", ::Mu::Model::ExportProfileId::Converted };
+        break;
+    default:
         return ExitJobFailed;
     }
     if (options.useLayout) {
-        const Mu::Model::DocumentSettings settings = readLayoutConfig();
-        if (!client.setSettings(settings)) {
+        if (!client.setSettings(readLayoutConfig())) {
             reportError(QStringLiteral("failed to apply ePUB layout settings"));
             return ExitJobFailed;
         }
         info(QStringLiteral("Applied Okular ePUB layout settings"));
     }
+    const QString file = QString::fromStdString(options.file);
+    const auto type = Mu::Plugin::Util::documentTypeForFile(file);
     const qsizetype pageCount = openDocument(client, file, QString::fromStdString(options.shared.password), type);
     if (pageCount < 0)
         return ExitJobFailed;
-    QVector<int> pages;
-    pages.reserve(static_cast<qsizetype>(options.pages.size()));
-    for (int page : options.pages) {
-        if (page >= pageCount) {
-            reportError(QStringLiteral("page %1 out of range (0..%2)").arg(page).arg(pageCount - 1));
-            return ExitJobFailed;
-        }
-        pages.push_back(page);
+    const auto formats = client.outputFormats();
+    std::string error;
+    if (!formats
+        || !Mu::Model::findExportProfile(
+            *formats, exportOptions, false, static_cast<std::int32_t>(pageCount), &error)) {
+        reportError(formats ? QString::fromStdString(error) : QStringLiteral("could not discover export formats"));
+        return ExitJobFailed;
     }
-    info(QStringLiteral("Exporting %1 from %2")
-             .arg(plural(static_cast<int>(pages.isEmpty() ? pageCount : pages.size()),
-                         QStringLiteral("page"),
-                         QStringLiteral("pages")))
-             .arg(file));
     const QString output = QString::fromStdString(options.output);
-    const auto mode = options.flatten ? Mu::Model::PdfOutputMode::Flattened : Mu::Model::PdfOutputMode::WithReferences;
-    const bool success = client.writePdfToFile(output, pages, mode);
-    if (!success) {
+    if (!client.exportDocument(output, exportOptions)) {
         reportError(QStringLiteral("export failed"));
         return ExitJobFailed;
     }
-    ok(QStringLiteral("Exported %1 to %2")
-           .arg(plural(static_cast<int>(pages.isEmpty() ? pageCount : pages.size()),
-                       QStringLiteral("page"),
-                       QStringLiteral("pages")))
-           .arg(QString::fromStdString(options.output)));
+    ok(QStringLiteral("Exported %1 to %2").arg(QString::fromStdString(exportOptions.formatId), output));
     out().flush();
     return ExitOk;
 }
@@ -487,7 +463,8 @@ int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
         reportError(QStringLiteral("no annotations applied (%1 skipped)").arg(skipped));
         return ExitJobFailed;
     }
-    if (!client.saveToFile(QString::fromStdString(options.output))) {
+    if (!client.exportDocument(QString::fromStdString(options.output),
+                               { "pdf", ::Mu::Model::ExportProfileId::Native })) {
         reportError(QStringLiteral("could not write %1").arg(QString::fromStdString(options.output)));
         return ExitJobFailed;
     }
@@ -535,13 +512,8 @@ int run(const Command& command)
     if (command.kind == Command::Kind::Ocr)
         code = runOcr(client, command.ocr);
     else if (command.kind == Command::Kind::Export) {
-        if (command.exportOptions.format == ExportFormat::Pdf)
-            code = runExportPdf(client, command.exportOptions);
-        else if (command.exportOptions.format == ExportFormat::Epub
-                 || command.exportOptions.format == ExportFormat::Azw3)
-            code = runExportBook(client, command.exportOptions);
-        else
-            code = runExportXfdf(client, command.exportOptions);
+        code = command.exportOptions.format == ExportFormat::Xfdf ? runExportXfdf(client, command.exportOptions)
+                                                                  : runExportDocument(client, command.exportOptions);
     } else if (command.kind == Command::Kind::Import)
         code = runImport(client, command.importOptions);
 

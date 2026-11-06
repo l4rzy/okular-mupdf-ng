@@ -54,8 +54,7 @@ WorkerClient::WorkerClient(QObject* parent)
         Qt::QueuedConnection);
     connect(m_transport, &WorkerTransport::ocrDone, this, &WorkerClient::ocrDone, Qt::QueuedConnection);
     connect(m_transport, &WorkerTransport::pageLinksReady, this, &WorkerClient::pageLinksReady, Qt::QueuedConnection);
-    connect(
-        m_transport, &WorkerTransport::pdfExportProgress, this, &WorkerClient::pdfExportProgress, Qt::QueuedConnection);
+    connect(m_transport, &WorkerTransport::exportProgress, this, &WorkerClient::exportProgress, Qt::QueuedConnection);
     m_thread->start();
 }
 
@@ -345,29 +344,19 @@ WorkerClient::clickFormButton(const Model::FormButtonClickRequest& request) cons
 // Document Saving, Export & Signing
 // =============================================================================
 
-bool WorkerClient::saveToFile(const QString& target)
+std::optional<std::vector<Model::OutputFormatInfo>> WorkerClient::outputFormats() const
 {
-    return sync([&](WorkerTransport* transport) { return transport->saveToFile(target); });
+    return sync([](WorkerTransport* transport) { return transport->outputFormats(); });
 }
 
-bool WorkerClient::exportEpubToFile(const QString& target)
+bool WorkerClient::exportDocument(const QString& target, const Model::ExportOptions& options)
 {
-    return sync([&](WorkerTransport* transport) { return transport->exportEpubToFile(target); });
+    return sync([&](WorkerTransport* transport) { return transport->exportDocument(target, options); });
 }
 
-bool WorkerClient::exportAzw3ToFile(const QString& target)
+std::optional<quint64> WorkerClient::startExport(const QString& target, const Model::ExportOptions& options) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->exportAzw3ToFile(target); });
-}
-
-bool WorkerClient::writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode)
-{
-    return sync([&](WorkerTransport* transport) { return transport->writePdfToFile(target, pages, mode); });
-}
-
-std::optional<quint64> WorkerClient::startPdfExportJob(const QString& target, const QVector<int>& pages) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->startPdfExportJob(target, pages); });
+    return sync([&](WorkerTransport* transport) { return transport->startExport(target, options); });
 }
 
 SignResponse WorkerClient::sign(const SignRequest& request, const QString& password, const QString& target)

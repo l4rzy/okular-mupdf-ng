@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plugin/worker_transport.hpp"
+#include "shared/model/export.hpp"
+#include <limits>
 
 #include <QCoreApplication>
 #include <QFile>
@@ -341,7 +343,7 @@ void WorkerTransport::cleanupSession()
     m_activeSignPassword.clear();
     m_inFlight = false;
     if (m_export)
-        completePdfExport(false, QStringLiteral("worker terminated"));
+        completeExport(false, QStringLiteral("worker terminated"));
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt.reset();
 #endif
@@ -907,26 +909,29 @@ std::optional<FormUpdateResponse> WorkerTransport::clickFormButton(const FormBut
 // Document Saving & Asynchronous Export
 // =============================================================================
 
-bool WorkerTransport::saveToFile(const QString& target)
+std::optional<std::vector<Model::OutputFormatInfo>> WorkerTransport::outputFormats()
 {
-    return writeFile(WriteDocumentRequest { }, target);
+    const auto response = call(OutputFormatsRequest { });
+    if (!response || response->error)
+        return std::nullopt;
+    const auto* formats = std::get_if<OutputFormatsResponse>(&response->payload);
+    return formats ? std::optional(formats->formats) : std::nullopt;
 }
 
-bool WorkerTransport::exportEpubToFile(const QString& target)
+bool WorkerTransport::canExport(const Model::ExportOptions& options, bool asynchronous)
 {
-    return writeFile(WriteDocumentRequest { { }, true }, target);
-}
-
-bool WorkerTransport::exportAzw3ToFile(const QString& target)
-{
-    return writeFile(WriteDocumentRequest { { }, false, true }, target);
-}
-
-bool WorkerTransport::writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode)
-{
-    if (!isValidPdfOutputMode(mode))
+    if (!Model::isValidExportOptions(options))
         return false;
-    return writeFile(WritePdfRequest { { }, { pages.begin(), pages.end() }, mode }, target);
+    const auto formats = outputFormats();
+    return formats
+        && Model::findExportProfile(*formats, options, asynchronous, std::numeric_limits<std::int32_t>::max());
+}
+
+bool WorkerTransport::exportDocument(const QString& target, const Model::ExportOptions& options)
+{
+    if (!canExport(options, false))
+        return false;
+    return writeFile(ExportRequest { { }, { }, options, false }, target);
 }
 
 std::unique_ptr<QTemporaryFile> WorkerTransport::createOutputFile(const QString& target)
@@ -943,9 +948,15 @@ std::unique_ptr<QTemporaryFile> WorkerTransport::createOutputFile(const QString&
     return file;
 }
 
-std::optional<quint64> WorkerTransport::startPdfExportJob(const QString& target, const QVector<int>& pages)
+std::optional<quint64> WorkerTransport::startExport(const QString& target, const Model::ExportOptions& options)
 {
     // One export at a time, using an independent reader of the opened source.
+    if (!isConnected() || m_export || !m_sourceFile)
+        return std::nullopt;
+
+    if (!canExport(options, true))
+        return std::nullopt;
+    // Discovery can drain a disconnect and clear the retained document.
     if (!isConnected() || m_export || !m_sourceFile)
         return std::nullopt;
 
@@ -960,6 +971,7 @@ std::optional<quint64> WorkerTransport::startPdfExportJob(const QString& target,
     auto file = createOutputFile(target);
     if (!file)
         return std::nullopt;
+    ExportRequest request { { }, { }, options, true };
     const auto outputTransfer = m_nextTransfer++;
     std::string e;
     if (!m_fd.send(outputTransfer, file->handle(), &e)) {
@@ -979,9 +991,9 @@ std::optional<quint64> WorkerTransport::startPdfExportJob(const QString& target,
         return std::nullopt;
     }
 
-    std::vector<std::int32_t> pageList(pages.begin(), pages.end());
-
-    auto response = call(StartPdfExportJobRequest { { outputTransfer }, { inputTransfer }, std::move(pageList) });
+    request.output.transferId = outputTransfer;
+    request.input.transferId = inputTransfer;
+    auto response = call(std::move(request));
     if (!response || response->error) {
         MU_LOG(warning,
                "Mu::Plugin",
@@ -1001,7 +1013,7 @@ std::optional<quint64> WorkerTransport::startPdfExportJob(const QString& target,
         m_exportTimer = std::make_unique<QTimer>(nullptr);
         m_exportTimer->setSingleShot(true);
         connect(m_exportTimer.get(), &QTimer::timeout, this, [this] {
-            completePdfExport(false, QStringLiteral("export timed out"));
+            completeExport(false, QStringLiteral("export timed out"));
         });
     }
     m_export = PendingExport { std::move(file), target, job->jobId };
@@ -1032,7 +1044,7 @@ bool WorkerTransport::finalizeOutputFile(QTemporaryFile& file, const QString& ta
     return true;
 }
 
-void WorkerTransport::completePdfExport(bool success, QString error)
+void WorkerTransport::completeExport(bool success, QString error)
 {
     if (!m_export)
         return;
@@ -1055,7 +1067,7 @@ void WorkerTransport::completePdfExport(bool success, QString error)
     if (!delivered && error.isEmpty())
         error = QStringLiteral("export failed");
     m_export.reset();
-    Q_EMIT pdfExportProgress(ExportProgressNotification {
+    Q_EMIT exportProgress(ExportProgressNotification {
         jobId, 0, 0, delivered ? ExportPhase::Succeeded : ExportPhase::Failed, error.toStdString() });
 }
 
@@ -1113,7 +1125,8 @@ bool WorkerTransport::setSettings(const DocumentSettings& settings)
 
 std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, bool reportFailure)
 {
-    const bool deferNotifications = std::holds_alternative<StartPdfExportJobRequest>(payload);
+    const auto* exportRequest = std::get_if<ExportRequest>(&payload);
+    const bool deferNotifications = exportRequest && exportRequest->asynchronous;
     // Phase 1: verify serialization preconditions. The protocol permits one
     // synchronous request at a time, so a disconnected transport bails out and a
     // reentrant or concurrent call aborts the session rather than interleaving.
@@ -1269,11 +1282,11 @@ bool WorkerTransport::handleNotification(const NotificationMessage& notification
             return true;
         }
         if (progress->done()) {
-            completePdfExport(progress->phase == ExportPhase::Succeeded, QString::fromStdString(progress->error));
+            completeExport(progress->phase == ExportPhase::Succeeded, QString::fromStdString(progress->error));
         } else if ((progress->phase == ExportPhase::CreatingPages || progress->phase == ExportPhase::Finalizing)
                    && progress->total > 0 && progress->completed > 0 && progress->completed <= progress->total
                    && (progress->phase == ExportPhase::Finalizing) == (progress->completed == progress->total)) {
-            Q_EMIT pdfExportProgress(*progress);
+            Q_EMIT exportProgress(*progress);
         }
         return true;
     }

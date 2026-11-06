@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MU_WORKER_ENGINE_EPUB_EXPORT_JOBS_HPP
-#define MU_WORKER_ENGINE_EPUB_EXPORT_JOBS_HPP
+#ifndef MU_WORKER_ENGINE_EXPORT_JOBS_HPP
+#define MU_WORKER_ENGINE_EXPORT_JOBS_HPP
 
 #include <cstdint>
 #include <memory>
@@ -10,17 +10,17 @@
 #include <optional>
 #include <vector>
 
-#include "engine/epub/export_progress.hpp"
+#include "engine/export/progress.hpp"
 #include "shared/model/types.hpp"
 #include "sys/sys.hpp"
 
 namespace Mu::Worker::Engine {
 
 /**
- * Asynchronous EPUB-to-PDF export job runner.
+ * Background original-source export job runner.
  *
  * Runs one export at a time in a detached thread that owns a private
- * EpubDocument opened from a transferred copy of the source file, so the
+ * document opened from a transferred copy of the source file, so the
  * session document and the main event loop are never blocked or shared.
  * Page counts are sampled every two seconds from a latest-only mailbox.
  * Finalization and completion wake the eventfd-backed notification path.
@@ -44,13 +44,13 @@ public:
 
     /// Submits a background export job. Consumes both descriptors on every
     /// path: rejection closes them here; a started job transfers ownership to
-    /// the engine (DocumentBase::openFd/savePdfFdWithReferences close them on
+    /// the engine (DocumentBase::openFd/exportFd close them on
     /// all paths). Returns nullopt for unsupported types or until the previous
     /// export's completion has been drained.
     [[nodiscard]] std::optional<std::uint64_t> submit(int inputFd,
                                                       int outputFd,
                                                       const ::Mu::Model::DocumentSettings& settings,
-                                                      std::vector<std::int32_t> pages,
+                                                      ::Mu::Model::ExportOptions options,
                                                       ::Mu::Model::DocumentType type = ::Mu::Model::DocumentType::Epub);
 
     /// Samples progress and drains completion atomically, in lifecycle order.
@@ -73,4 +73,4 @@ private:
 
 } // namespace Mu::Worker::Engine
 
-#endif // MU_WORKER_ENGINE_EPUB_EXPORT_JOBS_HPP
+#endif // MU_WORKER_ENGINE_EXPORT_JOBS_HPP

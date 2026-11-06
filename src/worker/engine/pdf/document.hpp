@@ -115,9 +115,6 @@ public:
                                         bool appearanceChanged,
                                         std::string* error = nullptr) override;
     [[nodiscard]] bool removeAnnotation(int page, std::int32_t objectNumber, std::string* error = nullptr) override;
-    [[nodiscard]] bool saveFd(int fd, std::string* error = nullptr) override;
-    [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
-    [[nodiscard]] bool flattenPdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
     [[nodiscard]] bool signFd(const Model::SignRequest& request,
                               CmsCallback callback,
                               int outputFd,
@@ -142,7 +139,17 @@ public:
                                                           bool* resourceLimit,
                                                           std::string* error = nullptr) const override;
 
+protected:
+    [[nodiscard]] bool writeExport(Sys::FileDescriptor output,
+                                   const Model::ExportOptions& options,
+                                   std::string* error,
+                                   const ExportProgressCallback& progress) override;
+
 private:
+    /// Saves live PDF edits, preserving source bytes and signatures when incremental
+    /// saving is available. Consumes the output descriptor on every path.
+    [[nodiscard]] bool writeNativePdf(Sys::FileDescriptor output, std::string* error);
+
     /// RAII helper executing a lambda callback with a target annotation handle.
     template <typename Callback>
     bool withAnnotation(int page, std::int32_t objectNumber, std::string* error, Callback&& callback);
@@ -161,7 +168,7 @@ private:
     void setPageCacheSuspended(bool suspended) noexcept override;
 
     /// Writes an isolated PDF copy with export or print appearance semantics.
-    bool writeBakedPdf(int fd, const std::vector<int>& pages, bool forPrinting, std::string* error);
+    bool writeBakedPdf(Sys::FileDescriptor output, const std::vector<int>& pages, bool forPrinting, std::string* error);
 
     /// Updates the cached presence of the catalog AcroForm dictionary.
     void updateAcroFormPresence();

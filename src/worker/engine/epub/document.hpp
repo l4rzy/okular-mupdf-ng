@@ -105,20 +105,21 @@ public:
     [[nodiscard]] std::vector<Font> fonts(const std::vector<int>& pages, std::string* error = nullptr) const override;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
-    [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
-    [[nodiscard]] bool exportAzw3Fd(int fd, std::string* error = nullptr) const;
 
-    [[nodiscard]] bool savePdfFdWithReferences(int fd,
-                                               const std::vector<int>& pages,
-                                               std::string* error = nullptr,
-                                               const ExportProgressCallback& progress = { }) override;
+protected:
+    [[nodiscard]] bool writeExport(Sys::FileDescriptor output,
+                                   const Model::ExportOptions& options,
+                                   std::string* error,
+                                   const ExportProgressCallback& progress) override;
 
 private:
-    [[nodiscard]] bool writePdfFd(int fd,
-                                  const std::vector<int>& pages,
-                                  bool withReferences,
-                                  std::string* error,
-                                  const ExportProgressCallback& progress = { });
+    [[nodiscard]] bool writeAzw3(Sys::FileDescriptor output, std::string* error) const;
+
+    [[nodiscard]] bool writePdf(Sys::FileDescriptor output,
+                                const std::vector<int>& pages,
+                                bool withReferences,
+                                std::string* error,
+                                const ExportProgressCallback& progress);
 
     struct LayoutGeometry {
         float paperWidth = 0;

@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -171,6 +172,73 @@ bool pixelsMatch(const std::vector<std::uint8_t>& actual, const std::vector<std:
 class TestDocument : public QObject {
     Q_OBJECT
 private slots:
+
+    void validatesExportBeforeWriting_data()
+    {
+        using Mu::Model::ExportOptions;
+        QTest::addColumn<ExportOptions>("options");
+        QTest::addColumn<bool>("asynchronous");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("native") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Native } << false << true;
+        QTest::newRow("print") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Print, { 0 } } << false << true;
+        QTest::newRow("flatten") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Flattened } << false << true;
+        QTest::newRow("format") << ExportOptions { "epub", ::Mu::Model::ExportProfileId::Converted } << false << false;
+        QTest::newRow("profile") << ExportOptions { "pdf", static_cast<::Mu::Model::ExportProfileId>(255) } << false
+                                 << false;
+        QTest::newRow("mode") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Print } << true << false;
+        QTest::newRow("native-selection")
+            << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Native, { 0 } } << false << false;
+        QTest::newRow("negative-page") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Print, { -1 } } << false
+                                       << false;
+        QTest::newRow("past-end") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Print, { 1 } } << false
+                                  << false;
+        QTest::newRow("unknown-flag") << ExportOptions { "pdf", ::Mu::Model::ExportProfileId::Print, { }, 1U << 31 }
+                                      << false << false;
+        QTest::newRow("unsupported-flag")
+            << ExportOptions { "pdf",
+                               ::Mu::Model::ExportProfileId::Print,
+                               { },
+                               std::to_underlying(Mu::Model::ExportFlag::IncludeReferences) }
+            << false << false;
+    }
+
+    void validatesExportBeforeWriting()
+    {
+        using namespace Mu;
+        QFETCH(Model::ExportOptions, options);
+        QFETCH(bool, asynchronous);
+        QFETCH(bool, accepted);
+
+        class ExportProbe : public Worker::Engine::PdfDocument {
+        public:
+            bool called = false;
+
+        protected:
+            bool writeExport(Worker::Sys::FileDescriptor,
+                             const Model::ExportOptions&,
+                             std::string*,
+                             const ExportProgressCallback&) override
+            {
+                called = true;
+                return true;
+            }
+        } document;
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto source = directory.filePath("source.pdf");
+        createTextPDF(document.context(), source);
+        QFile input(source);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "source.pdf", &error), error.c_str());
+        const int fd = ::open("/dev/null", O_WRONLY | O_CLOEXEC);
+        QVERIFY(fd >= 0);
+        QCOMPARE(document.exportFd(fd, options, asynchronous, &error), accepted);
+        QCOMPARE(document.called, accepted);
+        QCOMPARE(error.empty(), accepted);
+        QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+    }
 
     void enumeratesFontResources_data()
     {
@@ -1425,7 +1493,8 @@ private slots:
 
         const int pdfFd = ::open(pdfPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(pdfFd >= 0);
-        QVERIFY2(document.savePdfFd(pdfFd, { 0 }, &error), error.c_str());
+        QVERIFY2(document.exportFd(pdfFd, { "pdf", ::Mu::Model::ExportProfileId::Print, { 0 } }, false, &error),
+                 error.c_str());
 
         QFile pdfFile(pdfPath);
         QVERIFY(pdfFile.open(QIODevice::ReadOnly));
@@ -1518,7 +1587,8 @@ private slots:
 
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
-        QVERIFY2(document.savePdfFd(fd, { }, &error), error.c_str());
+        QVERIFY2(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Print, { } }, false, &error),
+                 error.c_str());
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
         QCOMPARE(renderPdfUsage(document, 0, "View", &error), viewBefore);
         QFile output(target);
@@ -1557,7 +1627,8 @@ private slots:
         const auto expected = renderPdfUsage(document, 0, "Print", &error);
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
-        QVERIFY2(document.savePdfFd(fd, { 0 }, &error), error.c_str());
+        QVERIFY2(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Print, { 0 } }, false, &error),
+                 error.c_str());
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
         QCOMPARE(document.pageDetails(0, &error).formFields.front().text, std::string("Unsaved print value"));
         QCOMPARE(renderPdfUsage(document, 0, "Print", &error), expected);
@@ -1572,7 +1643,7 @@ private slots:
         QVERIFY(!printed.textBoxes(0, 72, 72, 1000, true, &error).empty());
         const int fullFd = ::open("/dev/full", O_WRONLY);
         QVERIFY(fullFd >= 0);
-        QVERIFY(!document.savePdfFd(fullFd, { }, &error));
+        QVERIFY(!document.exportFd(fullFd, { "pdf", ::Mu::Model::ExportProfileId::Print, { } }, false, &error));
         QVERIFY(!error.empty());
         QVERIFY(::fcntl(fullFd, F_GETFD) == -1 && errno == EBADF);
         error.clear();
@@ -1623,7 +1694,7 @@ private slots:
         QVERIFY2(document.openFd(::dup(file.handle()), "source.pdf", &error), error.c_str());
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
-        QCOMPARE(document.savePdfFd(fd, pages, &error), accepted);
+        QCOMPARE(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Print, pages }, false, &error), accepted);
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
         if (!accepted) {
             QVERIFY(!error.empty());
@@ -1717,7 +1788,8 @@ private slots:
         const auto liveDetails = document.pageDetails(0, &error);
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
-        QVERIFY2(document.flattenPdfFd(fd, { }, &error), error.c_str());
+        QVERIFY2(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Flattened, { } }, false, &error),
+                 error.c_str());
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
         QVERIFY(pdf_has_unsaved_changes(context, live));
         QCOMPARE(renderPdfPage(document, 0, 612, 792, &error), edited);
@@ -1745,7 +1817,7 @@ private slots:
         // A failed write must also leave the live annotations and fields intact.
         const int fullFd = ::open("/dev/full", O_WRONLY);
         QVERIFY(fullFd >= 0);
-        QVERIFY(!document.flattenPdfFd(fullFd, { }, &error));
+        QVERIFY(!document.exportFd(fullFd, { "pdf", ::Mu::Model::ExportProfileId::Flattened, { } }, false, &error));
         QVERIFY(::fcntl(fullFd, F_GETFD) == -1 && errno == EBADF);
         error.clear();
         QCOMPARE(renderPdfPage(document, 0, 612, 792, &error), edited);
@@ -1777,7 +1849,7 @@ private slots:
         QVERIFY(directory.isValid());
         ::Mu::Worker::Engine::PdfDocument document;
         std::string error;
-        QVERIFY(!document.flattenPdfFd(-1, { }, &error));
+        QVERIFY(!document.exportFd(-1, { "pdf", ::Mu::Model::ExportProfileId::Flattened, { } }, false, &error));
         if (state != QLatin1String("closed")) {
             const QString source = directory.filePath("source.pdf");
             if (state == QLatin1String("locked"))
@@ -1799,7 +1871,7 @@ private slots:
             ::open(QFile::encodeName(directory.filePath("export.pdf")).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
         error.clear();
-        QVERIFY(!document.flattenPdfFd(fd, { }, &error));
+        QVERIFY(!document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Flattened, { } }, false, &error));
         QVERIFY(!error.empty());
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
         if (state == QLatin1String("xfa"))
@@ -1820,7 +1892,8 @@ private slots:
         const QString target = directory.filePath("layers.pdf");
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
-        QVERIFY2(document.flattenPdfFd(fd, { }, &error), error.c_str());
+        QVERIFY2(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Flattened, { } }, false, &error),
+                 error.c_str());
         QFile output(target);
         QVERIFY(output.open(QIODevice::ReadOnly));
         ::Mu::Worker::Engine::PdfDocument reloaded;
@@ -1868,7 +1941,8 @@ private slots:
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
         const std::vector<int> pages(selection.begin(), selection.end());
-        QVERIFY2(document.flattenPdfFd(fd, pages, &error), error.c_str());
+        QVERIFY2(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Flattened, pages }, false, &error),
+                 error.c_str());
         QCOMPARE(pdf_dict_getp(context, pdf_trailer(context, live), "Root/StructTreeRoot/ParentTree"), parentTree);
 
         QFile output(target);
@@ -1931,7 +2005,8 @@ private slots:
         const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(fd >= 0);
         const std::vector<int> pages(selection.begin(), selection.end());
-        QCOMPARE(document.flattenPdfFd(fd, pages, &error), success);
+        QCOMPARE(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Flattened, pages }, false, &error),
+                 success);
         QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
         QCOMPARE(document.pageCount(), 2);
         QCOMPARE(document.outline().size(), size_t(1));
@@ -1994,7 +2069,7 @@ private slots:
             // Serialization succeeds, but /dev/null cannot be fsynced.
             const int fd = ::open("/dev/null", O_RDWR);
             QVERIFY(fd >= 0);
-            QVERIFY(!document.saveFd(fd, &error));
+            QVERIFY(!document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error));
             QCOMPARE(error, std::string("failed to flush save output"));
             QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
             error.clear();
@@ -2009,7 +2084,8 @@ private slots:
             const auto target = directory.filePath(QStringLiteral("save-%1.pdf").arg(attempt));
             const int fd = ::open(QFile::encodeName(target).constData(), O_CREAT | O_TRUNC | O_RDWR, 0600);
             QVERIFY(fd >= 0);
-            QVERIFY2(document.saveFd(fd, &error), error.c_str());
+            QVERIFY2(document.exportFd(fd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                     error.c_str());
             QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
             QFile output(target);
             QVERIFY(output.open(QIODevice::ReadOnly));
@@ -2074,7 +2150,8 @@ private slots:
 
         QFile savedFile(saved);
         QVERIFY(savedFile.open(QIODevice::WriteOnly));
-        QVERIFY2(document.saveFd(savedFile.handle(), &error), error.c_str());
+        QVERIFY2(document.exportFd(savedFile.handle(), { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
         savedFile.close();
         document.close();
 
@@ -2148,7 +2225,8 @@ private slots:
 
         QFile savedFile(saved);
         QVERIFY(savedFile.open(QIODevice::WriteOnly));
-        QVERIFY2(document.saveFd(savedFile.handle(), &error), error.c_str());
+        QVERIFY2(document.exportFd(savedFile.handle(), { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
         savedFile.close();
         document.close();
 
@@ -2485,7 +2563,8 @@ private slots:
         const auto savedPath = directory.filePath("after-failure.pdf");
         const int savedFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(savedFd >= 0);
-        QVERIFY2(document.saveFd(savedFd, &error), error.c_str());
+        QVERIFY2(document.exportFd(savedFd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
         QCOMPARE(callbackCount, 1u);
     }
 
@@ -3151,7 +3230,8 @@ private slots:
         const QString savedPath = dir.filePath(QStringLiteral("form_javascript_button-saved.pdf"));
         QFile savedFile(savedPath);
         QVERIFY(savedFile.open(QIODevice::WriteOnly));
-        QVERIFY2(doc.saveFd(savedFile.handle(), &error), error.c_str());
+        QVERIFY2(doc.exportFd(savedFile.handle(), { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
         savedFile.close();
 
         QFile savedInput(savedPath);
@@ -3373,7 +3453,8 @@ private slots:
 
         const int outputFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outputFd >= 0);
-        QVERIFY2(document.saveFd(outputFd, &error), error.c_str());
+        QVERIFY2(document.exportFd(outputFd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error),
+                 error.c_str());
 
         QFile savedFile(savedPath);
         QVERIFY(savedFile.open(QIODevice::ReadOnly));
@@ -3513,7 +3594,7 @@ private slots:
         const auto savedPath = directory.filePath("shared-choice-saved.pdf");
         const int outputFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outputFd >= 0);
-        QVERIFY2(doc.saveFd(outputFd, &error), error.c_str());
+        QVERIFY2(doc.exportFd(outputFd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error), error.c_str());
         QFile savedFile(savedPath);
         QVERIFY(savedFile.open(QIODevice::ReadOnly));
         ::Mu::Worker::Engine::PdfDocument reopened;
@@ -3797,7 +3878,7 @@ private slots:
         const auto savedPath = directory.filePath("radio-values-saved.pdf");
         const int outputFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outputFd >= 0);
-        QVERIFY2(doc.saveFd(outputFd, &error), error.c_str());
+        QVERIFY2(doc.exportFd(outputFd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error), error.c_str());
         QFile saved(savedPath);
         QVERIFY(saved.open(QIODevice::ReadOnly));
         ::Mu::Worker::Engine::PdfDocument reopened;
@@ -3937,7 +4018,7 @@ private slots:
         const QString savedPath = dir.filePath(QStringLiteral("radios_sync-saved.pdf"));
         const int outputFd = ::open(savedPath.toUtf8().constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         QVERIFY(outputFd >= 0);
-        QVERIFY2(doc.saveFd(outputFd, &error), error.c_str());
+        QVERIFY2(doc.exportFd(outputFd, { "pdf", ::Mu::Model::ExportProfileId::Native }, false, &error), error.c_str());
 
         QFile savedFile(savedPath);
         QVERIFY(savedFile.open(QIODevice::ReadOnly));

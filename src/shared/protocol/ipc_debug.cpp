@@ -69,7 +69,7 @@ inline std::string_view forType(std::string_view type) noexcept
         return Magenta;
     if (type == "cancel-ocr")
         return DimMagenta;
-    if (type == "write-document" || type == "write-pdf" || type == "start-pdf-export-job")
+    if (type == "export" || type == "output-formats")
         return BrightWhite;
     if (type == "error")
         return BoldRed;
@@ -364,16 +364,17 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "epubPageSize", static_cast<std::uint8_t>(value.settings.epub.pageSize));
                 field(out, "epubFontFamily", static_cast<std::uint8_t>(value.settings.epub.fontFamily));
                 field(out, "epubCustomCssBase64Bytes", value.settings.epub.customCssBase64.size());
-            } else if constexpr (std::is_same_v<T, Model::WriteDocumentRequest>) {
-                out << "write-document";
-                field(out, "transfer", value.file.transferId);
-                field(out, "exportEpub", value.exportEpub);
-                field(out, "exportAzw3", value.exportAzw3);
-            } else if constexpr (std::is_same_v<T, Model::WritePdfRequest>) {
-                out << "write-pdf";
-                field(out, "transfer", value.file.transferId);
-                field(out, "pages", value.pages.size());
-                field(out, "mode", static_cast<unsigned int>(value.mode));
+            } else if constexpr (std::is_same_v<T, Model::OutputFormatsRequest>) {
+                out << "output-formats";
+            } else if constexpr (std::is_same_v<T, Model::ExportRequest>) {
+                out << "export";
+                field(out, "outputTransfer", value.output.transferId);
+                field(out, "inputTransfer", value.input.transferId);
+                field(out, "format", value.options.formatId);
+                field(out, "profile", static_cast<unsigned>(value.options.profileId));
+                field(out, "pages", value.options.pages.size());
+                field(out, "flags", value.options.flags);
+                field(out, "asynchronous", value.asynchronous);
             } else if constexpr (std::is_same_v<T, Model::SignRequest>) {
                 out << "sign";
                 field(out, "transfer", value.file.transferId);
@@ -427,11 +428,6 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
             } else if constexpr (std::is_same_v<T, Model::FormResetRequest>) {
                 out << "form-reset";
                 field(out, "handle", value.handle);
-            } else if constexpr (std::is_same_v<T, Model::StartPdfExportJobRequest>) {
-                out << "start-pdf-export-job";
-                field(out, "outputTransfer", value.output.transferId);
-                field(out, "inputTransfer", value.input.transferId);
-                field(out, "pages", value.pages.size());
             } else if constexpr (std::is_same_v<T, Model::FormButtonClickRequest>) {
                 out << "form-button-click";
                 field(out, "handle", value.handle);
@@ -451,6 +447,8 @@ inline std::string_view responseName(const Model::ResponsePayload& payload)
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, std::monostate>)
                 return "ok";
+            else if constexpr (std::is_same_v<T, Model::OutputFormatsResponse>)
+                return "output-formats";
             else if constexpr (std::is_same_v<T, Model::OpenResponse>)
                 return "open";
             else if constexpr (std::is_same_v<T, Model::RenderResponse>)
@@ -517,6 +515,8 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, std::monostate>)
                     out << " success";
+                else if constexpr (std::is_same_v<T, Model::OutputFormatsResponse>)
+                    out << " count=" << value.formats.size();
                 else if constexpr (std::is_same_v<T, Model::OpenResponse>)
                     out << " pages=" << value.pages.size();
                 else if constexpr (std::is_same_v<T, Model::RenderResponse>) {

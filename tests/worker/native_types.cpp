@@ -1,8 +1,10 @@
+#include "engine/export/formats.hpp"
 #include "engine/mupdf_helpers.hpp"
 #include "engine/signer.hpp"
 #include "runtime/command_service.hpp"
 #include "runtime/render_budget.hpp"
 #include "shared/compat.hpp"
+#include "shared/model/export.hpp"
 #include "shared/model/geometry.hpp"
 #include "shared/model/types.hpp"
 #include "shared/model/validation.hpp"
@@ -226,88 +228,175 @@ private slots:
         QCOMPARE(decodedOcr->page, 3);
     }
 
-    void writePdfModesRoundTrip_data()
+    void exportRequestRoundTrip_data()
     {
-        QTest::addColumn<Mu::Model::PdfOutputMode>("mode");
-        QTest::newRow("print") << Mu::Model::PdfOutputMode::Printable;
-        QTest::newRow("flatten") << Mu::Model::PdfOutputMode::Flattened;
-        QTest::newRow("epub-export") << Mu::Model::PdfOutputMode::WithReferences;
+        QTest::addColumn<Mu::Model::ExportProfileId>("profile");
+        using Mu::Model::ExportProfileId;
+        QTest::newRow("native") << ExportProfileId::Native;
+        QTest::newRow("print") << ExportProfileId::Print;
+        QTest::newRow("flattened") << ExportProfileId::Flattened;
+        QTest::newRow("with-references") << ExportProfileId::WithReferences;
+        QTest::newRow("source-with-references") << ExportProfileId::SourceWithReferences;
+        QTest::newRow("converted") << ExportProfileId::Converted;
     }
 
-    void writePdfModesRoundTrip()
+    void exportRequestRoundTrip()
     {
-        QFETCH(Mu::Model::PdfOutputMode, mode);
-        QVERIFY(Mu::Model::isValidPdfOutputMode(mode));
-        const Mu::Model::RequestMessage request { 48, Mu::Model::WritePdfRequest { { 19 }, { 2, 0 }, mode } };
+        using namespace Mu;
+        QFETCH(Mu::Model::ExportProfileId, profile);
+        const bool asynchronous = profile == Model::ExportProfileId::SourceWithReferences;
+        const Model::ExportRequest payload {
+            { 19 }, { asynchronous ? 20U : 0U }, { "pdf", profile, { 2, 0 } }, asynchronous
+        };
+        QVERIFY(Model::isValidExportRequest(payload));
+        const Model::RequestMessage request { 48, payload };
         std::string error;
-        const auto encoded = Mu::IPC::ZppCodec::encode(request, &error);
+        const auto encoded = IPC::ZppCodec::encode(request, &error);
         QVERIFY2(encoded, error.c_str());
-        Mu::Model::RequestMessage decoded;
-        QVERIFY2(Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
-        const auto* result = std::get_if<Mu::Model::WritePdfRequest>(&decoded.payload);
+        Model::RequestMessage decoded;
+        QVERIFY2(IPC::ZppCodec::decode(*encoded, &decoded, &error), error.c_str());
+        const auto* result = std::get_if<Model::ExportRequest>(&decoded.payload);
         QVERIFY(result);
-        QCOMPARE(result->file.transferId, std::uint64_t(19));
-        QCOMPARE(result->pages, std::vector<std::int32_t>({ 2, 0 }));
-        QCOMPARE(result->mode, mode);
+        QCOMPARE(result->output.transferId, std::uint64_t(19));
+        QCOMPARE(result->input.transferId, payload.input.transferId);
+        QCOMPARE(result->options.pages, payload.options.pages);
+        QCOMPARE(result->options.profileId, profile);
+        QCOMPARE(result->asynchronous, asynchronous);
     }
 
-    void pdfOutputModeValidation_data()
+    void exportRequestValidation_data()
     {
-        QTest::addColumn<int>("value");
-        QTest::addColumn<bool>("valid");
-        QTest::newRow("printable") << 0 << true;
-        QTest::newRow("flattened") << 1 << true;
-        QTest::newRow("with-references") << 2 << true;
-        QTest::newRow("unknown") << 3 << false;
-        QTest::newRow("maximum") << 255 << false;
+        QTest::addColumn<int>("invalid");
+        int index = 0;
+        for (const auto* name : { "zero-output",
+                                  "empty-format",
+                                  "invalid-profile",
+                                  "negative-page",
+                                  "unknown-flags",
+                                  "sync-input",
+                                  "missing-input",
+                                  "same-transfer",
+                                  "unknown-profile" }) {
+            QTest::newRow(name) << index++;
+        }
     }
 
-    void pdfOutputModeValidation()
+    void exportRequestValidation()
     {
-        QFETCH(int, value);
-        QFETCH(bool, valid);
-        const auto mode = static_cast<Mu::Model::PdfOutputMode>(value);
+        using namespace Mu;
+        QFETCH(int, invalid);
+        Model::ExportRequest request { { 19 }, { }, { "pdf", ::Mu::Model::ExportProfileId::Print } };
+        switch (invalid) {
+        case 0:
+            request.output.transferId = 0;
+            break;
+        case 1:
+            request.options.formatId.clear();
+            break;
+        case 2:
+            request.options.profileId = ::Mu::Model::ExportProfileId::Invalid;
+            break;
+        case 3:
+            request.options.pages = { -1 };
+            break;
+        case 4:
+            request.options.flags = 0x80000000;
+            break;
+        case 5:
+            request.input.transferId = 20;
+            break;
+        case 6:
+            request.asynchronous = true;
+            break;
+        case 7:
+            request.asynchronous = true;
+            request.input = request.output;
+            break;
+        case 8:
+            request.options.profileId = static_cast<Model::ExportProfileId>(255);
+            break;
+        }
         std::string_view reason;
-        QCOMPARE(Mu::Model::isValidPdfOutputMode(mode, &reason), valid);
-        if (valid)
-            return;
-        QCOMPARE(reason, std::string_view("invalid PDF output mode"));
-        // No descriptor channel: rejection must happen before FD receipt.
-        Mu::Worker::Runtime::CommandService service({ });
-        const auto response = service.dispatch({ 48, Mu::Model::WritePdfRequest { { 19 }, { }, mode } });
+        QVERIFY(!Model::isValidExportRequest(request, &reason));
+        QVERIFY(!reason.empty());
+        // No descriptor channel: invalid requests must fail before receiving FDs.
+        Worker::Runtime::CommandService service({ });
+        const auto response = service.dispatch({ 48, request });
         QVERIFY(response.error);
-        QCOMPARE(response.error->code, Mu::Model::ErrorCode::InvalidRequest);
-        QCOMPARE(response.error->operation, std::string("write_pdf"));
+        QCOMPARE(response.error->code, Model::ErrorCode::InvalidRequest);
+        QCOMPARE(response.error->operation, std::string("export"));
         QCOMPARE(response.error->message, std::string(reason));
     }
 
-    void fileOutputRequestValidation_data()
+    void exportCapabilities_data()
     {
-        QTest::addColumn<Mu::Model::RequestPayload>("payload");
-        QTest::addColumn<QString>("operation");
-        QTest::newRow("document") << Mu::Model::RequestPayload { Mu::Model::WriteDocumentRequest { } }
-                                  << QStringLiteral("write_document");
-        for (const auto mode : { Mu::Model::PdfOutputMode::Printable,
-                                 Mu::Model::PdfOutputMode::Flattened,
-                                 Mu::Model::PdfOutputMode::WithReferences }) {
-            QTest::newRow(qPrintable(QStringLiteral("pdf-mode-%1").arg(static_cast<int>(mode))))
-                << Mu::Model::RequestPayload { Mu::Model::WritePdfRequest { { }, { }, mode } }
-                << QStringLiteral("write_pdf");
-        }
-        QTest::newRow("start-export") << Mu::Model::RequestPayload { Mu::Model::StartPdfExportJobRequest { } }
-                                      << QStringLiteral("start_pdf_export_job");
+        using namespace Mu;
+        QTest::addColumn<Model::DocumentType>("type");
+        QTest::addColumn<std::string>("format");
+        QTest::addColumn<Mu::Model::ExportProfileId>("profile");
+        QTest::addColumn<bool>("asynchronous");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("pdf-save") << Model::DocumentType::Pdf << std::string("pdf")
+                                  << ::Mu::Model::ExportProfileId::Native << false << true;
+        QTest::newRow("pdf-flatten") << Model::DocumentType::Pdf << std::string("pdf")
+                                     << ::Mu::Model::ExportProfileId::Flattened << false << true;
+        QTest::newRow("pdf-background") << Model::DocumentType::Pdf << std::string("pdf")
+                                        << ::Mu::Model::ExportProfileId::SourceWithReferences << true << false;
+        QTest::newRow("epub-azw3") << Model::DocumentType::Epub << std::string("azw3")
+                                   << ::Mu::Model::ExportProfileId::Converted << false << true;
+        QTest::newRow("kindle-epub") << Model::DocumentType::Kindle << std::string("epub")
+                                     << ::Mu::Model::ExportProfileId::Converted << false << true;
+        QTest::newRow("epub-background") << Model::DocumentType::Epub << std::string("pdf")
+                                         << ::Mu::Model::ExportProfileId::SourceWithReferences << true << true;
+        QTest::newRow("epub-wrong-mode") << Model::DocumentType::Epub << std::string("pdf")
+                                         << ::Mu::Model::ExportProfileId::SourceWithReferences << false << false;
+        QTest::newRow("xps-print") << Model::DocumentType::Xps << std::string("pdf")
+                                   << ::Mu::Model::ExportProfileId::Print << false << true;
+        QTest::newRow("xps-flatten") << Model::DocumentType::Xps << std::string("pdf")
+                                     << ::Mu::Model::ExportProfileId::Flattened << false << false;
+        QTest::newRow("xps-conversion") << Model::DocumentType::Xps << std::string("azw3")
+                                        << ::Mu::Model::ExportProfileId::Converted << false << false;
     }
 
-    void fileOutputRequestValidation()
+    void exportCapabilities()
     {
-        QFETCH(Mu::Model::RequestPayload, payload);
-        QFETCH(QString, operation);
-        Mu::Worker::Runtime::CommandService service({ });
-        const auto response = service.dispatch({ 49, payload });
-        QVERIFY(response.error);
-        QCOMPARE(response.error->code, Mu::Model::ErrorCode::InvalidRequest);
-        QCOMPARE(response.error->operation, operation.toStdString());
-        QCOMPARE(response.error->message, std::string("file transfer identifier is zero"));
+        using namespace Mu;
+        QFETCH(Model::DocumentType, type);
+        QFETCH(std::string, format);
+        QFETCH(Mu::Model::ExportProfileId, profile);
+        QFETCH(bool, asynchronous);
+        QFETCH(bool, accepted);
+        const auto formats = Worker::Engine::outputFormatsFor(type);
+        const Model::ExportOptions options { format, profile };
+        QCOMPARE(Model::findExportProfile(formats, options, asynchronous, 3) != nullptr, accepted);
+        if (!accepted)
+            return;
+        auto invalid = options;
+        invalid.pages = { 3 };
+        QVERIFY(!Model::findExportProfile(formats, invalid, asynchronous, 3));
+        invalid = options;
+        invalid.flags = 0x80000000;
+        QVERIFY(!Model::findExportProfile(formats, invalid, asynchronous, 3));
+        invalid = options;
+        // No current profile supports every requirement at once. These are
+        // known flags, so this exercises profile validation rather than syntax.
+        invalid.flags = static_cast<std::uint32_t>(Model::ExportFlag::PageSelection)
+            | static_cast<std::uint32_t>(Model::ExportFlag::IncludeAnnotations)
+            | static_cast<std::uint32_t>(Model::ExportFlag::FlattenAnnotations)
+            | static_cast<std::uint32_t>(Model::ExportFlag::IncludeReferences);
+        QVERIFY(!Model::findExportProfile(formats, invalid, asynchronous, 3));
+        invalid = options;
+        invalid.profileId = static_cast<::Mu::Model::ExportProfileId>(255);
+        QVERIFY(!Model::findExportProfile(formats, invalid, asynchronous, 3));
+        // Discovery carries exactly the profiles validated by the worker.
+        Model::ResponseMessage response { 49, Model::OutputFormatsResponse { formats }, { } };
+        std::string error;
+        const auto bytes = IPC::ZppCodec::encode(response, &error);
+        QVERIFY2(bytes, error.c_str());
+        Model::ResponseMessage decoded;
+        QVERIFY2(IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
+        const auto& result = std::get<Model::OutputFormatsResponse>(decoded.payload);
+        QVERIFY(Model::findExportProfile(result.formats, options, asynchronous, 3));
     }
 
     void documentSettingsRoundTrip()

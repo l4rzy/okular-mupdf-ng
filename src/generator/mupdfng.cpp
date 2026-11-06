@@ -28,9 +28,7 @@
 #include <QPointer>
 #include <QPrinter>
 #include <QRunnable>
-#include <QSaveFile>
 #include <QTemporaryFile>
-#include <QTextStream>
 #include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
@@ -43,7 +41,6 @@
 #include "generator/conversion/document.hpp"
 #include "generator/conversion/signing.hpp"
 #include "generator/conversion/text.hpp"
-#include "generator/conversion/xfdf.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/form/construction.hpp"
 #include "generator/proxy/form/coordinator.hpp"
@@ -260,7 +257,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         Qt::QueuedConnection);
     connect(
         &m_worker,
-        &Plugin::WorkerClient::pdfExportProgress,
+        &Plugin::WorkerClient::exportProgress,
         this,
         [this](const Model::ExportProgressNotification& progress) {
             switch (progress.phase) {
@@ -1714,7 +1711,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
         return false;
     }
     if (workerReady()) {
-        if (m_worker.saveToFile(fileName))
+        if (m_worker.exportDocument(fileName, { "pdf", Model::ExportProfileId::Native }))
             return true;
         if (errorText)
             *errorText = i18n("Failed to save PDF document.");
@@ -1723,130 +1720,6 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
     if (errorText)
         *errorText = i18n("MuPDF worker is unavailable.");
     return false;
-}
-
-// Okular Generator Func: reports the supported export formats.
-Okular::ExportFormat::List Main::exportFormats() const
-{
-    Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
-    if (Model::isReflowableDocument(m_document.type))
-        formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
-    if (m_document.type == Model::DocumentType::Kindle) {
-        const QMimeType epub = QMimeDatabase().mimeTypeForName(QStringLiteral("application/epub+zip"));
-        if (epub.isValid())
-            formats.append(Okular::ExportFormat(i18n("ePUB"), epub));
-    }
-    if (m_document.type == Model::DocumentType::Epub) {
-        const QMimeType azw3 = QMimeDatabase().mimeTypeForName(QStringLiteral("application/vnd.amazon.mobi8-ebook"));
-        if (azw3.isValid())
-            formats.append(Okular::ExportFormat(i18n("Kindle (AZW3)"), azw3));
-    }
-    if (m_document.type == Model::DocumentType::Pdf) {
-        const QMimeType pdf = QMimeDatabase().mimeTypeForName(QStringLiteral("application/pdf"));
-        if (pdf.isValid())
-            formats.append(Okular::ExportFormat(i18n("Flattened PDF"), pdf));
-        // Standard PDF annotations can be dumped to an XFDF interchange file.
-        // Advertised as application/xml because XFDF lacks a portable MIME
-        // registration on many systems; the file dialog then filters *.xml.
-        const QMimeType xml = QMimeDatabase().mimeTypeForName(QStringLiteral("application/xml"));
-        if (xml.isValid())
-            formats.append(Okular::ExportFormat(i18n("Annotation File (XFDF)"), xml));
-    }
-    return formats;
-}
-
-// Okular Generator Func: exports the document to a selected format.
-bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
-{
-    if (format.mimeType().name() == QLatin1String("application/vnd.amazon.mobi8-ebook")) {
-        if (m_document.type != Model::DocumentType::Epub || !workerReady())
-            return false;
-        const bool success = m_worker.exportAzw3ToFile(fileName);
-        if (success)
-            Q_EMIT notice(i18n("Export to AZW3 finished."), NoticeMs);
-        return success;
-    }
-    if (format.mimeType().name() == QLatin1String("application/epub+zip")) {
-        if (m_document.type != Model::DocumentType::Kindle || !workerReady())
-            return false;
-        const bool success = m_worker.exportEpubToFile(fileName);
-        if (success)
-            Q_EMIT notice(i18n("Export to ePUB finished."), NoticeMs);
-        return success;
-    }
-    if (format.mimeType().inherits(QStringLiteral("application/pdf")))
-        return exportPdf(fileName);
-
-    if (format.mimeType().name() == QLatin1String("application/xml")) {
-        // Annotations are exported from the live Okular pages, so unsaved
-        // in-session changes are included. Only page-rotation validation needs
-        // a worker round trip; Okular's page orientation is already normalized.
-        if (m_document.type != Model::DocumentType::Pdf)
-            return false;
-        const auto info = m_worker.getDocumentInfo({ QStringLiteral("hasRotatedPages") });
-        const auto rotated = info.values.find("hasRotatedPages");
-        if (rotated == info.values.end() || rotated->second != "false") {
-            Q_EMIT error(rotated != info.values.end() && rotated->second == "true"
-                             ? i18n("XFDF export does not support rotated PDF pages.")
-                             : i18n("Could not check PDF page rotation for XFDF export."),
-                         NoticeMs);
-            return false;
-        }
-        const QByteArray data = Conversion::annotationsToXfdf(m_okularPages, dpi()).toUtf8();
-        // QSaveFile keeps the destination intact until the write fully succeeds.
-        QSaveFile file(fileName);
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-            return false;
-        const bool success = file.write(data) == data.size() && file.commit();
-        if (success)
-            Q_EMIT notice(i18n("Export to XFDF finished."), NoticeMs);
-        return success;
-    }
-
-    if (!format.mimeType().inherits(QStringLiteral("text/plain")) || !workerReady())
-        return false;
-
-    QSaveFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly))
-        return false;
-
-    QTextStream stream(&file);
-    const int pageCount = document() ? static_cast<int>(document()->pages()) : 0;
-    for (int page = 0; page < pageCount; ++page) {
-        if (!workerReady())
-            return false;
-        bool extracted = false;
-        const auto boxes =
-            m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true, &extracted);
-        if (!extracted)
-            return false;
-        stream << Conversion::plainText(boxes);
-        if (page + 1 < pageCount)
-            stream << QLatin1Char('\n');
-        if (stream.status() != QTextStream::Ok)
-            return false;
-    }
-    stream.flush();
-    return stream.status() == QTextStream::Ok && file.commit();
-}
-
-// Routes PDF export by document type; ebooks always use the isolated background job.
-bool Main::exportPdf(const QString& fileName)
-{
-    if (!workerReady())
-        return false;
-    if (m_document.type == Model::DocumentType::Pdf) {
-        const bool success = m_worker.writePdfToFile(fileName, { }, Model::PdfOutputMode::Flattened);
-        if (success)
-            Q_EMIT notice(i18n("Export to flattened PDF finished."), NoticeMs);
-        return success;
-    }
-    if (!Model::isReflowableDocument(m_document.type))
-        return false;
-    // File- and data-opened documents both retain a source descriptor for
-    // the isolated background job, leaving the session document usable.
-    Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
-    return m_worker.startPdfExportJob(fileName, { }).has_value();
 }
 
 // =============================================================================
@@ -1896,7 +1769,9 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     // Print-to-file and preview use the worker's staged PDF write and atomic publication.
     // Output is PDF regardless of filename suffix.
     if (!printer.outputFileName().isEmpty()) {
-        return m_worker.writePdfToFile(printer.outputFileName(), selectedPages, Model::PdfOutputMode::Printable)
+        return m_worker.exportDocument(
+                   printer.outputFileName(),
+                   { "pdf", Model::ExportProfileId::Print, { selectedPages.begin(), selectedPages.end() } })
             ? Okular::Document::NoPrintError
             : Okular::Document::PrintToFilePrintError;
     }
@@ -1909,7 +1784,8 @@ Okular::Document::PrintError Main::print(QPrinter& printer)
     const QString fileName = tempFile.fileName();
     tempFile.close();
 
-    if (!m_worker.writePdfToFile(fileName, selectedPages, Model::PdfOutputMode::Printable))
+    if (!m_worker.exportDocument(
+            fileName, { "pdf", Model::ExportProfileId::Print, { selectedPages.begin(), selectedPages.end() } }))
         return Okular::Document::FileConversionPrintError;
 
     const auto orientation = m_okularPages.first()->width() > m_okularPages.first()->height()

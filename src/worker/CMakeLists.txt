@@ -55,7 +55,7 @@ set(mupdf_worker_core_SRCS
     engine/epub/metadata.cpp
     engine/epub/fonts.cpp
     engine/epub/save.cpp
-    engine/epub/export_jobs.cpp
+    engine/export/jobs.cpp
     engine/xps/document.cpp
     engine/xps/page.cpp
     engine/xps/render.cpp

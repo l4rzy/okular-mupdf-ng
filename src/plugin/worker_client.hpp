@@ -9,7 +9,6 @@
 #include <QStringList>
 #include <QThread>
 #include <QTimer>
-#include <QVector>
 
 #include <atomic>
 #include <chrono>
@@ -98,13 +97,10 @@ public:
     std::optional<Model::LayersResponse> layers() const;
     std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request) const;
     bool setSettings(const Model::DocumentSettings& settings);
-    bool saveToFile(const QString& target);
-    bool writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode);
-    bool exportEpubToFile(const QString& target);
-    bool exportAzw3ToFile(const QString& target);
-    /// Submits an asynchronous background PDF export; returns the job id
-    /// immediately. Completion arrives via the pdfExportProgress signal.
-    std::optional<quint64> startPdfExportJob(const QString& target, const QVector<int>& pages) const;
+    std::optional<std::vector<Model::OutputFormatInfo>> outputFormats() const;
+    bool exportDocument(const QString& target, const Model::ExportOptions& options);
+    /// Returns immediately; completion arrives via exportProgress.
+    std::optional<quint64> startExport(const QString& target, const Model::ExportOptions& options) const;
     Model::SignResponse sign(const Model::SignRequest& request, const QString& password, const QString& target);
     std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation) const;
     bool
@@ -128,7 +124,7 @@ signals:
     void workerUnavailable();
     void ocrDone(quint64 jobId, int page);
     void pageLinksReady(quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, const QString& error);
-    void pdfExportProgress(Model::ExportProgressNotification progress);
+    void exportProgress(Model::ExportProgressNotification progress);
 
 private:
     // Everything tied to the worker process lifecycle: launch configuration,

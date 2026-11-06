@@ -8,19 +8,16 @@
 
 namespace Mu::Worker::Engine {
 
-bool XpsDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string* error)
+bool XpsDocument::writeExport(Sys::FileDescriptor outputFd,
+                              const Model::ExportOptions& options,
+                              std::string* error,
+                              const ExportProgressCallback&)
 {
-    Sys::FileDescriptor outputFd(fd);
-    if (!outputFd || !m_document)
-        return fail(error, "document or output FD is unavailable");
-    std::vector<int> targetPages = pages;
+    std::vector<int> targetPages = options.pages;
     if (targetPages.empty()) {
         targetPages.resize(static_cast<std::size_t>(m_pageCount));
         std::iota(targetPages.begin(), targetPages.end(), 0);
     }
-    for (const int page : targetPages)
-        if (page < 0 || page >= m_pageCount)
-            return fail(error, "page is unavailable");
 
     FILE* volatile file = ::fdopen(outputFd.get(), "wb");
     if (!file)

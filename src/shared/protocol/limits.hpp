@@ -26,6 +26,8 @@ inline constexpr std::size_t MaxDepth = 32;
 // aggregate allocation of a complete message.
 inline constexpr std::size_t MaxContainerAllocationBytes = 32U * 1024U * 1024U;
 
+inline constexpr std::size_t MaxExportPages = MaxContainerAllocationBytes / sizeof(std::int32_t);
+
 // --- Rendering & Geometry Limits ---
 inline constexpr int MaxRenderDimension = 16'384;
 // Tiled renders allocate only the requested tile. Capped at 64K (4x the

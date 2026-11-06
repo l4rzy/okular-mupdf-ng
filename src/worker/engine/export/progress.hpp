@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef MU_WORKER_ENGINE_EPUB_EXPORT_PROGRESS_HPP
-#define MU_WORKER_ENGINE_EPUB_EXPORT_PROGRESS_HPP
+#ifndef MU_WORKER_ENGINE_EXPORT_PROGRESS_HPP
+#define MU_WORKER_ENGINE_EXPORT_PROGRESS_HPP
 
 #include <chrono>
 #include <optional>

@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdio>
 #include <unistd.h>
+#include <utility>
 
 extern "C" {
 #include <mupdf/fitz.h>
@@ -231,28 +232,30 @@ void preparePrintablePages(fz_context* context, pdf_document* document)
 // Full Document Saving
 // =============================================================================
 
-// Consumes fd on every path. fz_output consumes the FILE* even if construction fails,
-// so it is deliberately never fclose'd after ownership transfers to MuPDF.
-bool PdfDocument::saveFd(int fd, std::string* error)
+bool PdfDocument::writeExport(Sys::FileDescriptor output,
+                              const Model::ExportOptions& options,
+                              std::string* error,
+                              const ExportProgressCallback&)
 {
-    if (fd < 0)
-        return fail(error, "output FD is invalid");
+    if (options.profileId == Model::ExportProfileId::Native)
+        return writeNativePdf(std::move(output), error);
+    return writeBakedPdf(std::move(output), options.pages, options.profileId == Model::ExportProfileId::Print, error);
+}
 
+bool PdfDocument::writeNativePdf(Sys::FileDescriptor outputFd, std::string* error)
+{
     pdf_document* pdf = pdf_specifics(m_context, m_document);
-    if (!m_document || m_locked || !pdf) {
-        ::close(fd);
-        return fail(error, "document cannot be saved");
-    }
+    if (!pdf)
+        return fail(error, "PDF document is unavailable");
 
     // Drop the cached pages before pdf_update_open_pages()/serialization so the
     // write sees the same open-page set it would without the render cache.
     clearPageCache();
 
-    FILE* volatile file = ::fdopen(fd, "wb");
-    if (!file) {
-        ::close(fd);
+    FILE* volatile file = ::fdopen(outputFd.get(), "wb");
+    if (!file)
         return fail(error, "could not adopt output FD");
-    }
+    (void)outputFd.release();
 
     fz_output* volatile output = nullptr;
     FILE* const outputFile = file; // Borrowed until the output is dropped.
@@ -300,35 +303,15 @@ bool PdfDocument::saveFd(int fd, std::string* error)
 // Flatten a grafted catalog rather than serializing or baking the live document.
 // The shared graft map preserves cyclic references, forms, outlines and resources,
 // while reading the current objects includes edits that have not been saved yet.
-bool PdfDocument::flattenPdfFd(int fd, const std::vector<int>& pages, std::string* error)
+bool PdfDocument::writeBakedPdf(Sys::FileDescriptor outputFd,
+                                const std::vector<int>& pages,
+                                bool forPrinting,
+                                std::string* error)
 {
-    return writeBakedPdf(fd, pages, false, error);
-}
-
-bool PdfDocument::writeBakedPdf(int fd, const std::vector<int>& pages, bool forPrinting, std::string* error)
-{
-    if (fd < 0)
-        return fail(error, "output FD is invalid");
-    if (!m_document || m_locked) {
-        ::close(fd);
-        return fail(error, forPrinting ? "document cannot be printed" : "document cannot be flattened");
-    }
-    if (pages.size() > static_cast<std::size_t>(m_pageCount)) {
-        ::close(fd);
-        return fail(error, "export page selection is too large");
-    }
-    for (const int page : pages) {
-        if (page < 0 || page >= m_pageCount) {
-            ::close(fd);
-            return fail(error, "export page is out of range");
-        }
-    }
-
-    FILE* volatile file = ::fdopen(fd, "wb");
-    if (!file) {
-        ::close(fd);
+    FILE* volatile file = ::fdopen(outputFd.get(), "wb");
+    if (!file)
         return fail(error, "could not adopt output FD");
-    }
+    (void)outputFd.release();
     fz_output* volatile output = nullptr;
     FILE* const outputFile = file; // Borrowed until the output is dropped.
     pdf_document* volatile copy = nullptr;
@@ -419,15 +402,6 @@ bool PdfDocument::writeBakedPdf(int fd, const std::vector<int>& pages, bool forP
         fail(error, fz_caught_message(m_context));
     }
     return saved;
-}
-
-// =============================================================================
-// Printing
-// =============================================================================
-
-bool PdfDocument::savePdfFd(int fd, const std::vector<int>& pages, std::string* error)
-{
-    return writeBakedPdf(fd, pages, true, error);
 }
 
 } // namespace Mu::Worker::Engine

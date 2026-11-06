@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "engine/document_base.hpp"
-#include "engine/epub/export_jobs.hpp"
+#include "engine/export/jobs.hpp"
 #include "engine/ocr/jobs.hpp"
 #include "runtime/frame_pool.hpp"
 #include "shared/model/types.hpp"
@@ -53,9 +53,7 @@ using ::Mu::Model::ResponseMessage;
 using ::Mu::Model::SettingsRequest;
 using ::Mu::Model::SignInput;
 using ::Mu::Model::SignRequest;
-using ::Mu::Model::StartPdfExportJobRequest;
 using ::Mu::Model::TextBoxesRequest;
-using ::Mu::Model::WritePdfRequest;
 
 using ::Mu::IPC::CtrlChannel;
 using ::Mu::IPC::FdChannel;
@@ -174,19 +172,10 @@ public:
     [[nodiscard]] ResponseMessage
     openRequestResponse(std::uint64_t requestId, int fd, const Model::OpenRequest& request);
 
-    /// Writes document edits or an EPUB/AZW3 conversion to a transferred descriptor.
+    [[nodiscard]] std::vector<Model::OutputFormatInfo> outputFormats() const;
+    /// Consumes transferred descriptors on every path.
     [[nodiscard]] ResponseMessage
-    writeDocumentResponse(std::uint64_t id, const Model::WriteDocumentRequest& payload, int fd);
-
-    /// Writes printable pages, a flattened PDF, or format-specific PDF export.
-    [[nodiscard]] ResponseMessage writePdfResponse(std::uint64_t id, const WritePdfRequest& payload, int fd);
-
-    /// Submits a background PDF export job using an isolated document copy.
-    /// Consumes both descriptors on every path.
-    [[nodiscard]] ResponseMessage startPdfExportJobResponse(const RequestMessage& request,
-                                                            const StartPdfExportJobRequest& payload,
-                                                            int outputFd,
-                                                            int inputFd);
+    exportResponse(std::uint64_t id, const Model::ExportRequest& payload, int outputFd, int inputFd = -1);
 
     /// Performs digital signature signing on a document page field.
     [[nodiscard]] ResponseMessage signFdResponse(const RequestMessage& request, const SignRequest& sign, int fd);

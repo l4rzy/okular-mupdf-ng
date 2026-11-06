@@ -3,7 +3,9 @@
 
 #include "engine/document_base.hpp"
 
+#include "engine/export/formats.hpp"
 #include <unistd.h>
+#include <utility>
 
 namespace Mu::Worker::Engine {
 
@@ -56,35 +58,21 @@ bool DocumentBase::removeAnnotation(int, std::int32_t, std::string* error)
     return fail(error, "annotations are not supported for this document type");
 }
 
-bool DocumentBase::saveFd(int fd, std::string* error)
+std::vector<OutputFormatInfo> DocumentBase::outputFormats() const
 {
-    if (fd >= 0)
-        ::close(fd);
-    return fail(error, "save is not supported for this document type");
+    return isOpen() && !isLocked() ? outputFormatsFor(type()) : std::vector<OutputFormatInfo> { };
 }
 
-bool DocumentBase::savePdfFd(int fd, const std::vector<int>&, std::string* error)
+bool DocumentBase::exportFd(
+    int fd, const ExportOptions& options, bool asynchronous, std::string* error, const ExportProgressCallback& progress)
 {
-    if (fd >= 0)
-        ::close(fd);
-    return fail(error, "save is not supported for this document type");
-}
-
-bool DocumentBase::savePdfFdWithReferences(int fd,
-                                           const std::vector<int>&,
-                                           std::string* error,
-                                           const ExportProgressCallback&)
-{
-    if (fd >= 0)
-        ::close(fd);
-    return fail(error, "PDF export is not supported for this document type");
-}
-
-bool DocumentBase::flattenPdfFd(int fd, const std::vector<int>&, std::string* error)
-{
-    if (fd >= 0)
-        ::close(fd);
-    return fail(error, "flattened PDF export is not supported for this document type");
+    Sys::FileDescriptor output(fd);
+    const auto formats = outputFormats();
+    if (!output)
+        return fail(error, "invalid output descriptor");
+    if (!findExportProfile(formats, options, asynchronous, pageCount(), error))
+        return false;
+    return writeExport(std::move(output), options, error, progress);
 }
 
 bool DocumentBase::signFd(const Model::SignRequest&, CmsCallback, int outputFd, SigningResult*, std::string* error)

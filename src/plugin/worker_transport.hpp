@@ -16,7 +16,6 @@
 #include <QStringList>
 #include <QTemporaryFile>
 #include <QTimer>
-#include <QVector>
 
 #include <atomic>
 #include <chrono>
@@ -24,7 +23,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "plugin/caching/epub_cache.hpp"
@@ -104,15 +105,10 @@ public:
     std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation);
     bool modifyAnnotation(int page, const QString& handle, const Model::Annotation& annotation, bool appearance);
     bool removeAnnotation(int page, const QString& handle);
-    bool saveToFile(const QString& target);
-    bool writePdfToFile(const QString& target, const QVector<int>& pages, Model::PdfOutputMode mode);
-    bool exportEpubToFile(const QString& target);
-    bool exportAzw3ToFile(const QString& target);
-    /// Submits an asynchronous background PDF export and returns its job id
-    /// immediately; the output file is finalized when the worker reports
-    /// completion via pdfExportProgress. Returns nullopt when no retained source
-    /// exists, the transport is busy, or the submit failed.
-    std::optional<quint64> startPdfExportJob(const QString& target, const QVector<int>& pages);
+    std::optional<std::vector<Model::OutputFormatInfo>> outputFormats();
+    bool exportDocument(const QString& target, const Model::ExportOptions& options);
+    /// Returns immediately; completion arrives via exportProgress.
+    std::optional<quint64> startExport(const QString& target, const Model::ExportOptions& options);
     Model::SignResponse signToFile(Model::SignRequest request, const QString& password, const QString& target);
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request);
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request);
@@ -124,10 +120,12 @@ signals:
     void processExited(int);
     void ocrDone(quint64, int);
     void pageLinksReady(quint64, std::vector<Model::PageLinks>, bool, QString);
-    void pdfExportProgress(Model::ExportProgressNotification progress);
+    void exportProgress(Model::ExportProgressNotification progress);
 
 private:
     friend class TestWorkerTransport;
+
+    bool canExport(const Model::ExportOptions& options, bool asynchronous);
 
     struct FrameSlotMapping;
     struct FrameLease;
@@ -142,7 +140,7 @@ private:
 
     /// Single completion exit: stops the timer, finalizes or discards the
     /// temporary file, clears the pending export, and emits the result signal.
-    void completePdfExport(bool success, QString error);
+    void completeExport(bool success, QString error);
 
     /// Opens an automatically removed output beside target for atomic publication.
     static std::unique_ptr<QTemporaryFile> createOutputFile(const QString& target);
@@ -165,7 +163,10 @@ private:
             MU_LOG(warning, "Mu::Plugin", "could not send output FD for " + target.toStdString() + ": " + e);
             return false;
         }
-        payload.file.transferId = transfer;
+        if constexpr (std::is_same_v<Payload, Model::ExportRequest>)
+            payload.output.transferId = transfer;
+        else
+            payload.file.transferId = transfer;
         auto response = call(std::move(payload));
         if (!response) {
             MU_LOG(warning, "Mu::Plugin", "worker did not answer the write request for " + target.toStdString());

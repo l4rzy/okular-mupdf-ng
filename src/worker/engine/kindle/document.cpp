@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <utility>
 
 #include "sys/sys.hpp"
 
@@ -41,10 +42,14 @@ void KindleDocument::close() noexcept
     EpubDocument::close();
 }
 
-bool KindleDocument::exportEpubFd(int fd, std::string* error) const
+bool KindleDocument::writeExport(Sys::FileDescriptor output,
+                                 const Model::ExportOptions& options,
+                                 std::string* error,
+                                 const ExportProgressCallback& progress)
 {
-    Sys::FileDescriptor output(fd);
-    if (!isOpen() || !m_epub || !output)
+    if (options.profileId != Model::ExportProfileId::Converted)
+        return EpubDocument::writeExport(std::move(output), options, error, progress);
+    if (!m_epub)
         return fail(error, "Kindle document is not open");
     std::array<char, 65536> bytes;
     off_t offset = 0;

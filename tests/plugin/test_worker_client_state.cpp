@@ -39,19 +39,17 @@ private Q_SLOTS:
             Mu::Model::OpenRequest open;
             open.documentType = kind == 0 ? Mu::Model::DocumentType::Kindle : Mu::Model::DocumentType::Epub;
             payload = open;
-        } else if (kind < 5) {
-            Mu::Model::WriteDocumentRequest save;
-            save.exportEpub = kind == 2;
-            save.exportAzw3 = kind == 3;
-            payload = save;
-        } else if (kind < 8) {
-            Mu::Model::WritePdfRequest save;
-            save.mode = kind == 6 ? Mu::Model::PdfOutputMode::Flattened
-                : kind == 7       ? Mu::Model::PdfOutputMode::WithReferences
-                                  : Mu::Model::PdfOutputMode::Printable;
-            payload = save;
         } else {
-            payload = Mu::Model::StartPdfExportJobRequest { };
+            Mu::Model::ExportRequest request;
+            request.options.formatId = kind == 2 ? "epub" : kind == 3 ? "azw3" : "pdf";
+            request.options.profileId = kind < 4 ? ::Mu::Model::ExportProfileId::Converted
+                : kind == 4                      ? ::Mu::Model::ExportProfileId::Native
+                : kind == 5                      ? ::Mu::Model::ExportProfileId::Print
+                : kind == 6                      ? ::Mu::Model::ExportProfileId::Flattened
+                : kind == 7                      ? ::Mu::Model::ExportProfileId::WithReferences
+                                                 : ::Mu::Model::ExportProfileId::SourceWithReferences;
+            request.asynchronous = kind == 8;
+            payload = request;
         }
         QCOMPARE(Mu::Plugin::Util::requestTimeoutFor(payload), timeout);
     }

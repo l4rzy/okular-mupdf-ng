@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "engine/epub/export_jobs.hpp"
+#include "engine/export/jobs.hpp"
 
 #include <exception>
 #include <sys/eventfd.h>
@@ -10,8 +10,10 @@
 #include <utility>
 
 #include "engine/document_factory.hpp"
+#include "engine/export/formats.hpp"
 #include "shared/logging.hpp"
 #include "sys/operation_budget.hpp"
+#include <limits>
 
 namespace Mu::Worker::Engine {
 
@@ -40,13 +42,13 @@ int ExportJobs::eventFd() const noexcept
 std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                                                 int outputFd,
                                                 const ::Mu::Model::DocumentSettings& settings,
-                                                std::vector<std::int32_t> pages,
+                                                ::Mu::Model::ExportOptions options,
                                                 ::Mu::Model::DocumentType type)
 {
     // Both descriptors are consumed on every path below, including rejection.
     Sys::FileDescriptor ownedInput(inputFd);
     Sys::FileDescriptor ownedOutput(outputFd);
-    if (!Model::isReflowableDocument(type))
+    if (!Model::findExportProfile(outputFormatsFor(type), options, true, std::numeric_limits<std::int32_t>::max()))
         return std::nullopt;
 
     // Copy settings before reserving the slot. Moving the copy into the closure
@@ -73,7 +75,7 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                               id,
                               type,
                               settings = std::move(settingsCopy),
-                              pages = std::move(pages),
+                              options = std::move(options),
                               inputFd = ownedInput.get(),
                               outputFd = ownedOutput.get()] {
             const Sys::OperationBudget budget;
@@ -90,19 +92,18 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                     ::close(inputFd);
                     ::close(outputFd);
                     error = "unsupported ebook type";
-                } else if (document->openFd(inputFd, "export.epub", &error)) {
-                    // savePdfFdWithReferences adopts and closes the output
+                } else if (document->openFd(inputFd, Model::documentTypeToMime(type), &error)) {
+                    // exportFd adopts and closes the output
                     // descriptor on every exit path, so ownership simply moves
                     // to the engine.
-                    success =
-                        document->savePdfFdWithReferences(outputFd, pages, &error, [state](int completed, int total) {
-                            std::lock_guard lock(state->mutex);
-                            state->progress->update(completed, total);
-                            // Page counts are sampled by the event loop. Wake it
-                            // immediately only when the finalization phase starts.
-                            if (completed == total)
-                                (void)::eventfd_write(state->event.get(), 1);
-                        });
+                    success = document->exportFd(outputFd, options, true, &error, [state](int completed, int total) {
+                        std::lock_guard lock(state->mutex);
+                        state->progress->update(completed, total);
+                        // Page counts are sampled by the event loop. Wake it
+                        // immediately only when the finalization phase starts.
+                        if (completed == total)
+                            (void)::eventfd_write(state->event.get(), 1);
+                    });
                 } else {
                     // Opening consumed the input fd; the output fd is still
                     // ours.

@@ -62,7 +62,12 @@ public:
     [[nodiscard]] std::vector<Font> fonts(const std::vector<int>& pages, std::string* error = nullptr) const override;
     [[nodiscard]] DocumentMetadata metadata(const std::vector<std::string>& keys,
                                             std::string* error = nullptr) const override;
-    [[nodiscard]] bool savePdfFd(int fd, const std::vector<int>& pages, std::string* error = nullptr) override;
+
+protected:
+    [[nodiscard]] bool writeExport(Sys::FileDescriptor output,
+                                   const Model::ExportOptions& options,
+                                   std::string* error,
+                                   const ExportProgressCallback& progress) override;
 
 private:
     [[nodiscard]] fz_page* loadPage(int page, std::string* error) const;
