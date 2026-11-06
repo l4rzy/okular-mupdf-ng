@@ -564,13 +564,17 @@ std::string response(const Model::ResponseMessage& message, bool colorize)
                 else if constexpr (std::is_same_v<T, Model::PingResponse>) {
                     out << " compat=" << std::quoted(value.compat) << " pid=" << value.pid
                         << " engine=" << std::quoted(value.engineVersion) << " systemMuPdf=" << value.systemMuPdf
-                        << " sandbox={landlock=" << value.sandbox.landlock;
-                    if (value.sandbox.landlockAbi > 0)
-                        out << " abi=" << value.sandbox.landlockAbi;
-                    out << " seccomp=" << value.sandbox.seccomp << " ns=" << value.sandbox.linuxNamespace
-                        << " rlimit=" << value.sandbox.resourceLimits << " memProt=" << value.sandbox.memoryProtection;
-                    if (!value.sandbox.reason.empty())
-                        out << " reason=" << std::quoted(value.sandbox.reason);
+                        << " sandbox={platform=" << std::quoted(value.sandbox.platform)
+                        << " profile=" << std::quoted(value.sandbox.profile)
+                        << " isolation=" << Model::isolationLevelName(value.sandbox.isolation());
+                    for (const auto& protection : value.sandbox.protections)
+                        out << " {id=" << std::quoted(protection.id)
+                            << " category=" << Model::protectionCategoryName(protection.category)
+                            << " state=" << Model::protectionStateName(protection.state)
+                            << " required=" << protection.required << " version=" << std::quoted(protection.version)
+                            << " diagnostic=" << std::quoted(protection.diagnostic) << '}';
+                    for (const auto& diagnostic : value.sandbox.diagnostics)
+                        out << " diagnostic=" << std::quoted(diagnostic);
                     out << '}';
                 } else if constexpr (std::is_same_v<T, Model::SignResponse>)
                     out << " result=" << static_cast<std::int32_t>(value.result)

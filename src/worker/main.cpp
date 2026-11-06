@@ -101,29 +101,42 @@ std::string escapeJsonString(const std::string& value)
 
 void printSandboxStatusHuman(const Mu::Model::SandboxStatus& status)
 {
-    std::cout << "Sandbox check on host:\n"
-              << "  landlock: " << (status.landlock ? "yes" : "no") << " abi=" << status.landlockAbi << "\n"
-              << "  seccomp: " << (status.seccomp ? "yes" : "no") << "\n"
-              << "  linuxNamespace: " << (status.linuxNamespace ? "yes" : "no") << "\n"
-              << "  resourceLimits: " << (status.resourceLimits ? "yes" : "no") << "\n"
-              << "  memoryProtection: " << (status.memoryProtection ? "yes" : "no") << "\n"
-              << "  fullyHardened: " << (status.isFullyHardened() ? "yes" : "no") << "\n"
-              << "  partiallyActive: " << (status.isPartiallyActive() ? "yes" : "no") << "\n";
-    if (!status.reason.empty())
-        std::cout << "  reason: " << status.reason << "\n";
+    std::cout << "Sandbox: " << status.platform << " profile=" << status.profile
+              << " isolation=" << Mu::Model::isolationLevelName(status.isolation()) << "\n";
+    for (const auto& protection : status.protections)
+        std::cout << "  " << protection.id << ": " << Mu::Model::protectionStateName(protection.state)
+                  << " required=" << protection.required << " version=" << protection.version << "\n";
+    for (const auto& diagnostic : status.diagnostics)
+        std::cout << "  " << diagnostic << "\n";
     std::cout.flush();
 }
 
 void printSandboxStatusJson(const Mu::Model::SandboxStatus& status)
 {
-    std::cout << "{\"landlock\":" << (status.landlock ? "true" : "false") << ",\"landlockAbi\":" << status.landlockAbi
-              << ",\"seccomp\":" << (status.seccomp ? "true" : "false")
-              << ",\"linuxNamespace\":" << (status.linuxNamespace ? "true" : "false")
-              << ",\"resourceLimits\":" << (status.resourceLimits ? "true" : "false")
-              << ",\"memoryProtection\":" << (status.memoryProtection ? "true" : "false")
-              << ",\"fullyHardened\":" << (status.isFullyHardened() ? "true" : "false")
-              << ",\"partiallyActive\":" << (status.isPartiallyActive() ? "true" : "false") << ",\"reason\":\""
-              << escapeJsonString(status.reason) << "\"}\n";
+    std::cout << "{\"platform\":\"" << escapeJsonString(status.platform) << "\",\"profile\":\""
+              << escapeJsonString(status.profile) << "\",\"isolation\":\""
+              << Mu::Model::isolationLevelName(status.isolation()) << '\"'
+              << ",\"policySatisfied\":" << (status.isFullyHardened() ? "true" : "false") << ",\"protections\":[";
+    bool first = true;
+    for (const auto& p : status.protections) {
+        if (!first)
+            std::cout << ',';
+        first = false;
+        std::cout << "{\"id\":\"" << escapeJsonString(p.id) << "\",\"category\":\""
+                  << Mu::Model::protectionCategoryName(p.category) << "\",\"state\":\""
+                  << Mu::Model::protectionStateName(p.state) << "\",\"required\":" << (p.required ? "true" : "false")
+                  << ",\"version\":\"" << escapeJsonString(p.version) << "\",\"diagnostic\":\""
+                  << escapeJsonString(p.diagnostic) << "\"}";
+    }
+    std::cout << "],\"diagnostics\":[";
+    first = true;
+    for (const auto& diagnostic : status.diagnostics) {
+        if (!first)
+            std::cout << ',';
+        first = false;
+        std::cout << '\"' << escapeJsonString(diagnostic) << '\"';
+    }
+    std::cout << "]}\n";
     std::cout.flush();
 }
 
@@ -241,10 +254,13 @@ int main(int argc, char* argv[])
     // on hosts where some Linux hardening controls are unavailable. The parent
     // can inspect the degraded status reported through Ping.
     if (sandbox.isPartiallyActive()) {
-        MU_LOG(warning, "Mu::Worker", std::string("sandbox partially active: ") + sandbox.reason);
+        MU_LOG(warning, "Mu::Worker", "sandbox partially active");
     } else if (!sandbox.isFullyHardened()) {
-        MU_LOG(critical, "Mu::Worker", std::string("worker unconfined: ") + sandbox.reason);
+        MU_LOG(critical, "Mu::Worker", "worker unconfined");
     }
+
+    for (const auto& diagnostic : sandbox.diagnostics)
+        MU_LOG(warning, "Mu::Worker", diagnostic);
 
     // Step 5: Enter main multiplexing event loop, handling requests until client disconnects or exits.
     return server.run(&error);

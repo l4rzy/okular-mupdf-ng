@@ -28,6 +28,14 @@
 
 namespace {
 
+bool isEnforced(const ::Mu::Model::SandboxStatus& status, std::string_view id)
+{
+    for (const auto& protection : status.protections)
+        if (protection.id == id)
+            return protection.state == ::Mu::Model::ProtectionState::Enforced;
+    return false;
+}
+
 struct ProbeContext {
     std::string allowedDirectory;
     std::string allowedFile;
@@ -122,16 +130,17 @@ bool runSandboxProbe(const ProbeContext& context, ProbeResult* result)
         ProbeResult probe;
         const auto status = ::Mu::Worker::Sandbox::activate({ context.requiredDirectory, context.optionalDirectory },
                                                             { pipeFds[1], context.inheritedFd });
-        std::strncpy(probe.reason, status.reason.c_str(), sizeof(probe.reason) - 1);
-        probe.landlockActive = status.landlock;
-        probe.seccompActive = status.seccomp;
-        probe.linuxNamespaceActive = status.linuxNamespace;
-        probe.resourceLimitsActive = status.resourceLimits;
-        probe.memoryProtectionActive = status.memoryProtection;
+        if (!status.diagnostics.empty())
+            std::strncpy(probe.reason, status.diagnostics.front().c_str(), sizeof(probe.reason) - 1);
+        probe.landlockActive = isEnforced(status, "linux.landlock");
+        probe.seccompActive = isEnforced(status, "linux.seccomp");
+        probe.linuxNamespaceActive = isEnforced(status, "linux.namespaces");
+        probe.resourceLimitsActive = isEnforced(status, "linux.resource_limits");
+        probe.memoryProtectionActive = isEnforced(status, "linux.mdwe");
         probe.unpreservedClosed =
             context.unpreservedFd >= 0 && ::fcntl(context.unpreservedFd, F_GETFD) < 0 && errno == EBADF;
 
-        if (status.landlock) {
+        if (isEnforced(status, "linux.landlock")) {
             const int allowed = ::open(context.allowedFile.c_str(), O_RDONLY | O_CLOEXEC);
             if (allowed >= 0) {
                 char byte = 0;
@@ -167,7 +176,7 @@ bool runSandboxProbe(const ProbeContext& context, ProbeResult* result)
         // Report the filesystem and thread probes before exercising a syscall
         // that the strict allowlist intentionally terminates. The parent can
         // then verify both the probe result and the expected signal.
-        if (status.seccomp) {
+        if (isEnforced(status, "linux.seccomp")) {
             try {
                 std::atomic_bool ran { false };
                 std::thread thread([&ran] { ran.store(true, std::memory_order_release); });
@@ -208,7 +217,7 @@ bool forbiddenOperationIsKilled(const std::string& allowedDirectory, ForbiddenOp
         return false;
     if (pid == 0) {
         const auto status = ::Mu::Worker::Sandbox::activate({ allowedDirectory });
-        if (!status.seccomp)
+        if (!isEnforced(status, "linux.seccomp"))
             _exit(2);
 
         if (operation == ForbiddenOperation::Fork) {
@@ -282,10 +291,10 @@ int runBudgetProbe(BudgetProbe probe)
     if (pid == 0) {
         if constexpr (!MU_DISABLE_WORKER_SANDBOX) {
             const auto status = Mu::Worker::Sandbox::activate({ });
-            if (!status.resourceLimits)
+            if (!isEnforced(status, "linux.resource_limits"))
                 _exit(3);
 #ifdef MUPDF_HAVE_LIBSECCOMP
-            if (!status.seccomp)
+            if (!isEnforced(status, "linux.seccomp"))
                 _exit(4);
 #endif
         }

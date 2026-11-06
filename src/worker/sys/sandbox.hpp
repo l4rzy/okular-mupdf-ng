@@ -4,7 +4,7 @@
 #ifndef MU_WORKER_SYS_SANDBOX_HPP
 #define MU_WORKER_SYS_SANDBOX_HPP
 
-#include "shared/model/types.hpp"
+#include "shared/model/sandbox_status.hpp"
 
 #include <string>
 #include <vector>
@@ -13,20 +13,12 @@ namespace Mu::Worker::Sandbox {
 
 using Status = ::Mu::Model::SandboxStatus;
 
-/// Applies Linux resource limits to the worker process.
-///
-/// All Linux builds cap virtual memory at 4 GiB. CPU and elapsed time are
-/// bounded separately for each operation by Sys::OperationBudget.
-/// Release builds additionally disable core dumps and mark the process non-dumpable
-/// to avoid exposing document contents or keys after a crash.
-bool applyResourceLimits(Status& status);
-
 /**
  * Restricts the initialized worker process using defense-in-depth security layers.
  *
  * Primary activation phases are descriptor sanitization, namespace isolation, resource limits,
  * Landlock, and Seccomp. MDWE and ambient-capability clearing are optional kernel hardening.
- * Activation is best-effort; the returned status and reason describe degraded phases.
+ * Activation is best-effort; the returned protections and diagnostics describe degraded phases.
  * DISABLE_WORKER_SANDBOX diagnostic builds return an inactive status without applying restrictions.
  *
  * @param readOnlyDirectories All directories are optional read-only paths; missing entries are skipped.

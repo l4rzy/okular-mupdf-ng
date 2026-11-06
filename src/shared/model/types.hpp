@@ -15,6 +15,7 @@
 #include <variant>
 #include <vector>
 
+#include "shared/model/sandbox_status.hpp"
 #include "shared/protocol/limits.hpp"
 
 namespace Mu::Model {
@@ -699,29 +700,6 @@ struct RenderFrame {
     std::int32_t width = 0, height = 0, stride = 0;
     /// PixelFormatRgba8888 for the current frame protocol.
     std::uint32_t format = PixelFormatRgba8888;
-};
-
-/// Status of the worker's process-isolation controls.
-struct SandboxStatus {
-    bool landlock = false;
-    std::int32_t landlockAbi = 0;
-    bool seccomp = false;
-    bool linuxNamespace = false;
-    bool resourceLimits = false;
-    bool memoryProtection = false;
-    std::string reason;
-
-    /// Returns true if all primary isolation controls are active.
-    [[nodiscard]] constexpr bool isFullyHardened() const noexcept
-    {
-        return landlock && seccomp && linuxNamespace && resourceLimits;
-    }
-
-    /// Returns true if some isolation mechanisms are active but full hardening is unavailable.
-    [[nodiscard]] constexpr bool isPartiallyActive() const noexcept
-    {
-        return !isFullyHardened() && (landlock || seccomp || linuxNamespace);
-    }
 };
 
 /// Opaque handle for a previously extracted annotation.

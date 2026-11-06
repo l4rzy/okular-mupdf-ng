@@ -798,7 +798,10 @@ void Main::closeWorkerDocument()
 // refusals. The gating policy itself lives in Main::sandboxGated().
 QString Main::sandboxGateMessage() const
 {
-    const QString reason = QString::fromStdString(m_worker.sandboxStatus().reason);
+    QStringList diagnostics;
+    for (const auto& diagnostic : m_worker.sandboxStatus().diagnostics)
+        diagnostics.push_back(QString::fromStdString(diagnostic));
+    const QString reason = diagnostics.join(QStringLiteral("; "));
     return i18n("The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
                 "To open this document, switch Sandbox Enforcement to Relaxed. This will reduce security "
                 "protections.\nError: %1",

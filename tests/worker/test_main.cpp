@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QDir>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QMap>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
@@ -146,61 +146,59 @@ private slots:
         }
         const auto result = runWorker(arguments, directory.path());
         QVERIFY2(result.completed, qPrintable(result.processError));
-        QMap<QString, bool> controls;
-        const QStringList booleanFields { "landlock",         "seccomp",       "linuxNamespace", "resourceLimits",
-                                          "memoryProtection", "fullyHardened", "partiallyActive" };
         if (json) {
             QJsonParseError error;
             const auto document = QJsonDocument::fromJson(result.output, &error);
             QCOMPARE(error.error, QJsonParseError::NoError);
             QVERIFY(document.isObject());
             const auto object = document.object();
-            QCOMPARE(object.size(), 9);
-            for (const auto& field : booleanFields) {
-                QVERIFY2(object.value(field).isBool(), qPrintable(field));
-                controls.insert(field, object.value(field).toBool());
+            QCOMPARE(object.value("platform").toString(), QStringLiteral("linux"));
+            QCOMPARE(object.value("profile").toString(), QStringLiteral("mupdfng.linux.v1"));
+            QVERIFY(object.value("protections").isArray());
+            QVERIFY(object.value("diagnostics").isArray());
+            bool full = true;
+            bool any = false;
+            bool hasRequired = false;
+            bool hasUnknown = false;
+            QStringList remainingIds { "linux.no_new_privileges", "linux.namespaces", "linux.resource_limits",
+                                       "linux.landlock",          "linux.seccomp",    "linux.mdwe" };
+            for (const auto& entry : object.value("protections").toArray()) {
+                const auto protection = entry.toObject();
+                const auto id = protection.value("id").toString();
+                QCOMPARE(remainingIds.removeAll(id), 1);
+                QVERIFY(protection.value("required").isBool());
+                QCOMPARE(protection.value("required").toBool(), id != "linux.mdwe");
+                QVERIFY(protection.value("version").isString());
+                QVERIFY(protection.value("diagnostic").isString());
+                QVERIFY(QStringList({ "filesystem", "syscall", "process", "resources", "memory" })
+                            .contains(protection.value("category").toString()));
+                const auto state = protection.value("state").toString();
+                QVERIFY(QStringList({ "unknown", "enforced", "unavailable", "disabled", "failed" }).contains(state));
+                if (protection.value("required").toBool()) {
+                    hasRequired = true;
+                    full = full && state == "enforced";
+                    any = any || state == "enforced";
+                    hasUnknown = hasUnknown || state == "unknown";
+                }
             }
-            QVERIFY(object.value("landlockAbi").isDouble());
-            const double abi = object.value("landlockAbi").toDouble();
-            QVERIFY(abi >= 0);
-            QCOMPARE(abi, double(object.value("landlockAbi").toInt(-1)));
-            if (controls.value("landlock"))
-                QVERIFY(abi >= 1);
-            QVERIFY(object.value("reason").isString());
+            QVERIFY(remainingIds.isEmpty());
+            full = full && hasRequired;
+            QVERIFY(object.value("policySatisfied").isBool());
+            QCOMPARE(object.value("policySatisfied").toBool(), full);
+            QCOMPARE(object.value("isolation").toString(),
+                     full             ? QStringLiteral("full")
+                         : any        ? QStringLiteral("degraded")
+                         : hasUnknown ? QStringLiteral("unknown")
+                                      : QStringLiteral("none"));
+            QCOMPARE(result.exitCode, full ? 0 : any ? 1 : 2);
         } else {
             const auto lines = result.output.split('\n');
-            QCOMPARE(lines.front(), QByteArray("Sandbox check on host:"));
-            QMap<QString, QByteArray> values;
-            for (const auto& line : lines.mid(1)) {
-                if (line.isEmpty())
-                    continue;
-                const qsizetype separator = line.indexOf(": ");
-                QVERIFY2(separator > 0, line.constData());
-                values.insert(QString::fromUtf8(line.first(separator).trimmed()), line.mid(separator + 2));
-            }
-            for (const auto& field : booleanFields) {
-                const auto value = values.value(field).split(' ').front();
-                QVERIFY2(value == "yes" || value == "no", qPrintable(field));
-                controls.insert(field, value == "yes");
-            }
-            const auto landlock = values.value("landlock").split(' ');
-            QCOMPARE(landlock.size(), 2);
-            QVERIFY(landlock.back().startsWith("abi="));
-            bool validAbi = false;
-            const int abi = landlock.back().mid(4).toInt(&validAbi);
-            QVERIFY(validAbi);
-            QVERIFY(abi >= 0);
-            if (controls.value("landlock"))
-                QVERIFY(abi >= 1);
+            QVERIFY(lines.front().startsWith("Sandbox: linux profile=mupdfng.linux.v1 isolation="));
+            QVERIFY(result.output.contains("linux.landlock"));
+            QVERIFY(result.output.contains("linux.resource_limits"));
+            const auto isolation = lines.front().split('=').back();
+            QCOMPARE(result.exitCode, isolation == "full" ? 0 : isolation == "degraded" ? 1 : 2);
         }
-        // Kernel capabilities vary: derive the expected code from this report.
-        const bool fullyHardened = controls.value("landlock") && controls.value("seccomp")
-            && controls.value("linuxNamespace") && controls.value("resourceLimits");
-        const bool partiallyActive = !fullyHardened
-            && (controls.value("landlock") || controls.value("seccomp") || controls.value("linuxNamespace"));
-        QCOMPARE(controls.value("fullyHardened"), fullyHardened);
-        QCOMPARE(controls.value("partiallyActive"), partiallyActive);
-        QCOMPARE(result.exitCode, fullyHardened ? 0 : partiallyActive ? 1 : 2);
     }
 
     void rejectsUnavailableEndpoints_data()

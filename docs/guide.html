@@ -91,20 +91,21 @@
 /usr/lib/okular-mupdf-ng/mupdfng-worker --sandbox-check=json</code></pre>
       <p>Example output from an x86_64 Debian-style installation:</p>
       <pre><code>/usr/lib/x86_64-linux-gnu/okular-mupdf-ng/mupdfng-worker --sandbox-check
-Sandbox check on host:
-  landlock: yes abi=9
-  seccomp: yes
-  linuxNamespace: yes
-  resourceLimits: yes
-  memoryProtection: yes
-  fullyHardened: yes
-  partiallyActive: no</code></pre>
+Sandbox: linux profile=mupdfng.linux.v1 isolation=full
+  linux.no_new_privileges: enforced required=1 version=
+  linux.namespaces: enforced required=1 version=
+  linux.resource_limits: enforced required=1 version=
+  linux.landlock: enforced required=1 version=9
+  linux.seccomp: enforced required=1 version=
+  linux.mdwe: enforced required=0 version=</code></pre>
       <p>The worker location depends on the package&rsquo;s library directory;
         it may use <code>lib64</code> or a multiarch directory. For a source build,
         use <code>./build/bin/mupdfng-worker --sandbox-check</code>.</p>
       <p>The probe activates the sandbox in a short-lived process and reports
-        Landlock, seccomp, namespaces, resource limits, memory protection, and any
-        reason for degraded protection. Exit code <code>0</code> means fully hardened,
+        the platform, profile, isolation level, individual protections, and diagnostics.
+        The Linux profile requires no-new-privileges, namespaces, resource limits, Landlock, and seccomp;
+        memory protection is optional. JSON output exposes these in <code>protections</code> and
+        <code>diagnostics</code> arrays, with <code>policySatisfied</code> indicating full hardening. Exit code <code>0</code> means fully hardened,
         <code>1</code> means partially active, and <code>2</code> means unconfined.</p>
       <p>Strict/Relaxed is the plugin&rsquo;s enforcement policy; the probe reports
         whether runtime protections can satisfy Strict on this host. It does not

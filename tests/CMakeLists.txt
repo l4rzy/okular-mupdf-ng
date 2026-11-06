@@ -23,6 +23,9 @@ function(add_layer_test target source label)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
+add_layer_test(test_security_sandbox_status security/sandbox_status.cpp security)
+target_include_directories(test_security_sandbox_status PRIVATE ../src)
+
 add_layer_test(test_worker_framepool worker/frame_pool.cpp worker
     ../src/worker/runtime/frame_pool.cpp ../src/worker/sys/sys.cpp)
 target_include_directories(test_worker_framepool PRIVATE ../src ../src/worker)

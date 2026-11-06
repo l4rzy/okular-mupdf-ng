@@ -24,6 +24,7 @@
 #include <cerrno>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <string_view>
 
 #include "engine/constants.hpp"
@@ -33,11 +34,48 @@ namespace Mu::Worker::Sandbox {
 #ifdef __linux__
 namespace {
 
+// Private activation scratch state. OS mechanisms do not escape in the model.
+struct LinuxStatus {
+    std::optional<bool> landlock, seccomp, linuxNamespace, resourceLimits, memoryProtection, noNewPrivileges;
+    std::int32_t landlockAbi = 0;
+    std::string reason;
+};
+
+Status reportLinuxStatus(const LinuxStatus& activation, bool disabled = false)
+{
+    using namespace ::Mu::Model;
+    Status result;
+    result.platform = "linux";
+    result.profile = "mupdfng.linux.v1";
+    const auto add = [&](std::string id, ProtectionCategory category, std::optional<bool> active, bool required) {
+        const auto state = disabled ? ProtectionState::Disabled
+            : !active               ? ProtectionState::Unknown
+            : *active               ? ProtectionState::Enforced
+                                    : ProtectionState::Failed;
+        result.protections.push_back({ std::move(id), category, state, required, { }, { } });
+    };
+    add("linux.no_new_privileges", ProtectionCategory::Process, activation.noNewPrivileges, true);
+    add("linux.namespaces", ProtectionCategory::Process, activation.linuxNamespace, true);
+    add("linux.resource_limits", ProtectionCategory::Resources, activation.resourceLimits, true);
+    add("linux.landlock", ProtectionCategory::Filesystem, activation.landlock, true);
+    if (activation.landlockAbi > 0)
+        result.protections.back().version = std::to_string(activation.landlockAbi);
+    add("linux.seccomp", ProtectionCategory::Syscall, activation.seccomp, true);
+#ifndef MUPDF_HAVE_LIBSECCOMP
+    if (!disabled)
+        result.protections.back().state = ProtectionState::Unavailable;
+#endif
+    add("linux.mdwe", ProtectionCategory::Memory, activation.memoryProtection, false);
+    if (!activation.reason.empty())
+        result.diagnostics.push_back(activation.reason);
+    return result;
+}
+
 // =============================================================================
 // Sandbox Diagnostics & Proc File Writes
 // =============================================================================
 
-void recordIssue(Status& status, std::string_view issue)
+void recordIssue(LinuxStatus& status, std::string_view issue)
 {
     if (status.reason.empty())
         status.reason = issue;
@@ -45,14 +83,14 @@ void recordIssue(Status& status, std::string_view issue)
         status.reason += "; " + std::string(issue);
 }
 
-bool recordErrno(Status& status, std::string_view operation)
+bool recordErrno(LinuxStatus& status, std::string_view operation)
 {
     const int error = errno;
     recordIssue(status, std::string(operation) + ": " + std::strerror(error));
     return false;
 }
 
-bool writeProcFile(Status& status, const char* path, std::string_view name, std::string_view contents)
+bool writeProcFile(LinuxStatus& status, const char* path, std::string_view name, std::string_view contents)
 {
     const int fd = ::open(path, O_WRONLY | O_CLOEXEC);
     if (fd < 0)
@@ -88,7 +126,7 @@ int landlockCreate(const landlock_ruleset_attr* attributes, size_t size, __u32 f
 // Landlock capability is probed with a zero-size ruleset request that returns
 // the supported ABI version. Access bits are enabled only when both the build
 // headers expose them and the running kernel reports the corresponding ABI.
-bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Status& status)
+bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, LinuxStatus& status)
 {
     // Probe supported Landlock ABI version
     const int abi = landlockCreate(nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
@@ -165,7 +203,6 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
         success = false;
     }
     ::close(rulesetFd);
-    status.landlock = success;
     return success;
 }
 
@@ -177,7 +214,7 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Statu
 ///
 /// Creating an unprivileged User namespace allows unsharing Network and IPC namespaces
 /// without requiring CAP_SYS_ADMIN/root privileges on the host system.
-bool activateNamespaces(Status& status)
+bool activateNamespaces(LinuxStatus& status)
 {
     const uid_t uid = ::getuid();
     const gid_t gid = ::getgid();
@@ -208,22 +245,17 @@ bool activateNamespaces(Status& status)
         return false;
     }
 
-    status.linuxNamespace = true;
     return true;
 }
 
 /// Enforces Memory-Deny-Write-Execute (MDWE / W^X) protection on Linux >= 6.3.
 /// Permanently prevents turning writable memory pages into executable memory.
-bool tryEnableMemoryProtection(Status& status)
+bool tryEnableMemoryProtection()
 {
-    if (::prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN, 0, 0, 0) == 0) {
-        status.memoryProtection = true;
-        return true;
-    }
-    return false;
+    return ::prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN, 0, 0, 0) == 0;
 }
 
-bool requireNoNewPrivileges(Status& status)
+bool requireNoNewPrivileges(LinuxStatus& status)
 {
     if (::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0)
         return true;
@@ -239,16 +271,13 @@ void tryClearAmbientCapabilities()
 #endif
 }
 
-} // namespace
-
 // =============================================================================
 // Resource Limits & Inherited Descriptors
 // =============================================================================
 
 /// Applies the configured Linux memory and release-only core-dump limits.
-bool applyResourceLimits(Status& status)
+bool applyResourceLimits(LinuxStatus& status)
 {
-#ifdef __linux__
     bool ok = true;
 #ifndef MU_DEBUG_ENABLED
     // Disable core dumps (RLIMIT_CORE = 0 & PR_SET_DUMPABLE = 0) on release builds
@@ -273,20 +302,12 @@ bool applyResourceLimits(Status& status)
         ok = false;
     }
 
-    status.resourceLimits = ok;
     return ok;
-#else
-    status.resourceLimits = false;
-    return false;
-#endif
 }
 
-namespace {
-
 #ifndef MU_DEBUG_ENABLED
-bool closeInheritedDescriptors(const std::vector<int>& preservedFds, Status& status)
+bool closeInheritedDescriptors(const std::vector<int>& preservedFds, LinuxStatus& status)
 {
-#ifdef __linux__
     std::vector<int> preserved;
     for (const int fd : preservedFds) {
         if (fd >= 3)
@@ -309,16 +330,10 @@ bool closeInheritedDescriptors(const std::vector<int>& preservedFds, Status& sta
     if (::syscall(SYS_close_range, first, std::numeric_limits<unsigned int>::max(), 0) == 0)
         return true;
     return recordErrno(status, "Closing inherited descriptors");
-#else
-    (void)preservedFds;
-    (void)status;
-    return true;
-#endif
 }
 
-bool redirectStandardDescriptors(const std::vector<int>& preservedFds, Status& status)
+bool redirectStandardDescriptors(const std::vector<int>& preservedFds, LinuxStatus& status)
 {
-#ifdef __linux__
     const int nullFd = ::open("/dev/null", O_RDWR | O_CLOEXEC);
     if (nullFd < 0) {
         return recordErrno(status, "Opening /dev/null");
@@ -336,15 +351,8 @@ bool redirectStandardDescriptors(const std::vector<int>& preservedFds, Status& s
     if (nullFd > STDERR_FILENO)
         ::close(nullFd);
     return success;
-#else
-    (void)preservedFds;
-    (void)status;
-    return true;
-#endif
 }
 #endif
-
-} // namespace
 
 // =============================================================================
 // Seccomp Syscall Filtering
@@ -355,12 +363,12 @@ bool redirectStandardDescriptors(const std::vector<int>& preservedFds, Status& s
 ///
 /// Default action is SCMP_ACT_KILL_PROCESS. Only explicitly allowlisted syscalls
 /// necessary for rendering, IPC, and threading are permitted.
-bool activateSeccomp(Status& status)
+bool activateSeccomp(LinuxStatus& status)
 {
     // Initialize seccomp filter with default-kill action
     scmp_filter_ctx filter = seccomp_init(SCMP_ACT_KILL_PROCESS);
     if (!filter) {
-        status.reason = "Seccomp filter allocation failed";
+        recordIssue(status, "Seccomp filter allocation failed");
         return false;
     }
 
@@ -650,7 +658,7 @@ bool activateSeccomp(Status& status)
     }
 #else
     error = -ENOSYS;
-    status.reason = "Required syscall is unavailable: clone";
+    recordIssue(status, "Required syscall is unavailable: clone");
 #endif
 
 #ifdef __NR_clone3
@@ -666,17 +674,17 @@ bool activateSeccomp(Status& status)
         return false;
     }
     seccomp_release(filter);
-    status.seccomp = true;
     return true;
 }
 #else
-bool activateSeccomp(Status& status)
+bool activateSeccomp(LinuxStatus& status)
 {
     recordIssue(status, "libseccomp was not available at build time");
     return false;
 }
 #endif
 
+} // namespace
 #endif // __linux__
 
 // =============================================================================
@@ -689,24 +697,33 @@ bool activateSeccomp(Status& status)
 /// hardened status; startup remains best-effort when a phase is unavailable.
 Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories, const std::vector<int>& preservedFds)
 {
-    Sandbox::Status status;
+#ifndef __linux__
+    (void)readOnlyDirectories;
+    (void)preservedFds;
+    Status unsupported;
+#ifdef __FreeBSD__
+    unsupported.platform = "freebsd";
+#else
+    unsupported.platform = "unknown";
+#endif
+    unsupported.diagnostics.push_back("sandbox activation is not implemented on this platform");
+    return unsupported;
+#else
+    LinuxStatus status;
     if constexpr (MU_DISABLE_WORKER_SANDBOX) {
         status.reason = "sandbox disabled by build configuration";
-        return status;
+        return reportLinuxStatus(status, true);
     }
-#ifndef __linux__
-    status.reason = "sandboxing is supported only on Linux";
-    return status;
-#else
     // Required: prevent privilege gain through setuid/setgid binaries or execve.
-    if (!requireNoNewPrivileges(status))
-        return status;
+    status.noNewPrivileges = requireNoNewPrivileges(status);
+    if (!*status.noNewPrivileges)
+        return reportLinuxStatus(status);
 
     // Optional: clear ambient capabilities when the kernel exposes the interface.
     tryClearAmbientCapabilities();
 
     // Optional: enforce W^X when supported by the running kernel.
-    tryEnableMemoryProtection(status);
+    status.memoryProtection = tryEnableMemoryProtection();
 #ifndef MU_DEBUG_ENABLED
     // Release: redirect standard descriptors unless explicitly preserved.
     redirectStandardDescriptors(preservedFds, status);
@@ -717,15 +734,15 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories, co
     (void)preservedFds;
 #endif
     // Required: isolate user, network, and IPC namespaces.
-    activateNamespaces(status);
+    status.linuxNamespace = activateNamespaces(status);
     // Required: prevent resource exhaustion and disable core-dump exposure.
-    applyResourceLimits(status);
+    status.resourceLimits = applyResourceLimits(status);
     // Required: restrict filesystem access to the configured read-only trees.
-    activateLandlock(readOnlyDirectories, status);
+    status.landlock = activateLandlock(readOnlyDirectories, status);
     // Required: enforce the syscall allowlist with a kill-by-default filter.
-    activateSeccomp(status);
+    status.seccomp = activateSeccomp(status);
 
-    return status;
+    return reportLinuxStatus(status);
 #endif
 }
 

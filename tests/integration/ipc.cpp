@@ -612,12 +612,17 @@ private slots:
         QCOMPARE(m_client.usesSystemMuPdf(), bool(TEST_SYSTEM_MUPDF));
 
         const auto sandbox = m_client.sandboxStatus();
+        QCOMPARE(sandbox.platform, std::string("linux"));
+        QCOMPARE(sandbox.profile, std::string("mupdfng.linux.v1"));
+        QVERIFY(!sandbox.protections.empty());
         if constexpr (MU_DISABLE_WORKER_SANDBOX) {
-            QVERIFY(!sandbox.landlock && !sandbox.seccomp && !sandbox.linuxNamespace && !sandbox.resourceLimits
-                    && !sandbox.memoryProtection);
-            QCOMPARE(sandbox.reason, std::string("sandbox disabled by build configuration"));
+            for (const auto& protection : sandbox.protections)
+                QCOMPARE(protection.state, ::Mu::Model::ProtectionState::Disabled);
+            QCOMPARE(sandbox.diagnostics, std::vector<std::string> { "sandbox disabled by build configuration" });
         } else {
-            QVERIFY(sandbox.landlock || sandbox.seccomp || sandbox.linuxNamespace || sandbox.memoryProtection);
+            QVERIFY(std::any_of(sandbox.protections.begin(), sandbox.protections.end(), [](const auto& protection) {
+                return protection.state == ::Mu::Model::ProtectionState::Enforced;
+            }));
         }
 
         QImage retained = m_client.render(0, 160, 160);
