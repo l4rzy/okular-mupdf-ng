@@ -76,6 +76,19 @@ ZipEntries singlePageEntries(const QByteArray& width = "400", const QByteArray& 
                    + height + "\"/>" } };
 }
 
+ZipEntries outlineEntries(const QByteArray& outline)
+{
+    auto entries = singlePageEntries();
+    entries.push_back({ "_rels/document.fdoc.rels",
+                        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                        "<Relationship Id=\"r1\" Type=\"http://schemas.microsoft.com/xps/2005/06/documentstructure\" "
+                        "Target=\"/structure.struct\"/></Relationships>" });
+    entries.push_back({ "structure.struct",
+                        "<DocumentStructure><DocumentStructure.Outline><DocumentOutline>" + outline
+                            + "</DocumentOutline></DocumentStructure.Outline></DocumentStructure>" });
+    return entries;
+}
+
 } // namespace
 
 class TestXps : public QObject {
@@ -527,17 +540,8 @@ private slots:
     {
         QFETCH(int, length);
         QFETCH(bool, valid);
-        auto entries = singlePageEntries();
-        entries.push_back(
-            { "_rels/document.fdoc.rels",
-              "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-              "<Relationship Id=\"r1\" Type=\"http://schemas.microsoft.com/xps/2005/06/documentstructure\" "
-              "Target=\"/structure.struct\"/></Relationships>" });
-        entries.push_back({ "structure.struct",
-                            "<DocumentStructure><DocumentStructure.Outline><DocumentOutline>"
-                            "<OutlineEntry OutlineTarget=\"#1\" Description=\""
-                                + QByteArray(length, 'x')
-                                + "\"/></DocumentOutline></DocumentStructure.Outline></DocumentStructure>" });
+        const auto entries =
+            outlineEntries("<OutlineEntry OutlineTarget=\"#1\" Description=\"" + QByteArray(length, 'x') + "\"/>");
         QTemporaryDir dir;
         const auto path = dir.filePath(QStringLiteral("outline.xps"));
         const auto failure = writeZip(path, entries);
@@ -568,6 +572,387 @@ private slots:
         error.clear();
         QVERIFY(!document.textBoxes(0, 72, 72, 1000, false, &error).empty());
         QVERIFY(error.empty());
+    }
+
+    void rejectsUnavailablePages_data()
+    {
+        QTest::addColumn<int>("page");
+        QTest::addColumn<bool>("closed");
+        QTest::newRow("closed") << 0 << true;
+        QTest::newRow("negative") << -1 << false;
+        QTest::newRow("past-end") << 2 << false;
+    }
+
+    void rejectsUnavailablePages()
+    {
+        QFETCH(int, page);
+        QFETCH(bool, closed);
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        if (!closed) {
+            const auto path = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/text-links.xps"));
+            QVERIFY(document.openFd(::open(path.constData(), O_RDONLY), "links.xps", &error));
+        }
+        QCOMPARE(document.pageGeometry(page, &error).widthPoints, 0.0);
+        QCOMPARE(error, std::string("page is unavailable"));
+        error.clear();
+        QCOMPARE(document.pageDetails(page, &error).geometry.widthPoints, 0.0);
+        QCOMPARE(error, std::string("page is unavailable"));
+        error.clear();
+        QVERIFY(document.extractLinks(page, &error).empty());
+        QCOMPARE(error, std::string("page is unavailable"));
+        error.clear();
+        QVERIFY(document.textBoxes(page, 72, 72, 100, false, &error).empty());
+        QCOMPARE(error, std::string("page is unavailable"));
+        // Callers may omit diagnostics without changing rejection behavior.
+        QVERIFY(document.extractLinks(page).empty());
+        QVERIFY(document.textBoxes(page, 72, 72, 100).empty());
+    }
+
+    void rejectsClosedDocumentOperations()
+    {
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        QVERIFY(!document.isLocked());
+        QVERIFY(!document.unlock("password", &error));
+        QCOMPARE(error, std::string("XPS document is not password locked"));
+        error.clear();
+        QVERIFY(document.metadata({ }, &error).values.empty());
+        QCOMPARE(error, std::string("document is unavailable"));
+        error.clear();
+        QVERIFY(document.outline(&error).empty());
+        QCOMPARE(error, std::string("document is unavailable"));
+        error.clear();
+        QVERIFY(document.fonts({ }, &error).empty());
+        QCOMPARE(error, std::string("document is unavailable"));
+        error.clear();
+        QVERIFY(!document.resolveLink("#1", &error).valid);
+        QCOMPARE(error, std::string("document is unavailable"));
+        error.clear();
+        QVERIFY(!document.openFd(-1, "invalid.xps", &error));
+        QCOMPARE(error, std::string("input FD is invalid"));
+        document.trimMemoryForIdle();
+        document.close();
+        document.close();
+        QVERIFY(!document.isOpen());
+        QCOMPARE(document.pageCount(), 0);
+    }
+
+    void rejectsBrokenPages_data()
+    {
+        QTest::addColumn<bool>("missing");
+        QTest::newRow("missing-part") << true;
+        QTest::newRow("malformed-xml") << false;
+    }
+
+    void rejectsBrokenPages()
+    {
+        QFETCH(bool, missing);
+        auto entries = singlePageEntries();
+        if (missing)
+            entries.removeLast();
+        else
+            entries.back().second = "<FixedPage";
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath(QStringLiteral("broken.xps"));
+        const auto failure = writeZip(path, entries);
+        QVERIFY2(failure.isEmpty(), failure.constData());
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        // Page parts load lazily, so a valid package can contain a broken page.
+        QVERIFY(document.openFd(::open(QFile::encodeName(path).constData(), O_RDONLY), "broken.xps", &error));
+        QCOMPARE(document.pageCount(), 1);
+        QCOMPARE(document.pageDetails(0, &error).geometry.widthPoints, 0.0);
+        QVERIFY(!error.empty());
+        error.clear();
+        std::array<unsigned char, 64> pixels;
+        pixels.fill(0xA5);
+        QVERIFY(!document.renderToBuffer({ 0, 4, 4, std::nullopt }, pixels.data(), 16, &error));
+        QVERIFY(!error.empty());
+        for (const auto pixel : pixels)
+            QCOMPARE(pixel, static_cast<unsigned char>(0xA5));
+        error.clear();
+        const auto valid = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/graphics.xps"));
+        QVERIFY(document.openFd(::open(valid.constData(), O_RDONLY), "graphics.xps", &error));
+        QVERIFY2(document.renderToBuffer({ 0, 4, 4, std::nullopt }, pixels.data(), 16, &error), error.c_str());
+        QVERIFY(error.empty());
+    }
+
+    void readsPageDetails_data()
+    {
+        QTest::addColumn<bool>("includeLinks");
+        QTest::addColumn<bool>("exhaustBudget");
+        QTest::newRow("with-links") << true << false;
+        QTest::newRow("without-links") << false << false;
+        QTest::newRow("exhausted-links") << true << true;
+        QTest::newRow("skip-exhausted-links") << false << true;
+    }
+
+    void readsPageDetails()
+    {
+        QFETCH(bool, includeLinks);
+        QFETCH(bool, exhaustBudget);
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        const auto path = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/text-links.xps"));
+        QVERIFY(document.openFd(::open(path.constData(), O_RDONLY), "links.xps", &error));
+        Worker::Engine::ExtractionBudgets budgets;
+        if (exhaustBudget)
+            budgets.links.remainingBytes = 0;
+        const auto details = document.pageDetails(0, &error, includeLinks, &budgets);
+        if (includeLinks && exhaustBudget) {
+            QCOMPARE(error, std::string(Worker::Engine::ExtractionBudgetError));
+            QCOMPARE(details.geometry.widthPoints, 0.0);
+            QVERIFY(details.links.empty());
+        } else {
+            QVERIFY2(error.empty(), error.c_str());
+            const auto geometry = document.pageGeometry(0, &error);
+            QCOMPARE(details.geometry.widthPoints, geometry.widthPoints);
+            QCOMPARE(details.geometry.heightPoints, geometry.heightPoints);
+            QCOMPARE(details.geometry.label, std::string("1"));
+            QCOMPARE(details.links.size(), includeLinks ? std::size_t(2) : std::size_t(0));
+            for (const auto& link : details.links) {
+                QVERIFY(link.left >= 0 && link.left < link.right && link.right <= 1);
+                QVERIFY(link.top >= 0 && link.top < link.bottom && link.bottom <= 1);
+                QVERIFY(link.target.valid);
+            }
+        }
+        QVERIFY(details.annotations.empty());
+        QVERIFY(details.signatures.empty());
+        QVERIFY(details.formFields.empty());
+        error.clear();
+        QVERIFY(document.extractAnnotations(0, &error).empty());
+        QVERIFY(error.empty());
+    }
+
+    void resolvesDestinations_data()
+    {
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<int>("page");
+        QTest::addColumn<bool>("external");
+        QTest::newRow("page") << QStringLiteral("#2") << 1 << false;
+        QTest::newRow("missing") << QStringLiteral("#missing") << -1 << false;
+        QTest::newRow("out-of-range") << QStringLiteral("#3") << -1 << false;
+        QTest::newRow("empty") << QString() << -1 << false;
+        QTest::newRow("external") << QStringLiteral("https://example.com/") << -1 << true;
+    }
+
+    void resolvesDestinations()
+    {
+        QFETCH(QString, uri);
+        QFETCH(int, page);
+        QFETCH(bool, external);
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        const auto path = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/text-links.xps"));
+        QVERIFY(document.openFd(::open(path.constData(), O_RDONLY), "links.xps", &error));
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            if (attempt == 2)
+                document.discardResolvedLinkCache();
+            const auto link = document.resolveLink(uri.toStdString(), &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(link.valid, external || page >= 0);
+            QCOMPARE(link.external, external);
+            if (external)
+                QCOMPARE(link.uri, uri.toStdString());
+            else if (link.valid)
+                QCOMPARE(link.viewport.page, page);
+        }
+        // Cached destinations belong to the open document, including cached misses.
+        const auto other = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/graphics.xps"));
+        QVERIFY(document.openFd(::open(other.constData(), O_RDONLY), "graphics.xps", &error));
+        QVERIFY(!document.resolveLink("#2", &error).valid);
+        QVERIFY(error.empty());
+    }
+
+    void readsNestedOutline_data()
+    {
+        QTest::addColumn<int>("depth");
+        QTest::addColumn<bool>("oversizedChild");
+        QTest::newRow("nested") << 3 << false;
+        QTest::newRow("maximum-depth") << int(Worker::Engine::Constant::MaxOutlineDepth + 1) << false;
+        QTest::newRow("excessive-depth") << int(Worker::Engine::Constant::MaxOutlineDepth + 2) << false;
+        QTest::newRow("oversized-child") << 2 << true;
+    }
+
+    void readsNestedOutline()
+    {
+        QFETCH(int, depth);
+        QFETCH(bool, oversizedChild);
+        QByteArray outline;
+        for (int level = 1; level <= depth; ++level) {
+            const auto title =
+                oversizedChild && level == depth ? QByteArray(Limit::MaxString + 1, 'x') : QByteArray::number(level);
+            outline += "<OutlineEntry OutlineLevel=\"" + QByteArray::number(level)
+                + "\" OutlineTarget=\"#1\" Description=\"" + title + "\"/>";
+        }
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath(QStringLiteral("outline.xps"));
+        const auto failure = writeZip(path, outlineEntries(outline));
+        QVERIFY2(failure.isEmpty(), failure.constData());
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        QVERIFY(document.openFd(::open(QFile::encodeName(path).constData(), O_RDONLY), "outline.xps", &error));
+        const auto nodes = document.outline(&error);
+        if (oversizedChild || depth > int(Worker::Engine::Constant::MaxOutlineDepth + 1)) {
+            QVERIFY(nodes.empty());
+            QCOMPARE(error,
+                     std::string(oversizedChild ? Worker::Engine::ExtractionBudgetError
+                                                : "resource limit: outline nesting limit exceeded"));
+        } else {
+            QVERIFY2(error.empty(), error.c_str());
+            const auto* levelNodes = &nodes;
+            for (int level = 1; level <= depth; ++level) {
+                QCOMPARE(levelNodes->size(), std::size_t(1));
+                const auto& node = levelNodes->front();
+                QCOMPARE(node.title, std::to_string(level));
+                QVERIFY(node.link.valid);
+                QCOMPARE(node.link.viewport.page, 0);
+                levelNodes = &node.children;
+            }
+            QVERIFY(levelNodes->empty());
+        }
+    }
+
+    void enumeratesArchiveFonts_data()
+    {
+        QTest::addColumn<QString>("entry");
+        QTest::addColumn<Model::FontType>("type");
+        QTest::newRow("root-ttf") << QStringLiteral("Font.ttf") << Model::FontType::TrueType;
+        for (const auto* suffix : { "ttc", "odttf" })
+            QTest::newRow(suffix) << QStringLiteral("Fonts/Font.%1").arg(suffix) << Model::FontType::TrueType;
+        for (const auto* suffix : { "otf", "otc", "woff", "woff2", "OTF" })
+            QTest::newRow(suffix) << QStringLiteral("Fonts/Font.%1").arg(suffix) << Model::FontType::TrueTypeOT;
+        QTest::newRow("no-extension") << QStringLiteral("Fonts/Font") << Model::FontType::Unknown;
+        QTest::newRow("other-resource") << QStringLiteral("Fonts/Font.png") << Model::FontType::Unknown;
+    }
+
+    void enumeratesArchiveFonts()
+    {
+        QFETCH(QString, entry);
+        QFETCH(Model::FontType, type);
+        auto entries = singlePageEntries();
+        // Font inventory classifies ZIP resources without loading their glyphs.
+        entries.push_back({ entry.toUtf8(), "unused resource" });
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath(QStringLiteral("resources.xps"));
+        const auto failure = writeZip(path, entries);
+        QVERIFY2(failure.isEmpty(), failure.constData());
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        QVERIFY(document.openFd(::open(QFile::encodeName(path).constData(), O_RDONLY), "resources.xps", &error));
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            const auto fonts = document.fonts({ }, &error);
+            QVERIFY2(error.empty(), error.c_str());
+            QCOMPARE(fonts.size(), type == Model::FontType::Unknown ? std::size_t(0) : std::size_t(1));
+            if (!fonts.empty()) {
+                QCOMPARE(fonts.front().name, std::string("Font"));
+                QCOMPARE(fonts.front().file, entry.toStdString());
+                QCOMPARE(fonts.front().type, type);
+                QCOMPARE(fonts.front().embedType, Model::FontEmbedType::FullyEmbedded);
+            }
+        }
+    }
+
+    void rejectsInvalidTextDpi_data()
+    {
+        QTest::addColumn<double>("x");
+        QTest::addColumn<double>("y");
+        QTest::newRow("zero-x") << 0.0 << 72.0;
+        QTest::newRow("negative-y") << 72.0 << -1.0;
+        QTest::newRow("nan-x") << std::numeric_limits<double>::quiet_NaN() << 72.0;
+        QTest::newRow("infinite-y") << 72.0 << std::numeric_limits<double>::infinity();
+    }
+
+    void rejectsInvalidTextDpi()
+    {
+        QFETCH(double, x);
+        QFETCH(double, y);
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        const auto path = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/text-links.xps"));
+        QVERIFY(document.openFd(::open(path.constData(), O_RDONLY), "links.xps", &error));
+        QVERIFY(document.textBoxes(0, x, y, 1000, false, &error).empty());
+        QCOMPARE(error, std::string("text DPI is invalid"));
+    }
+
+    void rendersWithCookie_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::newRow("default") << int(Model::DocumentTheme::Default);
+        QTest::newRow("dark") << int(Model::DocumentTheme::Dark);
+    }
+
+    void rendersWithCookie()
+    {
+        QFETCH(int, theme);
+        // Compare replay paths using an aligned solid fill, avoiding gradient
+        // and image-resampling rounding differences across platforms.
+        auto entries = singlePageEntries();
+        entries.back().second =
+            "<FixedPage xmlns=\"http://schemas.microsoft.com/xps/2005/06\" Width=\"400\" Height=\"600\">"
+            "<Path Fill=\"#ff0000\" Data=\"M 0,0 L 400,0 400,600 0,600 Z\"/></FixedPage>";
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto path = dir.filePath(QStringLiteral("solid.xps"));
+        const auto failure = writeZip(path, entries);
+        QVERIFY2(failure.isEmpty(), failure.constData());
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        QVERIFY(document.openFd(::open(QFile::encodeName(path).constData(), O_RDONLY), "solid.xps", &error));
+        Model::DocumentSettings settings;
+        settings.documentTheme = static_cast<Model::DocumentTheme>(theme);
+        settings.idleTrimAggressiveness = -1;
+        document.setSettings(settings);
+        QCOMPARE(document.settings().idleTrimAggressiveness, Model::IdleTrimLevel::Balanced);
+        std::array<unsigned char, 40 * 60 * 4> expected { }, actual { };
+        Worker::Engine::DocumentBase::RenderRequest request { 0, 40, 60, std::nullopt };
+        QVERIFY(document.renderToBuffer(request, expected.data(), 40 * 4, &error));
+        fz_cookie cookie { };
+        request.cookie = &cookie;
+        QVERIFY2(document.renderToBuffer(request, actual.data(), 40 * 4, &error), error.c_str());
+        QCOMPARE(actual, expected);
+        QCOMPARE(cookie.abort, 0);
+        document.trimMemoryForIdle();
+        QVERIFY(document.renderToBuffer(request, actual.data(), 40 * 4, &error));
+        QCOMPARE(actual, expected);
+    }
+
+    void rejectsInvalidSave_data()
+    {
+        QTest::addColumn<bool>("closed");
+        QTest::addColumn<int>("page");
+        QTest::newRow("closed") << true << 0;
+        QTest::newRow("negative-page") << false << -1;
+        QTest::newRow("past-end") << false << 1;
+    }
+
+    void rejectsInvalidSave()
+    {
+        QFETCH(bool, closed);
+        QFETCH(int, page);
+        Worker::Engine::XpsDocument document;
+        std::string error;
+        if (!closed) {
+            const auto path = QFile::encodeName(QStringLiteral(TEST_XPS_DIR "/graphics.xps"));
+            QVERIFY(document.openFd(::open(path.constData(), O_RDONLY), "graphics.xps", &error));
+        }
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QFile output(dir.filePath(QStringLiteral("print.pdf")));
+        QVERIFY(output.open(QIODevice::WriteOnly));
+        const int fd = ::dup(output.handle());
+        QVERIFY(fd >= 0);
+        QVERIFY(!document.savePdfFd(fd, { page }, &error));
+        QCOMPARE(error, std::string(closed ? "document or output FD is unavailable" : "page is unavailable"));
+        errno = 0;
+        QCOMPARE(::fcntl(fd, F_GETFD), -1);
+        QCOMPARE(errno, EBADF);
+        QCOMPARE(output.size(), 0);
+        QVERIFY(!document.savePdfFd(-1, { }, nullptr));
     }
 
     void probesZipDataInWorker()

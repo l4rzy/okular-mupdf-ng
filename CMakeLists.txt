@@ -50,7 +50,10 @@ if(ENABLE_COVERAGE)
     # Directory options instrument our CMake targets, without forwarding flags
     # into the external MuPDF/Rust builds. Counter relocation supports LLVM's
     # continuous profiling on Linux, retaining coverage from killed workers.
+    # Same-named private helpers in files such as EPUB/XPS fonts.cpp must
+    # have distinct profile records rather than colliding on the basename.
     add_compile_options(-fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic
+        -funique-internal-linkage-names
         "SHELL:-mllvm -runtime-counter-relocation")
     add_link_options(-fprofile-instr-generate)
 endif()
