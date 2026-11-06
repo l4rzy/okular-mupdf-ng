@@ -129,3 +129,10 @@ jobs:
           dpkg-deb --contents "$package" | grep -q '/share/okular-mupdf-ng/Allura-Regular\.ttf$'
           dpkg-deb --contents "$package" | grep -q '/doc/okular-mupdf-ng/Allura-OFL\.txt$'
           dpkg-deb --info "$package"
+
+      - name: Upload Ubuntu DEB CI artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-deb-ubuntu-26.04-${{ matrix.compiler }}
+          path: build/packages/*_ubuntu-26.04.deb
+          if-no-files-found: warn

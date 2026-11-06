@@ -146,3 +146,10 @@ jobs:
           file "$worker" | grep -q "$ELF_ARCH"
           rpm --checksig "$package"
           rpm --info -qp "$package"
+
+      - name: Upload Fedora RPM CI artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-rpm-fedora-${{ matrix.version }}-${{ matrix.arch }}
+          path: build/packages/*.fc${{ matrix.version }}.${{ matrix.arch }}.rpm
+          if-no-files-found: warn
