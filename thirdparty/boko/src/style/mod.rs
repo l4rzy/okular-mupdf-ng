@@ -32,15 +32,16 @@ pub trait ToCss {
 
 // Re-export property types
 pub use properties::{
-    BorderCollapse, BorderStyle, BoxSizing, BreakValue, Clear, Color, DecorationStyle, Display,
-    Float, FontStyle, FontVariant, FontWeight, Hyphens, Length, ListStylePosition, ListStyleType,
-    OverflowWrap, TextAlign, TextTransform, VerticalAlign, Visibility, WhiteSpace, WordBreak,
+    BorderCollapse, BorderStyle, BoxSizing, BreakValue, Clear, Color, DecorationStyle, Direction,
+    Display, Float, FontStyle, FontVariant, FontWeight, Hyphens, Length, ListStylePosition,
+    ListStyleType, OverflowWrap, TextAlign, TextTransform, VerticalAlign, Visibility, WhiteSpace,
+    WordBreak,
 };
 
 // Re-export core style types
 pub use style_pool::StylePool;
-pub use to_css::{changed_property_value, for_each_changed_property};
-pub use types::{ComputedStyle, StyleId};
+pub use to_css::{changed_property_value, changed_property_value_from, for_each_changed_property};
+pub use types::{AbsFontSize, ComputedStyle, StyleId};
 
 // Re-export declaration type (kept minimal)
 pub use declaration::Declaration;
@@ -49,6 +50,7 @@ pub use declaration::Declaration;
 pub use parse::{CssRule, InlineStyle, Origin, Specificity, Stylesheet, TextDecorationValue};
 
 // Re-export cascade function
+pub(crate) use cascade::inherit_from_parent;
 pub use cascade::{CascadeIndex, CascadeScratch, compute_styles, compute_styles_indexed};
 
 // Re-export macro for internal use

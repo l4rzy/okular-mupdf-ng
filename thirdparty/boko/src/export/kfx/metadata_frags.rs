@@ -196,13 +196,15 @@ pub(super) fn build_content_features_fragment(ctx: &ExportContext) -> KfxFragmen
     }
 
     // Tables enable the device's table renderer and the double-tap table
-    // viewer; Kindle Previewer declares both for books with tables.
+    // viewer; Kindle Previewer declares both for books with tables
+    // (yj_table v7, yj_table_viewer v2 — the viewer version the device's
+    // renderer expects for container-shaped cells).
     if ctx.has_tables {
         features.push(feature_entry("com.amazon.yjconversion", "yj_table", 7));
         features.push(feature_entry(
             "com.amazon.yjconversion",
             "yj_table_viewer",
-            1,
+            2,
         ));
     }
 
@@ -272,7 +274,13 @@ pub(super) fn build_document_data_fragment(ctx: &ExportContext) -> KfxFragment {
     let document_data = IonValue::Struct(vec![
         (
             KfxSymbol::Direction as u64,
-            IonValue::Symbol(KfxSymbol::Ltr as u64),
+            IonValue::Symbol(
+                (if ctx.rtl {
+                    KfxSymbol::Rtl
+                } else {
+                    KfxSymbol::Ltr
+                }) as u64,
+            ),
         ),
         (
             KfxSymbol::ColumnCount as u64,

@@ -57,33 +57,6 @@ pub fn transform_kindle_refs(
     raw_text: &[u8],
     file_starts: &[(u32, u32)],
 ) -> Vec<u8> {
-    replace_kindle_refs(html, |reference| {
-        generate_replacement(reference, elems, raw_text, file_starts)
-    })
-}
-
-/// Resolve stylesheet resources relative to the styles/ directory. Use the
-/// discovered record paths so FONT containers and image formats keep their
-/// actual filenames instead of guessing an extension from the URL's MIME hint.
-pub fn transform_kindle_css_refs(css: &[u8], assets: &[String]) -> Vec<u8> {
-    replace_kindle_refs(css, |reference| {
-        if let RefKind::Embed { img_idx, .. } = reference.kind {
-            let image = format!("images/image_{img_idx:04}.");
-            let font = format!("fonts/font_{img_idx:04}.");
-            if let Some(path) = assets
-                .iter()
-                .find(|p| p.starts_with(&image) || p.starts_with(&font))
-            {
-                return format!("../{path}").into_bytes();
-            }
-        }
-        let mut path = b"../".to_vec();
-        path.extend_from_slice(&generate_replacement(reference, &[], &[], &[]));
-        path
-    })
-}
-
-fn replace_kindle_refs(html: &[u8], replacement: impl Fn(&KindleRef) -> Vec<u8>) -> Vec<u8> {
     let mut output = Vec::with_capacity(html.len());
     let mut pos = 0;
 
@@ -94,7 +67,8 @@ fn replace_kindle_refs(html: &[u8], replacement: impl Fn(&KindleRef) -> Vec<u8>)
         output.extend_from_slice(&html[pos..start]);
 
         if let Some(kindle_ref) = parse_kindle_ref(&html[start..]) {
-            output.extend_from_slice(&replacement(&kindle_ref));
+            let replacement = generate_replacement(&kindle_ref, elems, raw_text, file_starts);
+            output.extend_from_slice(&replacement);
             pos = start + kindle_ref.end;
         } else {
             output.extend_from_slice(b"kindle:");
@@ -344,8 +318,8 @@ fn explicit_id(tag: &[u8]) -> Option<String> {
     html_tag(tag)?
         .html_attributes()
         .filter_map(Result::ok)
-        .find(|attribute| attribute.key.as_ref() == b"id")?
-        .unescape_value()
+        .find(|attribute| attribute.key.as_ref() == "id")?
+        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
         .ok()
         .map(|value| value.into_owned())
 }
@@ -476,12 +450,12 @@ fn clean_tag(tag: &[u8]) -> Vec<u8> {
     let has_id = explicit_id(tag).is_some();
     let mut result = Vec::with_capacity(tag.len());
     result.push(b'<');
-    result.extend_from_slice(start.name().as_ref());
+    result.extend_from_slice(start.name().as_ref().as_bytes());
     for attribute in start.html_attributes() {
         let Ok(attribute) = attribute else {
             return tag.to_vec();
         };
-        let name = attribute.key.as_ref();
+        let name = attribute.key.as_ref().as_bytes();
         if name.starts_with(b"data-Amzn")
             || name.starts_with(b"data-amzn")
             || (name == b"aid" && has_id)
@@ -497,7 +471,7 @@ fn clean_tag(tag: &[u8]) -> Vec<u8> {
         }
         // Preserve existing XML entities, escaping quotes when a formerly
         // single-quoted or unquoted HTML attribute is serialized with quotes.
-        for &byte in attribute.value.as_ref() {
+        for &byte in attribute.value.as_bytes() {
             if byte == b'"' {
                 result.extend_from_slice(b"&quot;");
             } else {

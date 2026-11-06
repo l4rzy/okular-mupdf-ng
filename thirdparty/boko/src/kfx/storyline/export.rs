@@ -17,6 +17,135 @@ pub(super) fn needs_container_wrapper(style: &ComputedStyle) -> bool {
     has_top || has_bottom || has_left || has_right
 }
 
+/// The layout hint a node's style should carry (`layout_hints:
+/// [treat_as_title]` etc). Reference KFX puts these in style structs, not on
+/// content nodes; they affect Kindle's rendering of headings, figures and
+/// captions.
+fn layout_hint_for(chapter: &Chapter, node_id: NodeId, role: Role) -> Option<KfxSymbol> {
+    match role {
+        Role::Heading(_) => Some(KfxSymbol::TreatAsTitle),
+        Role::Figure => Some(KfxSymbol::Figure),
+        Role::Caption => Some(KfxSymbol::Caption),
+        _ => {
+            let epub_type = chapter.semantics.epub_type(node_id)?;
+            let has_title_type = epub_type.split_whitespace().any(|t| {
+                matches!(
+                    t,
+                    "title" | "fulltitle" | "subtitle" | "covertitle" | "halftitle"
+                )
+            });
+            let has_caption_type = epub_type
+                .split_whitespace()
+                .any(|t| matches!(t, "caption" | "figcaption"));
+            if has_title_type {
+                Some(KfxSymbol::TreatAsTitle)
+            } else if has_caption_type {
+                Some(KfxSymbol::Caption)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// The first authored link color inside the node's inline flow, packed as
+/// ARGB. Reference output carries it on the containing block as
+/// link_unvisited_style/link_visited_style; recursion stops at nested
+/// blocks (they carry their own).
+fn link_color_for(chapter: &Chapter, node_id: NodeId) -> Option<u32> {
+    fn scan(chapter: &Chapter, id: NodeId, depth: u32) -> Option<u32> {
+        let node = chapter.node(id)?;
+        let inline = matches!(
+            node.role,
+            Role::Link | Role::Inline | Role::Text | Role::Break
+        );
+        if depth > 0 && !inline {
+            return None;
+        }
+        if node.role == Role::Link
+            && let Some(style) = chapter.styles.get(node.style)
+            && let Some(c) = style.color
+            // Black links are default ink; reference output only carries
+            // actually-colored links (black would break night mode).
+            && (c.r, c.g, c.b) != (0, 0, 0)
+        {
+            return Some(
+                ((c.a as u32) << 24) | ((c.r as u32) << 16) | ((c.g as u32) << 8) | c.b as u32,
+            );
+        }
+        chapter
+            .children(id)
+            .find_map(|child| scan(chapter, child, depth + 1))
+    }
+    scan(chapter, node_id, 0)
+}
+
+/// Per-column widths (percent) for a table's `column_format`.
+///
+/// Kindle Previewer computes these with its layout engine; without a layout
+/// pass, text volume per column is a serviceable stand-in. Reference output
+/// sums to ~90% (leaving slack), so widths are scaled to 90 with an 8% floor
+/// for narrow label columns. Returns empty (omit column_format) for tables
+/// with fewer than two columns. Spanning cells are skipped — their text
+/// doesn't belong to any single column.
+fn table_column_widths(chapter: &Chapter, table_id: NodeId) -> Vec<f64> {
+    fn subtree_text_chars(chapter: &Chapter, id: NodeId) -> usize {
+        let mut n = 0;
+        if let Some(node) = chapter.node(id)
+            && !node.text.is_empty()
+        {
+            n += chapter.text(node.text).chars().count();
+        }
+        for child in chapter.children(id) {
+            n += subtree_text_chars(chapter, child);
+        }
+        n
+    }
+    fn visit_row(chapter: &Chapter, row_id: NodeId, totals: &mut Vec<usize>) {
+        let mut col = 0usize;
+        for cell in chapter.children(row_id) {
+            if chapter.node(cell).map(|n| n.role) != Some(Role::TableCell) {
+                continue;
+            }
+            let span = chapter.semantics.col_span(cell).unwrap_or(1).max(1) as usize;
+            if span == 1 {
+                if totals.len() <= col {
+                    totals.resize(col + 1, 0);
+                }
+                totals[col] += subtree_text_chars(chapter, cell);
+            }
+            col += span;
+        }
+    }
+
+    let mut totals: Vec<usize> = Vec::new();
+    for child in chapter.children(table_id) {
+        match chapter.node(child).map(|n| n.role) {
+            Some(Role::TableRow) => visit_row(chapter, child, &mut totals),
+            Some(Role::TableHead | Role::TableBody) => {
+                for row in chapter.children(child) {
+                    if chapter.node(row).map(|n| n.role) == Some(Role::TableRow) {
+                        visit_row(chapter, row, &mut totals);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if totals.len() < 2 {
+        return Vec::new();
+    }
+    let sum: usize = totals.iter().sum();
+    if sum == 0 {
+        return vec![90.0 / totals.len() as f64; totals.len()];
+    }
+    totals
+        .iter()
+        .map(|&t| (90.0 * t as f64 / sum as f64).max(8.0))
+        .collect()
+}
+
 /// Convert an IR chapter to a TokenStream.
 ///
 /// This is the first stage of export: walking the IR tree and emitting tokens.
@@ -31,7 +160,20 @@ pub fn ir_to_tokens(chapter: &Chapter, ctx: &mut ExportContext) -> TokenStream {
     // one ExportContext is reused across chapters.
     ctx.reset_style_memo();
 
-    walk_node_for_export(chapter, chapter.root(), sch, ctx, &mut stream);
+    // Pre-compute static margin collapsing: the Kindle renderer does not
+    // collapse adjoining margins, so the collapsed values are baked into
+    // per-position style overrides (see collapse.rs).
+    let adjust = super::collapse::compute_margin_collapse(chapter);
+
+    walk_node_for_export(
+        chapter,
+        chapter.root(),
+        crate::style::StyleId::DEFAULT,
+        &adjust,
+        sch,
+        ctx,
+        &mut stream,
+    );
     stream
 }
 
@@ -43,6 +185,8 @@ pub fn ir_to_tokens(chapter: &Chapter, ctx: &mut ExportContext) -> TokenStream {
 pub(super) fn walk_node_for_export(
     chapter: &Chapter,
     node_id: NodeId,
+    parent_style: crate::style::StyleId,
+    adjust: &super::collapse::MarginAdjustMap,
     sch: &crate::kfx::schema::KfxSchema,
     ctx: &mut ExportContext,
     stream: &mut TokenStream,
@@ -55,7 +199,7 @@ pub(super) fn walk_node_for_export(
     // Root node: just walk children
     if node.role == Role::Root {
         for child in chapter.children(node_id) {
-            walk_node_for_export(chapter, child, sch, ctx, stream);
+            walk_node_for_export(chapter, child, parent_style, adjust, sch, ctx, stream);
         }
         return;
     }
@@ -82,7 +226,7 @@ pub(super) fn walk_node_for_export(
     // Definition lists: group dt+dd pairs into wrapper elements
     // HTML has dt/dd as flat siblings, but KFX needs them grouped for float to work
     if node.role == Role::DefinitionList {
-        emit_definition_list(chapter, node_id, sch, ctx, stream);
+        emit_definition_list(chapter, node_id, parent_style, adjust, sch, ctx, stream);
         return;
     }
 
@@ -90,7 +234,45 @@ pub(super) fn walk_node_for_export(
     // This produces non-overlapping style_events where each text segment
     // carries the accumulated state from all ancestors.
     if node.role == Role::Link || node.role == Role::Inline {
-        emit_inline_content_flat(chapter, node_id, sch, ctx, stream);
+        emit_inline_content_flat(chapter, node_id, parent_style, sch, ctx, stream);
+        return;
+    }
+
+    // Math: with a math font available, emit a KVG-bearing container —
+    // typeset vector shapes plus mathml/alt_text annotations (legitimate as
+    // overlays on the KVG; a device test showed they leak as visible content
+    // WITHOUT a shape layer). Equations with unmodeled content decline to a
+    // text-child container (alt_text annotation only, no mathml). With no
+    // font at all, math stays a plain inline text run.
+    if node.role == Role::Math {
+        if let Some(math) = chapter.math.get(&node_id) {
+            let text = math.to_text();
+            if !ctx.math_renders_as_container() {
+                if !text.is_empty() {
+                    stream.push(KfxToken::Text(text));
+                }
+                return;
+            }
+            let kvg = ctx.typeset_math(math);
+            let mathml = if kvg.is_some() {
+                crate::math::mathml::to_mathml(math)
+            } else {
+                String::new()
+            };
+            let alttext = math.alttext.clone().unwrap_or_else(|| text.clone());
+            let style_symbol = ctx.register_style_id(node.style, parent_style, &chapter.styles);
+            stream.push(KfxToken::MathKvg(Box::new(
+                crate::kfx::tokens::MathKvgToken {
+                    kvg,
+                    mathml,
+                    alttext,
+                    text,
+                    display: math.display,
+                    style_symbol: Some(style_symbol),
+                    node_id: Some(node_id),
+                },
+            )));
+        }
         return;
     }
 
@@ -101,11 +283,63 @@ pub(super) fn walk_node_for_export(
     if node.role == Role::Table {
         // Drives the yj_table / yj_table_viewer content features ($585).
         ctx.has_tables = true;
+        // Reference table elements carry column widths and border collapsing
+        // baked in; the device's table renderer needs column_format to lay
+        // cells out side by side.
+        elem.table_format = Some(Box::new(crate::kfx::tokens::TableFormat {
+            column_widths_pct: table_column_widths(chapter, node_id),
+            border_collapse: chapter
+                .styles
+                .get(node.style)
+                .is_some_and(|s| s.border_collapse == crate::style::BorderCollapse::Collapse),
+        }));
+    }
+
+    // A <caption> directly inside a table carries yj.classification: caption
+    // like reference output (figcaptions don't).
+    if node.role == Role::Caption {
+        elem.is_table_caption = node
+            .parent
+            .and_then(|p| chapter.node(p))
+            .is_some_and(|p| p.role == Role::Table);
     }
 
     // Register the node's style and get a KFX style symbol
     // This converts IR ComputedStyle → KFX style and deduplicates
-    let style_symbol = ctx.register_style_id(node.style, &chapter.styles);
+    let hint = layout_hint_for(chapter, node_id, node.role);
+    let adj = adjust.get(&node_id).copied().unwrap_or_default();
+    let link_color = link_color_for(chapter, node_id);
+    // Dropcap paragraphs suppress their leading span's float/large font.
+    let is_dropcap = chapter
+        .styles
+        .get(node.style)
+        .is_some_and(|s| s.dropcap_chars > 0);
+    // Role-driven property strips: lists shed their authored horizontal
+    // indent (the renderer's native gutter replaces it), table cells shed
+    // authored min/max-width (column_format carries the column widths).
+    // Kindle Previewer does both.
+    let strip = match node.role {
+        Role::UnorderedList | Role::OrderedList => crate::kfx::context::RoleStrip::ListIndent,
+        Role::TableCell => crate::kfx::context::RoleStrip::CellWidth,
+        _ => crate::kfx::context::RoleStrip::None,
+    };
+    let style_symbol = if hint.is_some()
+        || !adj.is_identity()
+        || link_color.is_some()
+        || strip != crate::kfx::context::RoleStrip::None
+    {
+        ctx.register_style_id_adjusted(
+            node.style,
+            parent_style,
+            &chapter.styles,
+            adj,
+            hint,
+            link_color,
+            strip,
+        )
+    } else {
+        ctx.register_style_id(node.style, parent_style, &chapter.styles)
+    };
     elem.style_symbol = Some(style_symbol);
 
     // Check if this element needs container wrapping for borders to render
@@ -211,8 +445,24 @@ pub(super) fn walk_node_for_export(
         elem.set_semantic(SemanticTarget::EpubType, epub_type.to_string());
     }
 
-    let run_style_symbol = elem.style_symbol;
+    // Run wrappers normally reuse the block's style; inside table cells and
+    // table captions they use the default style instead — the cell/caption
+    // element already carries the box style (borders, padding), and copying
+    // it onto the inner $269 would render the borders twice. Reference
+    // output gives these inner text elements their own minimal styles.
+    let is_table_caption = elem.is_table_caption;
+    let run_style_symbol = if node.role == Role::TableCell || is_table_caption {
+        ctx.default_style_used = true;
+        Some(ctx.default_style_symbol)
+    } else {
+        elem.style_symbol
+    };
     stream.push(KfxToken::StartElement(elem));
+
+    // Arm dropcap suppression for this block's first inline run.
+    if is_dropcap {
+        ctx.dropcap_suppress = true;
+    }
 
     // Reference content model: an element never carries BOTH its own text
     // and element children. When inline flow (text, breaks, links, spans)
@@ -221,8 +471,14 @@ pub(super) fn walk_node_for_export(
     // ref — Kindle Previewer's encoding. The hybrid shape (one ref plus
     // children) mis-accounts reading positions and never occurs in
     // Amazon-produced books.
-    let is_inline_flow =
-        |role: Role| matches!(role, Role::Text | Role::Break | Role::Link | Role::Inline);
+    // Math counts as inline flow only when it renders as a bare text run
+    // (no math font): the run wrapper must enclose it. As a KVG container it
+    // is a sibling element, closing any open run — like an inline image.
+    let math_is_flow = !ctx.math_renders_as_container();
+    let is_inline_flow = |role: Role| {
+        matches!(role, Role::Text | Role::Break | Role::Link | Role::Inline)
+            || (role == Role::Math && math_is_flow)
+    };
     let children: Vec<NodeId> = chapter.children(node_id).collect();
     let has_own_text = !node.text.is_empty() && !chapter.text(node.text).is_empty();
     let has_flow = has_own_text
@@ -233,7 +489,16 @@ pub(super) fn walk_node_for_export(
         .iter()
         .any(|&c| chapter.node(c).is_some_and(|n| !is_inline_flow(n.role)));
 
-    if !(has_flow && has_elements) {
+    // Table cells are $270 containers; a container must never carry a text
+    // ref directly (a bare-text <th>/<td> would otherwise put one there), so
+    // any inline flow in a cell is forced into a $269 run child — the shape
+    // reference cells always have. Table captions get the same treatment:
+    // reference captions nest their content in an inner text element, and
+    // the caption element itself (marked yj.classification: caption) must
+    // not carry a content ref or style_events.
+    let force_runs = (node.role == Role::TableCell || is_table_caption) && has_flow;
+
+    if !(has_flow && has_elements) && !force_runs {
         // Uniform content: emit text and children directly (single-ref or
         // pure-children element).
         if !node.text.is_empty() {
@@ -243,7 +508,7 @@ pub(super) fn walk_node_for_export(
             }
         }
         for child in children {
-            walk_node_for_export(chapter, child, sch, ctx, stream);
+            walk_node_for_export(chapter, child, node.style, adjust, sch, ctx, stream);
         }
     } else {
         // Mixed content: wrap each contiguous inline-flow run in a text
@@ -276,10 +541,14 @@ pub(super) fn walk_node_for_export(
             } else {
                 close_run(stream, &mut run_open);
             }
-            walk_node_for_export(chapter, child, sch, ctx, stream);
+            walk_node_for_export(chapter, child, node.style, adjust, sch, ctx, stream);
         }
         close_run(stream, &mut run_open);
     }
+
+    // Clear any unconsumed dropcap arming (e.g. a dropcap block whose first
+    // run was plain text) so it can't leak into a later block.
+    ctx.dropcap_suppress = false;
 
     stream.push(KfxToken::EndElement);
 }
@@ -386,6 +655,22 @@ pub(super) fn flatten_inline_content(
                 state: effective_state,
             });
         }
+        // MATH inside an inline element (e.g. `<span>… <math/> …</span>`):
+        // a math container cannot be nested mid-style-event, so emit the
+        // equation's readable linearization as an inline text segment rather
+        // than dropping it. (Math at block level gets the full container with
+        // annotations via walk_node_for_export.)
+        Role::Math => {
+            if let Some(m) = chapter.math.get(&node_id) {
+                let text = m.to_text();
+                if !text.is_empty() {
+                    segments.push(FlatSegment {
+                        text,
+                        state: effective_state,
+                    });
+                }
+            }
+        }
         // CONTAINERS (Link, Inline, etc.): Recurse with accumulated state
         _ => {
             let children: Vec<_> = chapter.children(node_id).collect();
@@ -410,6 +695,7 @@ pub(super) fn flatten_inline_content(
 pub(super) fn emit_flattened_segments(
     segments: Vec<FlatSegment>,
     chapter: &Chapter,
+    parent_style: crate::style::StyleId,
     _sch: &crate::kfx::schema::KfxSchema,
     ctx: &mut ExportContext,
     stream: &mut TokenStream,
@@ -430,9 +716,18 @@ pub(super) fn emit_flattened_segments(
             );
 
             // Set style (innermost). Inline runs use the inline projection:
-            // block-only properties (box_align) never ride style_events.
+            // block-only properties (box_align) never ride style_events. The
+            // first run of a dropcap paragraph additionally drops its float
+            // and large font (the native dropcap replaces them).
             if let Some(style_id) = segment.state.style {
-                let style_symbol = ctx.register_inline_style_id(style_id, &chapter.styles);
+                let suppress = ctx.dropcap_suppress;
+                ctx.dropcap_suppress = false;
+                let style_symbol = ctx.register_inline_style_id_inner(
+                    style_id,
+                    parent_style,
+                    &chapter.styles,
+                    suppress,
+                );
                 span.style_symbol = Some(style_symbol);
             }
 
@@ -485,6 +780,8 @@ pub(super) fn emit_flattened_segments(
 pub(super) fn emit_definition_list(
     chapter: &Chapter,
     node_id: NodeId,
+    parent_style: crate::style::StyleId,
+    adjust: &super::collapse::MarginAdjustMap,
     sch: &crate::kfx::schema::KfxSchema,
     ctx: &mut ExportContext,
     stream: &mut TokenStream,
@@ -496,7 +793,7 @@ pub(super) fn emit_definition_list(
 
     // Emit the outer dl container (becomes Paragraph like KPR)
     let mut dl_elem = ElementStart::new(Role::Paragraph);
-    let dl_style = ctx.register_style_id(node.style, &chapter.styles);
+    let dl_style = ctx.register_style_id(node.style, parent_style, &chapter.styles);
     dl_elem.style_symbol = Some(dl_style);
 
     stream.push(KfxToken::StartElement(dl_elem));
@@ -534,7 +831,7 @@ pub(super) fn emit_definition_list(
             // Use a neutral style (from dd or default)
             let mut wrapper_elem = ElementStart::new(Role::Paragraph);
             let wrapper_style = if let Some((_, dd_style_id)) = dd_info {
-                ctx.register_style_id(dd_style_id, &chapter.styles)
+                ctx.register_style_id(dd_style_id, node.style, &chapter.styles)
             } else {
                 ctx.default_style_symbol
             };
@@ -546,18 +843,46 @@ pub(super) fn emit_definition_list(
 
             // Emit the dt as a Container (with float:left style)
             // Use DefinitionTerm role since it maps to KfxSymbol::Container
-            let dt_style = ctx.register_style_id(child.style, &chapter.styles);
+            let dt_style = ctx.register_style_id(child.style, node.style, &chapter.styles);
             let mut dt_elem = ElementStart::new(Role::DefinitionTerm);
             dt_elem.style_symbol = Some(dt_style);
             stream.push(KfxToken::StartElement(dt_elem));
 
-            // Emit dt's children wrapped in a Paragraph (like KPR)
+            // Emit dt's children wrapped in a Paragraph (like KPR). Inline
+            // flow among the dt's children must be run-wrapped or the inner
+            // Paragraph becomes a hybrid (ref + element children) — the shape
+            // the reference model forbids. A dt like `<dt>Move to a point
+            // <math>…</math></dt>` mixes text with a math container, so it
+            // needs the same discipline as the dd path below.
             let mut dt_inner = ElementStart::new(Role::Paragraph);
             dt_inner.style_symbol = Some(dt_style);
             stream.push(KfxToken::StartElement(dt_inner));
 
-            for dt_child in chapter.children(child_id) {
-                walk_node_for_export(chapter, dt_child, sch, ctx, stream);
+            {
+                let math_is_flow = !ctx.math_renders_as_container();
+                let is_inline_flow = |role: Role| {
+                    matches!(role, Role::Text | Role::Break | Role::Link | Role::Inline)
+                        || (role == Role::Math && math_is_flow)
+                };
+                let mut run_open = false;
+                for dt_child in chapter.children(child_id) {
+                    let child_is_flow = chapter
+                        .node(dt_child)
+                        .is_some_and(|n| is_inline_flow(n.role));
+                    if child_is_flow && !run_open {
+                        let mut run = ElementStart::new(Role::Text);
+                        run.style_symbol = Some(dt_style);
+                        stream.push(KfxToken::StartElement(run));
+                        run_open = true;
+                    } else if !child_is_flow && run_open {
+                        stream.push(KfxToken::EndElement);
+                        run_open = false;
+                    }
+                    walk_node_for_export(chapter, dt_child, child.style, adjust, sch, ctx, stream);
+                }
+                if run_open {
+                    stream.push(KfxToken::EndElement);
+                }
             }
 
             stream.push(KfxToken::EndElement); // end dt inner Paragraph
@@ -567,9 +892,11 @@ pub(super) fn emit_definition_list(
             // element child, so any inline flow among the dd's children must
             // be run-wrapped or the wrapper becomes a hybrid element
             // (ref + children) — the shape the reference model forbids.
-            if let Some((dd_id, _)) = dd_info {
+            if let Some((dd_id, dd_style_id)) = dd_info {
+                let math_is_flow = !ctx.math_renders_as_container();
                 let is_inline_flow = |role: Role| {
                     matches!(role, Role::Text | Role::Break | Role::Link | Role::Inline)
+                        || (role == Role::Math && math_is_flow)
                 };
                 let mut run_open = false;
                 for dd_child in chapter.children(dd_id) {
@@ -585,7 +912,7 @@ pub(super) fn emit_definition_list(
                         stream.push(KfxToken::EndElement);
                         run_open = false;
                     }
-                    walk_node_for_export(chapter, dd_child, sch, ctx, stream);
+                    walk_node_for_export(chapter, dd_child, dd_style_id, adjust, sch, ctx, stream);
                 }
                 if run_open {
                     stream.push(KfxToken::EndElement);
@@ -598,7 +925,7 @@ pub(super) fn emit_definition_list(
             stream.push(KfxToken::EndElement);
         } else {
             // Non-dt child (orphan dd or other), emit normally
-            walk_node_for_export(chapter, child_id, sch, ctx, stream);
+            walk_node_for_export(chapter, child_id, node.style, adjust, sch, ctx, stream);
         }
 
         i += 1;
@@ -614,6 +941,7 @@ pub(super) fn emit_definition_list(
 pub(super) fn emit_inline_content_flat(
     chapter: &Chapter,
     node_id: NodeId,
+    parent_style: crate::style::StyleId,
     sch: &crate::kfx::schema::KfxSchema,
     ctx: &mut ExportContext,
     stream: &mut TokenStream,
@@ -623,5 +951,5 @@ pub(super) fn emit_inline_content_flat(
     flatten_inline_content(chapter, node_id, InlineState::default(), &mut segments);
 
     // Convert segments to tokens
-    emit_flattened_segments(segments, chapter, sch, ctx, stream);
+    emit_flattened_segments(segments, chapter, parent_style, sch, ctx, stream);
 }

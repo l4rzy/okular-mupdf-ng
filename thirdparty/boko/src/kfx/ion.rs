@@ -761,8 +761,10 @@ impl IonWriter {
         let mut coef = ((val * 1_000_000.0).round() as i64).max(i64::MIN + 1);
         let mut exp: i8 = -6;
 
-        // Normalize: remove trailing zeros
-        while coef != 0 && coef % 10 == 0 {
+        // Normalize: remove trailing zeros, but never past exponent 0 —
+        // reference KFX keeps integral decimals at exponent 0 (572., not
+        // 5.72d2), and old-firmware parsers are only exercised on that form.
+        while coef != 0 && coef % 10 == 0 && exp < 0 {
             coef /= 10;
             exp += 1;
         }

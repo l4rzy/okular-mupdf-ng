@@ -104,8 +104,11 @@ mod tests {
                     for attribute in tag.attributes() {
                         let attribute = attribute.unwrap();
                         result.push((
-                            String::from_utf8(attribute.key.as_ref().to_vec()).unwrap(),
-                            attribute.unescape_value().unwrap().into_owned(),
+                            attribute.key.as_ref().to_string(),
+                            attribute
+                                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .unwrap()
+                                .into_owned(),
                         ));
                     }
                 }
@@ -114,6 +117,21 @@ mod tests {
             }
         }
         result
+    }
+
+    #[test]
+    fn azw3_stylesheet_indices_return_errors_without_overflow() {
+        let bytes = include_bytes!("../../../../../tests/mobi/styled-linked.azw3");
+        let book = Book::from_bytes(bytes, Format::Azw3).unwrap();
+        for index in [
+            "not-a-number".to_string(),
+            usize::MAX.to_string(),
+            (usize::MAX - 1).to_string(),
+        ] {
+            let path = format!("styles/style{index}.css");
+            assert!(book.load_asset(&path).is_err(), "invalid asset: {path}");
+        }
+        assert!(!book.load_asset("styles/style0000.css").unwrap().is_empty());
     }
 
     #[test]

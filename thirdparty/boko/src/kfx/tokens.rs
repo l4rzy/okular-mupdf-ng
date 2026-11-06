@@ -35,6 +35,48 @@ pub enum KfxToken {
     StartSpan(SpanStart),
     /// End of an inline style span
     EndSpan,
+    /// A math equation exported as a KVG-bearing container (typeset shapes
+    /// plus mathml/alt_text annotations), or a text-child container when
+    /// the equation declined typesetting (`Raw` content).
+    MathKvg(Box<MathKvgToken>),
+    /// A math container imported from KFX: content references to its
+    /// `mathml` and `alt_text` annotation strings. The IR builder resolves
+    /// and parses them into a `Role::Math` node + `Math` AST (import-only;
+    /// export builds math from the IR side-table directly).
+    MathImport(Box<MathImportToken>),
+}
+
+/// Payload for an exported math container.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MathKvgToken {
+    /// Typeset KVG equation; `None` when the equation declined (falls back
+    /// to a text child, no mathml annotation).
+    pub kvg: Option<crate::math::kvg::KvgEquation>,
+    /// Serialized MathML (annotation; only emitted alongside KVG).
+    pub mathml: String,
+    /// Spoken alt text (annotation).
+    pub alttext: String,
+    /// Unicode linearization (text child when kvg is None).
+    pub text: String,
+    /// Display (block) vs inline math.
+    pub display: bool,
+    /// KFX style symbol for the container.
+    pub style_symbol: Option<u64>,
+    /// Original IR node id.
+    pub node_id: Option<NodeId>,
+}
+
+/// Content references carried by an imported KFX math container.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MathImportToken {
+    /// Ref to the serialized `<math>` source ($690 annotation).
+    pub mathml_ref: Option<ContentRef>,
+    /// Ref to the spoken alt text ($584 annotation).
+    pub alttext_ref: Option<ContentRef>,
+    /// KFX element id.
+    pub id: Option<i64>,
+    /// Style name for IR style lookup.
+    pub style_name: Option<String>,
 }
 
 /// Information about an element start.
@@ -65,10 +107,27 @@ pub struct ElementStart {
     /// KFX requires block elements with borders to be `type: container` with
     /// nested `type: text` for content. Set during export by checking IR style.
     pub needs_container_wrapper: bool,
-    /// Whether this table cell is a header cell (`<th>`). Emitted as the
-    /// `table_header_cell` semantic-type marker so the header/data distinction
-    /// survives KFX export.
+    /// Whether this table cell is a header cell (`<th>`). Set on import from
+    /// legacy marker cells or the enclosing header section; on export the
+    /// distinction is carried structurally (cells inside `type: header`).
     pub is_header_cell: bool,
+    /// Table-level formatting for `type: table` elements, computed during
+    /// export (reference output bakes column widths and border collapsing
+    /// into the table element; the device's table renderer lays out columns
+    /// from `column_format`).
+    pub table_format: Option<Box<TableFormat>>,
+    /// Whether this is a `<caption>` directly inside a table — carries
+    /// `yj.classification: caption` like reference output.
+    pub is_table_caption: bool,
+}
+
+/// Table-element formatting attributes emitted on `type: table` ($278).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TableFormat {
+    /// Per-column widths as percentages (empty = omit column_format).
+    pub column_widths_pct: Vec<f64>,
+    /// The table's CSS `border-collapse: collapse`.
+    pub border_collapse: bool,
 }
 
 impl ElementStart {
@@ -86,6 +145,8 @@ impl ElementStart {
             style_name: None,
             needs_container_wrapper: false,
             is_header_cell: false,
+            table_format: None,
+            is_table_caption: false,
         }
     }
 
@@ -199,6 +260,8 @@ impl TokenStream {
             style_name: None,
             needs_container_wrapper: false,
             is_header_cell: false,
+            table_format: None,
+            is_table_caption: false,
         }));
     }
 

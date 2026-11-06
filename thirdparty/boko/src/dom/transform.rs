@@ -32,6 +32,143 @@ pub(crate) fn user_agent_stylesheet_arc() -> std::sync::Arc<Stylesheet> {
     UA_STYLESHEET.clone()
 }
 
+/// Synthesize CSS declarations from legacy presentational attributes
+/// (`align=`, `valign=`), which many older EPUB/MOBI-derived books rely on.
+/// Per CSS these are presentational hints: they apply before author rules
+/// (any matching selector overrides them) but beat inherited values.
+fn presentational_hints(
+    element: &html5ever::LocalName,
+    attrs: &[crate::dom::arena::Attribute],
+) -> Option<crate::style::InlineStyle> {
+    let name = element.as_ref();
+    let aligned = matches!(
+        name,
+        "p" | "div"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "td"
+            | "th"
+            | "tr"
+            | "table"
+            | "caption"
+            | "tbody"
+            | "thead"
+            | "tfoot"
+            | "center"
+    );
+    let cellish = matches!(name, "td" | "th" | "tr" | "tbody" | "thead" | "tfoot");
+    let font = name == "font";
+    // MOBI-7 spacing convention: height= is vertical space before the
+    // block, width= is the first-line indent.
+    let mobi_spaced = matches!(name, "p" | "div" | "blockquote");
+    if !aligned && !cellish && !font && !mobi_spaced {
+        return None;
+    }
+    let clean_len = |v: &str| {
+        !v.is_empty()
+            && v.len() <= 12
+            && v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '%' || c == '-')
+    };
+    let mut css = String::new();
+    for attr in attrs {
+        match &*attr.name.local {
+            "align" if aligned => {
+                let v = attr.value.trim().to_ascii_lowercase();
+                if matches!(v.as_str(), "left" | "right" | "center" | "justify") {
+                    css.push_str("text-align: ");
+                    css.push_str(&v);
+                    css.push(';');
+                }
+            }
+            "valign" if cellish => {
+                let v = attr.value.trim().to_ascii_lowercase();
+                if matches!(v.as_str(), "top" | "middle" | "bottom" | "baseline") {
+                    css.push_str("vertical-align: ");
+                    css.push_str(&v);
+                    css.push(';');
+                }
+            }
+            // Legacy <font> element — the styling mechanism of old MOBI
+            // books (syntax-highlight colors, sized code and headings).
+            "size" if font => {
+                let v = attr.value.trim();
+                // Absolute 1-7 or relative +N/-N from the base size 3,
+                // mapped onto the browser scale.
+                let base: i32 = if let Some(rest) = v.strip_prefix('+') {
+                    3 + rest.parse::<i32>().unwrap_or(0)
+                } else if let Some(rest) = v.strip_prefix('-') {
+                    3 - rest.parse::<i32>().unwrap_or(0)
+                } else {
+                    v.parse().unwrap_or(3)
+                };
+                let em = match base.clamp(1, 7) {
+                    1 => "0.625",
+                    2 => "0.8125",
+                    3 => "1",
+                    4 => "1.125",
+                    5 => "1.5",
+                    6 => "2",
+                    _ => "3",
+                };
+                css.push_str("font-size: ");
+                css.push_str(em);
+                css.push_str("em;");
+            }
+            "color" if font => {
+                let v = attr.value.trim();
+                if !v.is_empty() {
+                    css.push_str("color: ");
+                    css.push_str(v);
+                    css.push(';');
+                }
+            }
+            "face" if font => {
+                let v = attr.value.trim();
+                if !v.is_empty() && v.chars().all(|c| !c.is_control() && c != ';') {
+                    css.push_str("font-family: ");
+                    css.push_str(v);
+                    css.push(';');
+                }
+            }
+            // MOBI-7 convention: a height=/width= attribute marks a
+            // legacy-spaced block — ALL of its vertical spacing comes from
+            // the attribute (paragraphs carry no implicit margins in that
+            // model), so both margins are pinned: top to the attribute
+            // value, bottom to zero.
+            "height" if mobi_spaced => {
+                let v = attr.value.trim();
+                if clean_len(v) {
+                    css.push_str("margin-top: ");
+                    css.push_str(v);
+                    css.push_str(";margin-bottom: 0;");
+                }
+            }
+            "width" if mobi_spaced => {
+                let v = attr.value.trim();
+                if clean_len(v) {
+                    css.push_str("text-indent: ");
+                    css.push_str(v);
+                    css.push_str(";margin-bottom: 0;");
+                    if !attrs.iter().any(|a| (&*a.name.local) == "height") {
+                        css.push_str("margin-top: 0;");
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if css.is_empty() {
+        return None;
+    }
+    let parsed = crate::style::InlineStyle::parse(&css);
+    (!parsed.is_empty()).then_some(parsed)
+}
+
 /// Context for the transform operation.
 struct TransformContext<'a> {
     dom: &'a ArenaDom,
@@ -77,7 +214,7 @@ impl<'a> TransformContext<'a> {
                 && let ArenaNodeData::Element { attrs, .. } = &node.data
             {
                 for attr in attrs {
-                    if attr.name.local.as_ref() == "lang" && !attr.value.is_empty() {
+                    if (&*attr.name.local) == "lang" && !attr.value.is_empty() {
                         return Some(attr.value.clone());
                     }
                 }
@@ -113,6 +250,7 @@ impl<'a> TransformContext<'a> {
                     &mut self.cascade_scratch,
                     None,
                     inline.as_ref(),
+                    None,
                 )
             });
 
@@ -133,6 +271,7 @@ impl<'a> TransformContext<'a> {
                 &mut self.cascade_scratch,
                 bloom,
                 inline.as_ref(),
+                None,
             )
         };
 
@@ -180,7 +319,7 @@ impl<'a> TransformContext<'a> {
         };
         attrs
             .iter()
-            .find(|a| a.name.local.as_ref() == "style" && !a.value.is_empty())
+            .find(|a| (&*a.name.local) == "style" && !a.value.is_empty())
             .map(|a| crate::style::InlineStyle::parse(&a.value))
             .filter(|i| !i.is_empty())
     }
@@ -300,9 +439,10 @@ impl<'a> TransformContext<'a> {
                 // selector-matched normal declaration.
                 let inline = attrs
                     .iter()
-                    .find(|a| a.name.local.as_ref() == "style" && !a.value.is_empty())
+                    .find(|a| (&*a.name.local) == "style" && !a.value.is_empty())
                     .map(|a| crate::style::InlineStyle::parse(&a.value))
                     .filter(|i| !i.is_empty());
+                let hints = presentational_hints(&name.local, attrs.as_slice());
                 let mut computed = compute_styles_indexed(
                     elem_ref,
                     &self.cascade_index,
@@ -311,15 +451,59 @@ impl<'a> TransformContext<'a> {
                     &mut self.cascade_scratch,
                     bloom,
                     inline.as_ref(),
+                    hints.as_ref(),
                 );
 
                 // Merge lang attribute into style (for KFX language property)
                 // This must happen before interning so the style includes the language
                 for attr in attrs {
-                    if attr.name.local.as_ref() == "lang" && !attr.value.is_empty() {
+                    if (&*attr.name.local) == "lang" && !attr.value.is_empty() {
                         computed.language = Some(attr.value.to_string());
                         break;
                     }
+                }
+
+                // MathML: `<math>` (by namespace or local name) becomes a
+                // single `Role::Math` IR leaf whose expression tree lives in
+                // the chapter's `math` side-table. `element_to_role` only
+                // sees the local name, so the namespace test is done here.
+                // We take over the whole subtree — no generic child recursion.
+                if (&*name.ns) == crate::math::mathml::MATHML_NS || (&*name.local) == "math" {
+                    if computed.display == Display::None {
+                        return;
+                    }
+                    let mut ir_node = Node::new(Role::Math);
+                    ir_node.style = self.chapter.styles.intern_ref(&computed);
+                    let ir_id = self.chapter.alloc_node(ir_node);
+                    self.chapter.append_child(ir_parent, ir_id);
+                    // Preserve the element id for anchor/link resolution.
+                    for attr in attrs {
+                        if (&*attr.name.local) == "id" {
+                            self.chapter.semantics.set_id(ir_id, &attr.value);
+                        }
+                    }
+                    let mut expr = crate::math::mathml::from_mathml(self.dom, dom_id);
+                    // Block context implies display math: a <math> that is
+                    // its parent's only non-whitespace content is a display
+                    // equation even without display="block" (the common
+                    // publisher shape — only ~2% of equations carry the
+                    // attribute in practice).
+                    if !expr.display
+                        && let Some(parent) = self.dom.get(dom_id).map(|n| n.parent)
+                    {
+                        let alone = self.dom.children(parent).all(|c| {
+                            c == dom_id
+                                || self
+                                    .dom
+                                    .text_content(c)
+                                    .is_some_and(|t| t.trim().is_empty())
+                        });
+                        if alone {
+                            expr.display = true;
+                        }
+                    }
+                    self.chapter.math.insert(ir_id, expr);
+                    return;
                 }
 
                 // Map to role first (needed for Break check)
@@ -341,8 +525,8 @@ impl<'a> TransformContext<'a> {
 
                 // Store semantic attributes
                 for attr in attrs {
-                    let attr_name = attr.name.local.as_ref();
-                    let attr_ns = attr.name.ns.as_ref();
+                    let attr_name = &*attr.name.local;
+                    let attr_ns = &*attr.name.ns;
                     match attr_name {
                         // Core layout attributes
                         "href" => {
@@ -355,7 +539,7 @@ impl<'a> TransformContext<'a> {
                         // Language (both lang and xml:lang)
                         "lang" => self.chapter.semantics.set_lang(ir_id, &attr.value),
                         // List start attribute (ol@start)
-                        "start" if name.local.as_ref() == "ol" => {
+                        "start" if (&*name.local) == "ol" => {
                             if let Ok(start) = attr.value.parse::<u32>() {
                                 self.chapter.semantics.set_list_start(ir_id, start);
                             }
@@ -376,18 +560,18 @@ impl<'a> TransformContext<'a> {
                             self.chapter.semantics.set_datetime(ir_id, &attr.value);
                         }
                         // Table cell attributes
-                        "rowspan" if matches!(name.local.as_ref(), "td" | "th") => {
+                        "rowspan" if matches!(&*name.local, "td" | "th") => {
                             if let Ok(span) = attr.value.parse::<u32>() {
                                 self.chapter.semantics.set_row_span(ir_id, span);
                             }
                         }
-                        "colspan" if matches!(name.local.as_ref(), "td" | "th") => {
+                        "colspan" if matches!(&*name.local, "td" | "th") => {
                             if let Ok(span) = attr.value.parse::<u32>() {
                                 self.chapter.semantics.set_col_span(ir_id, span);
                             }
                         }
                         // Extract language from class for code elements
-                        "class" if matches!(name.local.as_ref(), "code" | "pre") => {
+                        "class" if matches!(&*name.local, "code" | "pre") => {
                             for class in attr.value.split_whitespace() {
                                 if let Some(lang) = class.strip_prefix("language-") {
                                     self.chapter.semantics.set_language(ir_id, lang);
@@ -404,7 +588,7 @@ impl<'a> TransformContext<'a> {
                 }
 
                 // Mark th elements as header cells
-                if name.local.as_ref() == "th" {
+                if (&*name.local) == "th" {
                     self.chapter.semantics.set_header_cell(ir_id, true);
                 }
 

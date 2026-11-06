@@ -414,16 +414,21 @@ impl KfxSchema {
             },
             vec![],
         );
-        // Table cells → type: text with a yj.semantics.type: table_cell marker
-        // so the cell round-trips as a TableCell (KFX has no dedicated cell
-        // container; without the marker cells import back as plain Paragraphs,
-        // collapsing the table structure).
+        // Table cells → type: container (layout: vertical is added at
+        // emission) — the shape Kindle Previewer emits and the one the
+        // device's table renderer lays out as cells; cells typed $269 text
+        // linearize instead (each cell stacked on its own line). KFX has no
+        // dedicated cell element type and no marker is legal here (kfxlib
+        // rejects yj.semantics.* on $270 as extra data), so import restores
+        // TableCell structurally: a container directly inside a table_row is
+        // a cell, and a cell inside the header section is a header cell.
+        // Legacy boko output ($269 cells with yj.semantics.type markers)
+        // still imports via role_for_semantic_type.
         self.export_strategy_table.insert(
             Role::TableCell,
-            Strategy::StructureWithSemanticType {
+            Strategy::Structure {
                 role: Role::TableCell,
-                kfx_type: KfxSymbol::Text,
-                semantic_type: "table_cell",
+                kfx_type: KfxSymbol::Container,
             },
         );
 

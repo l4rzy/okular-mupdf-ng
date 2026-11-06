@@ -135,6 +135,7 @@ Third-party components retain their respective licenses and copyright notices:
 - **Allura font**: [SIL Open Font License 1.1](thirdparty/allura/OFL.txt).
 - **zpp::bits**: [MIT License](thirdparty/zpp/LICENSE).
 - **cxxopts**: [MIT License](thirdparty/cxxopts/LICENSE).
+- **boko**: [GPLv3 License](thirdparty/boko/LICENSE).
 
 Other dependencies and bundled resources, including fonts embedded by MuPDF,
 retain their upstream licenses. This summary does not replace the full license

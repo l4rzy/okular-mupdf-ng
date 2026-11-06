@@ -121,6 +121,15 @@ pub fn tokens_to_ion(tokens: &TokenStream, ctx: &mut ExportContext) -> IonValue 
 
                 span_stack.push((current_offset, span.clone()));
             }
+            KfxToken::MathImport(_) => {
+                // Import-only token; export emits math from the IR directly.
+            }
+            KfxToken::MathKvg(math) => {
+                let container = build_math_kvg_container(math, ctx);
+                if let Some(current) = stack.last_mut() {
+                    current.add_child(container);
+                }
+            }
             KfxToken::EndSpan => {
                 // Pop the span and calculate its length
                 if let Some((start_offset, mut span_info)) = span_stack.pop() {
@@ -153,17 +162,177 @@ pub fn tokens_to_ion(tokens: &TokenStream, ctx: &mut ExportContext) -> IonValue 
     }
 }
 
-/// The `yj.semantics.type` marker value for an element, if its export
-/// strategy carries one. A header cell overrides the strategy's "table_cell"
-/// with "table_header_cell" so the th/td distinction survives the round trip.
-fn semantic_type_for(elem: &ElementStart) -> Option<&'static str> {
-    if elem.is_header_cell {
-        Some("table_header_cell")
-    } else {
-        schema()
-            .export_strategy(elem.role)
-            .and_then(|s| s.semantic_type())
+/// Build a KVG-bearing math container (Kindle Previewer's math encoding):
+///
+/// ```text
+/// container ('yj.classification': math, render: inline, annotations
+///            [alt_text, mathml], pan_zoom_viewer, layout: vertical)
+/// └── container ('yj.classification': mathsegment, layout: vertical)
+///     └── kvg element (viewBox $66/$67, em sizes $56/$57, shape_list $250
+///                      referencing the book path_bundle "p0")
+/// ```
+///
+/// Declined equations (no `kvg`) get a text child + alt_text annotation
+/// only — the mathml annotation must never ship without a shape layer (it
+/// renders as visible garbage on old firmware).
+fn build_math_kvg_container(math: &MathKvgToken, ctx: &mut ExportContext) -> IonValue {
+    let container_id = ctx.fragment_ids.next_id();
+    ctx.record_content_id(container_id);
+    let style_sym = math.style_symbol.unwrap_or(ctx.default_style_symbol);
+    if style_sym == ctx.default_style_symbol {
+        ctx.default_style_used = true;
     }
+
+    let content_ref = |name: u64, index: usize| {
+        IonValue::Struct(vec![
+            (sym!(Name), IonValue::Symbol(name)),
+            (sym!(Index), IonValue::Int(index as i64)),
+        ])
+    };
+    let mut annotations = Vec::new();
+    if !math.alttext.is_empty() {
+        let (n, i) = ctx.append_text(&math.alttext);
+        annotations.push(IonValue::Struct(vec![
+            (sym!(Content), content_ref(n, i)),
+            (sym!(AnnotationType), IonValue::Symbol(sym!(AltText))),
+        ]));
+    }
+    if let Some(kvg) = &math.kvg {
+        if !math.mathml.is_empty() {
+            let (n, i) = ctx.append_text(&math.mathml);
+            annotations.push(IonValue::Struct(vec![
+                (sym!(Content), content_ref(n, i)),
+                (sym!(AnnotationType), IonValue::Symbol(sym!(Mathml))),
+            ]));
+        }
+
+        // Innermost: the kvg element with its shape list. All fractional
+        // numerics are Ion DECIMALS — the KFX convention throughout (and
+        // device-tested: binary floats in these fields crash pre-5.18.2
+        // firmware, whose KVG parser only accepts decimal/int scalars).
+        let dec = |v: f32| IonValue::Decimal(format!("{v}"));
+        let shapes: Vec<IonValue> = kvg
+            .shapes
+            .iter()
+            .map(|sh| {
+                let bundle_name = ctx.symbols.get_or_intern(&format!("p{}", sh.bundle));
+                IonValue::Struct(vec![
+                    (
+                        sym!(Path),
+                        IonValue::Struct(vec![
+                            (sym!(Name), IonValue::Symbol(bundle_name)),
+                            (sym!(Index), IonValue::Int(sh.path_index as i64)),
+                        ]),
+                    ),
+                    (
+                        sym!(Transform),
+                        IonValue::List(sh.transform.iter().map(|&v| dec(v)).collect()),
+                    ),
+                    (sym!(StrokeWidth), dec(0.0)),
+                    (sym!(Type), IonValue::Symbol(KfxSymbol::Shape as u64)),
+                ])
+            })
+            .collect();
+        let em_dim = |v: f32| {
+            IonValue::Struct(vec![
+                (sym!(Value), dec(v)),
+                (sym!(Unit), IonValue::Symbol(sym!(Em))),
+            ])
+        };
+        let kvg_id = ctx.fragment_ids.next_id();
+        ctx.record_content_id(kvg_id);
+        let kvg_elem = IonValue::Struct(vec![
+            (sym!(Id), IonValue::Int(kvg_id as i64)),
+            (
+                sym!(MaxWidth),
+                IonValue::Struct(vec![
+                    (sym!(Value), IonValue::Decimal("100".to_string())),
+                    (sym!(Unit), IonValue::Symbol(sym!(Percent))),
+                ]),
+            ),
+            (sym!(FixedWidth), IonValue::Int(kvg.fixed_width as i64)),
+            (sym!(FixedHeight), IonValue::Int(kvg.fixed_height as i64)),
+            (sym!(Width), em_dim(kvg.width_em)),
+            (sym!(Height), em_dim(kvg.height_em)),
+            (sym!(ShapeList), IonValue::List(shapes)),
+            (sym!(Style), IonValue::Symbol(ctx.default_style_symbol)),
+            (
+                sym!(KvgContentType),
+                IonValue::Symbol(KfxSymbol::Text as u64),
+            ),
+            (sym!(Type), IonValue::Symbol(KfxSymbol::Kvg as u64)),
+        ]);
+        ctx.default_style_used = true;
+
+        let seg_id = ctx.fragment_ids.next_id();
+        ctx.record_content_id(seg_id);
+        let segment = IonValue::Struct(vec![
+            (sym!(Id), IonValue::Int(seg_id as i64)),
+            (sym!(Layout), IonValue::Symbol(KfxSymbol::Vertical as u64)),
+            (sym!(Type), IonValue::Symbol(KfxSymbol::Container as u64)),
+            (
+                sym!(YjClassification),
+                IonValue::Symbol(KfxSymbol::Mathsegment as u64),
+            ),
+            (sym!(ContentList), IonValue::List(vec![kvg_elem])),
+        ]);
+
+        let mut fields = vec![
+            (sym!(Id), IonValue::Int(container_id as i64)),
+            (sym!(YjClassification), IonValue::Symbol(sym!(Math))),
+        ];
+        if !math.display {
+            fields.push((sym!(Render), IonValue::Symbol(sym!(Inline))));
+        }
+        if !annotations.is_empty() {
+            fields.push((sym!(Annotations), IonValue::List(annotations)));
+        }
+        fields.push((sym!(Layout), IonValue::Symbol(KfxSymbol::Vertical as u64)));
+        fields.push((sym!(PanZoomViewer), IonValue::Symbol(sym!(Enabled))));
+        fields.push((sym!(Style), IonValue::Symbol(style_sym)));
+        fields.push((sym!(Type), IonValue::Symbol(KfxSymbol::Container as u64)));
+        fields.push((sym!(ContentList), IonValue::List(vec![segment])));
+        IonValue::Struct(fields)
+    } else {
+        // Declined: readable text child, alt_text annotation only.
+        let mut fields = vec![
+            (sym!(Id), IonValue::Int(container_id as i64)),
+            (sym!(YjClassification), IonValue::Symbol(sym!(Math))),
+        ];
+        if !math.display {
+            fields.push((sym!(Render), IonValue::Symbol(sym!(Inline))));
+        }
+        if !annotations.is_empty() {
+            fields.push((sym!(Annotations), IonValue::List(annotations)));
+        }
+        fields.push((sym!(Layout), IonValue::Symbol(KfxSymbol::Vertical as u64)));
+        fields.push((sym!(Style), IonValue::Symbol(style_sym)));
+        fields.push((sym!(Type), IonValue::Symbol(KfxSymbol::Container as u64)));
+        if !math.text.is_empty() {
+            let inner_id = ctx.fragment_ids.next_id();
+            ctx.record_content_id(inner_id);
+            let (n, i) = ctx.append_text(&math.text);
+            ctx.record_content_length(inner_id, math.text.chars().count());
+            let inner = IonValue::Struct(vec![
+                (sym!(Id), IonValue::Int(inner_id as i64)),
+                (sym!(Style), IonValue::Symbol(style_sym)),
+                (sym!(Type), IonValue::Symbol(KfxSymbol::Text as u64)),
+                (sym!(Content), content_ref(n, i)),
+            ]);
+            fields.push((sym!(ContentList), IonValue::List(vec![inner])));
+        }
+        IonValue::Struct(fields)
+    }
+}
+
+/// The `yj.semantics.type` marker value for an element, if its export
+/// strategy carries one. (Table cells carry no marker — they're $270
+/// containers, where kfxlib rejects yj.semantics.* keys; import restores
+/// cell roles structurally instead.)
+fn semantic_type_for(elem: &ElementStart) -> Option<&'static str> {
+    schema()
+        .export_strategy(elem.role)
+        .and_then(|s| s.semantic_type())
 }
 
 /// Build the Ion field list for a `StartElement` token.
@@ -256,48 +425,85 @@ fn start_element_fields(
         fields.push((sym!(ListStyle), IonValue::Symbol(sym!(Numeric))));
     }
 
-    // Add layout_hints based on element role and semantics
-    // This affects Kindle's rendering behavior for headings, figures, and captions
-    let layout_hint = match elem.role {
-        // Headings (h1-h6) → treat_as_title
-        Role::Heading(_) => Some(KfxSymbol::TreatAsTitle),
-        // <figure> → figure
-        Role::Figure => Some(KfxSymbol::Figure),
-        // <figcaption>/<caption> → caption
-        Role::Caption => Some(KfxSymbol::Caption),
-        _ => {
-            // Check epub:type for additional semantic hints
-            if let Some(epub_type) = elem.get_semantic(SemanticTarget::EpubType) {
-                // Check each epub:type value (space-separated)
-                let has_title_type = epub_type.split_whitespace().any(|t| {
-                    matches!(
-                        t,
-                        "title" | "fulltitle" | "subtitle" | "covertitle" | "halftitle"
-                    )
-                });
-                let has_caption_type = epub_type
-                    .split_whitespace()
-                    .any(|t| matches!(t, "caption" | "figcaption"));
+    // Table cells are containers and need layout: vertical like all $270
+    // elements (reference cells carry it; the table renderer expects cell
+    // children of a table_row to be laid-out containers).
+    if elem.role == Role::TableCell && !container_wrapper {
+        fields.push((sym!(Layout), IonValue::Symbol(KfxSymbol::Vertical as u64)));
+    }
 
-                if has_title_type {
-                    Some(KfxSymbol::TreatAsTitle)
-                } else if has_caption_type {
-                    Some(KfxSymbol::Caption)
-                } else {
-                    None
-                }
-            } else {
-                None
+    // Reference table elements carry the viewer feature set and the
+    // formatting Kindle Previewer bakes in: pan/zoom + scale-to-fit in the
+    // double-tap viewer, regional selection, CSS border collapsing, and
+    // per-column widths (the renderer lays out columns from column_format).
+    if let Some(tf) = &elem.table_format {
+        fields.push((
+            sym!(YjTableFeatures),
+            IonValue::List(vec![
+                IonValue::Symbol(sym!(PanZoom)),
+                IonValue::Symbol(sym!(ScaleFit)),
+            ]),
+        ));
+        fields.push((
+            sym!(YjTableSelectionMode),
+            IonValue::Symbol(sym!(YjRegional)),
+        ));
+        if tf.border_collapse {
+            fields.push((sym!(TableBorderCollapse), IonValue::Bool(true)));
+        }
+        if !tf.column_widths_pct.is_empty() {
+            let columns = tf
+                .column_widths_pct
+                .iter()
+                .map(|w| {
+                    IonValue::Struct(vec![(
+                        sym!(Width),
+                        IonValue::Struct(vec![
+                            (sym!(Value), IonValue::Decimal(format!("{w:.4}"))),
+                            (sym!(Unit), IonValue::Symbol(sym!(Percent))),
+                        ]),
+                    )])
+                })
+                .collect();
+            fields.push((sym!(ColumnFormat), IonValue::List(columns)));
+        }
+        if tf.border_collapse {
+            for spacing in [
+                KfxSymbol::BorderSpacingVertical,
+                KfxSymbol::BorderSpacingHorizontal,
+            ] {
+                fields.push((
+                    spacing as u64,
+                    IonValue::Struct(vec![
+                        (sym!(Value), IonValue::Decimal("0".to_string())),
+                        (sym!(Unit), IonValue::Symbol(sym!(Pt))),
+                    ]),
+                ));
             }
         }
-    };
+    }
 
-    if let Some(hint) = layout_hint {
+    // Table captions carry yj.classification: caption like reference output.
+    // The caption's content lives in a nested run child (see force_runs in
+    // export.rs) — a classification-marked element with its own content ref
+    // and style_events trips kfxlib's caption offset accounting.
+    if elem.is_table_caption {
         fields.push((
-            sym!(LayoutHints),
-            IonValue::List(vec![IonValue::Symbol(hint as u64)]),
+            sym!(YjClassification),
+            IonValue::Symbol(KfxSymbol::Caption as u64),
         ));
     }
+
+    // Lists carry list_style_position: outside like reference output — the
+    // renderer's native gutter (which replaces the stripped authored
+    // margin/padding-left; see register_style_id_adjusted) holds the marker.
+    if matches!(elem.role, Role::UnorderedList | Role::OrderedList) {
+        fields.push((sym!(ListStylePosition), IonValue::Symbol(sym!(Outside))));
+    }
+
+    // (layout_hints ride the element's *style*, not the content node —
+    // reference KFX puts treat_as_title/figure/caption in style structs;
+    // see layout_hint_for in export.rs.)
 
     // Add yj.classification for footnote/endnote popup support
     // This marks the element so Kindle can show its content in a popup

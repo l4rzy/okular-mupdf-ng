@@ -43,10 +43,11 @@ struct MatchedDecl {
 ///
 /// Non-inherited properties (width, height, margin, padding, display, etc.)
 /// are NOT copied from the parent.
-fn inherit_from_parent(parent: &ComputedStyle) -> ComputedStyle {
+pub(crate) fn inherit_from_parent(parent: &ComputedStyle) -> ComputedStyle {
     ComputedStyle {
         // Font properties (inherited)
         font_size: parent.font_size,
+        font_size_abs: parent.font_size_abs,
         font_weight: parent.font_weight,
         font_style: parent.font_style,
         font_variant: parent.font_variant,
@@ -60,6 +61,7 @@ fn inherit_from_parent(parent: &ComputedStyle) -> ComputedStyle {
         word_spacing: parent.word_spacing,
         text_transform: parent.text_transform,
         hyphens: parent.hyphens,
+        direction: parent.direction,
         // Text decoration (inherited in some contexts)
         text_decoration_underline: parent.text_decoration_underline,
         text_decoration_line_through: parent.text_decoration_line_through,
@@ -226,7 +228,7 @@ impl<'a> CascadeIndex<'a> {
         // html5ever already lowercases HTML local names, so allocating a
         // lowercase copy is only needed in the rare uppercase case.
         if let Some(name) = elem.dom.element_name(elem.id) {
-            let name = name.as_ref();
+            let name: &str = name;
             let bucket = if name.bytes().any(|b| b.is_ascii_uppercase()) {
                 self.by_local.get(name.to_ascii_lowercase().as_str())
             } else {
@@ -272,6 +274,7 @@ pub fn compute_styles(
         &mut CascadeScratch::default(),
         None,
         None,
+        None,
     )
 }
 
@@ -289,6 +292,15 @@ pub fn compute_styles(
 /// attribute. Its normal declarations apply after every selector-matched
 /// normal declaration (inline beats any specificity), and its `!important`
 /// declarations apply last of all, per the CSS cascade.
+///
+/// `presentational`, when provided, holds declarations synthesized from
+/// legacy presentational attributes (`align=`, `valign=`, ...). Per CSS,
+/// presentational hints apply before every author rule — any matching
+/// selector overrides them — but they beat inherited values.
+// The parameters are the distinct cascade inputs (element, index, parent,
+// scratch, bloom, inline style, presentational hints); each is load-bearing
+// and grouping them into a struct would only add indirection on the hot path.
+#[allow(clippy::too_many_arguments)]
 pub fn compute_styles_indexed(
     elem: ElementRef<'_>,
     index: &CascadeIndex<'_>,
@@ -297,6 +309,7 @@ pub fn compute_styles_indexed(
     scratch: &mut CascadeScratch,
     bloom: Option<&BloomFilter>,
     inline_style: Option<&crate::style::InlineStyle>,
+    presentational: Option<&crate::style::InlineStyle>,
 ) -> ComputedStyle {
     let CascadeScratch {
         caches,
@@ -388,11 +401,40 @@ pub fn compute_styles_indexed(
     // style's normal declarations are injected at that boundary: inline
     // normal beats every selector-matched normal declaration but loses to
     // stylesheet `!important`; inline `!important` beats everything.
+    //
+    // `font_size_declared` tracks whether any declaration set font-size:
+    // the inherited `font_size` value is parent-relative (`Em(1.2)` copied
+    // verbatim), so resolving the absolute size must multiply only when this
+    // element actually declared one — an inherited value keeps the parent's
+    // absolute size.
+    let mut font_size_declared = false;
+    let mut apply = |style: &mut ComputedStyle, decl: &Declaration| {
+        font_size_declared |= matches!(decl, Declaration::FontSize(_));
+        apply_declaration(
+            style,
+            decl,
+            parent_style
+                .map(|p| p.direction)
+                .unwrap_or(super::Direction::Ltr),
+        );
+    };
+    // Presentational hints sit between the user-agent and author origins:
+    // any author rule overrides them, but they beat UA defaults (and
+    // inherited values). They're injected when the first non-UA normal
+    // declaration is reached; `matched` is sorted importance-then-origin,
+    // so UA normal declarations come first.
+    let mut hints_pending = presentational.is_some_and(|h| !h.declarations.is_empty());
     let mut inline_normal_pending = inline_style.is_some_and(|i| !i.declarations.is_empty());
     for m in matched.iter() {
+        if hints_pending && (m.important || m.origin != Origin::UserAgent) {
+            for decl in &presentational.expect("checked above").declarations {
+                apply(&mut style, decl);
+            }
+            hints_pending = false;
+        }
         if m.important && inline_normal_pending {
             for decl in &inline_style.expect("checked above").declarations {
-                apply_declaration(&mut style, decl);
+                apply(&mut style, decl);
             }
             inline_normal_pending = false;
         }
@@ -403,20 +445,45 @@ pub fn compute_styles_indexed(
         } else {
             &rule.declarations[m.decl as usize]
         };
-        apply_declaration(&mut style, decl);
+        apply(&mut style, decl);
+    }
+    if hints_pending {
+        // Only UA rules (or nothing) matched; the hints still apply.
+        for decl in &presentational.expect("checked above").declarations {
+            apply(&mut style, decl);
+        }
     }
     if let Some(inline) = inline_style {
         if inline_normal_pending {
             for decl in &inline.declarations {
-                apply_declaration(&mut style, decl);
+                apply(&mut style, decl);
             }
         }
         for decl in &inline.important_declarations {
-            apply_declaration(&mut style, decl);
+            apply(&mut style, decl);
         }
     }
 
+    let parent_abs = parent_style.map(|p| p.font_size_abs.0).unwrap_or(1.0);
+    style.font_size_abs = super::AbsFontSize(if font_size_declared {
+        resolve_font_size_abs(style.font_size, parent_abs)
+    } else {
+        parent_abs
+    });
+
     style
+}
+
+/// Resolve a declared font-size to an absolute root-relative multiple.
+fn resolve_font_size_abs(size: crate::style::Length, parent_abs: f32) -> f32 {
+    use crate::style::Length;
+    match size {
+        Length::Auto => parent_abs,
+        Length::Em(x) => parent_abs * x,
+        Length::Percent(p) => parent_abs * p / 100.0,
+        Length::Px(x) => x / 16.0,
+        Length::Rem(x) => x,
+    }
 }
 
 /// Return the specificity of the highest-specificity selector in `rule` that
@@ -445,14 +512,18 @@ fn rule_match_specificity(
         .zip(&rule.selector_specificities)
         .zip(hashes)
         .filter(|&((selector, _), hashes)| {
-            selectors::matching::matches_selector(selector, 0, Some(hashes), &elem, &mut context)
+            selectors::matching::matches_selector(selector, 0, Some(hashes), elem, &mut context)
         })
         .map(|((_, spec), _)| *spec)
         .max()
 }
 
 /// Apply a declaration to a computed style.
-fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
+fn apply_declaration(
+    style: &mut ComputedStyle,
+    decl: &Declaration,
+    parent_direction: super::Direction,
+) {
     match decl {
         // Colors
         Declaration::Color(c) => style.color = Some(*c),
@@ -473,6 +544,8 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
         Declaration::WordSpacing(l) => style.word_spacing = *l,
         Declaration::TextTransform(t) => style.text_transform = *t,
         Declaration::Hyphens(h) => style.hyphens = *h,
+        Declaration::Direction(d) => style.direction = *d,
+        Declaration::DirectionInherit => style.direction = parent_direction,
         Declaration::WhiteSpace(ws) => style.white_space = *ws,
         Declaration::VerticalAlign(v) => style.vertical_align = *v,
 
@@ -480,6 +553,7 @@ fn apply_declaration(style: &mut ComputedStyle, decl: &Declaration) {
         Declaration::TextDecoration(d) => {
             style.text_decoration_underline = d.underline;
             style.text_decoration_line_through = d.line_through;
+            style.overline = d.overline;
         }
         Declaration::TextDecorationStyle(s) => style.underline_style = *s,
         Declaration::TextDecorationColor(c) => style.underline_color = Some(*c),

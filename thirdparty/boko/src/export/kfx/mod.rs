@@ -79,6 +79,7 @@ fn build_kfx_container(book: &Book) -> crate::Result<Vec<u8>> {
     let meta = book.metadata();
     let container_id = generate_container_id(&format!("{}\n{}", meta.identifier, meta.title));
     let mut ctx = ExportContext::new();
+    ctx.rtl = meta.is_rtl();
 
     // ========================================================================
     // PASS 1: SURVEY (Read-Only / State Accumulation)
@@ -87,6 +88,11 @@ fn build_kfx_container(book: &Book) -> crate::Result<Vec<u8>> {
     // ========================================================================
 
     let (standalone_cover_path, spine_info) = survey_book(book, &mut ctx)?;
+
+    // Body-size normalization: the text-dominant font size renders at 1rem
+    // (the user's device font-size setting), like reference output. Must be
+    // resolved before Pass 2 registers any styles.
+    ctx.resolve_font_scale();
 
     // After Pass 1: ctx.symbols is COMPLETE, ctx.position_map has all EIDs
     // Note: TOC anchor entity IDs are computed AFTER Pass 2 chapter processing
@@ -193,6 +199,36 @@ fn build_kfx_container(book: &Book) -> crate::Result<Vec<u8>> {
     // determined the media-derived flags (HDV images, JPEG restart markers);
     // the copy pushed before chapters was a placeholder for ordering.
     fragments[0] = build_content_features_fragment(&ctx);
+
+    // 2j2. Shared KVG glyph outline bundle (math typesetting), if any
+    // equations were typeset. Must precede the container entity map so the
+    // bundle is enumerated there.
+    if !ctx.math_bundle.is_empty() {
+        // One fragment per size-bounded segment (Kindle Previewer caps
+        // bundles ~45 KB; oversized bundles are suspect on old firmware).
+        // Coordinates are Ion DECIMALS, the KFX numeric convention.
+        let segments = std::mem::take(&mut ctx.math_bundle);
+        for (b, outlines) in segments.segments().iter().enumerate() {
+            let fid = format!("p{b}");
+            let name_sym = ctx.symbols.get_or_intern(&fid);
+            let path_list: Vec<IonValue> = outlines
+                .iter()
+                .map(|outline| {
+                    IonValue::List(
+                        outline
+                            .iter()
+                            .map(|&v| IonValue::Decimal(format!("{v}")))
+                            .collect(),
+                    )
+                })
+                .collect();
+            let value = IonValue::Struct(vec![
+                (KfxSymbol::Name as u64, IonValue::Symbol(name_sym)),
+                (KfxSymbol::PathList as u64, IonValue::List(path_list)),
+            ]);
+            fragments.push(KfxFragment::new(KfxSymbol::PathBundle as u64, fid, value));
+        }
+    }
 
     // 2k. Navigation maps for reader functionality
     fragments.push(build_position_map_fragment(&ctx));
