@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -60,7 +60,8 @@ Requires:       okular
 Recommends:     tesseract-langpack-eng
 
 %description
-Supports PDF, ePUB, legacy MOBI, and DRM-free AZW3 and single-container KFX.
+Supports PDF, XPS, OpenXPS, ePUB, legacy MOBI, DRM-free AZW3, and
+single-container KFX.
 Document parsing, rendering, and OCR run in a separate sandboxed worker.
 Includes the mupdfng-cli command-line utility.
 
@@ -110,6 +111,12 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Fri Nov 06 2026 l4rzy <me@23ro.org> - 0.6.1-1
+- Update to version 0.6.1.
+- Add XPS and OpenXPS support with text, links, fonts, outlines, and PDF export.
+- Report progress during asynchronous PDF export.
+- Make sandbox capability reporting platform independent.
+
 * Sun Nov 01 2026 l4rzy <me@23ro.org> - 0.6.0-1
 - Update to version 0.6.0.
 - Enable native PDF print previews and direct PDF print-to-file output.

@@ -11,7 +11,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.6.0
+Version:        0.6.1
 Release:        0%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -64,7 +64,8 @@ Requires:       okular
 Recommends:     %{tessdata_package}
 
 %description
-Supports PDF, ePUB, legacy MOBI, and DRM-free AZW3 and single-container KFX.
+Supports PDF, XPS, OpenXPS, ePUB, legacy MOBI, DRM-free AZW3, and
+single-container KFX.
 Document parsing, rendering, and OCR run in a separate sandboxed worker.
 Includes the mupdfng-cli command-line utility.
 

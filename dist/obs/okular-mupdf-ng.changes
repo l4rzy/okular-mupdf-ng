@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Fri Nov 06 16:07:34 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.6.1.
+- Add XPS and OpenXPS support with text, links, fonts, outlines, and PDF export.
+- Report progress during asynchronous PDF export.
+- Make sandbox capability reporting platform independent.
+
+-------------------------------------------------------------------
 Sun Nov 01 19:13:29 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.6.0.
