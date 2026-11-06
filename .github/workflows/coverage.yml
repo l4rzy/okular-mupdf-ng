@@ -95,6 +95,7 @@ jobs:
             -DENABLE_LTO=OFF \
             -DENABLE_BUILD_TREE_WORKER=ON \
             -DDISABLE_WORKER_SANDBOX=ON \
+            -DSIGNATURE_FONT_DIR="$PWD/thirdparty/allura" \
             -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
 
       - name: Build

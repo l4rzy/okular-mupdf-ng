@@ -343,6 +343,8 @@ std::optional<SignatureField> extractSignatureField(fz_context* context,
         value.bottom = (raw->rectangle.y1 - bounds.y0) / height;
 
         if (raw->signedField) {
+            // Only a validated /ByteRange can establish full-file coverage.
+            value.signsTotalDocument = false;
             if (raw->signerName)
                 value.signerName = raw->signerName;
             if (raw->reason)
@@ -451,7 +453,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     FILE* volatile sourceCopy = nullptr;
     volatile bool saved = false;
     volatile bool createdWidget = false;
-    volatile bool widgetMutationComplete = false;
+    volatile bool widgetMutationPending = false;
 
     std::array<unsigned char, Constant::FileCopyChunkBytes> copyBuffer { };
 
@@ -538,8 +540,9 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
             char sigName[64] { };
             std::snprintf(sigName, sizeof(sigName), "OkularMuPDFSignature_%06x", suffix);
             widget = pdf_create_signature_widget(m_context, nativePage, sigName);
-            pdf_dict_del(m_context, pdf_annot_obj(m_context, widget), PDF_NAME(Lock));
             createdWidget = true;
+            widgetMutationPending = true;
+            pdf_dict_del(m_context, pdf_annot_obj(m_context, widget), PDF_NAME(Lock));
             const fz_rect bounds = pdf_bound_page(m_context, nativePage, FZ_CROP_BOX);
             const float width = bounds.x1 - bounds.x0, height = bounds.y1 - bounds.y0;
             pdf_set_annot_rect(m_context,
@@ -677,6 +680,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
                 }
 
                 // The same epoch drives /M, keeping the dictionary and the appearance consistent.
+                widgetMutationPending = true;
                 pdf_sign_signature_with_appearance(m_context, widget, signer, signingTime, dlist);
 
                 if (reason || location) {
@@ -725,7 +729,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
 
         // Step 4: Cleanup in-memory document state after successful output serialization
         clearSignatureMutation(m_context, nativePage, widget, createdWidget);
-        widgetMutationComplete = true;
+        widgetMutationPending = false;
     }
     fz_catch(m_context)
     {
@@ -748,7 +752,9 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
         }
         // MuPDF mutates the widget before invoking the CMS callback. Roll back
         // that in-memory mutation when serialization or the callback fails.
-        if (widget && nativePage && !widgetMutationComplete) {
+        // Rejected existing targets have not been mutated and must retain
+        // their signed value/read-only flag. Only undo changes we started.
+        if (widget && nativePage && widgetMutationPending) {
             fz_try(m_context)
             {
                 clearSignatureMutation(m_context, nativePage, widget, createdWidget);
