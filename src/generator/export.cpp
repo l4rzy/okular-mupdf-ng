@@ -71,6 +71,10 @@ Okular::ExportFormat::List Main::exportFormats() const
         for (const auto& action : WorkerExports) {
             if (!supportsExport(*available, action))
                 continue;
+            if (action.profile == Model::ExportProfileId::SourceWithReferences) {
+                formats.append(Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF));
+                continue;
+            }
             const auto mime = QMimeDatabase().mimeTypeForName(QString::fromLatin1(action.mime));
             if (mime.isValid())
                 formats.append(Okular::ExportFormat(action.label.toString(), mime));
