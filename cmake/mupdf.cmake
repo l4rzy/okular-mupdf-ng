@@ -64,7 +64,8 @@ else()
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-html-background.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-css-attribute-selectors.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-form-autosize.patch"
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-radio-unison.patch")
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.5-radio-unison.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/mupdf-1.28.6-html-max-width.patch")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_mupdf_patches})
     foreach(_mupdf_patch IN LISTS _mupdf_patches)
         execute_process(

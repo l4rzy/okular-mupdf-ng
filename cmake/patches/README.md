@@ -35,6 +35,17 @@ and opens synthetic HTML directly without plugin CSS overrides.
 The plugin's EPUB layout cache revision also changes so cached page counts and
 outline positions from the unpatched engine are not reused.
 
+Block and image layout also honor CSS `max-width`, including percentages and
+font-relative lengths. Both preliminary measurement and final layout constrain
+the content box, so oversized figure containers wrap their captions and scale
+their images together. This fixes cropped Gutenberg figures such as the Auckland
+illustration in *Round the Globe*, while preserving smaller authored widths.
+`mupdf-1.28.6-html-max-width.patch` adds the CSS property and its regenerated gperf
+table; layout changes share the existing layout patch because they modify the
+same sizing code. Tests in `testFigureMaxWidth` cover figures, generic containers,
+inline/block images, width limits, aspect ratios and repeated reflow. The cache
+revision changes so previous figure pagination is not reused.
+
 Table cell widths resolve percentages against the available table width, and
 font-relative lengths against the cell's font size. Explicit widths retain the
 minimum content width, including padding and borders; later rows cannot shrink

@@ -2432,6 +2432,120 @@ private slots:
         file.close();
     }
 
+    void testFigureMaxWidth_data()
+    {
+        QTest::addColumn<QString>("tag");
+        QTest::addColumn<QString>("width");
+        QTest::addColumn<QString>("maximum");
+        QTest::addColumn<float>("expectedWidth");
+        for (const auto& tag : { QStringLiteral("figure"),
+                                 QStringLiteral("div"),
+                                 QStringLiteral("inline-image"),
+                                 QStringLiteral("block-image") }) {
+            const auto add = [&](const char* name, const char* width, const char* maximum, float expected) {
+                const auto row = tag.toLatin1() + '-' + name;
+                QTest::newRow(row.constData())
+                    << tag << QString::fromLatin1(width) << QString::fromLatin1(maximum) << expected;
+            };
+            add("wide-gutenberg-figure", "50.875em", "100%", 204);
+            add("small-figure", "80pt", "100%", 80);
+            if (tag != QStringLiteral("block-image"))
+                add("percentage-width", "50%", "100%", 102);
+            add("percentage-limit", "500pt", "50%", 102);
+            add("absolute-limit", "500pt", "96pt", 96);
+            add("em-limit", "500pt", "8em", 96);
+            add("rem-limit", "500pt", "8rem", 80);
+            add("auto-width", "auto", "50%", 102);
+            add("no-limit", "80pt", "none", 80);
+            add("negative-limit", "80pt", "-1pt", 80);
+            add("zero-limit", "500pt", "0", 0);
+        }
+    }
+
+    void testFigureMaxWidth()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for the bundled MuPDF max-width patch");
+#endif
+        QFETCH(QString, tag);
+        QFETCH(QString, width);
+        QFETCH(QString, maximum);
+        QFETCH(float, expectedWidth);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage image(400, 40, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QVERIFY(image.save(directory.filePath(QStringLiteral("image.png"))));
+        QFile html(directory.filePath(QStringLiteral("figure.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        const bool standaloneImage = tag.endsWith(QStringLiteral("-image"));
+        const auto illustration = standaloneImage
+            ? QStringLiteral("<img class='illustration' style='display: %1' src='image.png'/>")
+                  .arg(tag == QStringLiteral("block-image") ? QStringLiteral("block") : QStringLiteral("inline"))
+            : QStringLiteral("<%1 class='illustration'><img src='image.png'/>"
+                             "<figcaption>AUCKLAND FROM THE SUMMIT OF MOUNT EDEN.</figcaption></%1>")
+                  .arg(tag);
+        const auto content = QStringLiteral("<html><head><style>@page { margin: 18pt; } html { font-size: 10pt; }"
+                                            "body { margin: 0; font-size: 12pt; }"
+                                            ".illustration { margin: 0; width: %1; max-width: %2; text-align: center; }"
+                                            "img { width: 100%; height: auto; }"
+                                            "</style></head><body>%3<p>Following paragraph.</p></body></html>")
+                                 .arg(width, maximum, illustration)
+                                 .toUtf8();
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        // Repeated layout must resolve percentages against the new containing block.
+        for (const float pageWidth : { 240.0f, 300.0f, 240.0f }) {
+            fz_try(context)
+            {
+                fz_layout_document(context, document, pageWidth, 600, 12);
+            }
+            fz_catch(context)
+            {
+                error = QString::fromUtf8(fz_caught_message(context));
+            }
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const auto inspection = Mu::Test::inspectDocumentText(context, document);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QCOMPARE(inspection.images.size(), 1);
+            const auto bounds = inspection.images.front();
+            const float expected = maximum.endsWith('%') ? expectedWidth * (pageWidth - 36) / 204 : expectedWidth;
+            // A fixed small figure must stay small when the page becomes wider.
+            const float imageWidth = width == QStringLiteral("80pt") ? 80 : expected;
+            QVERIFY2(
+                std::abs(bounds.x1 - bounds.x0 - imageWidth) < 0.02f,
+                qPrintable(QStringLiteral("Image width %1, expected %2").arg(bounds.x1 - bounds.x0).arg(imageWidth)));
+            QVERIFY(std::abs(bounds.y1 - bounds.y0 - imageWidth / 10) < 0.02f);
+            if (standaloneImage || expectedWidth == 0)
+                continue;
+            std::array<fz_quad, 16> quads;
+            const int count = fz_search_page_number(
+                context, document, 0, "AUCKLAND FROM THE SUMMIT OF MOUNT EDEN.", nullptr, quads.data(), quads.size());
+            QVERIFY(count > 0);
+            for (int index = 0; index < count; ++index) {
+                const auto caption = fz_rect_from_quad(quads[static_cast<std::size_t>(index)]);
+                QVERIFY(caption.x0 >= bounds.x0 - 0.02f);
+                QVERIFY(caption.x1 <= bounds.x1 + 0.02f);
+            }
+        }
+    }
+
     void testImageVerticalAlignment_data()
     {
         QTest::addColumn<QString>("alignment");

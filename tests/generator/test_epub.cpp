@@ -10,6 +10,7 @@
 #include <KSharedConfig>
 #include <QDateTime>
 #include <QFile>
+#include <QIcon>
 #include <QMimeDatabase>
 #include <QPrinter>
 #include <QScopeGuard>
@@ -340,6 +341,30 @@ private slots:
         Okular::GotoAction broken(QString(), QStringLiteral("nonexistent.html#missing"));
         document.processAction(&broken);
         QCOMPARE(document.viewport().pageNumber, 2);
+    }
+
+    void pdfExportUsesStandardFormat_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_DIR "/sample.epub");
+        QTest::newRow("azw3") << QStringLiteral(TEST_MOBI_DIR "/sample.azw3");
+        QTest::newRow("kfx") << QStringLiteral(TEST_MOBI_DIR "/sample.kfx");
+    }
+
+    void pdfExportUsesStandardFormat()
+    {
+        QFETCH(QString, path);
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        const auto formats = document.exportFormats();
+        const auto standard = Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF);
+        const auto it = std::find_if(formats.begin(), formats.end(), [&](const auto& format) {
+            return format.mimeType() == standard.mimeType();
+        });
+        QVERIFY(it != formats.end());
+        QCOMPARE(it->description(), standard.description());
+        QCOMPARE(it->icon().name(), standard.icon().name());
     }
 
     void exportsEpubToAzw3()
