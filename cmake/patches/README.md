@@ -55,6 +55,17 @@ fixed widths with both separate and collapsed borders. The EPUB layout cache
 revision changes so old pagination is not reused. These corrections share the
 layout patch because its `rem` conversions touch the same table sizing code.
 
+Images contribute their CSS-constrained intrinsic widths to table and
+inline-block measurement. Percentage widths and maximum widths contribute zero
+to the minimum and use their initial values for the preferred width, avoiding
+the circular dependency on the cell width being calculated. Absolute and
+font-relative maximum widths cap both contributions. Measurements start from
+the source image rather than geometry left by a previous layout. This fixes
+oversized image columns in *Radiotechnik* without discarding text minimum widths
+or shrinking unconstrained image contributions. `testTableImageWidths` covers
+HTML/CSS tables, inline/block images, separate/collapsed borders, repeated
+reflow and unconstrained controls. The EPUB cache revision changes accordingly.
+
 Static and relatively positioned `inline-block` elements use atomic flow nodes
 with their own formatting context, rather than interrupting the surrounding
 paragraph as ordinary blocks. Layout resolves explicit or shrink-to-fit widths,

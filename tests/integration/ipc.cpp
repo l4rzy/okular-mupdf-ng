@@ -11,6 +11,7 @@
 #include "plugin/worker_transport.hpp"
 #include "shared/protocol/zpp_codec.hpp"
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -29,6 +30,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
 #include <future>
 #include <iterator>
@@ -37,6 +39,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -81,11 +84,17 @@ class TestIpc : public QObject {
             ->requestId;
     }
 
-    // Locate the live worker control socket without exposing transport internals
-    // in the production API. Linux SO_PEERCRED identifies its process as well.
+    // Identify our private control endpoint and read its peer credentials.
+    // Only unsandboxed fixture workers can be filtered by executable: release
+    // workers disable dumpability, which can hide /proc/<pid>/exe.
     static int workerControlSocket(pid_t& workerPid, const QString& binary = QStringLiteral(RENDER_WORKER_BUILD_PATH))
     {
-        const QString workerPath = QFileInfo(binary).canonicalFilePath();
+        const QString workerPath = binary.isEmpty() ? QString() : QFileInfo(binary).canonicalFilePath();
+        if (!binary.isEmpty() && workerPath.isEmpty())
+            return -1;
+        const QString prefix = QStringLiteral("worker-%1-").arg(QCoreApplication::applicationPid());
+        int socket = -1;
+        pid_t pid = -1;
         for (const auto& name :
              QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
             bool ok = false;
@@ -94,15 +103,34 @@ class TestIpc : public QObject {
             socklen_t size = sizeof(type);
             if (!ok || ::getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &size) != 0 || type != SOCK_STREAM)
                 continue;
+            sockaddr_un address { };
+            size = sizeof(address);
+            if (::getpeername(fd, reinterpret_cast<sockaddr*>(&address), &size) != 0 || address.sun_family != AF_UNIX)
+                continue;
+            const QString endpoint =
+                QFileInfo(QString::fromLocal8Bit(
+                              address.sun_path,
+                              static_cast<qsizetype>(::strnlen(address.sun_path, sizeof(address.sun_path)))))
+                    .fileName();
+            if (!endpoint.startsWith(prefix) || !endpoint.endsWith(QLatin1String("-ctrl.sock")))
+                continue;
             ucred peer { };
             size = sizeof(peer);
-            if (::getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &size) == 0
-                && QFileInfo(QStringLiteral("/proc/%1/exe").arg(peer.pid)).symLinkTarget() == workerPath) {
-                workerPid = peer.pid;
-                return fd;
-            }
+            if (::getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &size) != 0 || peer.pid <= 0 || peer.pid == ::getpid()
+                || peer.uid != ::geteuid())
+                continue;
+            if (!workerPath.isEmpty()
+                && QFileInfo(QStringLiteral("/proc/%1/exe").arg(peer.pid)).symLinkTarget() != workerPath)
+                continue;
+            // Never select an arbitrary process when several workers match.
+            if (socket >= 0 && pid != peer.pid)
+                return -1;
+            socket = fd;
+            pid = peer.pid;
         }
-        return -1;
+        if (socket >= 0)
+            workerPid = pid;
+        return socket;
     }
 
 private slots:
@@ -1265,7 +1293,9 @@ private slots:
         }
         case 5: {
             pid_t pid = -1;
-            QVERIFY(workerControlSocket(pid, QStringLiteral(WORKER_BUILD_PATH)) >= 0);
+            // This case owns the only worker; executable inspection is neither
+            // necessary nor reliable once the release sandbox is active.
+            QVERIFY(workerControlSocket(pid, { }) >= 0);
             QCOMPARE(::kill(pid, SIGKILL), 0);
             QTRY_VERIFY(!m_client.isConnected());
             break;

@@ -760,6 +760,134 @@ private slots:
             QVERIFY(bounds[1].x0 - bounds[0].x0 >= 70.0f);
     }
 
+    void testTableImageWidths_data()
+    {
+        QTest::addColumn<bool>("cssTable");
+        QTest::addColumn<bool>("blockImage");
+        QTest::addColumn<QString>("imageSizing");
+        QTest::addColumn<bool>("collapsed");
+        for (const bool cssTable : { false, true }) {
+            for (const bool blockImage : { false, true }) {
+                for (const auto& sizing : { QStringLiteral("max-width:100%"),
+                                            QStringLiteral("width:100%"),
+                                            QStringLiteral("max-width:36pt"),
+                                            QStringLiteral("width:40pt"),
+                                            QStringLiteral("max-width:none") }) {
+                    for (const bool collapsed : { false, true }) {
+                        const auto row = QByteArray(cssTable ? "css-" : "html-") + (blockImage ? "block-" : "inline-")
+                            + sizing.toLatin1() + (collapsed ? "-collapsed" : "-separate");
+                        QTest::newRow(row.constData()) << cssTable << blockImage << sizing << collapsed;
+                    }
+                }
+            }
+        }
+    }
+
+    void testTableImageWidths()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Regression coverage for bundled MuPDF table image sizing");
+#endif
+        QFETCH(bool, cssTable);
+        QFETCH(bool, blockImage);
+        QFETCH(QString, imageSizing);
+        QFETCH(bool, collapsed);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage image(640, 240, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QVERIFY(image.save(directory.filePath(QStringLiteral("image.png"))));
+        const auto table = cssTable ? QStringLiteral("div class='table'") : QStringLiteral("table");
+        const auto row = cssTable ? QStringLiteral("div class='row'") : QStringLiteral("tr");
+        const auto cell = cssTable ? QStringLiteral("div class='cell'") : QStringLiteral("td");
+        const auto closeTable = cssTable ? QStringLiteral("div") : QStringLiteral("table");
+        const auto closeRow = cssTable ? QStringLiteral("div") : QStringLiteral("tr");
+        const auto closeCell = cssTable ? QStringLiteral("div") : QStringLiteral("td");
+        const auto content =
+            QStringLiteral("<html><head><style>@page { margin:18pt; } body { margin:0; font-size:10pt; }"
+                           "table,.table { display:table; width:100%; border-spacing:0; border-collapse:%1; }"
+                           "tr,.row { display:table-row; } td,.cell { display:table-cell; width:30%; padding:2pt; "
+                           "border:1pt solid; }"
+                           "p { margin:0; } img { %2; height:auto; display:%3; }"
+                           "</style></head><body><%4><%5><%6><img src='image.png'/></%7>"
+                           "<%6><img src='image.png'/></%7><%6><img src='image.png'/></%7></%8>"
+                           "<%5><%6><p>Sound waves move through air.</p></%7>"
+                           "<%6><p>Water waves move over water.</p></%7>"
+                           "<%6><p>Light waves travel through space.</p></%7></%8></%9></body></html>")
+                .arg(collapsed ? QStringLiteral("collapse") : QStringLiteral("separate"),
+                     imageSizing,
+                     blockImage ? QStringLiteral("block") : QStringLiteral("inline"),
+                     table,
+                     row,
+                     cell,
+                     closeCell,
+                     closeRow,
+                     closeTable)
+                .toUtf8();
+        QFile html(directory.filePath(QStringLiteral("table-images.html")));
+        QVERIFY(html.open(QIODevice::WriteOnly));
+        QCOMPARE(html.write(content), content.size());
+        html.close();
+        ::Mu::Worker::Engine::EpubDocument owner;
+        auto* context = owner.context();
+        fz_document* document = nullptr;
+        fz_var(document);
+        QString error;
+        const auto path = QFile::encodeName(html.fileName());
+        fz_try(context)
+        {
+            document = fz_open_document(context, path.constData());
+        }
+        fz_catch(context)
+        {
+            error = QString::fromUtf8(fz_caught_message(context));
+        }
+        const auto cleanup = qScopeGuard([&] { fz_drop_document(context, document); });
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        for (const float width : { 240.0f, 360.0f, 240.0f }) {
+            fz_try(context)
+            {
+                fz_layout_document(context, document, width, 600, 12);
+            }
+            fz_catch(context)
+            {
+                error = QString::fromUtf8(fz_caught_message(context));
+            }
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            const auto inspection = Mu::Test::inspectDocumentText(context, document);
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QCOMPARE(inspection.images.size(), 3);
+            if (imageSizing == QStringLiteral("max-width:none")) {
+                // Unconstrained images retain their intrinsic minimum width.
+                QVERIFY(inspection.images.front().x1 > width - 18);
+                continue;
+            }
+            for (const auto& bounds : inspection.images) {
+                QVERIFY(bounds.x0 >= 18 - 0.02f);
+                QVERIFY2(bounds.x1 <= width - 18 + 0.02f,
+                         qPrintable(QStringLiteral("Image right edge %1 exceeds page content edge %2")
+                                        .arg(bounds.x1)
+                                        .arg(width - 18)));
+                QVERIFY(bounds.x1 > bounds.x0);
+                const float imageWidth = bounds.x1 - bounds.x0;
+                QVERIFY(std::abs((bounds.y1 - bounds.y0) - imageWidth * 240 / 640) < 0.02f);
+            }
+            for (const auto* label : { "Sound waves move through air.",
+                                       "Water waves move over water.",
+                                       "Light waves travel through space." }) {
+                std::array<fz_quad, 16> quads;
+                const int count =
+                    fz_search_page_number(context, document, 0, label, nullptr, quads.data(), quads.size());
+                QVERIFY(count > 0);
+                for (int index = 0; index < count; ++index) {
+                    const auto bounds = fz_rect_from_quad(quads[static_cast<std::size_t>(index)]);
+                    QVERIFY(bounds.x0 >= 18 - 0.02f);
+                    QVERIFY(bounds.x1 <= width - 18 + 0.02f);
+                }
+            }
+        }
+    }
+
     void testTableRowBackgrounds_data()
     {
         QTest::addColumn<bool>("collapsed");
