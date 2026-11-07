@@ -2560,6 +2560,89 @@ private slots:
         file.close();
     }
 
+    void testFigureContainersFitPage_data()
+    {
+        QTest::addColumn<QString>("container");
+        QTest::addColumn<int>("width");
+        for (const auto& container : { QStringLiteral("figure"), QStringLiteral("div role='figure'") }) {
+            for (const int width : { 550, 160 })
+                QTest::newRow(qPrintable(container + QString::number(width))) << container << width;
+        }
+    }
+
+    void testFigureContainersFitPage()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Requires bundled MuPDF max-width and attribute selector support");
+#endif
+        QFETCH(QString, container);
+        QFETCH(int, width);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage image(550, 300, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QFile file(directory.filePath(QStringLiteral("figure.html")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        // Match knowledge.epub: a fixed-width semantic figure with auto margins,
+        // an intrinsically sized image, and a caption followed by descriptive text.
+        const auto content =
+            QStringLiteral("<html><head><style>.figc550 { width: %1px; margin: 1.5em auto; text-align: center; }"
+                           "p { margin: 0; } .subcaption { text-align: justify; font-size: 0.8em; "
+                           "text-indent: 2em; margin-left: -2em; margin-right: -2em; }</style></head><body>"
+                           "<%2 class='figc550'><img src='data:image/png;base64,%4'/>"
+                           "<p><b>VIEW OF THE ROCK-HEWN TEMPLES AT LUNG-MEN</b></p>"
+                           "<p class='subcaption'>Here, as early as the seventh century, Chinese artists sculptured "
+                           "religious figures "
+                           "in the recesses of precipitous cliffs and turned them into hundreds of quarried temples. "
+                           "Many smaller figures and decorations in other recesses can also be discerned.</p>"
+                           "</%3><p>Following paragraph.</p></body></html>")
+                .arg(width)
+                .arg(container, container.section(' ', 0, 0), QString::fromLatin1(png.toBase64()))
+                .toUtf8();
+        QCOMPARE(file.write(content), content.size());
+        file.close();
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        // Exercise the injected reader CSS at two paper sizes on the same document owner.
+        ::Mu::Worker::Engine::EpubDocument doc;
+        for (const auto size : { ::Mu::Model::EpubPageSize::A5, ::Mu::Model::EpubPageSize::B5 }) {
+            ::Mu::Model::DocumentSettings settings;
+            settings.epub.pageSize = size;
+            doc.setSettings(settings);
+            std::string error;
+            QVERIFY2(doc.openFd(::dup(file.handle()), "figure.html", &error), error.c_str());
+            const auto inspection = Mu::Test::inspectDocumentText(doc.context(), doc.document());
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QCOMPARE(inspection.images.size(), 1);
+            const auto geometry = doc.pageGeometry(0, &error);
+            const double margin = geometry.widthPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction;
+            const auto bounds = inspection.images.front();
+            QVERIFY(bounds.x0 >= margin - 0.02);
+            QVERIFY(bounds.x1 <= geometry.widthPoints - margin + 0.02);
+            const double expectedWidth =
+                std::min({ static_cast<double>(width), 550 * 0.75, geometry.widthPoints - 2 * margin });
+            QVERIFY2(std::abs(bounds.x1 - bounds.x0 - expectedWidth) < 0.02,
+                     qPrintable(
+                         QStringLiteral("Image width %1, expected %2").arg(bounds.x1 - bounds.x0).arg(expectedWidth)));
+            QVERIFY(std::abs((bounds.y1 - bounds.y0) / expectedWidth - 300.0 / 550) < 0.01);
+            QString text;
+            for (int page = 0; page < doc.pageCount(); ++page) {
+                for (const auto& box : doc.textBoxes(page, 72, 72, 10000, false, &error)) {
+                    QVERIFY(box.left >= -0.02);
+                    QVERIFY(box.right <= geometry.widthPoints + 0.02);
+                    text += QString::fromStdString(box.text);
+                }
+            }
+            QVERIFY2(error.empty(), error.c_str());
+            text.remove(' ');
+            QVERIFY(text.contains(QStringLiteral("canalsobediscerned.")));
+            QVERIFY(text.contains(QStringLiteral("Followingparagraph.")));
+        }
+    }
+
     void testFigureMaxWidth_data()
     {
         QTest::addColumn<QString>("tag");

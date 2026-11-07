@@ -27,7 +27,7 @@ namespace {
 constexpr quint32 V3Magic = 0x45504133; // 'EPA3'
 constexpr quint32 V3Version = 3;
 // Bump when bundled layout fixes change pagination without a MuPDF version bump.
-constexpr quint32 LayoutRevision = 12; // Responsive table images change column widths and pagination.
+constexpr quint32 LayoutRevision = 13; // Figure wrapper constraints change caption wrapping and pagination.
 constexpr qint64 V3HeaderBytes = 16;
 // Bytes probed from each end of the source to derive the content-addressed key.
 constexpr qint64 IdentityProbeBytes = 64LL * 1024LL;

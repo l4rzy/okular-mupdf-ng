@@ -93,8 +93,10 @@ private slots:
         QTest::newRow("pre-max-width-outline") << false << quint32(10) << false;
         QTest::newRow("pre-table-images-accelerator") << true << quint32(11) << false;
         QTest::newRow("pre-table-images-outline") << false << quint32(11) << false;
-        QTest::newRow("current-accelerator") << true << quint32(12) << true;
-        QTest::newRow("current-outline") << false << quint32(12) << true;
+        QTest::newRow("pre-figure-containers-accelerator") << true << quint32(12) << false;
+        QTest::newRow("pre-figure-containers-outline") << false << quint32(12) << false;
+        QTest::newRow("current-accelerator") << true << quint32(13) << true;
+        QTest::newRow("current-outline") << false << quint32(13) << true;
     }
 
     void isolatesLayoutRevisions()

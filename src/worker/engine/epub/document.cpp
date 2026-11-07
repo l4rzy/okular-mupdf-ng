@@ -4,9 +4,8 @@
 #include "engine/epub/document.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstdio>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -112,26 +111,24 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
     const float marginX = dimensions.widthPoints * Constant::PageMarginFraction;
     const float marginY = dimensions.heightPoints * Constant::PageMarginFraction;
 
-    std::array<char, 128> marginRule { };
     // Page margins repeat on every page; reset body margins to avoid a second inset.
     // Append user CSS last so specialized books can opt into custom margins.
-    std::snprintf(marginRule.data(),
-                  marginRule.size(),
-                  "@page { margin: %.3fpt %.3fpt !important; } body { margin: 0 !important; } ",
-                  marginY,
-                  marginX);
-    std::string css = marginRule.data();
+    std::string css = std::format(
+        "@page {{ margin: {:.3f}pt {:.3f}pt !important; }} body {{ margin: 0 !important; }} ", 
+        marginY, marginX);
 
-    // Some EPUBs specify both width and height as 100% for images. During
-    // reflow, the containing block may not have a definite height, causing
-    // the image to collapse or overlap nearby text. Keep the image's natural
-    // aspect ratio and cap it at the available content width, matching the
-    // image safeguards used by SumatraPDF.
+    // Some EPUBs specify both width and height as 100% for images. This keeps
+    // the image's natural aspect ratio and cap it at the available content width,
+    // matching the image safeguards used by SumatraPDF.
     css += "img { height: auto !important; max-width: 100% !important; } ";
+    // Fixed-width figure wrappers must fit too: image percentages resolve
+    // against the wrapper, and captions wrap within that same content box.
+    css += "figure, [role=figure] { max-width: 100% !important; } ";
     if (const char* fontRule = fontFamilyCss(settings.epub.fontFamily)) {
         css += ' ';
         css += fontRule;
     }
+    // Custom CSS comes last, thus it can override the previous styles
     if (!customCss.empty()) {
         css += ' ';
         css += customCss;
@@ -298,36 +295,14 @@ void EpubDocument::close() noexcept
     clearPageCache();
 
     if (m_context) {
-        fz_try(m_context)
-        {
-            fz_drop_document(m_context, m_document);
-        }
-        fz_catch(m_context)
-        {
-        }
+        fz_drop_document(m_context, m_document);
+        fz_drop_archive(m_context, m_archive);
+        fz_drop_stream(m_context, m_stream);
     }
     m_document = nullptr;
-    if (m_context) {
-        fz_try(m_context)
-        {
-            fz_drop_archive(m_context, m_archive);
-        }
-        fz_catch(m_context)
-        {
-        }
-    }
     m_archive = nullptr;
-    m_fonts.reset();
-    if (m_context) {
-        fz_try(m_context)
-        {
-            fz_drop_stream(m_context, m_stream);
-        }
-        fz_catch(m_context)
-        {
-        }
-    }
     m_stream = nullptr;
+    m_fonts.reset();
     if (m_input)
         ::fclose(m_input);
     m_input = nullptr;
