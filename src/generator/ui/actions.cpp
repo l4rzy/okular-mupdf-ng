@@ -5,6 +5,7 @@
 #include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/mupdfng.hpp"
 #include "generator/ui/window_menus.hpp"
+#include "shared/model/theme_colors.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
 
@@ -15,14 +16,47 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QColor>
 #include <QIcon>
 #include <QMenu>
+#include <QPainter>
+#include <QPen>
+#include <QPixmap>
+#include <QRect>
 
 namespace Mu::Generator {
 
 namespace {
 
 constexpr int ShortNoticeMs = 1500;
+
+QIcon themePreviewIcon(Model::DocumentTheme theme)
+{
+    const auto backgroundRgb = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme));
+    const QColor background(backgroundRgb[0], backgroundRgb[1], backgroundRgb[2]);
+    const QColor foreground = [&] {
+        if (theme == Model::DocumentTheme::Twilight)
+            return QColor(Qt::black);
+        if (theme == Model::DocumentTheme::Default)
+            return QColor(32, 33, 36);
+        const auto rgb = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
+        return QColor(rgb[0], rgb[1], rgb[2]);
+    }();
+    const QColor nearBackground((foreground.red() + 9 * background.red()) / 10,
+                                (foreground.green() + 9 * background.green()) / 10,
+                                (foreground.blue() + 9 * background.blue()) / 10);
+    QPixmap preview(18, 18);
+    preview.fill(Qt::transparent);
+    QPainter painter(&preview);
+    painter.fillRect(QRect(1, 1, 8, 8), foreground);
+    painter.fillRect(QRect(9, 1, 8, 8), nearBackground);
+    painter.fillRect(QRect(1, 9, 8, 8), nearBackground);
+    painter.fillRect(QRect(9, 9, 8, 8), background);
+    painter.setPen(QPen(QColor(0x22, 0x22, 0x33), 1));
+    painter.drawRect(QRect(0, 0, 17, 17));
+    painter.end();
+    return QIcon(preview);
+}
 
 } // namespace
 
@@ -145,6 +179,10 @@ void Main::setupThemeActions()
     m_themeActions = new QActionGroup(this);
     const auto addTheme = [&](const QString& name, const QString& label, std::optional<Model::DocumentTheme> theme) {
         auto* action = new QAction(label, m_themeActions);
+        const auto previewTheme = theme.value_or(
+            static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()));
+        action->setIcon(theme == Model::DocumentTheme::Default ? QIcon::fromTheme(QStringLiteral("edit-undo"))
+                                                               : themePreviewIcon(previewTheme));
         action->setCheckable(true);
         action->setData(theme ? static_cast<int>(*theme) : -1);
         KActionCollection::setShortcutsConfigurable(action, false);
@@ -231,6 +269,8 @@ void Main::syncThemeActions()
     actionCollection()
         ->action(QStringLiteral("mupdf_theme_inherit"))
         ->setVisible(m_document.settings.theme.has_value());
+    actionCollection()->action(QStringLiteral("mupdf_theme_inherit"))->setIcon(
+        themePreviewIcon(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
     const int theme = static_cast<int>(
         m_document.settings.theme.value_or(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
     for (QAction* action : m_themeActions->actions())

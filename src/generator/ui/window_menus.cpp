@@ -152,6 +152,7 @@ private:
         for (QAction* action : actionCollection()->actions()) {
             if (auto* source = collection ? collection->action(action->objectName()) : nullptr) {
                 action->setText(source->text());
+                action->setIcon(source->icon());
                 action->setEnabled(source->isEnabled());
                 action->setVisible(source->isVisible());
                 action->setChecked(source->isChecked());
