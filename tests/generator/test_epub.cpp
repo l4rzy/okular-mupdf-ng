@@ -6,18 +6,29 @@
 #include "support/synopsis.hpp"
 #include "support/text_inspection.hpp"
 
+#include <KActionCollection>
 #include <KConfigGroup>
 #include <KSharedConfig>
+#include <KXMLGUIClient>
+#include <QAction>
+#include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFile>
 #include <QIcon>
 #include <QMimeDatabase>
 #include <QPrinter>
+#include <QPushButton>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QTest>
+#include <QTimer>
 #include <QUrl>
 
 #include <okular/core/action.h>
@@ -32,6 +43,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <string_view>
 
 namespace {
 
@@ -102,6 +114,50 @@ PdfInspection inspectPdf(const QString& path)
         result.error = QString::fromUtf8(fz_caught_message(context));
     }
     return result;
+}
+
+QString createReflowEpub(const QString& path, const QByteArray& chapter)
+{
+    auto* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+    if (!context)
+        return QStringLiteral("Could not create MuPDF context");
+    fz_archive* archive = nullptr;
+    fz_zip_writer* zip = nullptr;
+    fz_buffer* buffer = nullptr;
+    fz_var(archive);
+    fz_var(zip);
+    fz_var(buffer);
+    QString error;
+    const auto encodedPath = QFile::encodeName(path);
+    fz_try(context)
+    {
+        archive = fz_open_zip_archive(context, TEST_EPUB_DIR "/sample.epub");
+        zip = fz_new_zip_writer(context, encodedPath.constData());
+        for (int index = 0; index < fz_count_archive_entries(context, archive); ++index) {
+            const char* entry = fz_list_archive_entry(context, archive, index);
+            buffer = std::string_view(entry).ends_with("chapter1.html")
+                ? fz_new_buffer_from_copied_data(context,
+                                                 reinterpret_cast<const unsigned char*>(chapter.constData()),
+                                                 static_cast<std::size_t>(chapter.size()))
+                : fz_read_archive_entry(context, archive, entry);
+            fz_write_zip_entry(context, zip, entry, buffer, 0);
+            fz_drop_buffer(context, buffer);
+            buffer = nullptr;
+        }
+        fz_close_zip_writer(context, zip);
+    }
+    fz_always(context)
+    {
+        fz_drop_buffer(context, buffer);
+        fz_drop_zip_writer(context, zip);
+        fz_drop_archive(context, archive);
+    }
+    fz_catch(context)
+    {
+        error = QString::fromUtf8(fz_caught_message(context));
+    }
+    fz_drop_context(context);
+    return error;
 }
 
 } // namespace
@@ -365,6 +421,87 @@ private slots:
         QVERIFY(it != formats.end());
         QCOMPARE(it->description(), standard.description());
         QCOMPARE(it->icon().name(), standard.icon().name());
+    }
+
+    void restoresReadingPositionAfterReflow_data()
+    {
+        QTest::addColumn<bool>("changeFont");
+        QTest::addColumn<bool>("uniqueText");
+        QTest::newRow("font-size") << true << true;
+        QTest::newRow("page-size") << false << true;
+        QTest::newRow("ambiguous-text-fallback") << true << false;
+    }
+
+    void restoresReadingPositionAfterReflow()
+    {
+        QFETCH(bool, changeFont);
+        QFETCH(bool, uniqueText);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath(QStringLiteral("reading.epub"));
+        QByteArray html = "<html><head><title>" + QByteArray(QTest::currentDataTag()) + "</title></head><body>";
+        for (int paragraph = 0; paragraph < 80; ++paragraph) {
+            html += "<p>";
+            for (int word = 0; word < 22; ++word)
+                html += uniqueText
+                    ? QByteArray("p") + QByteArray::number(paragraph) + "word" + QByteArray::number(word) + ' '
+                    : QByteArray("repeated ");
+            html += "</p>";
+        }
+        html += "</body></html>";
+        const auto error = createReflowEpub(path, html);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        QVERIFY(document.pages() >= 4);
+        const auto oldPages = document.pages();
+        const int oldPage = static_cast<int>(oldPages / 2);
+        document.requestTextPage(static_cast<unsigned int>(oldPage));
+        QTRY_VERIFY(document.page(oldPage)->hasTextPage());
+        const auto words = document.page(oldPage)->words(nullptr, Okular::TextPage::AnyPixelTextAreaInclusionBehaviour);
+        const auto word =
+            std::find_if(words.begin(), words.end(), [](const auto& item) { return item.area().bottom > 0.4; });
+        QVERIFY(word != words.end());
+        const QString anchor = word->text();
+        Okular::DocumentViewport viewport(oldPage);
+        viewport.rePos = { true, 0.5, 0.4, Okular::DocumentViewport::Center };
+        document.setViewport(viewport);
+        auto* action = document.guiClient()->actionCollection()->action(QStringLiteral("mupdf_document_settings"));
+        QVERIFY(action && action->isEnabled());
+        bool applied = false;
+        QTimer::singleShot(0, &document, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            auto* inherit = dialog->findChild<QCheckBox*>(QStringLiteral("inheritLayout"));
+            auto* font = dialog->findChild<QSpinBox*>(QStringLiteral("fontSize"));
+            auto* page = dialog->findChild<QComboBox*>(QStringLiteral("pageSize"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            QTimer::singleShot(0, dialog, &QDialog::reject); // Close safely if applying fails.
+            if (!inherit || !font || !page || !buttons)
+                return;
+            inherit->setChecked(false);
+            if (changeFont)
+                font->setValue(16);
+            else
+                page->setCurrentIndex(page->findData(static_cast<int>(Mu::Model::EpubPageSize::Letter)));
+            applied = true;
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+        action->trigger();
+        QVERIFY(applied);
+        QVERIFY(document.pages() != oldPages);
+        QVERIFY(document.viewport().pageNumber != oldPage);
+        if (!uniqueText) {
+            const double restoredProgress =
+                (document.viewport().pageNumber + document.viewport().rePos.normalizedY) / document.pages();
+            QVERIFY(std::abs(restoredProgress - (oldPage + 0.4) / oldPages) < 1e-6);
+        }
+        const int restored = document.viewport().pageNumber;
+        document.requestTextPage(static_cast<unsigned int>(restored));
+        QTRY_VERIFY(document.page(restored)->hasTextPage());
+        QVERIFY2(document.page(restored)->text().contains(anchor), qPrintable(anchor));
     }
 
     void exportsEpubToAzw3()

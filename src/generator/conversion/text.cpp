@@ -7,6 +7,15 @@
 #include <algorithm>
 
 namespace Mu::Generator::Conversion {
+namespace {
+
+QString normalizeReflowText(QString text)
+{
+    text.removeIf([](QChar ch) { return ch.isSpace() || ch == QChar(0x00ad); });
+    return text;
+}
+
+} // namespace
 
 Okular::TextPage* textPage(const std::vector<Model::TextBox>& boxes, qreal width, qreal height)
 {
@@ -76,6 +85,32 @@ QString plainText(const std::vector<Model::TextBox>& boxes)
             text += QLatin1Char('\n');
     }
     return text;
+}
+
+QString captureReflowText(const std::vector<Model::TextBox>& boxes, double top)
+{
+    QString text;
+    const auto first = std::find_if(boxes.begin(), boxes.end(), [top](const auto& box) { return box.bottom > top; });
+    for (auto it = first; it != boxes.end() && text.size() < 64; ++it)
+        text += normalizeReflowText(QString::fromStdString(it->text));
+    return text.size() >= 24 ? text.left(64) : QString();
+}
+
+std::optional<double> findReflowText(const std::vector<Model::TextBox>& boxes, const QString& snippet)
+{
+    if (snippet.isEmpty())
+        return std::nullopt;
+    const auto text = normalizeReflowText(plainText(boxes));
+    auto offset = text.indexOf(snippet);
+    if (offset < 0 || text.indexOf(snippet, offset + 1) >= 0)
+        return std::nullopt;
+    for (const auto& box : boxes) {
+        const auto length = normalizeReflowText(QString::fromStdString(box.text)).size();
+        if (offset < length)
+            return std::max(0.0, box.top);
+        offset -= length;
+    }
+    return std::nullopt;
 }
 
 } // namespace Mu::Generator::Conversion

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/config/csseditor/editor.hpp"
+#include "generator/conversion/text.hpp"
 #include "generator/mupdfng.hpp"
 
 #include <KLocalizedString>
@@ -20,6 +21,9 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
+#include <algorithm>
+#include <iterator>
+#include <okular/core/page.h>
 
 namespace Mu::Generator {
 namespace {
@@ -36,6 +40,51 @@ void addSettingRow(QVBoxLayout* layout, const QString& text, QWidget* control)
     row->addWidget(line, 1);
     row->addWidget(control);
     layout->addLayout(row);
+}
+
+void restoreReflowPosition(Okular::Document* doc,
+                           Plugin::WorkerClient& worker,
+                           double width,
+                           double pageHeight,
+                           Okular::DocumentViewport target,
+                           double progress,
+                           const QString& snippet)
+{
+    if (doc->pages() == 0)
+        return;
+    const bool hadPosition = target.rePos.enabled;
+    const double position = progress * doc->pages();
+    target.pageNumber = std::clamp(static_cast<int>(position), 0, static_cast<int>(doc->pages()) - 1);
+    target.rePos.enabled = true;
+    target.rePos.normalizedY = std::clamp(position - target.pageNumber, 0.0, 1.0);
+    if (!hadPosition)
+        target.rePos.pos = Okular::DocumentViewport::TopLeft;
+    if (!snippet.isEmpty()) {
+        // Bound synchronous work to nearby pages and 100k native text boxes.
+        // Concatenate pages so a snippet can straddle a new page boundary.
+        std::vector<Model::TextBox> boxes;
+        const double height = doc->page(0)->height();
+        for (int index = std::max(0, target.pageNumber - 8);
+             index <= std::min(static_cast<int>(doc->pages()) - 1, target.pageNumber + 8);
+             ++index) {
+            bool success = false;
+            auto next = worker.getTextBoxesForPage(index, width, pageHeight, true, &success);
+            if (!success || boxes.size() + next.size() > 100'000) {
+                boxes.clear();
+                break;
+            }
+            for (auto& box : next) {
+                box.top += index * height;
+                box.bottom += index * height;
+            }
+            boxes.insert(boxes.end(), std::make_move_iterator(next.begin()), std::make_move_iterator(next.end()));
+        }
+        if (const auto top = Conversion::findReflowText(boxes, snippet); top && height > 0) {
+            target.pageNumber = std::clamp(static_cast<int>(*top / height), 0, static_cast<int>(doc->pages()) - 1);
+            target.rePos.normalizedY = std::clamp(*top / height - target.pageNumber, 0.0, 1.0);
+        }
+    }
+    doc->setViewport(target, nullptr, false, false);
 }
 
 } // namespace
@@ -104,15 +153,21 @@ bool Main::applyDocumentSettings(const Config::DocumentSettings& settings)
     const QString path = url.toLocalFile();
     const QString password = m_document.password;
     const auto mime = QMimeDatabase().mimeTypeForFile(path);
+    const auto oldViewport = doc->viewport();
     const int page = static_cast<int>(doc->currentPage());
+    const double oldY = oldViewport.rePos.enabled ? std::clamp(oldViewport.rePos.normalizedY, 0.0, 1.0) : 0;
+    const double progress = (page + oldY) / doc->pages();
+    const auto snippet = Conversion::captureReflowText(
+        m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), true), oldY * doc->page(page)->height());
     doc->closeDocument();
     if (doc->openDocument(path, url, mime, password) != Okular::Document::OpenSuccess) {
         Config::writeDocumentSettings(key, previous);
-        doc->openDocument(path, url, mime, password);
+        if (doc->openDocument(path, url, mime, password) == Okular::Document::OpenSuccess)
+            doc->setViewport(oldViewport, nullptr, false, false);
         Q_EMIT error(i18n("Could not reload the book with the new layout."), 5000);
         return false;
     }
-    doc->setViewportPage(std::clamp(page, 0, static_cast<int>(doc->pages()) - 1));
+    restoreReflowPosition(doc, m_worker, dpi().width(), dpi().height(), oldViewport, progress, snippet);
     return true;
 }
 

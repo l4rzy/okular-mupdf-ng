@@ -8,6 +8,7 @@
 
 #include <QString>
 #include <QVector>
+#include <optional>
 
 #include "plugin/ocr/ocr.hpp"
 #include "shared/model/types.hpp"
@@ -23,6 +24,10 @@ Okular::TextPage* mergedTextPage(const std::vector<Model::TextBox>& nativeBoxes,
 /// Assembles worker text boxes into plain text, preserving source lines
 /// (newlines follow endOfLine boxes; empty boxes contribute no text).
 QString plainText(const std::vector<Model::TextBox>& boxes);
+/// Short reading-position context; whitespace and soft hyphens are ignored.
+QString captureReflowText(const std::vector<Model::TextBox>& boxes, double top);
+/// Returns the first matching box's top only when the snippet is unique.
+std::optional<double> findReflowText(const std::vector<Model::TextBox>& boxes, const QString& snippet);
 
 } // namespace Mu::Generator::Conversion
 

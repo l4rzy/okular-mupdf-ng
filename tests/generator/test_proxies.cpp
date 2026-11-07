@@ -573,6 +573,57 @@ private slots:
         QCOMPARE(::Mu::Generator::Conversion::plainText(sparse), QStringLiteral("\nKept\n"));
     }
 
+    void reflowTextMatching_data()
+    {
+        QTest::addColumn<QString>("first");
+        QTest::addColumn<QString>("second");
+        QTest::addColumn<QString>("snippet");
+        QTest::addColumn<double>("expected");
+        QTest::newRow("reflowed-whitespace") << QStringLiteral("Read this ") << QStringLiteral("passage again")
+                                             << QStringLiteral("Readthispassageagain") << 10.0;
+        QTest::newRow("second-page") << QStringLiteral("Previous page") << QStringLiteral("Reading position")
+                                     << QStringLiteral("Readingposition") << 700.0;
+        QTest::newRow("page-boundary") << QStringLiteral("Reading ") << QStringLiteral("position preserved")
+                                       << QStringLiteral("Readingpositionpreserved") << 10.0;
+        QTest::newRow("unicode-soft-hyphen")
+            << QStringLiteral("Accurate trans\u00ad") << QStringLiteral("lation matters")
+            << QStringLiteral("Accuratetranslationmatters") << 10.0;
+        QTest::newRow("ambiguous") << QStringLiteral("Repeated passage") << QStringLiteral("Repeated passage")
+                                   << QStringLiteral("Repeatedpassage") << -1.0;
+        QTest::newRow("missing") << QStringLiteral("Other") << QStringLiteral("content")
+                                 << QStringLiteral("Missingpassage") << -1.0;
+        QTest::newRow("empty") << QString() << QString() << QString() << -1.0;
+    }
+
+    void reflowTextMatching()
+    {
+        QFETCH(QString, first);
+        QFETCH(QString, second);
+        QFETCH(QString, snippet);
+        QFETCH(double, expected);
+        const std::vector<::Mu::Model::TextBox> boxes {
+            { first.toStdString(), 0, 10, 100, 20, true },
+            { second.toStdString(), 0, 700, 100, 710, true },
+        };
+        const auto top = ::Mu::Generator::Conversion::findReflowText(boxes, snippet);
+        QCOMPARE(top.has_value(), expected >= 0);
+        if (top)
+            QCOMPARE(*top, expected);
+    }
+
+    void capturesReflowText()
+    {
+        const std::string passage = "A distinctive reading position with enough surrounding text to identify it.";
+        const std::vector<::Mu::Model::TextBox> boxes {
+            { "Above viewport", 0, 0, 100, 10, true },
+            { passage, 0, 30, 100, 40, true },
+        };
+        QCOMPARE(::Mu::Generator::Conversion::captureReflowText(boxes, 20),
+                 QString::fromStdString(passage).remove(' ').left(64));
+        QVERIFY(::Mu::Generator::Conversion::captureReflowText(boxes, 50).isEmpty());
+        QVERIFY(::Mu::Generator::Conversion::captureReflowText({ { "Short", 0, 0, 100, 10, true } }, 0).isEmpty());
+    }
+
     void annotationConversionPreservesOpacityAndCaretSymbol()
     {
         ::Mu::Model::Annotation source;
