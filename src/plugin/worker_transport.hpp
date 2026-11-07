@@ -28,7 +28,6 @@
 #include <utility>
 #include <vector>
 
-#include "plugin/caching/epub_cache.hpp"
 #include "plugin/signing_authorization.hpp"
 #include "shared/logging.hpp"
 #include "shared/model/types.hpp"
@@ -66,10 +65,14 @@ public:
     /// Resident memory of the worker process in bytes; nullopt unless the
     /// process is running and its status is readable.
     std::optional<quint64> workerMemoryBytes() const;
+    /// Transfers the source and optional accelerator to the worker. Persistent
+    /// cache policy belongs to the caller; returned bytes are opaque here.
     Model::OpenStatus open(const QString& path,
                            const QString& password,
                            QList<Model::PageInfo>* pages,
-                           Model::DocumentType type = Model::DocumentType::Pdf);
+                           Model::DocumentType type = Model::DocumentType::Pdf,
+                           const std::vector<std::uint8_t>& accelerator = { },
+                           std::vector<std::uint8_t>* producedAccelerator = nullptr);
     Model::OpenStatus openData(const QByteArray& data,
                                const QString& password,
                                QList<Model::PageInfo>* pages,
@@ -190,14 +193,6 @@ private:
 
     /// Reopens the retained source with an independent offset for a background reader.
     [[nodiscard]] std::unique_ptr<QFile> openSourceInput() const;
-    /// Memoized EPUB cache path for a source; recomputed only when the source
-    /// or the EPUB layout settings change.
-    QString epubCachePath(const QString& sourcePath);
-    Model::OpenStatus openFile(const QString& path,
-                               const QString& password,
-                               QList<Model::PageInfo>* pages,
-                               Model::DocumentType type,
-                               bool useEpubAcceleratorCache);
     // A request may receive asynchronous notifications while its response is
     // pending; call() serializes that exchange and handles both message kinds.
     std::optional<Model::ResponseMessage> requestOcr(int page, const QString& language, int dpi);
@@ -223,14 +218,9 @@ private:
     // Sole-owner unique_ptrs (no QObject parent): m_notifier is recreated per
     // session around the live control FD; m_exportTimer is created lazily once.
     std::unique_ptr<QSocketNotifier> m_notifier;
-    QString m_socketPath, m_fdSocketPath, m_tempPath, m_sourcePath;
+    QString m_socketPath, m_fdSocketPath, m_tempPath;
     SigningAuthorization m_signingAuthorization;
     QString m_activeSignPassword;
-    Model::DocumentSettings m_settings;
-    // Memoized EPUB cache path and the identity it was derived from.
-    std::optional<QString> m_epubCachePath;
-    std::optional<QByteArray> m_epubCacheLayoutKey;
-    QString m_epubCacheSource;
     std::optional<PendingExport> m_export;
     std::unique_ptr<QTimer> m_exportTimer;
     std::unordered_map<std::uint64_t, std::shared_ptr<FrameSlotMapping>> m_frameSlots;
@@ -242,7 +232,6 @@ private:
 #endif
     bool m_intentionalStop = false;
     bool m_inFlight = false;
-    bool m_useEpubCache = false;
     // Retain the exact opened source for background jobs and PDF TOC identity
     // (also covers openData). The original pathname may be replaced or deleted.
     std::unique_ptr<QFile> m_sourceFile;

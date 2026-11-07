@@ -83,9 +83,9 @@ class TestIpc : public QObject {
 
     // Locate the live worker control socket without exposing transport internals
     // in the production API. Linux SO_PEERCRED identifies its process as well.
-    static int workerControlSocket(pid_t& workerPid)
+    static int workerControlSocket(pid_t& workerPid, const QString& binary = QStringLiteral(RENDER_WORKER_BUILD_PATH))
     {
-        const QString workerPath = QFileInfo(QStringLiteral(RENDER_WORKER_BUILD_PATH)).canonicalFilePath();
+        const QString workerPath = QFileInfo(binary).canonicalFilePath();
         for (const auto& name :
              QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
             bool ok = false;
@@ -1160,6 +1160,129 @@ private slots:
         QCOMPARE(second->size(), first->size());
         QCOMPARE(second->front().title, first->front().title);
         QVERIFY(m_client.close());
+    }
+
+    void epubTransportPassesAccelerators_data()
+    {
+        QTest::addColumn<bool>("cachedOutline");
+        QTest::newRow("no-disk-cache") << false;
+        QTest::newRow("unrelated-disk-outline") << true;
+    }
+
+    void epubTransportPassesAccelerators()
+    {
+        QFETCH(bool, cachedOutline);
+        using namespace Mu::Model;
+        using Cache = Mu::Plugin::Caching::EPUB::Cache;
+        const DocumentSettings settings;
+        const auto cachePath = Cache::cacheFilePath(m_epub, settings);
+        QVERIFY(!cachePath.isEmpty());
+        QFile::remove(cachePath);
+        if (cachedOutline) {
+            OutlineNode sentinel;
+            sentinel.title = "Disk cache belongs to the client";
+            QVERIFY(Cache::saveOutlineAt(cachePath, { sentinel }));
+        }
+        Mu::Plugin::WorkerTransport transport;
+        QVERIFY(transport.start(QStringLiteral(WORKER_BUILD_PATH), { }, nullptr));
+        QVERIFY(transport.setSettings(settings));
+        QList<PageInfo> pages;
+        std::vector<std::uint8_t> accelerator;
+        QCOMPARE(transport.open(m_epub, { }, &pages, DocumentType::Epub, { }, &accelerator), OpenStatus::Success);
+        QVERIFY(!accelerator.empty());
+        const auto firstPages = pages.size();
+        const auto outline = transport.synopsis();
+        QVERIFY(outline && !outline->empty());
+        QVERIFY(outline->front().title != "Disk cache belongs to the client");
+        QVERIFY(transport.close());
+        std::vector<std::uint8_t> produced;
+        QCOMPARE(transport.open(m_epub, { }, &pages, DocumentType::Epub, accelerator, &produced), OpenStatus::Success);
+        QCOMPARE(pages.size(), firstPages);
+        QVERIFY(!produced.empty());
+        QVERIFY(transport.close());
+        const auto cached = Cache::loadAt(cachePath);
+        QCOMPARE(cached.has_value(), cachedOutline);
+        if (cached) {
+            QVERIFY(!cached->accelerator);
+            QVERIFY(cached->outline && cached->outline->size() == 1);
+            QCOMPARE(cached->outline->front().title, std::string("Disk cache belongs to the client"));
+        }
+    }
+
+    void epubCacheSessionBoundaries_data()
+    {
+        QTest::addColumn<int>("boundary");
+        QTest::newRow("close") << 0;
+        QTest::newRow("replace-with-pdf") << 1;
+        QTest::newRow("replace-with-epub-data") << 2;
+        QTest::newRow("restart-worker") << 3;
+        QTest::newRow("failed-open") << 4;
+        QTest::newRow("worker-exit") << 5;
+    }
+
+    void epubCacheSessionBoundaries()
+    {
+        QFETCH(int, boundary);
+        using namespace Mu::Model;
+        using Cache = Mu::Plugin::Caching::EPUB::Cache;
+        const DocumentSettings settings;
+        QVERIFY(m_client.setSettings(settings));
+        const auto cachePath = Cache::cacheFilePath(m_epub, settings);
+        QFile::remove(cachePath);
+        QList<PageInfo> pages;
+        QCOMPARE(m_client.open(m_epub, { }, pages, DocumentType::Epub), OpenStatus::Success);
+        OutlineNode sentinel;
+        sentinel.title = "Cached EPUB outline";
+        QVERIFY(Cache::saveOutlineAt(cachePath, { sentinel }));
+        bool generated = true;
+        const auto warm = m_client.synopsis(true, &generated);
+        QVERIFY(warm && warm->size() == 1);
+        QCOMPARE(warm->front().title, sentinel.title);
+        QVERIFY(!generated);
+        switch (boundary) {
+        case 0:
+            QVERIFY(m_client.close());
+            break;
+        case 1:
+            QCOMPARE(m_client.open(m_pdf, { }, pages), OpenStatus::Success);
+            break;
+        case 2: {
+            QFile source(m_epub);
+            QVERIFY(source.open(QIODevice::ReadOnly));
+            QCOMPARE(m_client.openData(source.readAll(), { }, pages, DocumentType::Epub), OpenStatus::Success);
+            break;
+        }
+        case 3:
+            QVERIFY(m_client.start(QStringLiteral(WORKER_BUILD_PATH)));
+            break;
+        case 4: {
+            QFile invalid(m_fixtureRoot.filePath(QStringLiteral("invalid.epub")));
+            QVERIFY(invalid.open(QIODevice::WriteOnly));
+            QCOMPARE(invalid.write("invalid EPUB"), qint64(12));
+            invalid.close();
+            QCOMPARE(m_client.open(invalid.fileName(), { }, pages, DocumentType::Epub), OpenStatus::Failed);
+            break;
+        }
+        case 5: {
+            pid_t pid = -1;
+            QVERIFY(workerControlSocket(pid, QStringLiteral(WORKER_BUILD_PATH)) >= 0);
+            QCOMPARE(::kill(pid, SIGKILL), 0);
+            QTRY_VERIFY(!m_client.isConnected());
+            break;
+        }
+        }
+        const auto next = m_client.synopsis();
+        if (boundary == 2) {
+            QVERIFY(next && !next->empty());
+            QVERIFY(next->front().title != sentinel.title);
+        } else if (boundary == 1) {
+            QVERIFY(next && next->empty());
+        } else {
+            QVERIFY(!next);
+        }
+        const auto preserved = Cache::loadAt(cachePath);
+        QVERIFY(preserved && preserved->outline && preserved->outline->size() == 1);
+        QCOMPARE(preserved->outline->front().title, sentinel.title);
     }
 
     void epubExportPdfOverIpc_data()

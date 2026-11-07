@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "plugin/caching/epub_cache.hpp"
 #include "plugin/worker_transport.hpp"
 #include "shared/logging.hpp"
 
@@ -89,7 +90,8 @@ bool WorkerClient::startWorker()
     Model::PingResponse workerInfo;
     QMetaObject::invokeMethod(
         m_transport,
-        [transport = m_transport, binaryPath, tessDataDirectories, &result, &workerInfo] {
+        [this, transport = m_transport, binaryPath, tessDataDirectories, &result, &workerInfo] {
+            m_epubCache.reset();
             result = transport->start(binaryPath, tessDataDirectories, &workerInfo);
         },
         Qt::BlockingQueuedConnection);
@@ -105,7 +107,13 @@ void WorkerClient::stop()
     m_lifecycle.beginStop();
     m_lifecycle.timer.stop();
     if (m_transport)
-        QMetaObject::invokeMethod(m_transport, [t = m_transport] { t->stop(); }, Qt::BlockingQueuedConnection);
+        QMetaObject::invokeMethod(
+            m_transport,
+            [this, transport = m_transport] {
+                m_epubCache.reset();
+                transport->stop();
+            },
+            Qt::BlockingQueuedConnection);
     m_lifecycle.info = { };
     m_lifecycle.setState(State::Stopped);
 }
@@ -126,20 +134,65 @@ std::optional<quint64> WorkerClient::workerMemoryBytes() const
 
 OpenStatus WorkerClient::open(const QString& path, const QString& password, QList<PageInfo>& pages, DocumentType type)
 {
-    return sync([&](WorkerTransport* transport) { return transport->open(path, password, &pages, type); },
-                OpenStatus::Failed);
+    return sync(
+        [&](WorkerTransport* transport) {
+            m_epubCache.reset();
+            const bool cacheEpub = type == DocumentType::Epub;
+            const QString cachePath = cacheEpub ? Caching::EPUB::Cache::cacheFilePath(path, m_settings) : QString();
+            const auto cached = Caching::EPUB::Cache::loadAt(cachePath);
+            std::vector<std::uint8_t> accelerator;
+            if (cached && cached->accelerator)
+                accelerator.assign(cached->accelerator->cbegin(), cached->accelerator->cend());
+            std::vector<std::uint8_t> produced;
+            const auto status = transport->open(path, password, &pages, type, accelerator, &produced);
+            if (status == OpenStatus::Success && cacheEpub && transport->isConnected()) {
+                m_epubCache = EpubCacheSession {
+                    path, cachePath, Caching::EPUB::Cache::layoutKey(m_settings), transport->documentEpoch()
+                };
+                if (!produced.empty()) {
+                    const QByteArray bytes(reinterpret_cast<const char*>(produced.data()),
+                                           static_cast<qsizetype>(produced.size()));
+                    (void)Caching::EPUB::Cache::saveAcceleratorAt(cachePath, bytes);
+                }
+            }
+            return status;
+        },
+        OpenStatus::Failed);
 }
 
 OpenStatus
 WorkerClient::openData(const QByteArray& data, const QString& password, QList<PageInfo>& pages, DocumentType type)
 {
-    return sync([&](WorkerTransport* transport) { return transport->openData(data, password, &pages, type); },
-                OpenStatus::Failed);
+    return sync(
+        [&](WorkerTransport* transport) {
+            m_epubCache.reset();
+            return transport->openData(data, password, &pages, type);
+        },
+        OpenStatus::Failed);
 }
 
 bool WorkerClient::close()
 {
-    return sync([&](WorkerTransport* transport) { return transport->close(); });
+    return sync([&](WorkerTransport* transport) {
+        m_epubCache.reset();
+        return transport->close();
+    });
+}
+
+QString WorkerClient::epubCachePath(WorkerTransport* transport) const
+{
+    if (!m_epubCache)
+        return { };
+    if (m_epubCache->documentEpoch != transport->documentEpoch() || !transport->isConnected()) {
+        m_epubCache.reset();
+        return { };
+    }
+    const auto layoutKey = Caching::EPUB::Cache::layoutKey(m_settings);
+    if (m_epubCache->cachePath.isEmpty() || m_epubCache->layoutKey != layoutKey) {
+        m_epubCache->cachePath = Caching::EPUB::Cache::cacheFilePath(m_epubCache->sourcePath, m_settings);
+        m_epubCache->layoutKey = layoutKey;
+    }
+    return m_epubCache->cachePath;
 }
 
 // =============================================================================
@@ -292,7 +345,18 @@ std::optional<std::vector<EmbeddedFile>> WorkerClient::embeddedFiles() const
 
 std::optional<std::vector<OutlineNode>> WorkerClient::synopsis(bool allowHeuristic, bool* generatedSynopsis) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->synopsis(allowHeuristic, generatedSynopsis); });
+    if (generatedSynopsis)
+        *generatedSynopsis = false;
+    return sync([&](WorkerTransport* transport) {
+        const auto cachePath = epubCachePath(transport);
+        if (const auto cached = Caching::EPUB::Cache::loadAt(cachePath); cached && cached->outline)
+            return cached->outline;
+        const auto epoch = transport->documentEpoch();
+        auto outline = transport->synopsis(allowHeuristic, generatedSynopsis);
+        if (outline && !cachePath.isEmpty() && epoch == transport->documentEpoch() && transport->isConnected())
+            (void)Caching::EPUB::Cache::saveOutlineAt(cachePath, *outline);
+        return outline;
+    });
 }
 
 DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& keys) const
@@ -381,7 +445,12 @@ std::optional<Model::LayersResponse> WorkerClient::setLayer(const Model::SetLaye
 
 bool WorkerClient::setSettings(const DocumentSettings& settings)
 {
-    return sync([&](WorkerTransport* transport) { return transport->setSettings(settings); });
+    return sync([&](WorkerTransport* transport) {
+        if (!transport->setSettings(settings))
+            return false;
+        m_settings = settings;
+        return true;
+    });
 }
 
 SandboxStatus WorkerClient::sandboxStatus() const

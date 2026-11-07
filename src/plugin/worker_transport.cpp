@@ -27,7 +27,6 @@
 #include <unistd.h>
 #include <utility>
 
-#include "plugin/caching/epub_cache.hpp"
 #include "plugin/caching/pdf_toc_cache.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/util/process_memory.hpp"
@@ -299,14 +298,9 @@ void WorkerTransport::clearDocumentState()
         QFile::remove(m_tempPath);
         m_tempPath.clear();
     }
-    m_sourcePath.clear();
-    m_useEpubCache = false;
     m_sourceFile.reset();
     m_pdfPageCount = 0;
     m_pdfSynopsis.reset();
-    m_epubCachePath.reset();
-    m_epubCacheLayoutKey.reset();
-    m_epubCacheSource.clear();
 }
 
 void WorkerTransport::cleanupSession()
@@ -384,40 +378,15 @@ std::optional<quint64> WorkerTransport::workerMemoryBytes() const
 }
 
 // =============================================================================
-// Document Opening, Caching & Closing
+// Document Opening & Closing
 // =============================================================================
 
-QString WorkerTransport::epubCachePath(const QString& sourcePath)
-{
-    // The cache path binds the source bytes and the EPUB layout settings. The
-    // fingerprint recomputation costs a 128 KiB source probe plus a SHA-256, so
-    // memoize it for the session and only recompute when either input changes.
-    const QByteArray layoutKey = Caching::EPUB::Cache::layoutKey(m_settings);
-    if (m_epubCachePath && m_epubCacheSource == sourcePath && m_epubCacheLayoutKey
-        && *m_epubCacheLayoutKey == layoutKey)
-        return *m_epubCachePath;
-
-    const QString cachePath = Caching::EPUB::Cache::cacheFilePath(sourcePath, m_settings);
-    if (cachePath.isEmpty())
-        return { };
-
-    m_epubCachePath = cachePath;
-    m_epubCacheSource = sourcePath;
-    m_epubCacheLayoutKey = layoutKey;
-    return cachePath;
-}
-
-OpenStatus
-WorkerTransport::open(const QString& path, const QString& password, QList<PageInfo>* pages, DocumentType type)
-{
-    return openFile(path, password, pages, type, true);
-}
-
-OpenStatus WorkerTransport::openFile(const QString& path,
-                                     const QString& password,
-                                     QList<PageInfo>* pages,
-                                     DocumentType type,
-                                     bool useEpubAcceleratorCache)
+OpenStatus WorkerTransport::open(const QString& path,
+                                 const QString& password,
+                                 QList<PageInfo>* pages,
+                                 DocumentType type,
+                                 const std::vector<std::uint8_t>& accelerator,
+                                 std::vector<std::uint8_t>* producedAccelerator)
 {
 #ifdef MU_DEBUG_ENABLED
     const auto pageLinksStartedAt = std::chrono::steady_clock::now();
@@ -430,13 +399,6 @@ OpenStatus WorkerTransport::openFile(const QString& path,
     std::string e;
     if (!m_fd.send(transfer, file.handle(), &e))
         return OpenStatus::Failed;
-    std::optional<Caching::EPUB::CacheEntry> cached;
-    if (useEpubAcceleratorCache && type == DocumentType::Epub) {
-        cached = Caching::EPUB::Cache::loadAt(epubCachePath(path));
-    }
-    std::vector<std::uint8_t> accelerator;
-    if (cached && cached->accelerator)
-        accelerator.assign(cached->accelerator->cbegin(), cached->accelerator->cend());
     OpenRequest req {
         { transfer }, QFileInfo(path).fileName().toStdString(), password.toStdString(), type, accelerator
     };
@@ -461,11 +423,8 @@ OpenStatus WorkerTransport::openFile(const QString& path,
     if (!opened)
         return OpenStatus::Failed;
     m_frameSlots.clear();
-    if (useEpubAcceleratorCache && type == DocumentType::Epub && !opened->epubAccelerator.empty()) {
-        const QByteArray produced(reinterpret_cast<const char*>(opened->epubAccelerator.data()),
-                                  static_cast<qsizetype>(opened->epubAccelerator.size()));
-        (void)Caching::EPUB::Cache::saveAcceleratorAt(epubCachePath(path), produced);
-    }
+    if (producedAccelerator)
+        *producedAccelerator = std::move(opened->epubAccelerator);
     if (pages) {
         pages->clear();
         pages->reserve(static_cast<qsizetype>(opened->pages.size()));
@@ -476,8 +435,6 @@ OpenStatus WorkerTransport::openFile(const QString& path,
         m_pdfPageCount = static_cast<int>(opened->pages.size());
     }
     m_sourceFile = std::move(source);
-    m_sourcePath = path;
-    m_useEpubCache = useEpubAcceleratorCache && type == DocumentType::Epub;
     return OpenStatus::Success;
 }
 
@@ -495,7 +452,7 @@ WorkerTransport::openData(const QByteArray& data, const QString& password, QList
         return OpenStatus::Failed;
     file.setAutoRemove(false);
     m_tempPath = file.fileName();
-    const OpenStatus status = openFile(m_tempPath, password, pages, type, false);
+    const OpenStatus status = open(m_tempPath, password, pages, type);
     if (status == OpenStatus::Failed) {
         QFile::remove(m_tempPath);
         m_tempPath.clear();
@@ -768,11 +725,6 @@ std::optional<std::vector<OutlineNode>> WorkerTransport::synopsis(bool allowHeur
             *generatedSynopsis = m_pdfSynopsisGenerated;
         return *m_pdfSynopsis;
     }
-    if (m_useEpubCache && !m_sourcePath.isEmpty()) {
-        if (const auto cached = Caching::EPUB::Cache::loadAt(epubCachePath(m_sourcePath)); cached && cached->outline) {
-            return *cached->outline;
-        }
-    }
     auto response = call(SynopsisRequest { }, /*reportFailure=*/true);
     if (!response || response->error)
         return std::nullopt;
@@ -811,8 +763,6 @@ std::optional<std::vector<OutlineNode>> WorkerTransport::synopsis(bool allowHeur
                 (void)Caching::PDF::saveToc(cachePath, m_pdfPageCount, *m_pdfSynopsis);
             return *m_pdfSynopsis;
         }
-        if (m_useEpubCache && !m_sourcePath.isEmpty())
-            (void)Caching::EPUB::Cache::saveOutlineAt(epubCachePath(m_sourcePath), value->nodes);
         return std::move(value->nodes);
     }
     return std::nullopt;
@@ -1115,7 +1065,6 @@ bool WorkerTransport::setSettings(const DocumentSettings& settings)
     auto response = call(SettingsRequest { settings });
     if (!response || response->error)
         return false;
-    m_settings = settings;
     return true;
 }
 

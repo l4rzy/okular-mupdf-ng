@@ -25,7 +25,7 @@ namespace Mu::Plugin {
 class WorkerTransport;
 
 /**
- * Thread-marshalled facade over the worker transport.
+ * Thread-marshalled document client with EPUB cache policy.
  *
  * The generator calls this object from its own thread; each operation is
  * marshalled to WorkerTransport, which owns the sockets and process. The
@@ -127,6 +127,17 @@ signals:
     void exportProgress(Model::ExportProgressNotification progress);
 
 private:
+    struct EpubCacheSession {
+        QString sourcePath;
+        QString cachePath;
+        QByteArray layoutKey;
+        quint64 documentEpoch = 0;
+    };
+
+    /// Called only on the transport thread. A document boundary invalidates
+    /// the session before cached data can be returned or persisted.
+    QString epubCachePath(WorkerTransport* transport) const;
+
     // Everything tied to the worker process lifecycle: launch configuration,
     // restart-budget policy, cached handshake facts, the restart timer, and
     // the observable state used for operation gating.
@@ -201,6 +212,10 @@ private:
     QThread* m_thread = nullptr;
     WorkerTransport* m_transport = nullptr;
     LifeCycle m_lifecycle;
+    // Accessed only inside sync() or the startup dispatch on the transport
+    // thread, alongside the document state whose epoch guards this cache.
+    Model::DocumentSettings m_settings;
+    mutable std::optional<EpubCacheSession> m_epubCache;
 };
 
 } // namespace Mu::Plugin
