@@ -11,6 +11,7 @@
 #include <QLayout>
 #include <QLocale>
 #include <QMenu>
+#include <QStandardItemModel>
 #include <QTimer>
 #include <QToolButton>
 #include <QWindow>
@@ -41,6 +42,12 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     , m_mupdfsw(new Ui_MuPDFNGSettingsWidgetBase)
 {
     m_mupdfsw->setupUi(this);
+    m_mupdfsw->kcfg_DocumentTheme->setItemText(4, Config::customThemeName(1));
+    m_mupdfsw->kcfg_DocumentTheme->setItemText(5, Config::customThemeName(2));
+    if (auto* model = qobject_cast<QStandardItemModel*>(m_mupdfsw->kcfg_DocumentTheme->model())) {
+        model->item(4)->setEnabled(Config::hasCustomTheme(1));
+        model->item(5)->setEnabled(Config::hasCustomTheme(2));
+    }
     setupToolTips();
 
 #ifndef MU_WORKER_ENABLE_FORM_JAVASCRIPT

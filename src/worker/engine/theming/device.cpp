@@ -21,7 +21,9 @@ struct ThemeDevice {
     const fz_cookie* cookie;
     fz_default_colorspaces* defaultColorspaces;
     Model::DocumentTheme theme;
+    Model::ThemeCustomization custom;
     std::array<int, 3> background;
+    std::array<int, 3> foreground;
     bool recolorVectors;
     int maskDepth;
     std::size_t tileDepth;
@@ -34,18 +36,20 @@ void checkCancellation(fz_context* context, const ThemeDevice* device)
         fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
 }
 
-void mapColor(float* rgb, const std::array<int, 3>& background)
+void mapColor(float* rgb,
+              const std::array<int, 3>& background,
+              const std::array<int, 3>& foreground,
+              unsigned blendPercent)
 {
-    constexpr auto foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
     for (int i = 0; i < 3; ++i)
         rgb[i] = std::isfinite(rgb[i]) ? std::clamp(rgb[i], 0.0f, 1.0f) : 0.0f;
     const float low = std::min({ rgb[0], rgb[1], rgb[2] });
     const float high = std::max({ rgb[0], rgb[1], rgb[2] });
-    // Match Dark's fixed saturation blend without changing neutral colors or edge coverage.
+    // Preserve neutral colors and edge coverage while blending chromatic pixels toward the theme palette.
     for (std::size_t i = 0; i < 3; ++i)
-        rgb[i] =
-            (static_cast<float>(foreground[i])
-             + static_cast<float>(background[i] - foreground[i]) * (low + (high - rgb[i]) * Theme::SaturationBlend))
+        rgb[i] = (static_cast<float>(foreground[i])
+                  + static_cast<float>(background[i] - foreground[i])
+                      * (low + (high - rgb[i]) * (static_cast<float>(blendPercent) / 100.0f)))
             / 255.0f;
 }
 
@@ -63,7 +67,7 @@ void mapVectorColor(fz_context* context,
     if (state->maskDepth || !state->recolorVectors || !colorspace)
         return;
     fz_convert_color(context, colorspace, color, fz_device_rgb(context), rgb, nullptr, params);
-    mapColor(rgb, state->background);
+    mapColor(rgb, state->background, state->foreground, state->custom.vectorBlendPercent);
     colorspace = fz_device_rgb(context);
     color = rgb;
 }
@@ -115,11 +119,11 @@ bool isMostlyDarkImage(fz_context* context, const ThemeDevice* state, fz_image* 
                 const unsigned alpha = pixel[3];
                 visibleWeight += alpha;
                 if (Theme::RedWeight * pixel[0] + Theme::GreenWeight * pixel[1] + Theme::BlueWeight * pixel[2]
-                    < Theme::ImageDarknessCutoff * alpha)
+                    < state->custom.imageDarknessThreshold * alpha)
                     darkWeight += alpha;
             }
         }
-        dark = darkWeight > visibleWeight / Theme::DarkCoverageDivisor;
+        dark = darkWeight * 100 > visibleWeight * state->custom.darkCoveragePercent;
     }
     fz_always(context)
     {
@@ -145,8 +149,8 @@ void fillImage(
     if (fz_is_empty_irect(bounds) || alpha == 0)
         return;
     validateBounds(context, bounds);
-    const bool invertImage = state->theme == Model::DocumentTheme::Dark && state->recolorVectors
-        && !isMostlyDarkImage(context, state, source, params);
+    const bool invertImage = (state->theme == Model::DocumentTheme::Dark || Model::ThemeColor::isCustom(state->theme))
+        && state->recolorVectors && !isMostlyDarkImage(context, state, source, params);
     fz_pixmap* volatile pixmap = nullptr;
     fz_device* volatile raster = nullptr;
     fz_image* volatile image = nullptr;
@@ -164,12 +168,12 @@ void fillImage(
         const int stride = fz_pixmap_stride(context, pixmap);
         auto* samples = fz_pixmap_samples(context, pixmap);
         if (invertImage)
-            applyDocumentTheme(context, pixmap, state->theme, state->cookie);
+            applyDocumentTheme(context, pixmap, state->theme, state->cookie, state->custom);
         else
             for (int y = 0; y < height; ++y) {
                 checkCancellation(context, state);
                 auto* pixel = samples + std::size_t(y) * std::size_t(stride);
-                dimImageRow(pixel, width);
+                dimImageRow(pixel, width, state->custom.imageDimmingPercent);
             }
         image = fz_new_image_from_pixmap(context, pixmap, nullptr);
         const fz_matrix position { float(width), 0, 0, float(height), float(bounds.x0), float(bounds.y0) };
@@ -227,7 +231,7 @@ void fillShade(
                 if (!pixel[3])
                     continue;
                 float rgb[3] { float(pixel[0]) / pixel[3], float(pixel[1]) / pixel[3], float(pixel[2]) / pixel[3] };
-                mapColor(rgb, state->background);
+                mapColor(rgb, state->background, state->foreground, state->custom.vectorBlendPercent);
                 for (int i = 0; i < 3; ++i)
                     pixel[i] = static_cast<unsigned char>(std::clamp(rgb[i] * pixel[3] + 0.5f, 0.0f, float(pixel[3])));
             }
@@ -258,16 +262,21 @@ fz_device* newThemeDevice(fz_context* context,
                           fz_irect bounds,
                           const fz_cookie* cookie,
                           Model::DocumentTheme theme,
-                          bool recolorVectors)
+                          bool recolorVectors,
+                          Model::ThemeCustomization custom)
 {
-    if (theme != Model::DocumentTheme::Dusk && theme != Model::DocumentTheme::Dark)
-        fz_throw(context, FZ_ERROR_ARGUMENT, "theme device requires Dusk or Dark");
+    if (theme != Model::DocumentTheme::Dusk && theme != Model::DocumentTheme::Dark
+        && !Model::ThemeColor::isCustom(theme))
+        fz_throw(context, FZ_ERROR_ARGUMENT, "theme device requires Dusk, Dark, or a custom profile");
     auto* state =
         reinterpret_cast<ThemeDevice*>(fz_new_passthrough_device_of_size(context, target, sizeof(ThemeDevice)));
     state->transform = transform;
     state->cookie = cookie;
     state->theme = theme;
-    state->background = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme));
+    state->custom = Model::ThemeColor::isCustom(theme) ? custom : Model::ThemeCustomization { };
+    state->background = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme, custom.backgroundRgb));
+    state->foreground = Model::ThemeColor::splitRgb(
+        Model::ThemeColor::isCustom(theme) ? custom.foregroundRgb : Model::ThemeColor::DarkForeground);
     state->recolorVectors = recolorVectors;
     state->bounds[0] = bounds;
     auto* device = &state->super;

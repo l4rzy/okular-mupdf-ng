@@ -244,6 +244,11 @@ sudo apt install tesseract-ocr-eng</code></pre>
               <td>Nearly black (<code>#202124</code>)</td>
               <td>Light text; inverts lighter images and dims uninverted images to 80% brightness</td>
             </tr>
+            <tr>
+              <th scope="row">Custom themes</th>
+              <td>Configured in <code>themerc</code></td>
+              <td>Uses the configured foreground, background, darkness thresholds, image dimming, and vector blend</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -253,15 +258,41 @@ sudo apt install tesseract-ocr-eng</code></pre>
         Dusk preserves vector colors only when both the page and its border are
         mostly dark, but still dims images. Dusk distinguishes images from vectors,
         not their content: scanned text dims with its image, and vector illustrations
-        follow the text palette.</p>
+        follow the text palette. Custom themes use their configured page and image darkness
+        thresholds with the same page preservation and image handling.</p>
       <p>For pages that use non-normal blend modes or knockout
-        groups, Dark transforms the completed page to preserve correct compositing.
-        Selective image inversion and 80% image dimming are unavailable on those pages.
+        groups, Dark and custom themes transform the completed page to preserve correct compositing.
+        Selective image inversion and configured image dimming are unavailable on those pages.
         PDF highlights&rsquo; Multiply blending does not trigger this fallback,
         keeping highlighted text readable unless other blends require it.</p>
       <p>Themes affect viewing only. OCR, printing, exports, and the document&rsquo;s
         saved content retain their original colors. You can assign
         <a href="#keyboard-shortcuts">keyboard shortcuts</a> to toggle themes.</p>
+      <p>Configure up to two custom themes in
+        <code>~/.config/okular-mupdf-ng/themerc</code>, using <code>[Custom1]</code> and
+        <code>[Custom2]</code> groups. Set <code>Name</code> to choose each theme&rsquo;s menu label.
+        Colors use six-digit RGB hex values without a leading <code>#</code>. Darkness cutoffs range from 0 to 255;
+        coverage, dimming, and blend values are percentages. Coverage accepts 1&ndash;99;
+        omitted or invalid entries use their defaults. Restart Okular after editing the file.</p>
+      <pre><code>[Custom1]
+Name=Magenta
+Background=202124
+Foreground=DADCE0
+PageDarknessThreshold=128
+ImageDarknessThreshold=160
+DarkCoveragePercent=50
+ImageDimmingPercent=80
+VectorBlendPercent=40
+
+[Custom2]
+Name=Teal
+Background=DDF4F0
+Foreground=163D3A
+PageDarknessThreshold=128
+ImageDarknessThreshold=160
+DarkCoveragePercent=50
+ImageDimmingPercent=80
+VectorBlendPercent=40</code></pre>
       <p>Loading placeholders match Twilight, Dusk, and Dark when Okular&rsquo;s per-page
         placeholder color API is available. On older versions, Dusk and Dark temporarily
         use accessibility <strong>Change Paper Color</strong>. These settings are not saved,

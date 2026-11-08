@@ -13,6 +13,8 @@
         <choice name="Twilight" />
         <choice name="Dusk" />
         <choice name="Dark" />
+        <choice name="Custom1" />
+        <choice name="Custom2" />
       </choices>
     </entry>
     <entry key="LinkPreviewMode" type="Enum">

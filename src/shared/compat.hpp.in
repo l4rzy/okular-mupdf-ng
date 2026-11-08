@@ -16,7 +16,7 @@ inline constexpr std::string_view MUPDF_CACHE_ID = "@MUPDF_CACHE_ID@";
 
 namespace Mu::IPC {
 
-// Compatibility version and wire revision (DocumentSettings includes documentTheme).
+// Compatibility version and wire revision (DocumentSettings includes document theme settings).
 inline constexpr std::string_view COMPAT = "@MU_COMPAT_VERSION@";
 
 } // namespace Mu::IPC

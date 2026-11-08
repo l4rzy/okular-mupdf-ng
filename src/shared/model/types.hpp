@@ -396,7 +396,20 @@ struct IdleTrimLevel {
 
 /// Viewing palettes shared by all document formats.
 // Keep aligned with the DocumentTheme choices in mupdfngsettings.kcfg.
-enum class DocumentTheme : std::uint8_t { Default, Twilight, Dusk, Dark };
+enum class DocumentTheme : std::uint8_t { Default, Twilight, Dusk, Dark, Custom1, Custom2 };
+
+/// User-defined rendering palette and thresholds shared with the worker.
+struct ThemeCustomization {
+    std::uint32_t backgroundRgb = 0x202124;
+    std::uint32_t foregroundRgb = 0xDADCE0;
+    std::uint8_t pageDarknessThreshold = 128;
+    std::uint8_t imageDarknessThreshold = 160;
+    std::uint8_t darkCoveragePercent = 50;
+    std::uint8_t imageDimmingPercent = 80;
+    std::uint8_t vectorBlendPercent = 40;
+
+    bool operator==(const ThemeCustomization&) const = default;
+};
 
 /// Rendering and layout settings shared by document engines.
 struct DocumentSettings {
@@ -421,6 +434,8 @@ struct DocumentSettings {
     bool overprintSimulation = false;
     /// Viewing-only palette; exports, printing, and OCR retain original colors.
     DocumentTheme documentTheme = DocumentTheme::Default;
+    /// Palette selected by documentTheme when it is a custom profile.
+    ThemeCustomization activeCustomTheme;
 };
 
 /// Document metadata values and basic document identity.

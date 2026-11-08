@@ -98,11 +98,13 @@ bool XpsDocument::renderToBuffer(const RenderRequest& request,
         pix->y = bbox.y0;
 
         const auto theme = m_settings.documentTheme;
+        const auto& custom = m_settings.activeCustomTheme;
         const bool inspectPage = shouldInspectThemePage(theme);
         if (inspectPage && request.cookie)
             list = fz_new_display_list_from_page(m_context, page);
-        const auto pageTheme =
-            inspectPage ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list) : ThemePageInfo { };
+        const auto pageTheme = inspectPage
+            ? inspectThemePage(m_context, page, bounds, theme, request.cookie, list, custom)
+            : ThemePageInfo { };
         const auto themePlan = planThemeRendering(m_settings, pageTheme);
         const auto paperColor = themePlan.paperColor;
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
@@ -113,8 +115,8 @@ bool XpsDocument::renderToBuffer(const RenderRequest& request,
         // device coordinates without an inverse-transform round trip.
         dev = fz_new_draw_device(m_context, fz_identity, pix);
         if (themePlan.useDevice) {
-            auto* themed =
-                newThemeDevice(m_context, dev, fz_identity, bbox, request.cookie, theme, themePlan.recolorVectors);
+            auto* themed = newThemeDevice(
+                m_context, dev, fz_identity, bbox, request.cookie, theme, themePlan.recolorVectors, custom);
             fz_drop_device(m_context, dev);
             dev = themed;
         }
@@ -135,7 +137,7 @@ bool XpsDocument::renderToBuffer(const RenderRequest& request,
             fz_throw(m_context, FZ_ERROR_ABORT, "render cancelled");
         fz_close_device(m_context, dev);
         if (!themePlan.useDevice)
-            applyDocumentTheme(m_context, pix, theme, request.cookie);
+            applyDocumentTheme(m_context, pix, theme, request.cookie, custom);
         fz_drop_device(m_context, dev);
         dev = nullptr;
     }
