@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.6.1
+Version:        0.6.2
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -111,6 +111,13 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Sat Nov 07 2026 l4rzy <me@23ro.org> - 0.6.2-1
+- Update to version 0.6.2.
+- Improve EPUB layout, sizing, and rendering; preserve reading position when changing layout.
+- Add theme preview icons and restore Okular's default PDF export format.
+- Fix PDF signing and improve worker-client cache handling.
+- Update the bundled ebook conversion library to boko 0.6.0.
+
 * Fri Nov 06 2026 l4rzy <me@23ro.org> - 0.6.1-1
 - Update to version 0.6.1.
 - Add XPS and OpenXPS support with text, links, fonts, outlines, and PDF export.

@@ -1,3 +1,13 @@
+okular-mupdf-ng (0.6.2-1) unstable; urgency=medium
+
+  * Update to version 0.6.2.
+  * Improve EPUB layout and rendering, and preserve reading position when changing layout.
+  * Add theme preview icons and restore Okular's default PDF export format.
+  * Fix PDF signing and improve worker-client cache handling.
+  * Update the bundled ebook conversion library to boko 0.6.0.
+
+ -- l4rzy <me@23ro.org>  Sat, 07 Nov 2026 21:02:11 -0600
+
 okular-mupdf-ng (0.6.1-1) unstable; urgency=medium
 
   * Update to version 0.6.1.

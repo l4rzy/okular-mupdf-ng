@@ -27,7 +27,7 @@
         "ServiceTypes": [
             "okular/Generator"
         ],
-        "Version": "0.6.1",
+        "Version": "0.6.2",
         "Website": "https://github.com/l4rzy/okular-mupdf-ng",
         "Icon": "mupdfng"
     },

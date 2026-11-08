@@ -1,4 +1,13 @@
 -------------------------------------------------------------------
+Sun Nov 08 03:02:11 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.6.2.
+- Improve EPUB layout and rendering, and preserve reading position when changing layout.
+- Add theme preview icons and restore Okular's default PDF export format.
+- Fix PDF signing and improve worker-client cache handling.
+- Update the bundled ebook conversion library to boko 0.6.0.
+
+-------------------------------------------------------------------
 Fri Nov 06 16:07:34 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.6.1.

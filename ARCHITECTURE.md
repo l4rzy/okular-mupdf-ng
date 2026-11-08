@@ -63,9 +63,9 @@ contract between host and worker and has no Okular/KDE GUI dependency.
 ### Worker
 
 `src/worker/` is a native C++23 process with no Qt or Okular dependency. Its
-runtime dispatches requests to PDF, EPUB, and MOBI document engines. The engines own
-MuPDF document lifetime, page operations, rendering, forms, annotations,
-signatures, OCR, metadata, and save operations.
+runtime dispatches requests to PDF, EPUB, MOBI, Kindle, and XPS document
+engines. The engines own MuPDF document lifetime, page operations, rendering,
+forms, annotations, signatures, OCR, metadata, and save operations.
 
 `test_worker_link_boundary` rejects all Qt, Okular, and KDE shared-library
 dependencies and checks worker and shared source includes for Qt, KDE, Okular,
@@ -134,9 +134,9 @@ its actual status through the initial ping. The Okular generator defaults to
 Strict enforcement: it withholds documents unless the worker reports a fully
 hardened sandbox. Relaxed enforcement permits processing with degraded protection.
 
-The worker supports PDF, EPUB, and MOBI. Its build-time tessdata default is
-`TESSDATA_DIR` (`/usr/share/tessdata` by default); the plugin may pass
-additional absolute directories from its hidden advanced configuration. The
+The worker supports PDF, EPUB, MOBI, AZW3, KFX, and XPS/OpenXPS. Its build-time
+tessdata default is `TESSDATA_DIR` (`/usr/share/tessdata` by default); the
+plugin may pass additional absolute directories from its hidden advanced configuration. The
 worker also provides `--help`, `--version`, and `--sandbox-check` for diagnostics,
 although document processing is exclusively through private host IPC.
 
@@ -163,7 +163,7 @@ src/
 ├── shared/             # IPC protocol, models, transport, validation
 ├── tools/cli/          # command-line interface for worker-backed document tools
 └── worker/             # isolated native worker
-    ├── engine/         # PDF/EPUB/MOBI engines, OCR, signing
+    ├── engine/         # PDF/EPUB/MOBI/Kindle/XPS engines, OCR, signing
     ├── runtime/        # request dispatch and worker server
     └── sys/            # sandboxing, limits, system integration
 ```

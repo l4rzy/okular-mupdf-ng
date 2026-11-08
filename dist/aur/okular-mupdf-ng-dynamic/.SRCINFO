@@ -1,6 +1,6 @@
 pkgbase = okular-mupdf-ng-dynamic
 	pkgdesc = Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, KFX, and XPS
-	pkgver = 0.6.1
+	pkgver = 0.6.2
 	pkgrel = 1
 	url = https://github.com/l4rzy/okular-mupdf-ng
 	arch = x86_64
@@ -28,7 +28,7 @@ pkgbase = okular-mupdf-ng-dynamic
 	provides = okular-mupdf-ng
 	conflicts = okular-mupdf-ng
 	conflicts = okular-mupdf-ng-git
-	source = okular-mupdf-ng::git+https://github.com/l4rzy/okular-mupdf-ng.git#tag=v0.6.1
+	source = okular-mupdf-ng::git+https://github.com/l4rzy/okular-mupdf-ng.git#tag=v0.6.2
 	sha256sums = SKIP
 
 pkgname = okular-mupdf-ng-dynamic
