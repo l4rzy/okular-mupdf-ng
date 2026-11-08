@@ -13,8 +13,6 @@ jobs:
   coverage:
     name: LLVM coverage and SonarQube
     runs-on: ubuntu-26.04
-    container:
-      image: ubuntu:26.04
     env:
       DEBIAN_FRONTEND: noninteractive
       CC: clang-21
@@ -29,8 +27,8 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
-          apt-get update
-          apt-get install --yes --no-install-recommends \
+          sudo apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
             ca-certificates \
             clang-21 \
             cmake \
@@ -94,7 +92,6 @@ jobs:
             -DENABLE_SANITIZERS=OFF \
             -DENABLE_LTO=OFF \
             -DENABLE_BUILD_TREE_WORKER=ON \
-            -DDISABLE_WORKER_SANDBOX=ON \
             -DSIGNATURE_FONT_DIR="$PWD/thirdparty/allura" \
             -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
 
