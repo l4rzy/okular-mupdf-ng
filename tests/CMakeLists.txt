@@ -15,7 +15,7 @@ endif()
 
 function(add_layer_test target source label)
     add_executable(${target} ${source} ${ARGN})
-    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Test mupdf_shared)
+    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Test ng_shared)
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES
         LABELS "${label}"
@@ -34,11 +34,11 @@ if(BUILD_OKULAR_GENERATOR)
 add_executable(test_render_worker support/render_worker.cpp ../src/worker/runtime/worker_server.cpp)
 set_target_properties(test_render_worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 target_include_directories(test_render_worker PRIVATE ../src ../src/worker ${MU_GENERATED_INCLUDE_DIR})
-target_link_libraries(test_render_worker PRIVATE mupdf_worker_core MuPDF::Engine)
+target_link_libraries(test_render_worker PRIVATE ng_worker_core MuPDF::Engine)
 target_link_options(test_render_worker PRIVATE "LINKER:--wrap=fz_new_draw_device")
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_render_worker PRIVATE MU_DEBUG_ENABLED)
-    target_link_libraries(test_render_worker PRIVATE mupdf_ipc_debug)
+    target_link_libraries(test_render_worker PRIVATE ng_ipc_debug)
 endif()
 
 add_executable(test_mupdf
@@ -70,14 +70,14 @@ target_link_libraries(test_mupdf PRIVATE
     Qt6::Gui
     Qt6::Network
     Okular::Core
-    mupdf_generator_adapters
-    mupdf_generator_signature
-    mupdf_plugin_cache
-    mupdf_plugin_crypto
-    mupdf_plugin_util
-    mupdf_plugin_worker
-    mupdf_shared
-    mupdf_worker_core
+    ng_generator_adapters
+    ng_generator_signature
+    ng_plugin_cache
+    ng_plugin_crypto
+    ng_plugin_util
+    ng_plugin_worker
+    ng_shared
+    ng_worker_core
     MuPDF::Engine
     ${NSS_LIBRARIES}
     ZLIB::ZLIB)
@@ -177,12 +177,12 @@ add_dependencies(test_tools_cli_export mupdfng-cli mupdfng-worker)
 set_tests_properties(test_tools_cli_export PROPERTIES TIMEOUT 150)
 
 add_layer_test(test_tools_layoutconfig tools/test_layout_config.cpp tools)
-target_link_libraries(test_tools_layoutconfig PRIVATE mupdf_cli_layout)
+target_link_libraries(test_tools_layoutconfig PRIVATE ng_cli_layout)
 if(ENABLE_FORM_JAVASCRIPT)
     target_compile_definitions(test_tools_layoutconfig PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
 endif()
 if(BUILD_OKULAR_GENERATOR)
-    target_link_libraries(test_tools_layoutconfig PRIVATE mupdf_generator_settings)
+    target_link_libraries(test_tools_layoutconfig PRIVATE ng_generator_settings)
     target_include_directories(test_tools_layoutconfig PRIVATE ${CMAKE_BINARY_DIR}/src)
     target_compile_definitions(test_tools_layoutconfig PRIVATE HAVE_KDE_CONFIG)
 endif()
@@ -206,52 +206,52 @@ endif()
 # Plugin behaviour owns persistent cache state and uses a per-test root.
 add_layer_test(test_plugin_ocrcache plugin/test_ocrcache.cpp plugin)
 target_include_directories(test_plugin_ocrcache PRIVATE ../src)
-target_link_libraries(test_plugin_ocrcache PRIVATE mupdf_plugin_cache)
+target_link_libraries(test_plugin_ocrcache PRIVATE ng_plugin_cache)
 
 add_layer_test(test_plugin_cachevacuum plugin/test_cachevacuum.cpp plugin)
 target_include_directories(test_plugin_cachevacuum PRIVATE ../src)
-target_link_libraries(test_plugin_cachevacuum PRIVATE mupdf_plugin_cache)
+target_link_libraries(test_plugin_cachevacuum PRIVATE ng_plugin_cache)
 
 add_layer_test(test_plugin_ocroptions plugin/test_ocr_options.cpp plugin)
 target_include_directories(test_plugin_ocroptions PRIVATE ../src)
-target_link_libraries(test_plugin_ocroptions PRIVATE mupdf_plugin_util)
+target_link_libraries(test_plugin_ocroptions PRIVATE ng_plugin_util)
 
 add_layer_test(test_plugin_processmemory plugin/test_process_memory.cpp plugin)
 target_include_directories(test_plugin_processmemory PRIVATE ../src)
-target_link_libraries(test_plugin_processmemory PRIVATE mupdf_plugin_util)
+target_link_libraries(test_plugin_processmemory PRIVATE ng_plugin_util)
 
 add_layer_test(test_plugin_epubcache plugin/test_epubcache.cpp plugin)
 target_include_directories(test_plugin_epubcache PRIVATE ../src)
-target_link_libraries(test_plugin_epubcache PRIVATE Qt6::Core mupdf_plugin_cache)
+target_link_libraries(test_plugin_epubcache PRIVATE Qt6::Core ng_plugin_cache)
 
 add_layer_test(test_plugin_layerresponse plugin/test_layer_response.cpp plugin)
 target_include_directories(test_plugin_layerresponse PRIVATE ../src)
 
 add_layer_test(test_plugin_renderimage plugin/test_render_image.cpp plugin)
 target_include_directories(test_plugin_renderimage PRIVATE ../src)
-target_link_libraries(test_plugin_renderimage PRIVATE Qt6::Gui mupdf_plugin_util)
+target_link_libraries(test_plugin_renderimage PRIVATE Qt6::Gui ng_plugin_util)
 
 add_layer_test(test_plugin_signatureimage plugin/test_signature_image.cpp plugin)
 target_include_directories(test_plugin_signatureimage PRIVATE ../src)
-target_link_libraries(test_plugin_signatureimage PRIVATE Qt6::Gui mupdf_plugin_util)
+target_link_libraries(test_plugin_signatureimage PRIVATE Qt6::Gui ng_plugin_util)
 
 add_layer_test(test_plugin_signingauthorization plugin/test_signing_authorization.cpp plugin)
 target_include_directories(test_plugin_signingauthorization PRIVATE ../src)
 
 add_layer_test(test_plugin_signingtimestamp plugin/test_signing_timestamp.cpp plugin)
 target_include_directories(test_plugin_signingtimestamp PRIVATE ../src)
-target_link_libraries(test_plugin_signingtimestamp PRIVATE Qt6::Core mupdf_plugin_util)
+target_link_libraries(test_plugin_signingtimestamp PRIVATE Qt6::Core ng_plugin_util)
 
 add_layer_test(test_plugin_xfdfparse plugin/test_xfdf_parse.cpp plugin)
 target_include_directories(test_plugin_xfdfparse PRIVATE ../src)
-target_link_libraries(test_plugin_xfdfparse PRIVATE mupdf_plugin_util)
+target_link_libraries(test_plugin_xfdfparse PRIVATE ng_plugin_util)
 
 # NSS initialization is process-global, so exercise each runtime mode in a
 # separate test process even though the modes share one test executable.
 add_executable(test_nss_runtime
     plugin/test_nss_runtime.cpp)
 target_include_directories(test_nss_runtime PRIVATE ../src ${NSS_INCLUDE_DIRS})
-target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test mupdf_plugin_crypto)
+target_link_libraries(test_nss_runtime PRIVATE Qt6::Core Qt6::Test ng_plugin_crypto)
 foreach(runtime_test IN ITEMS
         defaultPathSelection
         defaultFallbackMode
@@ -269,7 +269,7 @@ foreach(runtime_test IN ITEMS
 endforeach()
 
 add_layer_test(test_generator_layers generator/test_layers_model.cpp generator)
-target_link_libraries(test_generator_layers PRIVATE mupdf_generator_adapters KF6::ConfigCore)
+target_link_libraries(test_generator_layers PRIVATE ng_generator_adapters KF6::ConfigCore)
 target_include_directories(test_generator_layers PRIVATE ${OKULAR_CORE_INCLUDE_DIR})
 target_compile_definitions(test_generator_layers PRIVATE
     TEST_LAYER_PDF="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf"
@@ -292,7 +292,7 @@ add_dependencies(test_generator_forms okularGenerator_mupdfng mupdfng-worker)
 
 add_layer_test(test_generator_epub generator/test_epub.cpp "generator;integration" support/genpdf.cpp)
 target_include_directories(test_generator_epub PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR} ${MU_GENERATED_INCLUDE_DIR})
-target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Qt6::PrintSupport Okular::Core KF6::ConfigCore mupdf_plugin_cache MuPDF::Engine KF6::XmlGui)
+target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Qt6::PrintSupport Okular::Core KF6::ConfigCore ng_plugin_cache MuPDF::Engine KF6::XmlGui)
 target_compile_definitions(test_generator_epub PRIVATE
     TEST_BUNDLED_MUPDF=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
@@ -305,8 +305,16 @@ set_tests_properties(test_generator_epub PROPERTIES TIMEOUT 150)
 
 add_layer_test(test_generator_ocr generator/test_ocr.cpp generator)
 target_include_directories(test_generator_ocr PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR} ${MU_GENERATED_INCLUDE_DIR})
-target_link_libraries(test_generator_ocr PRIVATE Qt6::Gui Okular::Core KF6::ConfigCore KF6::XmlGui mupdf_generator_settings)
+target_link_libraries(test_generator_ocr PRIVATE
+    Qt6::Gui
+    Okular::Core
+    KF6::ConfigCore
+    KF6::XmlGui
+    ng_generator_settings
+    ng_plugin_cache
+    ng_plugin_worker)
 target_compile_definitions(test_generator_ocr PRIVATE
+    WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
     TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub"
     TEST_MOBI_PATH="${CMAKE_CURRENT_SOURCE_DIR}/mobi/legacy-palmdoc.mobi"
@@ -320,12 +328,12 @@ endif()
 
 add_layer_test(test_generator_page_error generator/test_page_error.cpp generator)
 target_include_directories(test_generator_page_error PRIVATE ../src)
-target_link_libraries(test_generator_page_error PRIVATE mupdf_generator_page_error Qt6::Gui KF6::I18n)
+target_link_libraries(test_generator_page_error PRIVATE ng_generator_page_error Qt6::Gui KF6::I18n)
 
 add_layer_test(test_plugin_ocrcontroller plugin/test_ocrcontroller.cpp plugin)
 target_include_directories(test_plugin_ocrcontroller PRIVATE
     ../src ${MU_GENERATED_INCLUDE_DIR} ${NSS_INCLUDE_DIRS})
-target_link_libraries(test_plugin_ocrcontroller PRIVATE mupdf_plugin_ocr Qt6::Gui Qt6::Network)
+target_link_libraries(test_plugin_ocrcontroller PRIVATE ng_plugin_ocr Qt6::Gui Qt6::Network)
 target_compile_definitions(test_plugin_ocrcontroller PRIVATE
     WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
@@ -333,7 +341,7 @@ add_dependencies(test_plugin_ocrcontroller mupdfng-worker)
 
 add_layer_test(test_plugin_workertransport plugin/test_worker_transport.cpp plugin)
 target_include_directories(test_plugin_workertransport PRIVATE ../src)
-target_link_libraries(test_plugin_workertransport PRIVATE mupdf_plugin_worker)
+target_link_libraries(test_plugin_workertransport PRIVATE ng_plugin_worker)
 target_compile_definitions(test_plugin_workertransport PRIVATE WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>")
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_plugin_workertransport PRIVATE MU_DEBUG_ENABLED)
@@ -342,13 +350,13 @@ add_dependencies(test_plugin_workertransport mupdfng-worker)
 
 add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp plugin)
 target_include_directories(test_plugin_workerclientstate PRIVATE ../src)
-target_link_libraries(test_plugin_workerclientstate PRIVATE mupdf_plugin_worker)
+target_link_libraries(test_plugin_workerclientstate PRIVATE ng_plugin_worker)
 
 add_layer_test(test_generator_config generator/test_config.cpp generator
     ../src/generator/config/certmanager/self_signed_dialog.cpp
     ../src/generator/config/certmanager/manager_dialog.cpp)
 target_include_directories(test_generator_config PRIVATE ../src ${CMAKE_BINARY_DIR}/src)
-target_link_libraries(test_generator_config PRIVATE Qt6::Gui Qt6::Concurrent KF6::I18n mupdf_generator_settings mupdf_plugin_crypto)
+target_link_libraries(test_generator_config PRIVATE Qt6::Gui Qt6::Concurrent KF6::I18n ng_generator_settings ng_plugin_crypto)
 
 add_layer_test(test_generator_pageplaceholder generator/test_page_placeholder.cpp generator
     ../src/generator/page/placeholder.cpp)
@@ -357,20 +365,20 @@ target_link_libraries(test_generator_pageplaceholder PRIVATE Qt6::Gui Okular::Co
 
 add_layer_test(test_generator_signaturepreview generator/test_signature_preview.cpp generator)
 target_include_directories(test_generator_signaturepreview PRIVATE ../src)
-target_link_libraries(test_generator_signaturepreview PRIVATE Qt6::Gui mupdf_generator_settings)
+target_link_libraries(test_generator_signaturepreview PRIVATE Qt6::Gui ng_generator_settings)
 
 # Generator adapters are the only unit tests linked to Okular proxy classes.
 add_layer_test(test_generator_proxies generator/test_proxies.cpp generator)
 target_include_directories(test_generator_proxies PRIVATE ../src)
 target_compile_definitions(test_generator_proxies PRIVATE HAVE_NEW_SIGNATURE_API=1)
 target_link_libraries(test_generator_proxies PRIVATE
-    mupdf_generator_adapters
-    mupdf_generator_signature
+    ng_generator_adapters
+    ng_generator_signature
     KF6::I18n
 )
 
 add_layer_test(test_generator_linkpreview generator/test_link_preview.cpp "generator;integration")
-target_link_libraries(test_generator_linkpreview PRIVATE mupdf_generator_adapters mupdf_plugin_worker)
+target_link_libraries(test_generator_linkpreview PRIVATE ng_generator_adapters ng_plugin_worker)
 target_compile_definitions(test_generator_linkpreview PRIVATE
     WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/layers.pdf")
@@ -378,11 +386,11 @@ add_dependencies(test_generator_linkpreview mupdfng-worker)
 
 add_layer_test(test_generator_signingconversion generator/test_signing_conversion.cpp generator)
 target_include_directories(test_generator_signingconversion PRIVATE ../src)
-target_link_libraries(test_generator_signingconversion PRIVATE mupdf_generator_adapters KF6::I18n)
+target_link_libraries(test_generator_signingconversion PRIVATE ng_generator_adapters KF6::I18n)
 
 add_layer_test(test_generator_xfdf generator/test_xfdf.cpp generator)
 target_include_directories(test_generator_xfdf PRIVATE ../src ${OKULAR_CORE_INCLUDE_DIR})
-target_link_libraries(test_generator_xfdf PRIVATE mupdf_generator_adapters KF6::I18n KF6::XmlGui)
+target_link_libraries(test_generator_xfdf PRIVATE ng_generator_adapters KF6::I18n KF6::XmlGui)
 target_compile_definitions(test_generator_xfdf PRIVATE
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."
     TEST_WORKER_DIR="$<TARGET_FILE_DIR:mupdfng-worker>")
@@ -404,8 +412,8 @@ target_include_directories(test_security_transport PRIVATE
     ../src ${MU_GENERATED_INCLUDE_DIR})
 if(MU_DEBUG_BUILD)
     target_compile_definitions(test_security_transport PRIVATE MU_DEBUG_ENABLED)
-    target_link_libraries(test_security_transport PRIVATE mupdf_ipc_debug)
-    target_link_libraries(test_mupdf PRIVATE mupdf_ipc_debug)
+    target_link_libraries(test_security_transport PRIVATE ng_ipc_debug)
+    target_link_libraries(test_mupdf PRIVATE ng_ipc_debug)
 endif()
 
 # Keep the isolated process and shared contract free of Qt and host dependencies.
@@ -425,4 +433,4 @@ set_tests_properties(test_plugin_boundary PROPERTIES LABELS "plugin" TIMEOUT 15)
 
 add_layer_test(test_plugin_pdf_toc plugin/test_pdf_toc.cpp plugin ../src/worker/engine/pdf/generated_outline.cpp)
 target_include_directories(test_plugin_pdf_toc PRIVATE ../src ../src/worker)
-target_link_libraries(test_plugin_pdf_toc PRIVATE mupdf_plugin_cache MuPDF::Engine)
+target_link_libraries(test_plugin_pdf_toc PRIVATE ng_plugin_cache MuPDF::Engine)

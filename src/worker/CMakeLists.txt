@@ -72,32 +72,32 @@ set(mupdf_worker_core_SRCS
     sys/operation_budget.cpp
 )
 
-add_library(mupdf_worker_core OBJECT ${mupdf_worker_core_SRCS})
+add_library(ng_worker_core OBJECT ${mupdf_worker_core_SRCS})
 
-target_include_directories(mupdf_worker_core PRIVATE
+target_include_directories(ng_worker_core PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..       # src/ root for shared/ contract headers
     ${MU_GENERATED_INCLUDE_DIR}
 )
 
-target_link_libraries(mupdf_worker_core PRIVATE
+target_link_libraries(ng_worker_core PRIVATE
     MuPDF::Engine
 )
-target_link_libraries(mupdf_worker_core PUBLIC
+target_link_libraries(ng_worker_core PUBLIC
     Threads::Threads
-    mupdf_shared
+    ng_shared
     mupdfng_boko
     ${CMAKE_DL_LIBS}
 )
 
 # The bundled MuPDF is built with tesseract enabled, so OCR is always available.
-target_compile_definitions(mupdf_worker_core PRIVATE
+target_compile_definitions(ng_worker_core PRIVATE
     MU_WORKER_USE_SYSTEM_MUPDF=$<BOOL:${USE_SYSTEM_MUPDF}>
     TESSDATA_DIR="${TESSDATA_DIR}"
     SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
 )
 if(ENABLE_FORM_JAVASCRIPT)
-    target_compile_definitions(mupdf_worker_core PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
+    target_compile_definitions(ng_worker_core PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
 endif()
 
 add_executable(mupdfng-worker
@@ -106,16 +106,16 @@ add_executable(mupdfng-worker
     sys/sandbox.cpp
 )
 target_link_libraries(mupdfng-worker PRIVATE
-    mupdf_worker_core
+    ng_worker_core
     MuPDF::Engine
 )
 if(MU_DEBUG_BUILD)
-    target_link_libraries(mupdfng-worker PRIVATE mupdf_ipc_debug)
+    target_link_libraries(mupdfng-worker PRIVATE ng_ipc_debug)
 endif()
 set_target_properties(mupdfng-worker PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 
 if(MU_DEBUG_BUILD)
-    target_compile_definitions(mupdf_worker_core PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(ng_worker_core PRIVATE MU_DEBUG_ENABLED)
     target_compile_definitions(mupdfng-worker PRIVATE MU_DEBUG_ENABLED)
 endif()
 

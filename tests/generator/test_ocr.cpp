@@ -48,6 +48,8 @@
 #include "generator/config/document_settings.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
+#include "plugin/caching/ocr_cache.hpp"
+#include "plugin/worker_client.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/placeholder.hpp"
 #endif
@@ -114,6 +116,29 @@ private:
             "<< /Type /Annot /Subtype /Link /Rect [10 10 100 100] /Dest [3 0 R /XYZ 0 450 null] >>"
         };
         return writePdfObjects(path, objects);
+    }
+
+    static bool seedOcrResults(const QString& path, const QStringList& pageText, double top = 0.1, double bottom = 0.9)
+    {
+        Mu::Plugin::WorkerClient worker;
+        if (!worker.start(QStringLiteral(WORKER_BUILD_PATH)))
+            return false;
+        QList<Mu::Plugin::WorkerClient::PageInfo> pages;
+        if (worker.open(path, { }, pages) != Mu::Model::OpenStatus::Success || pages.size() < pageText.size())
+            return false;
+        const auto metadata = worker.getDocumentInfo({ QStringLiteral("hash") });
+        const auto hash = metadata.values.find("hash");
+        if (hash == metadata.values.end())
+            return false;
+        const QString documentHash = QString::fromStdString(hash->second);
+        for (int page = 0; page < pageText.size(); ++page) {
+            QVector<Mu::Plugin::Caching::OCR::CacheItem> items;
+            if (!pageText.at(page).isEmpty())
+                items.append({ pageText.at(page), 0.05, top, 0.95, bottom });
+            if (!Mu::Plugin::Caching::OCR::Cache::save(documentHash, page, QStringLiteral("eng"), 150, items))
+                return false;
+        }
+        return true;
     }
 
     static QWidget* previewWindow()
@@ -1798,6 +1823,10 @@ private slots:
             Mu::Generator::Config::setOcrTriggerMode(*settings.ocr, 3);
             QVERIFY(Mu::Generator::Config::writeDocumentSettings(settingsKey, settings));
         }
+        if (!missingModel) {
+            const QStringList results { withImage ? QStringLiteral("RASTERONLY") : QString() };
+            QVERIFY2(seedOcrResults(path, results, 0.05, 0.3), "Could not seed the generator OCR result cache");
+        }
         const auto clearOverride = qScopeGuard([&] { Mu::Generator::Config::writeDocumentSettings(settingsKey, { }); });
         Okular::DocumentObserver observer;
         Okular::Document document(nullptr);
@@ -1818,15 +1847,8 @@ private slots:
         if (missingModel) {
             QTRY_VERIFY_WITH_TIMEOUT(!warnings.empty(), 10000);
         } else {
-            const auto completed = [&] {
-                return std::any_of(notices.begin(), notices.end(), [](const auto& notice) {
-                    return notice.front().toString().contains(QStringLiteral("OCR completed"));
-                });
-            };
             if (withImage)
-                QTRY_VERIFY_WITH_TIMEOUT(completed(), 10000);
-            else
-                QTest::qWait(1500);
+                QTRY_VERIFY_WITH_TIMEOUT(text().contains(QStringLiteral("RASTERONLY")), 1000);
             QCOMPARE(text().count(QStringLiteral("RASTERONLY")), withImage ? 1 : 0);
         }
         QCOMPARE(text().count(nativeText), 1);
@@ -1853,7 +1875,6 @@ private slots:
             actions->action(QStringLiteral("mupdf_document_settings"))->trigger();
             document.requestTextPage(0);
             QTRY_VERIFY(document.page(0)->hasTextPage());
-            QTest::qWait(1500);
             QVERIFY(text().contains(nativeText));
             QVERIFY(!text().contains(QStringLiteral("RASTERONLY")));
             QVERIFY(warnings.empty());
@@ -1879,8 +1900,6 @@ private slots:
             QTRY_VERIFY_WITH_TIMEOUT(document.page(0)->hasTextPage(), 10000);
             if (withImage)
                 QTRY_VERIFY_WITH_TIMEOUT(text().contains(QStringLiteral("RASTERONLY")), 10000);
-            else
-                QTest::qWait(1500);
             QCOMPARE(text().count(nativeText), 1);
             QVERIFY(std::none_of(notices.begin(), notices.end(), [](const auto& notice) {
                 return notice.front().toString().contains(QStringLiteral("Running OCR"));
@@ -1930,6 +1949,7 @@ private slots:
         const QString path = m_root.filePath(mode + QStringLiteral(".pdf"));
         {
             QPdfWriter pdf(path);
+            pdf.setTitle(mode);
             pdf.setResolution(150);
             QPainter painter(&pdf);
             for (int page = 0; page < 2; ++page) {
@@ -1937,6 +1957,10 @@ private slots:
                     QVERIFY(pdf.newPage());
                 painter.drawImage(QRect(100, 100, 1000, 400), scan);
             }
+        }
+        if (enabled) {
+            QVERIFY2(seedOcrResults(path, { QStringLiteral("HELLO VIEWPORT") }),
+                     "Could not seed the generator OCR result cache");
         }
 
         Okular::Document document(nullptr);
@@ -1959,7 +1983,7 @@ private slots:
                 QTRY_VERIFY_WITH_TIMEOUT(document.page(page)->hasTextPage(), 10000);
                 QVERIFY(document.page(page)->text().contains(QStringLiteral("HELLO")));
             } else {
-                QTest::qWait(500);
+                QCoreApplication::processEvents();
                 QVERIFY(!document.page(page)->hasTextPage());
             }
         }

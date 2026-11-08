@@ -31,11 +31,49 @@
 #include <stdexcept>
 #include <string>
 #include <sys/mman.h>
+#include <tuple>
 #include <unistd.h>
 #include <utility>
 #include <vector>
 
 namespace {
+
+using ZipEntries = QList<QPair<QByteArray, QByteArray>>;
+
+QByteArray writeEpubArchive(const QString& path, const ZipEntries& entries)
+{
+    fz_context* context = fz_new_context(nullptr, nullptr, FZ_STORE_DEFAULT);
+    if (!context)
+        return "could not create context";
+    const auto cleanup = qScopeGuard([&] { fz_drop_context(context); });
+    const auto encodedPath = QFile::encodeName(path);
+    fz_zip_writer* volatile zip = nullptr;
+    fz_buffer* volatile buffer = nullptr;
+    QByteArray error;
+    fz_try(context)
+    {
+        zip = fz_new_zip_writer(context, encodedPath.constData());
+        for (const auto& entry : entries) {
+            buffer = fz_new_buffer_from_copied_data(context,
+                                                    reinterpret_cast<const unsigned char*>(entry.second.constData()),
+                                                    static_cast<std::size_t>(entry.second.size()));
+            fz_write_zip_entry(context, zip, entry.first.constData(), buffer, 0);
+            fz_drop_buffer(context, buffer);
+            buffer = nullptr;
+        }
+        fz_close_zip_writer(context, zip);
+    }
+    fz_always(context)
+    {
+        fz_drop_buffer(context, buffer);
+        fz_drop_zip_writer(context, zip);
+    }
+    fz_catch(context)
+    {
+        error = fz_caught_message(context);
+    }
+    return error;
+}
 
 struct PathBoundsDevice {
     fz_device super;
@@ -2263,6 +2301,79 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(first.size(), second.size());
         QVERIFY(first.empty());
+    }
+
+    void testEnumeratesEmbeddedFontExtensions()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath(QStringLiteral("fonts.epub"));
+        const QByteArray package =
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+            "<package xmlns=\"http://www.idpf.org/2007/opf\" unique-identifier=\"BookId\" version=\"2.0\">"
+            "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>Fonts</dc:title>"
+            "<dc:language>en</dc:language></metadata>"
+            "<manifest><item id=\"chapter\" href=\"chapter.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "</manifest><spine><itemref idref=\"chapter\"/></spine></package>";
+        const ZipEntries entries {
+            { "mimetype", "application/epub+zip" },
+            { "META-INF/container.xml",
+              "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\" version=\"1.0\"><rootfiles>"
+              "<rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/>"
+              "</rootfiles></container>" },
+            { "OEBPS/content.opf", package },
+            { "OEBPS/chapter.xhtml", "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>Fonts</body></html>" },
+            { "OEBPS/fonts/Roboto.TTF", "font" },
+            { "OEBPS/fonts/Collection.ttc", "font" },
+            { "OEBPS/fonts/OpenType.otf", "font" },
+            { "OEBPS/fonts/OpenCollection.otc", "font" },
+            { "OEBPS/fonts/WebFont.woff", "font" },
+            { "OEBPS/fonts/WebFont2.woff2", "font" },
+            { "Loose.ttf", "font" },
+            { "OEBPS/fonts/README.txt", "ignored" },
+            { "OEBPS/fonts/README", "ignored" }
+        };
+        const QByteArray zipError = writeEpubArchive(path, entries);
+        QVERIFY2(zipError.isEmpty(), zipError.constData());
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "fonts.epub", &error), error.c_str());
+        file.close();
+
+        auto fonts = document.fonts({ }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(fonts.size(), std::size_t(7));
+        std::sort(
+            fonts.begin(), fonts.end(), [](const auto& left, const auto& right) { return left.file < right.file; });
+        const std::array expected {
+            std::tuple { "Loose", "Loose.ttf", ::Mu::Model::FontType::TrueType },
+            std::tuple { "Collection", "OEBPS/fonts/Collection.ttc", ::Mu::Model::FontType::TrueType },
+            std::tuple { "OpenCollection", "OEBPS/fonts/OpenCollection.otc", ::Mu::Model::FontType::TrueTypeOT },
+            std::tuple { "OpenType", "OEBPS/fonts/OpenType.otf", ::Mu::Model::FontType::TrueTypeOT },
+            std::tuple { "Roboto", "OEBPS/fonts/Roboto.TTF", ::Mu::Model::FontType::TrueType },
+            std::tuple { "WebFont", "OEBPS/fonts/WebFont.woff", ::Mu::Model::FontType::TrueTypeOT },
+            std::tuple { "WebFont2", "OEBPS/fonts/WebFont2.woff2", ::Mu::Model::FontType::TrueTypeOT },
+        };
+        for (std::size_t i = 0; i < fonts.size(); ++i) {
+            const auto& [name, filePath, type] = expected[i];
+            QCOMPARE(fonts[i].name, std::string(name));
+            QCOMPARE(fonts[i].file, std::string(filePath));
+            QCOMPARE(fonts[i].type, type);
+            QCOMPARE(fonts[i].embedType, ::Mu::Model::FontEmbedType::FullyEmbedded);
+        }
+        QCOMPARE(document.fonts({ }, &error).size(), fonts.size()); // The archive scan is cached.
+    }
+
+    void testFontsOnClosedDocument()
+    {
+        ::Mu::Worker::Engine::EpubDocument document;
+        std::string error;
+        QVERIFY(document.fonts({ }, &error).empty());
+        QVERIFY(error.empty());
+        QVERIFY(document.fonts({ }, nullptr).empty());
     }
 
     void testSavePdf()

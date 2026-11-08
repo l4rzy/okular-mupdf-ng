@@ -525,6 +525,37 @@ private slots:
         QCOMPARE(bytes.mid(60, 8), QByteArray("BOOKMOBI"));
     }
 
+    void coversExportDispatchAndFailures()
+    {
+        const auto path = QStringLiteral(TEST_EPUB_DIR "/sample.epub");
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const auto plainText = Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText);
+        const auto textOutput = directory.filePath(QStringLiteral("export.txt"));
+        QVERIFY(document.exportTo(textOutput, plainText));
+        QFile textFile(textOutput);
+        QVERIFY(textFile.open(QIODevice::ReadOnly));
+        QVERIFY(textFile.readAll().contains("Hello EPUB World"));
+
+        QVERIFY(!document.exportTo(directory.filePath(QStringLiteral("missing/export.txt")), plainText));
+        const Okular::ExportFormat xmlFormat(QStringLiteral("XML"),
+                                             QMimeDatabase().mimeTypeForName(QStringLiteral("application/xml")));
+        QVERIFY(!document.exportTo(directory.filePath(QStringLiteral("export.xml")), xmlFormat));
+        const Okular::ExportFormat unsupportedFormat(
+            QStringLiteral("Binary"), QMimeDatabase().mimeTypeForName(QStringLiteral("application/octet-stream")));
+        QVERIFY(!document.exportTo(directory.filePath(QStringLiteral("export.bin")), unsupportedFormat));
+
+        QSignalSpy notices(&document, &Okular::Document::notice);
+        const auto pdfOutput = directory.filePath(QStringLiteral("missing/export.pdf"));
+        QVERIFY(!document.exportTo(pdfOutput, Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF)));
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(notices.front().front().toString().contains(QStringLiteral("Starting to export to PDF")));
+    }
+
     void exportsKindleToEpub_data()
     {
         QTest::addColumn<QString>("fixture");

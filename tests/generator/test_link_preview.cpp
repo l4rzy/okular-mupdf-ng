@@ -846,9 +846,9 @@ private slots:
         auto* bar = scroll->verticalScrollBar();
         auto* scroller = QScroller::scroller(scroll->viewport());
         const int maximum = bar->maximum();
-        // Use a long Qt scroll animation so a slow worker/test host still has
-        // time to deliver the neighbor while the viewport is in motion.
-        scroller->scrollTo(QPointF(0, maximum), 2000);
+        // Keep enough animation time for the released fake render to complete
+        // while the viewport is still in motion.
+        scroller->scrollTo(QPointF(0, maximum), 500);
         QTRY_VERIFY(neighborStarted.load());
         QCOMPARE(scroller->state(), QScroller::Scrolling);
         releaseNeighbor = true;

@@ -15,8 +15,10 @@
 #include <cstring>
 #include <fcntl.h>
 #include <memory>
+#include <poll.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <thread>
 #include <unistd.h>
 #include <utility>
@@ -232,6 +234,10 @@ private slots:
         QCOMPARE(decodedResponse.id, std::uint64_t(9));
         QVERIFY(std::holds_alternative<::Mu::Model::PingResponse>(decodedResponse.payload));
 
+        QVERIFY(!::Mu::IPC::writeFrame(client, std::span<const std::byte> { }, 1000, &error));
+        QVERIFY(error.find("empty or too large") != std::string::npos);
+        QVERIFY(client.valid());
+
         // The native writer rejects an oversized control message before narrowing its
         // length to the 32-bit control-plane header.
         const std::vector<std::byte> oversized(::Mu::Limit::MaxControlMessageBytes + 1);
@@ -268,6 +274,90 @@ private slots:
         auto peer = listener.accept(::getpid(), 1000, &error, &connectResult);
         QVERIFY(peer.valid());
         QCOMPARE(connectResult, ::Mu::IPC::IoResult::Complete);
+    }
+
+    void controlChannelRejectsInvalidPathsAndPeers()
+    {
+        ::Mu::IPC::CtrlChannel listener;
+        std::string error;
+        QVERIFY(!listener.listen({ }, &error));
+        QCOMPARE(error, std::string("control socket path is invalid or too long"));
+
+        const std::string longPath(sizeof(sockaddr_un { }.sun_path), 'x');
+        error.clear();
+        QVERIFY(!listener.connect(longPath, -1, &error));
+        QCOMPARE(error, std::string("control socket path is invalid or too long"));
+        QVERIFY(!listener.valid());
+
+        QTemporaryDir dir(::Mu::Plugin::Util::tempDirectory() + QStringLiteral("/test-XXXXXX"));
+        QVERIFY(dir.isValid());
+        const std::string path = QFile::encodeName(dir.filePath(QStringLiteral("control.sock"))).toStdString();
+        QVERIFY2(listener.listen(path, &error), error.c_str());
+
+        ::Mu::IPC::CtrlChannel duplicateListener;
+        error.clear();
+        QVERIFY(!duplicateListener.listen(path, &error));
+        QVERIFY(!duplicateListener.valid());
+        QVERIFY(!error.empty());
+
+        ::Mu::IPC::CtrlChannel mismatchedClient;
+        QVERIFY(!mismatchedClient.connect(path, static_cast<std::int64_t>(::getpid()) + 1, &error));
+        QVERIFY(!mismatchedClient.valid());
+
+        // The rejected client connection remains queued at the listener; its
+        // credentials still identify the current process after client close.
+        auto peer = listener.accept(::getpid(), 1000, &error);
+        QVERIFY2(peer.valid(), error.c_str());
+
+        ::Mu::IPC::CtrlChannel client;
+        QVERIFY2(client.connect(path, ::getpid(), &error), error.c_str());
+        ::Mu::IPC::IoResult result = ::Mu::IPC::IoResult::Complete;
+        peer = listener.accept(static_cast<std::int64_t>(::getpid()) + 1, 50, &error, &result);
+        QVERIFY(!peer.valid());
+        QCOMPARE(result, ::Mu::IPC::IoResult::Timeout);
+        QVERIFY(error.find("timed out") != std::string::npos);
+    }
+
+    void controlChannelWaitAndReadTimeoutAreRecoverable()
+    {
+        int fds[2] { -1, -1 };
+        QCOMPARE(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds), 0);
+        ::Mu::IPC::CtrlChannel writer(fds[0]);
+        ::Mu::IPC::CtrlChannel reader(fds[1]);
+        std::string error;
+        std::vector<std::byte> frame;
+
+        QVERIFY(!reader.wait(POLLIN, 0, &error));
+        QVERIFY(error.find("timed out") != std::string::npos);
+        QVERIFY(!::Mu::IPC::readFrame(reader, &frame, 0, &error));
+        QVERIFY(error.find("timed out") != std::string::npos);
+        QVERIFY(reader.valid());
+
+        const std::array payload { std::byte { 42 } };
+        QVERIFY2(::Mu::IPC::writeFrame(writer, payload, 100, &error), error.c_str());
+        QVERIFY2(reader.wait(POLLIN, 100, &error), error.c_str());
+        QVERIFY2(::Mu::IPC::readFrame(reader, &frame, 100, &error), error.c_str());
+        QCOMPARE(frame, std::vector<std::byte> { std::byte { 42 } });
+    }
+
+    void nonBlockingReaderRejectsOversizedLength()
+    {
+        int fds[2] { -1, -1 };
+        QCOMPARE(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, fds), 0);
+        ::Mu::IPC::CtrlChannel writer(fds[0]);
+        ::Mu::IPC::CtrlChannel reader(fds[1]);
+        const std::uint32_t length = ::Mu::Limit::MaxControlMessageBytes + 1;
+        const std::array header { std::byte((length >> 24) & 0xff),
+                                  std::byte((length >> 16) & 0xff),
+                                  std::byte((length >> 8) & 0xff),
+                                  std::byte(length & 0xff) };
+        QCOMPARE(::write(writer.fd(), header.data(), header.size()), ssize_t(header.size()));
+
+        std::vector<std::byte> frame;
+        std::string error;
+        QCOMPARE(::Mu::IPC::tryReadFrame(reader, &frame, &error), ::Mu::IPC::ReadStatus::Error);
+        QVERIFY(error.find("invalid length") != std::string::npos);
+        QVERIFY(!reader.valid());
     }
 
     void nativeControlTransportRejectsMalformedAndTimedOutFrames()

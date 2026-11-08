@@ -216,8 +216,28 @@ private slots:
         QVERIFY(remove->isEnabled());
         tabs->setCurrentIndex(0);
         tabs->setCurrentIndex(1);
+        people->setCurrentItem(nullptr);
+        QVERIFY(!remove->isEnabled());
+        remove->click();
+        QCOMPARE(people->rowCount(), 1);
+
         people->selectRow(0);
         QVERIFY(remove->isEnabled());
+        people->item(0, 0)->setData(Qt::UserRole, 99);
+        remove->click();
+        QCOMPARE(people->rowCount(), 1);
+        people->item(0, 0)->setData(Qt::UserRole, 0);
+
+        QTimer::singleShot(0, &dialog, [&dialog] {
+            for (auto* message : dialog.findChildren<QMessageBox*>()) {
+                if (auto* noButton = message->button(QMessageBox::No))
+                    noButton->click();
+            }
+        });
+        remove->click();
+        QCOMPARE(people->rowCount(), 1);
+        QCOMPARE(Database::listTrustedSigners(path).size(), 1);
+
         QTimer::singleShot(0, &dialog, [&dialog] {
             for (auto* message : dialog.findChildren<QMessageBox*>())
                 message->button(QMessageBox::Yes)->click();
