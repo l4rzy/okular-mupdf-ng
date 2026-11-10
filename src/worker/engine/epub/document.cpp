@@ -134,10 +134,10 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
     // Some EPUBs specify both width and height as 100% for images. This keeps
     // the image's natural aspect ratio and cap it at the available content width,
     // matching the image safeguards used by SumatraPDF.
-    css += "img { height: auto !important; max-width: 100% !important; } ";
     // Fixed-width figure wrappers must fit too: image percentages resolve
     // against the wrapper, and captions wrap within that same content box.
-    css += "figure, [role=figure] { max-width: 100% !important; } ";
+    css += "img { height: auto !important; max-width: 100% !important; } "
+           "figure, [role=figure], .figcenter, .figleft, .figright { max-width: 100% !important; } ";
     if (const char* fontRule = fontFamilyCss(settings.epub.fontFamily)) {
         css += ' ';
         css += fontRule;

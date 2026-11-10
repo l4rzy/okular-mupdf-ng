@@ -2738,8 +2738,12 @@ private slots:
     {
         QTest::addColumn<QString>("container");
         QTest::addColumn<int>("width");
-        for (const auto& container : { QStringLiteral("figure"), QStringLiteral("div role='figure'") }) {
-            for (const int width : { 550, 160 })
+        for (const auto& container : { QStringLiteral("figure"),
+                                       QStringLiteral("div role='figure'"),
+                                       QStringLiteral("div class='figcenter'"),
+                                       QStringLiteral("div class='figleft'"),
+                                       QStringLiteral("div class='figright'") }) {
+            for (const int width : { 550, 538, 160 })
                 QTest::newRow(qPrintable(container + QString::number(width))) << container << width;
         }
     }
@@ -2761,19 +2765,22 @@ private slots:
         QVERIFY(image.save(&buffer, "PNG"));
         QFile file(directory.filePath(QStringLiteral("figure.html")));
         QVERIFY(file.open(QIODevice::WriteOnly));
-        // Match knowledge.epub: a fixed-width semantic figure with auto margins,
+        // Exercise fixed-width figures with auto margins,
         // an intrinsically sized image, and a caption followed by descriptive text.
         const auto content =
-            QStringLiteral("<html><head><style>.figc550 { width: %1px; margin: 1.5em auto; text-align: center; }"
-                           "p { margin: 0; } .subcaption { text-align: justify; font-size: 0.8em; "
-                           "text-indent: 2em; margin-left: -2em; margin-right: -2em; }</style></head><body>"
-                           "<%2 class='figc550'><img src='data:image/png;base64,%4'/>"
-                           "<p><b>VIEW OF THE ROCK-HEWN TEMPLES AT LUNG-MEN</b></p>"
-                           "<p class='subcaption'>Here, as early as the seventh century, Chinese artists sculptured "
-                           "religious figures "
-                           "in the recesses of precipitous cliffs and turned them into hundreds of quarried temples. "
-                           "Many smaller figures and decorations in other recesses can also be discerned.</p>"
-                           "</%3><p>Following paragraph.</p></body></html>")
+            QStringLiteral(
+                "<html><head><style>figure, [role=figure], .figcenter { margin: 1.5em auto; text-align: center; }"
+                ".figleft { float: left; margin: 1em 0; }"
+                ".figright { float: right; margin: 1em 0; }"
+                "p { margin: 0; } .subcaption { text-align: justify; font-size: 0.8em; "
+                "text-indent: 2em; margin-left: -2em; margin-right: -2em; }</style></head><body>"
+                "<%2 style='width: %1px'><img src='data:image/png;base64,%4'/>"
+                "<p><b>SAMPLE IMAGE WITH A LONG CAPTION HEADING</b></p>"
+                "<p class='subcaption'>This sample caption contains several sentences to exercise text wrapping. "
+                "The generated image is a solid rectangle with a fixed aspect ratio and no embedded text. "
+                "Additional placeholder words make the caption span multiple lines at narrow page widths. "
+                "The caption ends here.</p>"
+                "</%3><p>Following paragraph.</p></body></html>")
                 .arg(width)
                 .arg(container, container.section(' ', 0, 0), QString::fromLatin1(png.toBase64()))
                 .toUtf8();
@@ -2812,7 +2819,7 @@ private slots:
             }
             QVERIFY2(error.empty(), error.c_str());
             text.remove(' ');
-            QVERIFY(text.contains(QStringLiteral("canalsobediscerned.")));
+            QVERIFY(text.contains(QStringLiteral("Thecaptionendshere.")));
             QVERIFY(text.contains(QStringLiteral("Followingparagraph.")));
         }
     }
