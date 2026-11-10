@@ -20,6 +20,7 @@ if(USE_SYSTEM_MUPDF)
     # uses whatever MuPDF the distribution provides, leaving any version floor to
     # the distributor's package dependencies.
     pkg_check_modules(MUPDF_SYSTEM REQUIRED IMPORTED_TARGET mupdf)
+    set(MUPDF_CACHE_ID "${MUPDF_SYSTEM_VERSION}-system-vanilla")
 
     add_library(MuPDF::Engine INTERFACE IMPORTED GLOBAL)
     set_target_properties(MuPDF::Engine PROPERTIES
@@ -44,6 +45,7 @@ else()
         REGEX "^#define FZ_VERSION \"")
     string(REGEX MATCH "FZ_VERSION \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" _ "${MUPDF_VERSION_LINE}")
     set(MUPDF_VERSION "${CMAKE_MATCH_1}")
+    set(MUPDF_CACHE_ID "${MUPDF_VERSION}-bundled-patched")
     if(NOT MUPDF_VERSION VERSION_EQUAL MUPDF_REQUIRED_VERSION)
         message(FATAL_ERROR
             "MuPDF ${MUPDF_REQUIRED_VERSION} is required, found ${MUPDF_VERSION} in ${MUPDF_SOURCE_DIR}")

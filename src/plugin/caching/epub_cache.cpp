@@ -8,6 +8,7 @@
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QFile>
+#include <QFileInfo>
 
 #include <cmath>
 #include <limits>
@@ -29,8 +30,6 @@ constexpr quint32 V3Version = 3;
 // Bump when bundled layout fixes change pagination without a MuPDF version bump.
 constexpr quint32 LayoutRevision = 14; // EPUB line spacing and publisher style controls change pagination.
 constexpr qint64 V3HeaderBytes = 16;
-// Bytes probed from each end of the source to derive the content-addressed key.
-constexpr qint64 IdentityProbeBytes = 64LL * 1024LL;
 constexpr qint64 MaxAcceleratorBytes = static_cast<qint64>(Model::MaxEpubAcceleratorBytes);
 constexpr qint64 MaxOutlineCompressedBytes = 8LL * 1024LL * 1024LL;
 constexpr qint64 MaxOutlineRawBytes = 64LL * 1024LL * 1024LL;
@@ -356,35 +355,19 @@ template <typename Update> bool updateEntry(const QString& cachePath, Update&& u
 
 QString Cache::cacheFilePath(const QString& path, const Model::DocumentSettings& settings)
 {
-    // The cache is content-addressed: the filename binds the source bytes
-    // (bounded head/tail probes plus size), the EPUB layout settings/revision,
-    // and the MuPDF version. Application releases alone do not invalidate it.
-    QFile source(path);
-    if (!source.open(QIODevice::ReadOnly))
-        return { };
+    // Bind the cache to the canonical path and file size without reading source
+    // contents. Same-size edits at the same path intentionally reuse the key.
+    const QFileInfo source(path);
+    const QString canonicalPath = source.canonicalFilePath();
     const qint64 size = source.size();
-    if (size < 0)
+    if (canonicalPath.isEmpty() || !source.isFile() || size < 0)
         return { };
-
-    const qint64 probeSize = size < IdentityProbeBytes ? size : IdentityProbeBytes;
-    const QByteArray head = source.read(probeSize);
-    if (head.size() != probeSize)
-        return { };
-
-    QByteArray tail = head;
-    if (size > IdentityProbeBytes) {
-        if (!source.seek(size - IdentityProbeBytes))
-            return { };
-        tail = source.read(IdentityProbeBytes);
-        if (tail.size() != IdentityProbeBytes)
-            return { };
-    }
 
     QByteArray payload;
     QDataStream stream(&payload, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_6_0);
-    stream << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
-           << static_cast<quint64>(size) << head << tail << layoutFingerprint(settings);
+    stream << QByteArray(::Mu::MUPDF_CACHE_ID.data(), static_cast<qsizetype>(::Mu::MUPDF_CACHE_ID.size()))
+           << canonicalPath << static_cast<quint64>(size) << layoutFingerprint(settings);
     if (stream.status() != QDataStream::Ok)
         return { };
 

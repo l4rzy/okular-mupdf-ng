@@ -37,7 +37,7 @@ public:
                                           const Model::DocumentSettings& settings,
                                           const std::vector<Model::OutlineNode>& outline);
 
-    /// Settings-aware stable cache filename for the canonical source.
+    /// Cache filename derived from the canonical source path, file size, and layout settings.
     [[nodiscard]] static QString cacheFilePath(const QString& path, const Model::DocumentSettings& settings);
 
     /// The EPUB layout fingerprint that participates in the cache filename.

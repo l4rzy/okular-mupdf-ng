@@ -9,6 +9,9 @@ namespace Mu {
 // worker additionally reports its runtime MuPDF version in the ping response.
 inline constexpr std::string_view MUPDF_VERSION = "@MUPDF_REQUIRED_VERSION@";
 
+// Cache identity includes the linked package version and bundled patch variant.
+inline constexpr std::string_view MUPDF_CACHE_ID = "@MUPDF_CACHE_ID@";
+
 } // namespace Mu
 
 namespace Mu::IPC {

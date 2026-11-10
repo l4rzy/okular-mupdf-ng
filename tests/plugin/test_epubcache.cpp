@@ -3,7 +3,6 @@
 
 #include <QCryptographicHash>
 #include <QDataStream>
-#include <QDateTime>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
@@ -82,23 +81,35 @@ private slots:
         QTest::addColumn<bool>("accelerator");
         QTest::addColumn<quint32>("revision");
         QTest::addColumn<bool>("accepted");
-        QTest::newRow("original-accelerator") << true << quint32(0) << false;
-        QTest::newRow("original-outline") << false << quint32(0) << false;
+        QTest::addColumn<QString>("engineIdentity");
+        const QString engineIdentity =
+            QString::fromUtf8(::Mu::MUPDF_CACHE_ID.data(), static_cast<qsizetype>(::Mu::MUPDF_CACHE_ID.size()));
+        QTest::newRow("original-accelerator") << true << quint32(0) << false << engineIdentity;
+        QTest::newRow("original-outline") << false << quint32(0) << false << engineIdentity;
         // Explicit stale revisions share one key format; revision 0 omits it.
-        QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5) << false;
-        QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5) << false;
-        QTest::newRow("pre-table-widths-accelerator") << true << quint32(9) << false;
-        QTest::newRow("pre-table-widths-outline") << false << quint32(9) << false;
-        QTest::newRow("pre-max-width-accelerator") << true << quint32(10) << false;
-        QTest::newRow("pre-max-width-outline") << false << quint32(10) << false;
-        QTest::newRow("pre-table-images-accelerator") << true << quint32(11) << false;
-        QTest::newRow("pre-table-images-outline") << false << quint32(11) << false;
-        QTest::newRow("pre-figure-containers-accelerator") << true << quint32(12) << false;
-        QTest::newRow("pre-figure-containers-outline") << false << quint32(12) << false;
-        QTest::newRow("pre-gutenberg-figures-accelerator") << true << quint32(14) << false;
-        QTest::newRow("pre-gutenberg-figures-outline") << false << quint32(14) << false;
-        QTest::newRow("current-accelerator") << true << quint32(15) << true;
-        QTest::newRow("current-outline") << false << quint32(15) << true;
+        QTest::newRow("pre-attribute-selectors-accelerator") << true << quint32(5) << false << engineIdentity;
+        QTest::newRow("pre-attribute-selectors-outline") << false << quint32(5) << false << engineIdentity;
+        QTest::newRow("pre-table-widths-accelerator") << true << quint32(9) << false << engineIdentity;
+        QTest::newRow("pre-table-widths-outline") << false << quint32(9) << false << engineIdentity;
+        QTest::newRow("pre-max-width-accelerator") << true << quint32(10) << false << engineIdentity;
+        QTest::newRow("pre-max-width-outline") << false << quint32(10) << false << engineIdentity;
+        QTest::newRow("pre-table-images-accelerator") << true << quint32(11) << false << engineIdentity;
+        QTest::newRow("pre-table-images-outline") << false << quint32(11) << false << engineIdentity;
+        QTest::newRow("pre-figure-containers-accelerator") << true << quint32(12) << false << engineIdentity;
+        QTest::newRow("pre-figure-containers-outline") << false << quint32(12) << false << engineIdentity;
+        QTest::newRow("pre-layout-controls-accelerator") << true << quint32(13) << false << engineIdentity;
+        QTest::newRow("pre-layout-controls-outline") << false << quint32(13) << false << engineIdentity;
+        QTest::newRow("current-accelerator") << true << quint32(14) << true << engineIdentity;
+        QTest::newRow("current-outline") << false << quint32(14) << true << engineIdentity;
+        const QString otherVariant = engineIdentity.endsWith(QStringLiteral("-bundled-patched"))
+            ? engineIdentity.chopped(QStringLiteral("-bundled-patched").size()) + QStringLiteral("-system-vanilla")
+            : engineIdentity.chopped(QStringLiteral("-system-vanilla").size()) + QStringLiteral("-bundled-patched");
+        for (const bool accelerator : { false, true }) {
+            QTest::newRow(accelerator ? "other-build-accelerator" : "other-build-outline")
+                << accelerator << quint32(14) << false << otherVariant;
+            QTest::newRow(accelerator ? "other-version-accelerator" : "other-version-outline")
+                << accelerator << quint32(14) << false << QStringLiteral("0.0.0-bundled-patched");
+        }
     }
 
     void isolatesLayoutRevisions()
@@ -106,11 +117,10 @@ private slots:
         QFETCH(bool, accelerator);
         QFETCH(quint32, revision);
         QFETCH(bool, accepted);
+        QFETCH(QString, engineIdentity);
         clearCacheFiles();
         ::Mu::Model::DocumentSettings settings;
-        QFile source(m_documentPath);
-        QVERIFY(source.open(QIODevice::ReadOnly));
-        const QByteArray bytes = source.readAll();
+        const QFileInfo source(m_documentPath);
 
         // Build a persisted key without the application release version. Old
         // layout revisions miss, while compatible accelerators and outlines load.
@@ -127,8 +137,8 @@ private slots:
         QByteArray payload;
         QDataStream stream(&payload, QIODevice::WriteOnly);
         stream.setVersion(QDataStream::Qt_6_0);
-        stream << QByteArray(::Mu::MUPDF_VERSION.data(), static_cast<qsizetype>(::Mu::MUPDF_VERSION.size()))
-               << static_cast<quint64>(bytes.size()) << bytes << bytes << layout;
+        stream << engineIdentity.toUtf8() << source.canonicalFilePath() << static_cast<quint64>(source.size())
+               << layout;
         const QString entryPath = ::Mu::Plugin::Caching::directory(QStringLiteral("epub_accel")) + QLatin1Char('/')
             + QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex())
             + QStringLiteral(".bin");
@@ -164,7 +174,7 @@ private slots:
         const QString path = cacheFile();
         QVERIFY(!path.isEmpty());
 
-        // A content change yields a distinct content-addressed key, so the
+        // A size change yields a distinct cache key, so the
         // previous entry is never reused; it becomes an orphan for now.
         QFile source(m_documentPath);
         QVERIFY(source.open(QIODevice::Append));
@@ -187,7 +197,45 @@ private slots:
         QVERIFY(!QFile::exists(corrupt));
     }
 
-    void sameSizeContentChangeInvalidates()
+    void isolatesSourcePaths_data()
+    {
+        QTest::addColumn<QString>("operation");
+        QTest::addColumn<bool>("reused");
+        QTest::newRow("copy") << QStringLiteral("copy") << false;
+        QTest::newRow("rename") << QStringLiteral("rename") << false;
+        QTest::newRow("symlink") << QStringLiteral("symlink") << true;
+        QTest::newRow("relative-path") << QStringLiteral("relative") << true;
+    }
+
+    void isolatesSourcePaths()
+    {
+        QFETCH(QString, operation);
+        QFETCH(bool, reused);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString original = directory.filePath(QStringLiteral("source.epub"));
+        QString alternate = directory.filePath(QStringLiteral("alternate.epub"));
+        QVERIFY(QFile::copy(m_documentPath, original));
+        using Cache = ::Mu::Plugin::Caching::EPUB::Cache;
+        const ::Mu::Model::DocumentSettings settings;
+        QVERIFY(Cache::saveAccelerator(original, settings, QByteArrayLiteral("cached layout")));
+        const QString originalKey = Cache::cacheFilePath(original, settings);
+        if (operation == QStringLiteral("copy"))
+            QVERIFY(QFile::copy(original, alternate));
+        else if (operation == QStringLiteral("rename"))
+            QVERIFY(QFile::rename(original, alternate));
+        else if (operation == QStringLiteral("symlink"))
+            QVERIFY(QFile::link(original, alternate));
+        else
+            alternate = QDir::current().relativeFilePath(original);
+
+        const QString alternateKey = Cache::cacheFilePath(alternate, settings);
+        QVERIFY(!alternateKey.isEmpty());
+        QCOMPARE(alternateKey == originalKey, reused);
+        QCOMPARE(Cache::load(alternate, settings).has_value(), reused);
+    }
+
+    void sameSizeContentChangeIsReused()
     {
         clearCacheFiles();
         ::Mu::Model::DocumentSettings settings;
@@ -200,15 +248,12 @@ private slots:
             ::Mu::Plugin::Caching::EPUB::Cache::saveAccelerator(m_documentPath, settings, QByteArray("accelerator")));
         QVERIFY(::Mu::Plugin::Caching::EPUB::Cache::load(m_documentPath, settings));
 
-        // Same length and same (restored) modification time, different bytes:
-        // the bounded content probe must still produce a different key.
-        const QDateTime modified = QFileInfo(m_documentPath).lastModified();
+        // Content and modification time do not participate in file identity.
         QVERIFY(source.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QCOMPARE(source.write("BBBBBBBBBBB"), qint64(11));
-        QVERIFY(source.setFileTime(modified, QFileDevice::FileModificationTime));
         source.close();
 
-        QVERIFY(!::Mu::Plugin::Caching::EPUB::Cache::load(m_documentPath, settings));
+        QVERIFY(::Mu::Plugin::Caching::EPUB::Cache::load(m_documentPath, settings));
     }
 
     void identicalContentRewriteIsReused()
