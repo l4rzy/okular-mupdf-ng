@@ -164,6 +164,14 @@
       <min>10</min>
       <max>20</max>
     </entry>
+    <entry key="EpubLineSpacing" type="Enum">
+      <default>Normal</default>
+      <choices>
+        <choice name="Dense" />
+        <choice name="Normal" />
+        <choice name="Sparse" />
+      </choices>
+    </entry>
     <entry key="EpubFontFamily" type="Enum">
       <default>Default</default>
       <choices>
@@ -181,6 +189,9 @@
         <choice name="B5" />
         <choice name="Letter" />
       </choices>
+    </entry>
+    <entry key="EpubIgnoreBuiltinCss" type="Bool">
+      <default>false</default>
     </entry>
     <entry key="EpubCustomCss" type="String">
       <default></default>

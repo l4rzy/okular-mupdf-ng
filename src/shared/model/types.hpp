@@ -363,6 +363,9 @@ enum class EpubPageSize : std::uint8_t { B5, A5, SixByNine, Letter };
 /// Supported EPUB layout font families.
 enum class EpubFontFamily : std::uint8_t { Default, Serif, SansSerif, Monospace };
 
+/// EPUB body line-height presets.
+enum class EpubLineSpacing : std::uint8_t { Dense, Normal, Sparse };
+
 using Limit::MaxEpubCustomCssBase64Bytes;
 using Limit::MaxEpubCustomCssCharacters;
 
@@ -370,10 +373,14 @@ using Limit::MaxEpubCustomCssCharacters;
 struct EpubLayoutSettings {
     /// Base font size in points.
     std::int32_t fontSize = 11;
+    /// Line-height preset applied to EPUB body text.
+    EpubLineSpacing lineSpacing = EpubLineSpacing::Normal;
     /// Target paper size used by EPUB pagination.
     EpubPageSize pageSize = EpubPageSize::B5;
     /// Default family used when EPUB content does not select one.
     EpubFontFamily fontFamily = EpubFontFamily::Default;
+    /// Whether to ignore styles authored by the ebook publisher.
+    bool ignoreBuiltinCss = false;
     /// Base64-encoded UTF-8 CSS supplied by the caller.
     std::string customCssBase64;
 };

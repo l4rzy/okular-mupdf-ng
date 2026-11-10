@@ -47,12 +47,16 @@ DocumentSettings readDocumentSettings(const QString& key)
     if (group.hasKey("FontSize")) {
         EpubSettings layout;
         layout.fontSize = group.readEntry("FontSize", layout.fontSize);
+        layout.lineSpacing = group.readEntry("LineSpacing", layout.lineSpacing);
         layout.fontFamily = group.readEntry("FontFamily", layout.fontFamily);
         layout.pageSize = group.readEntry("PageSize", layout.pageSize);
         layout.customCssBase64 = group.readEntry("CustomCss", QString());
+        layout.ignoreBuiltinCss = group.readEntry("IgnoreBuiltinCss", false);
         if (layout.fontSize >= Limit::MinEpubFontSize && layout.fontSize <= Limit::MaxEpubFontSize
-            && layout.fontFamily >= 0 && layout.fontFamily <= static_cast<int>(Model::EpubFontFamily::Monospace)
-            && layout.pageSize >= 0 && layout.pageSize <= static_cast<int>(Model::EpubPageSize::Letter)
+            && layout.lineSpacing >= static_cast<int>(Model::EpubLineSpacing::Dense)
+            && layout.lineSpacing <= static_cast<int>(Model::EpubLineSpacing::Sparse) && layout.fontFamily >= 0
+            && layout.fontFamily <= static_cast<int>(Model::EpubFontFamily::Monospace) && layout.pageSize >= 0
+            && layout.pageSize <= static_cast<int>(Model::EpubPageSize::Letter)
             && Model::isValidEpubCustomCssBase64(layout.customCssBase64.toStdString()))
             settings.layout = layout;
     }
@@ -84,9 +88,11 @@ bool writeDocumentSettings(const QString& key, const DocumentSettings& settings)
         group.writeEntry("Theme", static_cast<int>(*settings.theme));
     if (settings.layout) {
         group.writeEntry("FontSize", settings.layout->fontSize);
+        group.writeEntry("LineSpacing", settings.layout->lineSpacing);
         group.writeEntry("FontFamily", settings.layout->fontFamily);
         group.writeEntry("PageSize", settings.layout->pageSize);
         group.writeEntry("CustomCss", settings.layout->customCssBase64);
+        group.writeEntry("IgnoreBuiltinCss", settings.layout->ignoreBuiltinCss);
     }
     if (settings.ocr) {
         group.writeEntry("OcrLanguage", settings.ocr->language);

@@ -225,6 +225,8 @@ bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view*
         return failWith("idle trim level is invalid", reason);
     if (settings.epub.fontSize < Limit::MinEpubFontSize || settings.epub.fontSize > Limit::MaxEpubFontSize)
         return failWith("EPUB font size is invalid", reason);
+    if (static_cast<std::uint8_t>(settings.epub.lineSpacing) > static_cast<std::uint8_t>(EpubLineSpacing::Sparse))
+        return failWith("EPUB line spacing is invalid", reason);
     if (static_cast<std::uint8_t>(settings.epub.pageSize) > static_cast<std::uint8_t>(EpubPageSize::Letter))
         return failWith("EPUB page size is invalid", reason);
     if (static_cast<std::uint8_t>(settings.epub.fontFamily) > static_cast<std::uint8_t>(EpubFontFamily::Monospace))

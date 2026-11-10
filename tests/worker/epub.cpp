@@ -2608,7 +2608,10 @@ private slots:
 
         ::Mu::Worker::Engine::EpubDocument doc;
         ::Mu::Model::DocumentSettings settings;
-        settings.epub.customCssBase64 = customCss.toBase64().toStdString();
+        // Keep this geometry test independent of the preset and verify CSS can override it.
+        const QByteArray marginTestCss =
+            QByteArrayLiteral("body, body * { line-height: 24pt !important; } ") + customCss;
+        settings.epub.customCssBase64 = marginTestCss.toBase64().toStdString();
         doc.setSettings(settings);
         std::string error;
         QVERIFY2(doc.openFd(::dup(file.handle()), "margins.html", &error), error.c_str());
@@ -2619,10 +2622,10 @@ private slots:
             const auto geometry = doc.pageGeometry(page, &error);
             const auto boxes = doc.textBoxes(page, 72, 72, 10000, false, &error);
             QVERIFY2(error.empty(), error.c_str());
-            const double marginX = customCss.isEmpty()
+            const double marginX = pageMargin == 0.0
                 ? geometry.widthPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction
                 : pageMargin;
-            const double marginY = customCss.isEmpty()
+            const double marginY = pageMargin == 0.0
                 ? geometry.heightPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction
                 : pageMargin;
             QString line;
@@ -2645,6 +2648,66 @@ private slots:
         QCOMPARE(lines.size(), lineCount);
         for (int line = 0; line < lineCount; ++line)
             QCOMPARE(lines[line], QStringLiteral("Line%1").arg(line));
+    }
+
+    void testLineSpacing_data()
+    {
+        QTest::addColumn<int>("preset");
+        QTest::addColumn<double>("multiplier");
+        QTest::newRow("dense") << static_cast<int>(::Mu::Model::EpubLineSpacing::Dense) << 1.4;
+        QTest::newRow("normal") << static_cast<int>(::Mu::Model::EpubLineSpacing::Normal) << 1.65;
+        QTest::newRow("sparse") << static_cast<int>(::Mu::Model::EpubLineSpacing::Sparse) << 1.85;
+    }
+
+    void testLineSpacing()
+    {
+        QFETCH(int, preset);
+        QFETCH(double, multiplier);
+        QTemporaryFile file;
+        QVERIFY(file.open());
+        const QByteArray content = QByteArrayLiteral("<html><body>A<br/>A</body></html>");
+        QCOMPARE(file.write(content), content.size());
+        QVERIFY(file.flush());
+
+        ::Mu::Worker::Engine::EpubDocument doc;
+        ::Mu::Model::DocumentSettings settings;
+        settings.epub.lineSpacing = static_cast<::Mu::Model::EpubLineSpacing>(preset);
+        doc.setSettings(settings);
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "spacing.html", &error), error.c_str());
+        const auto boxes = doc.textBoxes(0, 72, 72, 1000, false, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(boxes.size(), 2u);
+        QVERIFY(std::abs(boxes[1].top - boxes[0].top - settings.epub.fontSize * multiplier) < 0.05);
+    }
+
+    void testIgnorePublisherStyles()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(directory.filePath(QStringLiteral("styles.html")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const QByteArray content = QByteArrayLiteral(
+            "<html><head><style>p { display: none !important; }</style></head><body><p>Visible text</p></body></html>");
+        QCOMPARE(file.write(content), content.size());
+        file.close();
+        QVERIFY(file.open(QIODevice::ReadOnly));
+
+        ::Mu::Worker::Engine::EpubDocument doc;
+        ::Mu::Model::DocumentSettings settings;
+        settings.epub.ignoreBuiltinCss = true;
+        doc.setSettings(settings);
+        std::string error;
+        QVERIFY2(doc.openFd(::dup(file.handle()), "styles.html", &error), error.c_str());
+        const auto visibleText = doc.textBoxes(0, 72, 72, 1000, false, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QVERIFY(!visibleText.empty());
+
+        settings.epub.customCssBase64 = QByteArrayLiteral("p { display: none !important; }").toBase64().toStdString();
+        doc.setSettings(settings);
+        QVERIFY2(doc.openFd(::dup(file.handle()), "styles.html", &error), error.c_str());
+        QVERIFY(doc.textBoxes(0, 72, 72, 1000, false, &error).empty());
+        QVERIFY2(error.empty(), error.c_str());
     }
 
     void testCustomCss()

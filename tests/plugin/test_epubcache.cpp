@@ -95,8 +95,8 @@ private slots:
         QTest::newRow("pre-table-images-outline") << false << quint32(11) << false;
         QTest::newRow("pre-figure-containers-accelerator") << true << quint32(12) << false;
         QTest::newRow("pre-figure-containers-outline") << false << quint32(12) << false;
-        QTest::newRow("current-accelerator") << true << quint32(13) << true;
-        QTest::newRow("current-outline") << false << quint32(13) << true;
+        QTest::newRow("current-accelerator") << true << quint32(14) << true;
+        QTest::newRow("current-outline") << false << quint32(14) << true;
     }
 
     void isolatesLayoutRevisions()
@@ -117,8 +117,9 @@ private slots:
         layoutStream.setVersion(QDataStream::Qt_6_0);
         if (revision != 0)
             layoutStream << revision;
-        layoutStream << settings.epub.fontSize << static_cast<quint8>(settings.epub.pageSize)
-                     << static_cast<quint8>(settings.epub.fontFamily)
+        layoutStream << settings.epub.fontSize << static_cast<quint8>(settings.epub.lineSpacing)
+                     << static_cast<quint8>(settings.epub.pageSize) << static_cast<quint8>(settings.epub.fontFamily)
+                     << settings.epub.ignoreBuiltinCss
                      << QCryptographicHash::hash(QByteArray::fromStdString(settings.epub.customCssBase64),
                                                  QCryptographicHash::Sha256);
         QByteArray payload;

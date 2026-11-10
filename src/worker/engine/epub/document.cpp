@@ -64,6 +64,19 @@ constexpr const char* fontFamilyCss(EpubFontFamily fontFamily) noexcept
     }
 }
 
+constexpr float lineHeightMultiplier(EpubLineSpacing lineSpacing) noexcept
+{
+    switch (lineSpacing) {
+    case EpubLineSpacing::Dense:
+        return 1.4F;
+    case EpubLineSpacing::Sparse:
+        return 1.85F;
+    case EpubLineSpacing::Normal:
+    default:
+        return 1.65F;
+    }
+}
+
 /// Decodes base64-encoded user CSS and validates UTF-8 sanity. The encoded
 /// syntax is validated by the shared Mu::Model validator.
 std::optional<std::string> decodeCustomCss(fz_context* context, std::string_view encoded)
@@ -114,8 +127,9 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
     // Page margins repeat on every page; reset body margins to avoid a second inset.
     // Append user CSS last so specialized books can opt into custom margins.
     std::string css = std::format(
-        "@page {{ margin: {:.3f}pt {:.3f}pt !important; }} body {{ margin: 0 !important; }} ", 
-        marginY, marginX);
+        "@page {{ margin: {:.3f}pt {:.3f}pt !important; }} body {{ margin: 0 !important; }} ", marginY, marginX);
+    css += std::format("body, body * {{ line-height: {:.2f} !important; }} ",
+                       lineHeightMultiplier(settings.epub.lineSpacing));
 
     // Some EPUBs specify both width and height as 100% for images. This keeps
     // the image's natural aspect ratio and cap it at the available content width,
@@ -226,14 +240,14 @@ bool EpubDocument::openFdWithAccelerator(int fd,
         // Step 2: Inject custom styling rules (margins, font-family, custom CSS)
         fz_try(m_context)
         {
-            fz_style_document(m_context, m_document, 1, css.c_str());
+            fz_style_document(m_context, m_document, m_settings.epub.ignoreBuiltinCss ? 0 : 1, css.c_str());
         }
         fz_catch(m_context)
         {
             if (!hasCustomCss)
                 fz_rethrow(m_context);
             MU_LOG(warning, "Mu::Worker::Epub", "custom CSS was rejected; using built-in EPUB CSS");
-            fz_style_document(m_context, m_document, 1, fallbackCss.c_str());
+            fz_style_document(m_context, m_document, m_settings.epub.ignoreBuiltinCss ? 0 : 1, fallbackCss.c_str());
         }
 
         // Step 3: Perform initial layout and pagination pass
@@ -459,6 +473,8 @@ void EpubDocument::setSettings(const DocumentSettings& settings) noexcept
 {
     m_settings = settings;
     m_settings.epub.fontSize = std::clamp(m_settings.epub.fontSize, std::int32_t(10), std::int32_t(20));
+    if (static_cast<std::uint8_t>(m_settings.epub.lineSpacing) > static_cast<std::uint8_t>(EpubLineSpacing::Sparse))
+        m_settings.epub.lineSpacing = EpubLineSpacing::Normal;
     if (static_cast<std::uint8_t>(m_settings.epub.pageSize) > static_cast<std::uint8_t>(EpubPageSize::Letter))
         m_settings.epub.pageSize = EpubPageSize::B5;
     if (static_cast<std::uint8_t>(m_settings.epub.fontFamily) > static_cast<std::uint8_t>(EpubFontFamily::Monospace))

@@ -222,6 +222,12 @@ void Main::showDocumentSettings()
     auto* family = new QComboBox(fields);
     family->addItems({ i18n("Default"), i18n("Serif"), i18n("Sans-serif"), i18n("Monospace") });
     addSettingRow(form, i18n("Font Family"), family);
+    auto* lineSpacing = new QComboBox(fields);
+    lineSpacing->setObjectName(QStringLiteral("lineSpacing"));
+    lineSpacing->addItem(i18n("Dense"), static_cast<int>(Model::EpubLineSpacing::Dense));
+    lineSpacing->addItem(i18n("Normal"), static_cast<int>(Model::EpubLineSpacing::Normal));
+    lineSpacing->addItem(i18n("Sparse"), static_cast<int>(Model::EpubLineSpacing::Sparse));
+    addSettingRow(form, i18n("Line Spacing"), lineSpacing);
     auto* page = new QComboBox(fields);
     page->setObjectName(QStringLiteral("pageSize"));
     page->addItem(i18n("A5 (148 × 210 mm)"), static_cast<int>(Model::EpubPageSize::A5));
@@ -229,6 +235,9 @@ void Main::showDocumentSettings()
     page->addItem(i18n("B5 (176 × 250 mm)"), static_cast<int>(Model::EpubPageSize::B5));
     page->addItem(i18n("Letter (216 × 279 mm)"), static_cast<int>(Model::EpubPageSize::Letter));
     addSettingRow(form, i18n("Page Size"), page);
+    auto* ignoreBuiltinCss = new QCheckBox(i18n("Ignore ebook's built-in CSS"), fields);
+    ignoreBuiltinCss->setObjectName(QStringLiteral("ignoreBuiltinCss"));
+    form->addWidget(ignoreBuiltinCss);
     auto* cssToggle = new QPushButton(i18n("Custom CSS"), fields);
     cssToggle->setCheckable(true);
     form->addWidget(cssToggle);
@@ -239,8 +248,10 @@ void Main::showDocumentSettings()
     connect(cssToggle, &QPushButton::toggled, css, &QWidget::setVisible);
     const auto showLayout = [=](const Config::EpubSettings& layout) {
         size->setValue(layout.fontSize);
+        lineSpacing->setCurrentIndex(lineSpacing->findData(layout.lineSpacing));
         family->setCurrentIndex(layout.fontFamily);
         page->setCurrentIndex(page->findData(layout.pageSize));
+        ignoreBuiltinCss->setChecked(layout.ignoreBuiltinCss);
         css->setEncodedText(layout.customCssBase64);
     };
     showLayout(m_document.settings.layout.value_or(defaults.startupEpub));
@@ -327,8 +338,12 @@ void Main::showDocumentSettings()
         if (ebook && layoutGroup->isEnabled()) {
             settings.layout = inherit->isChecked()
                 ? std::nullopt
-                : std::optional(Config::EpubSettings {
-                      size->value(), family->currentIndex(), page->currentData().toInt(), css->encodedText() });
+                : std::optional(Config::EpubSettings { size->value(),
+                                                       family->currentIndex(),
+                                                       lineSpacing->currentData().toInt(),
+                                                       page->currentData().toInt(),
+                                                       ignoreBuiltinCss->isChecked(),
+                                                       css->encodedText() });
         }
         if (pdf) {
             settings.ocr.reset();
@@ -352,8 +367,10 @@ void Main::showDocumentSettings()
     connect(theme, &QComboBox::currentIndexChanged, &dialog, updateButtons);
     connect(inherit, &QCheckBox::toggled, &dialog, updateButtons);
     connect(size, &QSpinBox::valueChanged, &dialog, updateButtons);
+    connect(lineSpacing, &QComboBox::currentIndexChanged, &dialog, updateButtons);
     connect(family, &QComboBox::currentIndexChanged, &dialog, updateButtons);
     connect(page, &QComboBox::currentIndexChanged, &dialog, updateButtons);
+    connect(ignoreBuiltinCss, &QCheckBox::toggled, &dialog, updateButtons);
     connect(css, &CssEditor::encodedTextChanged, &dialog, updateButtons);
     connect(inheritOcr, &QCheckBox::toggled, &dialog, updateButtons);
     connect(language, &QComboBox::currentIndexChanged, &dialog, updateButtons);

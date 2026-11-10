@@ -415,6 +415,8 @@ private slots:
             settings.idleTrimAggressiveness = Model::IdleTrimLevel::Aggressive;
             settings.documentTheme = Model::DocumentTheme::Dark;
             settings.epub.fontSize = 17;
+            settings.epub.lineSpacing = Model::EpubLineSpacing::Sparse;
+            settings.epub.ignoreBuiltinCss = true;
             settings.epub.pageSize = pageSize;
             settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(static_cast<std::uint8_t>(pageSize));
             settings.epub.customCssBase64 = "Ym9keSB7IGNvbG9yOiByZWQ7IH0=";
@@ -430,6 +432,8 @@ private slots:
             QCOMPARE(output.memoryCacheBytes, 128ULL * 1024ULL * 1024ULL);
             QCOMPARE(output.idleTrimAggressiveness, Model::IdleTrimLevel::Aggressive);
             QCOMPARE(output.epub.fontSize, 17);
+            QCOMPARE(output.epub.lineSpacing, Model::EpubLineSpacing::Sparse);
+            QVERIFY(output.epub.ignoreBuiltinCss);
             QCOMPARE(output.epub.pageSize, pageSize);
             QCOMPARE(output.epub.fontFamily, settings.epub.fontFamily);
             QCOMPARE(output.epub.customCssBase64, settings.epub.customCssBase64);

@@ -103,6 +103,12 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     epubPageSize->addItem(i18n("B5 (176 × 250 mm)"), MuPDFNGSettings::EnumEpubPageSize::B5);
     epubPageSize->addItem(i18n("Letter (216 × 279 mm)"), MuPDFNGSettings::EnumEpubPageSize::Letter);
 
+    auto* epubLineSpacing = m_mupdfsw->kcfg_EpubLineSpacing;
+    epubLineSpacing->clear();
+    epubLineSpacing->addItem(i18n("Dense"), static_cast<int>(Model::EpubLineSpacing::Dense));
+    epubLineSpacing->addItem(i18n("Normal"), static_cast<int>(Model::EpubLineSpacing::Normal));
+    epubLineSpacing->addItem(i18n("Sparse"), static_cast<int>(Model::EpubLineSpacing::Sparse));
+
     auto* epubFontFamily = m_mupdfsw->kcfg_EpubFontFamily;
     epubFontFamily->clear();
     epubFontFamily->addItem(i18n("Default"), MuPDFNGSettings::EnumEpubFontFamily::Default);

@@ -39,9 +39,11 @@ struct RenderingSettings {
 struct EpubSettings {
     int fontSize = 11;
     int fontFamily = 0;
+    int lineSpacing = static_cast<int>(Model::EpubLineSpacing::Normal);
     // Page size in Model::EpubPageSize order, not the KCfg index (see
     // epubPageSizeForConfig); the default matches the KCfg default of A5.
     int pageSize = static_cast<int>(Model::EpubPageSize::A5);
+    bool ignoreBuiltinCss = false;
     QString customCssBase64;
 
     bool operator==(const EpubSettings& other) const = default;
@@ -110,10 +112,13 @@ documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub
         : Model::IdleTrimLevel::Balanced;
     settings.paperColorRgb = paperColorRgb;
     settings.epub.fontSize = std::clamp(epub.fontSize, Limit::MinEpubFontSize, Limit::MaxEpubFontSize);
+    settings.epub.lineSpacing = static_cast<Model::EpubLineSpacing>(
+        std::clamp(epub.lineSpacing, 0, static_cast<int>(Model::EpubLineSpacing::Sparse)));
     settings.epub.pageSize =
         static_cast<Model::EpubPageSize>(std::clamp(epub.pageSize, 0, static_cast<int>(Model::EpubPageSize::Letter)));
     settings.epub.fontFamily = static_cast<Model::EpubFontFamily>(
         std::clamp(epub.fontFamily, 0, static_cast<int>(Model::EpubFontFamily::Monospace)));
+    settings.epub.ignoreBuiltinCss = epub.ignoreBuiltinCss;
     settings.epub.customCssBase64 = epub.customCssBase64.toStdString();
     return settings;
 }

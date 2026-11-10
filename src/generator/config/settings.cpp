@@ -180,7 +180,9 @@ EpubSettings readEpubSettings()
     const QString customCss = MuPDFNGSettings::epubCustomCss();
     return { MuPDFNGSettings::epubFontSize(),
              MuPDFNGSettings::epubFontFamily(),
+             MuPDFNGSettings::epubLineSpacing(),
              epubPageSizeForConfig(MuPDFNGSettings::epubPageSize()),
+             MuPDFNGSettings::epubIgnoreBuiltinCss(),
              Model::isValidEpubCustomCssBase64(customCss.toStdString()) ? customCss : QString() };
 }
 

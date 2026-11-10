@@ -361,9 +361,11 @@ inline void requestPayload(std::ostringstream& out, const Model::RequestPayload&
                 field(out, "overprint", value.settings.overprintSimulation);
                 field(out, "idleTrim", value.settings.idleTrimAggressiveness);
                 field(out, "epubFontSize", value.settings.epub.fontSize);
+                field(out, "epubLineSpacing", static_cast<std::uint8_t>(value.settings.epub.lineSpacing));
                 field(out, "epubPageSize", static_cast<std::uint8_t>(value.settings.epub.pageSize));
                 field(out, "epubFontFamily", static_cast<std::uint8_t>(value.settings.epub.fontFamily));
                 field(out, "epubCustomCssBase64Bytes", value.settings.epub.customCssBase64.size());
+                field(out, "epubIgnoreBuiltinCss", value.settings.epub.ignoreBuiltinCss);
             } else if constexpr (std::is_same_v<T, Model::OutputFormatsRequest>) {
                 out << "output-formats";
             } else if constexpr (std::is_same_v<T, Model::ExportRequest>) {

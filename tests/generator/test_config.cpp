@@ -71,7 +71,8 @@ private slots:
             settings.theme = Mu::Model::DocumentTheme::Dusk;
         if (layout)
             settings.layout =
-                Config::EpubSettings { 16, 2, 0, QString::fromLatin1(QByteArray("body { color: red; }").toBase64()) };
+                Config::EpubSettings { 16, 2,    static_cast<int>(Mu::Model::EpubLineSpacing::Sparse),
+                                       0,  true, QString::fromLatin1(QByteArray("body { color: red; }").toBase64()) };
         if (ocr) {
             settings.ocr = Config::OcrSettings();
             settings.ocr->language = QStringLiteral("vie");
@@ -390,7 +391,7 @@ private slots:
         ::Mu::Generator::Config::RenderingSettings rendering {
             4, 6, 2, false, 256LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Aggressive
         };
-        ::Mu::Generator::Config::EpubSettings epub { 99, -1, 99, QStringLiteral("Ym9keXt9") };
+        ::Mu::Generator::Config::EpubSettings epub { 99, -1, 1, 99, true, QStringLiteral("Ym9keXt9") };
 
         const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0x112233);
         QCOMPARE(settings.graphicsAntialiasing, 4);
@@ -401,6 +402,8 @@ private slots:
         QCOMPARE(settings.idleTrimAggressiveness, ::Mu::Model::IdleTrimLevel::Aggressive);
         QCOMPARE(settings.paperColorRgb, 0x112233u);
         QCOMPARE(settings.epub.fontSize, 20);
+        QCOMPARE(settings.epub.lineSpacing, Mu::Model::EpubLineSpacing::Normal);
+        QVERIFY(settings.epub.ignoreBuiltinCss);
         QCOMPARE(static_cast<int>(settings.epub.fontFamily), 0);
         QCOMPARE(static_cast<int>(settings.epub.pageSize), 3);
         QCOMPARE(QString::fromStdString(settings.epub.customCssBase64), QStringLiteral("Ym9keXt9"));
@@ -472,9 +475,9 @@ private slots:
             RenderingSettings { 8, 8, 2, true, 256LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Balanced },
         };
         const std::array<EpubSettings, 3> epubs {
-            EpubSettings { -100, -100, -100, QStringLiteral("Ym9keXt9") },
-            EpubSettings { 0, 0, 0, QString() },
-            EpubSettings { 999, 999, 999, QStringLiteral("Ym9keXt9") },
+            EpubSettings { -100, -100, -1, -100, false, QStringLiteral("Ym9keXt9") },
+            EpubSettings { 0, 0, 1, 0, false, QString() },
+            EpubSettings { 999, 999, 3, 999, false, QStringLiteral("Ym9keXt9") },
         };
 
         for (const auto& rendering : renderings) {
