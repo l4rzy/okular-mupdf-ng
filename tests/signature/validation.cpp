@@ -544,10 +544,31 @@ private slots:
                                              << static_cast<int>(Okular::SignatureInfo::CertificateExpired) << false;
     }
 
+    void passwordlessCertificateDoesNotPrompt_data()
+    {
+        QTest::addColumn<bool>("provideCancellationFlag");
+        QTest::addColumn<bool>("initialCancelled");
+        QTest::newRow("null cancellation flag") << false << false;
+        QTest::newRow("initially not cancelled") << true << false;
+        QTest::newRow("initially cancelled") << true << true;
+    }
+
     void passwordlessCertificateDoesNotPrompt()
     {
+        QFETCH(bool, provideCancellationFlag);
+        QFETCH(bool, initialCancelled);
+
         ::Mu::Generator::Proxy::CertificateStore store;
-        const auto certificates = store.signingCertificates(nullptr);
+        const Okular::CertificateStore& baseStore = store;
+        bool userCancelled = initialCancelled;
+        bool* cancellationFlag = provideCancellationFlag ? &userCancelled : nullptr;
+#if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
+        const auto certificates = baseStore.signingCertificates(nullptr, cancellationFlag);
+#else
+        const auto certificates = baseStore.signingCertificates(cancellationFlag);
+#endif
+        if (provideCancellationFlag)
+            QVERIFY(!userCancelled);
         const auto certificate =
             std::find_if(certificates.cbegin(), certificates.cend(), [](const Okular::CertificateInfo& value) {
                 return value.nickName() == QStringLiteral("okular-mupdf-test");

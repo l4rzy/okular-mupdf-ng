@@ -6,6 +6,7 @@
 #include "generator/conversion/xfdf.hpp"
 #include "generator/mupdfng.hpp"
 #include <KLocalizedString>
+#include <QIcon>
 #include <QMimeDatabase>
 #include <QSaveFile>
 #include <QTextStream>
@@ -16,6 +17,12 @@ namespace Mu::Generator {
 namespace {
 
 constexpr int NoticeMs = 3000;
+
+QIcon exportIcon(const QMimeType& mime)
+{
+    const QIcon fallback = QIcon::fromTheme(mime.genericIconName(), QIcon::fromTheme(QStringLiteral("text-x-generic")));
+    return QIcon::fromTheme(mime.iconName(), fallback);
+}
 
 struct ExportAction {
     KLocalizedString label;
@@ -77,7 +84,7 @@ Okular::ExportFormat::List Main::exportFormats() const
             }
             const auto mime = QMimeDatabase().mimeTypeForName(QString::fromLatin1(action.mime));
             if (mime.isValid())
-                formats.append(Okular::ExportFormat(action.label.toString(), mime));
+                formats.append(Okular::ExportFormat(exportIcon(mime), action.label.toString(), mime));
         }
     }
     if (m_document.type == Model::DocumentType::Pdf) {
@@ -86,7 +93,7 @@ Okular::ExportFormat::List Main::exportFormats() const
         // registration on many systems; the file dialog then filters *.xml.
         const QMimeType xml = QMimeDatabase().mimeTypeForName(QStringLiteral("application/xml"));
         if (xml.isValid())
-            formats.append(Okular::ExportFormat(i18n("Annotation File (XFDF)"), xml));
+            formats.append(Okular::ExportFormat(exportIcon(xml), i18n("Annotation File (XFDF)"), xml));
     }
     return formats;
 }
