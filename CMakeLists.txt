@@ -139,6 +139,18 @@ if(NOT MU_COMPAT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
     message(FATAL_ERROR "KPlugin.Version must use MAJOR.MINOR.PATCH: ${MU_COMPAT_VERSION}")
 endif()
 set(MU_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(MU_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(MU_BUILD_INFO_FILE "${MU_GENERATED_INCLUDE_DIR}/shared/build_info.hpp")
+include(cmake/build_info.cmake)
+# Check on every build: commits, tags, and local edits can change without a
+# CMake reconfiguration. configure_file leaves an unchanged header untouched.
+add_custom_target(ng_build_info
+    COMMAND "${CMAKE_COMMAND}"
+        "-DMU_SOURCE_DIR=${MU_SOURCE_DIR}"
+        "-DMU_BUILD_INFO_FILE=${MU_BUILD_INFO_FILE}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_info.cmake"
+    BYPRODUCTS "${MU_BUILD_INFO_FILE}"
+    VERBATIM)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/compat.hpp.in"
     "${MU_GENERATED_INCLUDE_DIR}/shared/compat.hpp"

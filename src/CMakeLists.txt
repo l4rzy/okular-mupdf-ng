@@ -12,6 +12,7 @@ add_library(ng_shared STATIC
   shared/model/export.cpp
   shared/protocol/zpp_codec.cpp
 )
+add_dependencies(ng_shared ng_build_info)
 set_target_properties(ng_shared PROPERTIES
     AUTOMOC OFF
     AUTORCC OFF

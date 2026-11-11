@@ -4,6 +4,7 @@
 
 #include "generator/mupdfng.hpp"
 #include "generator/ui/window_menus.hpp"
+#include "shared/build_info.hpp"
 #include "shared/model/theme_colors.hpp"
 
 #include <okular/core/fileprinter.h>
@@ -747,6 +748,10 @@ QString Main::generatorExtraDescription() const
 
     QString result = m_worker.usesSystemMuPdf() ? i18n("MuPDF: %1 (system library)", engineVersion)
                                                 : i18n("MuPDF: %1 (bundled, patched)", engineVersion);
+    if (!Mu::GIT_BUILD.empty()) {
+        const QString gitBuild = QString::fromUtf8(Mu::GIT_BUILD.data(), static_cast<qsizetype>(Mu::GIT_BUILD.size()));
+        result.prepend(i18n("[git build: %1]", gitBuild) + QLatin1Char('\n'));
+    }
 
     const Model::SandboxStatus status = m_worker.sandboxStatus();
     if (status.isFullyHardened()) {

@@ -4,6 +4,8 @@
 #ifndef MU_TOOLS_CLI_ARGS_HPP
 #define MU_TOOLS_CLI_ARGS_HPP
 
+#include "shared/build_info.hpp"
+
 #include <QStringList>
 
 #include <optional>
@@ -90,8 +92,10 @@ struct Command {
 /// Formats the CLI and engine versions. The source label identifies runtime
 /// worker data; systemMuPdf adds its library origin when known. Omit it for
 /// the build-time fallback, whose worker origin has not been verified.
-[[nodiscard]] QString
-versionText(const QString& mupdfVersion, const QString& source, std::optional<bool> systemMuPdf = std::nullopt);
+[[nodiscard]] QString versionText(const QString& mupdfVersion,
+                                  const QString& source,
+                                  std::optional<bool> systemMuPdf = std::nullopt,
+                                  std::string_view gitBuild = ::Mu::GIT_BUILD);
 
 /// Parses "0,2,5" and "1-3,5" page selections. Empty means all pages.
 [[nodiscard]] bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error);

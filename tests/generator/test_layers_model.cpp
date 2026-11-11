@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/ui/layers_model.hpp"
+#include "shared/build_info.hpp"
 #include "support/synopsis.hpp"
 
 #include <KConfigGroup>
@@ -147,9 +148,11 @@ private slots:
         const QString path = QStringLiteral(TEST_LAYER_PDF);
         QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
                  Okular::Document::OpenSuccess);
-        QVERIFY(document.metaData(QStringLiteral("GeneratorExtraDescription"), { })
-                    .toString()
-                    .contains(QStringLiteral("MuPDF")));
+        const QString description = document.metaData(QStringLiteral("GeneratorExtraDescription"), { }).toString();
+        QVERIFY(description.contains(QStringLiteral("MuPDF")));
+        if (!Mu::GIT_BUILD.empty())
+            QVERIFY(description.contains(
+                QString::fromUtf8(Mu::GIT_BUILD.data(), static_cast<qsizetype>(Mu::GIT_BUILD.size()))));
         QVERIFY(document.layersModel());
         QSignalSpy finished(&document, &Okular::Document::searchFinished);
         document.searchText(

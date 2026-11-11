@@ -2,6 +2,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Test Xml)
+find_package(Git QUIET)
+if(GIT_FOUND)
+    add_test(NAME test_build_info
+        COMMAND ${CMAKE_COMMAND}
+            "-DPROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/git-build-info-test"
+            "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_build_info.cmake")
+    set_tests_properties(test_build_info PROPERTIES LABELS "tools" TIMEOUT 30)
+endif()
 add_test(NAME test_worker_kindle_conversion
     COMMAND "${CARGO_EXECUTABLE}" test --locked --release
         --manifest-path "${PROJECT_SOURCE_DIR}/src/worker/engine/kindle/Cargo.toml"

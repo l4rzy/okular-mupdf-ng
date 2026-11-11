@@ -277,7 +277,25 @@ private slots:
         const std::optional<bool> origin = systemMuPdf < 0 ? std::nullopt : std::optional<bool>(systemMuPdf != 0);
         const QString expected =
             QStringLiteral("mupdfng-cli %1\n%2\n").arg(QString::fromUtf8(::Mu::IPC::COMPAT.data()), engineLine);
-        QCOMPARE(Cli::versionText(QStringLiteral("1.2.3"), source, origin), expected);
+        QCOMPARE(Cli::versionText(QStringLiteral("1.2.3"), source, origin, { }), expected);
+    }
+
+    void versionGitBuild_data()
+    {
+        QTest::addColumn<std::string>("gitBuild");
+        QTest::addColumn<QString>("suffix");
+        QTest::newRow("release-or-archive") << std::string() << QString();
+        QTest::newRow("git") << std::string("0a52671") << QStringLiteral(" [git build 0a52671]");
+        QTest::newRow("dirty") << std::string("0a52671 - dirty") << QStringLiteral(" [git build 0a52671 - dirty]");
+    }
+
+    void versionGitBuild()
+    {
+        QFETCH(std::string, gitBuild);
+        QFETCH(QString, suffix);
+        const QString expected = QStringLiteral("mupdfng-cli %1%2\nWorker: MuPDF 1.2.3 (bundled, patched)\n")
+                                     .arg(QString::fromUtf8(::Mu::IPC::COMPAT.data()), suffix);
+        QCOMPARE(Cli::versionText(QStringLiteral("1.2.3"), QStringLiteral("Worker"), false, gitBuild), expected);
     }
 
     void parsesPageLists()

@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#ifndef MU_SHARED_BUILD_INFO_HPP
+#define MU_SHARED_BUILD_INFO_HPP
+
+#include <string_view>
+
+namespace Mu {
+
+// Empty for clean tagged releases and source archives without Git metadata.
+inline constexpr std::string_view GIT_BUILD = "@MU_GIT_BUILD@";
+
+} // namespace Mu
+
+#endif // MU_SHARED_BUILD_INFO_HPP
