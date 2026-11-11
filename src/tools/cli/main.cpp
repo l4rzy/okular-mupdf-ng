@@ -282,6 +282,9 @@ int runExportDocument(Mu::Plugin::WorkerClient& client, const ExportOptions& opt
     case ExportFormat::Azw3:
         exportOptions = { "azw3", ::Mu::Model::ExportProfileId::Converted };
         break;
+    case ExportFormat::Markdown:
+        exportOptions = { "md", ::Mu::Model::ExportProfileId::Converted };
+        break;
     default:
         return ExitJobFailed;
     }

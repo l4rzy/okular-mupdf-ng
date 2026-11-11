@@ -166,7 +166,7 @@ bool EpubDocument::writeExport(Sys::FileDescriptor output,
                                const ExportProgressCallback& progress)
 {
     if (options.profileId == Model::ExportProfileId::Converted)
-        return writeAzw3(std::move(output), error);
+        return writeConvertedBook(std::move(output), options.formatId, error);
     return writePdf(
         std::move(output), options.pages, options.profileId != Model::ExportProfileId::Print, error, progress);
 }

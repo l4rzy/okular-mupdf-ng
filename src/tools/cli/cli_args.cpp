@@ -70,8 +70,9 @@ QCommandLineParser& setupExportParser(QCommandLineParser& parser)
     parser.setApplicationDescription(
         "Export a document through the MuPDF worker.\n"
         "The format is inferred from the output suffix: .pdf exports an ePUB or legacy MOBI document "
-        "to PDF (or flattens a PDF with --flatten), .epub converts Kindle to ePUB, .azw3 converts ePUB to Kindle, and "
-        ".xfdf/.xml exports a PDF document's annotations as XFDF.\n"
+        "to PDF (or flattens a PDF with --flatten), .epub converts Kindle to ePUB, .azw3 converts ePUB to Kindle, "
+        ".md/.markdown converts ePUB or Kindle to Markdown, and .xfdf/.xml exports a PDF document's annotations as "
+        "XFDF.\n"
         "XFDF export does not support PDF documents containing rotated pages.");
     parser.addHelpOption();
     parser.addOption({ { "o", "output" }, "Output file; alternative to the OUTPUT positional.", "file" });
@@ -197,9 +198,10 @@ Command parseExport(const QStringList& args)
         return command;
     options.useLayout = parser.isSet("use-layout");
     options.flatten = parser.isSet("flatten");
-    if ((options.format == ExportFormat::Epub || options.format == ExportFormat::Azw3)
+    if ((options.format == ExportFormat::Epub || options.format == ExportFormat::Azw3
+         || options.format == ExportFormat::Markdown)
         && (parser.isSet("pages") || options.useLayout || options.flatten)) {
-        command.error = "ePUB and AZW3 export do not support --pages, --use-layout, or --flatten";
+        command.error = "ePUB, AZW3, and Markdown export do not support --pages, --use-layout, or --flatten";
         return command;
     }
     if (options.flatten && (options.format != ExportFormat::Pdf || options.useLayout)) {
@@ -297,6 +299,8 @@ ExportFormat exportFormatForSuffix(const std::string& path)
         return ExportFormat::Epub;
     if (suffix == "azw3")
         return ExportFormat::Azw3;
+    if (suffix == "md" || suffix == "markdown")
+        return ExportFormat::Markdown;
     if (suffix == "xfdf" || suffix == "xml")
         return ExportFormat::Xfdf;
     return ExportFormat::Unknown;

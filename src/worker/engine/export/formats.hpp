@@ -83,6 +83,13 @@ inline std::vector<OutputFormatInfo> outputFormatsFor(DocumentType type)
     default:
         break;
     }
+    if (type == DocumentType::Epub || type == DocumentType::Kindle) {
+        formats.push_back(
+            { .id = "md",
+              .mimeType = "text/markdown",
+              .extensions = { "md", "markdown" },
+              .profiles = { { .id = ExportProfileId::Converted, .content = ExportContent::OriginalSource } } });
+    }
     return formats;
 }
 

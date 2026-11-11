@@ -46,15 +46,20 @@ impl Seek for LimitedFile {
 // The caller retains ownership of both descriptors.
 #[unsafe(no_mangle)]
 pub extern "C" fn mupdfng_kindle_convert(input: i32, output: i32) -> i32 {
-    convert(input, output, false)
+    convert(input, output, Format::Azw3, Format::Epub)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mupdfng_epub_convert(input: i32, output: i32) -> i32 {
-    convert(input, output, true)
+    convert(input, output, Format::Epub, Format::Azw3)
 }
 
-fn convert(input: i32, output: i32, to_azw3: bool) -> i32 {
+#[unsafe(no_mangle)]
+pub extern "C" fn mupdfng_epub_markdown(input: i32, output: i32) -> i32 {
+    convert(input, output, Format::Epub, Format::Markdown)
+}
+
+fn convert(input: i32, output: i32, from: Format, to: Format) -> i32 {
     if input < 0 || output < 0 {
         return -1;
     }
@@ -69,19 +74,14 @@ fn convert(input: i32, output: i32, to_azw3: bool) -> i32 {
         }
         let mut bytes = vec![0; size as usize];
         input.read_exact_at(&mut bytes, 0)?;
-        let format = if to_azw3 {
-            Format::Epub
-        } else if bytes.starts_with(b"CONT") {
+        let format = if from == Format::Azw3 && bytes.starts_with(b"CONT") {
             Format::Kfx
         } else {
-            Format::Azw3
+            from
         };
         let book = Book::from_bytes(&bytes, format)?;
         let mut output = LimitedFile(File::from(output));
-        book.export(
-            if to_azw3 { Format::Azw3 } else { Format::Epub },
-            &mut output,
-        )?;
+        book.export(to, &mut output)?;
         Ok(())
     });
     if matches!(result, Ok(Ok(()))) { 0 } else { -1 }

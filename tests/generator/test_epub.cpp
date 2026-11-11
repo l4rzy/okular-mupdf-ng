@@ -525,6 +525,37 @@ private slots:
         QCOMPARE(bytes.mid(60, 8), QByteArray("BOOKMOBI"));
     }
 
+    void exportsMarkdown_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_DIR "/sample.epub");
+        QTest::newRow("azw3") << QStringLiteral(TEST_MOBI_DIR "/sample.azw3");
+        QTest::newRow("kfx") << QStringLiteral(TEST_MOBI_DIR "/sample.kfx");
+    }
+
+    void exportsMarkdown()
+    {
+        QFETCH(QString, path);
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        const auto formats = document.exportFormats();
+        const auto it = std::find_if(formats.begin(), formats.end(), [](const auto& format) {
+            return format.mimeType().name() == QStringLiteral("text/markdown");
+        });
+        QVERIFY(it != formats.end());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto output = directory.filePath(QStringLiteral("export.md"));
+        QVERIFY(document.exportTo(output, *it));
+        QFile result(output);
+        QVERIFY(result.open(QIODevice::ReadOnly));
+        const auto markdown = result.readAll();
+        QVERIFY2(markdown.contains("Hello"), markdown.constData());
+        QVERIFY2(markdown.contains("# "), markdown.constData());
+        QVERIFY(!markdown.contains("<html"));
+    }
+
     void coversExportDispatchAndFailures()
     {
         const auto path = QStringLiteral(TEST_EPUB_DIR "/sample.epub");

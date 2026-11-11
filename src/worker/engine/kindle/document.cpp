@@ -47,7 +47,7 @@ bool KindleDocument::writeExport(Sys::FileDescriptor output,
                                  std::string* error,
                                  const ExportProgressCallback& progress)
 {
-    if (options.profileId != Model::ExportProfileId::Converted)
+    if (options.profileId != Model::ExportProfileId::Converted || options.formatId != "epub")
         return EpubDocument::writeExport(std::move(output), options, error, progress);
     if (!m_epub)
         return fail(error, "Kindle document is not open");

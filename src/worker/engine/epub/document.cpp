@@ -20,6 +20,7 @@
 #include "sys/sys.hpp"
 
 extern "C" int mupdfng_epub_convert(int input, int output);
+extern "C" int mupdfng_epub_markdown(int input, int output);
 
 namespace Mu::Worker::Engine {
 
@@ -188,12 +189,15 @@ bool EpubDocument::openFd(int fd, std::string displayName, std::string* error)
     return openFdWithAccelerator(fd, std::move(displayName), { }, error);
 }
 
-bool EpubDocument::writeAzw3(Sys::FileDescriptor output, std::string* error) const
+bool EpubDocument::writeConvertedBook(Sys::FileDescriptor output, std::string_view format, std::string* error) const
 {
     if (!m_input)
         return fail(error, "EPUB document is not open");
-    if (mupdfng_epub_convert(::fileno(m_input), output.get()) != 0)
-        return fail(error, "could not convert EPUB to AZW3");
+    if (format != "azw3" && format != "md")
+        return fail(error, "unsupported book conversion format");
+    const auto convert = format == "md" ? mupdfng_epub_markdown : mupdfng_epub_convert;
+    if (convert(::fileno(m_input), output.get()) != 0)
+        return fail(error, format == "md" ? "could not convert EPUB to Markdown" : "could not convert EPUB to AZW3");
     return true;
 }
 

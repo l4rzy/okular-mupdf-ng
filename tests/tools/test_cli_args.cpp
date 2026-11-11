@@ -71,6 +71,27 @@ private slots:
         QCOMPARE(command.exportOptions.pages, std::vector<int>({ 0, 2, 5 }));
     }
 
+    void markdownExportOptions_data()
+    {
+        QTest::addColumn<QString>("suffix");
+        QTest::newRow("short") << QStringLiteral("md");
+        QTest::newRow("long") << QStringLiteral("markdown");
+        QTest::newRow("upper-case") << QStringLiteral("MD");
+    }
+
+    void markdownExportOptions()
+    {
+        QFETCH(QString, suffix);
+        const QString output = QStringLiteral("out.") + suffix;
+        const auto command = Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", output });
+        QVERIFY(command.error.empty());
+        QCOMPARE(command.exportOptions.format, Cli::ExportFormat::Markdown);
+        for (const auto* option : { "--use-layout", "--flatten" }) {
+            QVERIFY(!Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", output, option }).error.empty());
+        }
+        QVERIFY(!Cli::parseArgs({ "mupdfng-cli", "export", "book.epub", output, "--pages", "0" }).error.empty());
+    }
+
     void exportInfersFormatFromSuffix()
     {
         const Cli::Command epub = Cli::parseArgs({ "mupdfng-cli", "export", "book.azw3", "out.EPUB" });

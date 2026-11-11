@@ -346,6 +346,16 @@ private slots:
                                    << ::Mu::Model::ExportProfileId::Converted << false << true;
         QTest::newRow("kindle-epub") << Model::DocumentType::Kindle << std::string("epub")
                                      << ::Mu::Model::ExportProfileId::Converted << false << true;
+        QTest::newRow("epub-markdown") << Model::DocumentType::Epub << std::string("md")
+                                       << Model::ExportProfileId::Converted << false << true;
+        QTest::newRow("kindle-markdown") << Model::DocumentType::Kindle << std::string("md")
+                                         << Model::ExportProfileId::Converted << false << true;
+        QTest::newRow("markdown-not-asynchronous")
+            << Model::DocumentType::Epub << std::string("md") << Model::ExportProfileId::Converted << true << false;
+        QTest::newRow("pdf-no-markdown") << Model::DocumentType::Pdf << std::string("md")
+                                         << Model::ExportProfileId::Converted << false << false;
+        QTest::newRow("legacy-mobi-no-markdown")
+            << Model::DocumentType::Mobi << std::string("md") << Model::ExportProfileId::Converted << false << false;
         QTest::newRow("epub-background") << Model::DocumentType::Epub << std::string("pdf")
                                          << ::Mu::Model::ExportProfileId::SourceWithReferences << true << true;
         QTest::newRow("epub-wrong-mode") << Model::DocumentType::Epub << std::string("pdf")

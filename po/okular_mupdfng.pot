@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 16:27-0500\n"
+"POT-Creation-Date: 2026-11-10 23:14-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -779,7 +779,7 @@ msgstr ""
 msgid "Finalizing PDF…"
 msgstr ""
 
-#: src/generator/mupdfng.cpp:272
+#: src/generator/mupdfng.cpp:272 src/generator/export.cpp:46
 msgid "Export to PDF finished."
 msgstr ""
 
@@ -1260,23 +1260,59 @@ msgid ""
 "Placeholder"
 msgstr ""
 
-#: src/generator/export.cpp:89
+#: src/generator/export.cpp:42 rc.cpp:78
+msgid "PDF"
+msgstr ""
+
+#: src/generator/export.cpp:48
+msgid "Flattened PDF"
+msgstr ""
+
+#: src/generator/export.cpp:52
+msgid "Export to flattened PDF finished."
+msgstr ""
+
+#: src/generator/export.cpp:53
+msgid "ePUB"
+msgstr ""
+
+#: src/generator/export.cpp:57
+msgid "Export to ePUB finished."
+msgstr ""
+
+#: src/generator/export.cpp:58
+msgid "Kindle (AZW3)"
+msgstr ""
+
+#: src/generator/export.cpp:62
+msgid "Export to AZW3 finished."
+msgstr ""
+
+#: src/generator/export.cpp:63
+msgid "Markdown"
+msgstr ""
+
+#: src/generator/export.cpp:67
+msgid "Export to Markdown finished."
+msgstr ""
+
+#: src/generator/export.cpp:104
 msgid "Annotation File (XFDF)"
 msgstr ""
 
-#: src/generator/export.cpp:107
+#: src/generator/export.cpp:122
 msgid "Starting to export to PDF."
 msgstr ""
 
-#: src/generator/export.cpp:126
+#: src/generator/export.cpp:141
 msgid "XFDF export does not support rotated PDF pages."
 msgstr ""
 
-#: src/generator/export.cpp:127
+#: src/generator/export.cpp:142
 msgid "Could not check PDF page rotation for XFDF export."
 msgstr ""
 
-#: src/generator/export.cpp:138
+#: src/generator/export.cpp:153
 msgid "Export to XFDF finished."
 msgstr ""
 
@@ -1350,10 +1386,6 @@ msgstr ""
 
 #: rc.cpp:72
 msgid "Cache Management"
-msgstr ""
-
-#: rc.cpp:78
-msgid "PDF"
 msgstr ""
 
 #: rc.cpp:81

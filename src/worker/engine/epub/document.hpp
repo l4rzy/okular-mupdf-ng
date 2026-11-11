@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -113,7 +114,8 @@ protected:
                                    const ExportProgressCallback& progress) override;
 
 private:
-    [[nodiscard]] bool writeAzw3(Sys::FileDescriptor output, std::string* error) const;
+    [[nodiscard]] bool
+    writeConvertedBook(Sys::FileDescriptor output, std::string_view format, std::string* error) const;
 
     [[nodiscard]] bool writePdf(Sys::FileDescriptor output,
                                 const std::vector<int>& pages,

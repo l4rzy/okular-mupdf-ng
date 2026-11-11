@@ -61,6 +61,37 @@ private slots:
                  QStringLiteral("application/epub+zip"));
     }
 
+    void exportsMarkdown_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("suffix");
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_PATH) << QStringLiteral("md");
+        QTest::newRow("azw3") << QStringLiteral(TEST_MOBI_DIR "/sample.azw3") << QStringLiteral("markdown");
+        QTest::newRow("kfx") << QStringLiteral(TEST_MOBI_DIR "/sample.kfx") << QStringLiteral("md");
+    }
+
+    void exportsMarkdown()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, suffix);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto output = directory.filePath(QStringLiteral("export.") + suffix);
+        QProcess cli;
+        cli.start(
+            QStringLiteral(MUPDFNG_CLI_PATH),
+            { QStringLiteral("export"), path, output, QStringLiteral("--worker"), QStringLiteral(WORKER_BUILD_PATH) });
+        QVERIFY(cli.waitForFinished(60000));
+        QCOMPARE(cli.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(cli.exitCode() == 0, cli.readAllStandardError().constData());
+        QFile result(output);
+        QVERIFY(result.open(QIODevice::ReadOnly));
+        const auto markdown = result.readAll();
+        QVERIFY2(markdown.contains("Hello"), markdown.constData());
+        QVERIFY2(markdown.contains("# "), markdown.constData());
+        QVERIFY(!markdown.contains("<html"));
+    }
+
     void appliesLayout_data()
     {
         QTest::addColumn<bool>("useLayout");

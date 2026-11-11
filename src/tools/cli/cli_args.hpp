@@ -41,6 +41,7 @@ enum class ExportFormat {
     Pdf,
     Epub,
     Azw3,
+    Markdown,
     Xfdf,
     Unknown,
 };
@@ -96,7 +97,7 @@ versionText(const QString& mupdfVersion, const QString& source, std::optional<bo
 [[nodiscard]] bool parsePageList(const std::string& text, std::vector<int>& pages, std::string& error);
 
 /// Infers the export format from the output path suffix (.pdf, .xfdf/.xml;
-/// case-insensitive, plus .epub and .azw3). Anything else yields ExportFormat::Unknown.
+/// case-insensitive, plus .epub, .azw3, .md and .markdown). Anything else yields ExportFormat::Unknown.
 [[nodiscard]] ExportFormat exportFormatForSuffix(const std::string& path);
 
 } // namespace Mu::Tools::Cli

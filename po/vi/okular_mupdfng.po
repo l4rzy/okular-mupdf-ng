@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 16:27-0500\n"
-"PO-Revision-Date: 2026-11-10 16:27-0500\n"
+"POT-Creation-Date: 2026-11-10 23:14-0500\n"
+"PO-Revision-Date: 2026-11-10 23:15-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
 "Language: vi\n"
@@ -829,9 +829,9 @@ msgstr "Đang tạo trang PDF: %1 trên %2…"
 msgid "Finalizing PDF…"
 msgstr "Đang hoàn tất PDF…"
 
-#: src/generator/mupdfng.cpp:272
+#: src/generator/mupdfng.cpp:272 src/generator/export.cpp:46
 msgid "Export to PDF finished."
-msgstr "Đã xuất PDF xong."
+msgstr "Đã hoàn tất kết xuất PDF"
 
 #: src/generator/mupdfng.cpp:276
 msgid "Export to PDF failed: %1"
@@ -1335,25 +1335,61 @@ msgstr ""
 "Vị trí\n"
 "chữ ký"
 
-#: src/generator/export.cpp:89
+#: src/generator/export.cpp:42 rc.cpp:78
+msgid "PDF"
+msgstr "PDF"
+
+#: src/generator/export.cpp:48
+msgid "Flattened PDF"
+msgstr "PDF phẳng"
+
+#: src/generator/export.cpp:52
+msgid "Export to flattened PDF finished."
+msgstr "Đã hoàn tất kết xuất PDF làm phẳng"
+
+#: src/generator/export.cpp:53
+msgid "ePUB"
+msgstr "ePUB"
+
+#: src/generator/export.cpp:57
+msgid "Export to ePUB finished."
+msgstr "Đã hoàn tất kết xuất ePUB"
+
+#: src/generator/export.cpp:58
+msgid "Kindle (AZW3)"
+msgstr "Kindle (AZW3)"
+
+#: src/generator/export.cpp:62
+msgid "Export to AZW3 finished."
+msgstr "Đã hoàn tất kết xuất AZW3"
+
+#: src/generator/export.cpp:63
+msgid "Markdown"
+msgstr "Markdown"
+
+#: src/generator/export.cpp:67
+msgid "Export to Markdown finished."
+msgstr "Đã hoàn tất kết xuất Markdown"
+
+#: src/generator/export.cpp:104
 msgid "Annotation File (XFDF)"
 msgstr "Tệp chú thích (XFDF)"
 
-#: src/generator/export.cpp:107
+#: src/generator/export.cpp:122
 msgid "Starting to export to PDF."
 msgstr "Đang bắt đầu xuất PDF."
 
-#: src/generator/export.cpp:126
+#: src/generator/export.cpp:141
 msgid "XFDF export does not support rotated PDF pages."
 msgstr "Xuất XFDF không hỗ trợ các trang PDF được xoay."
 
-#: src/generator/export.cpp:127
+#: src/generator/export.cpp:142
 msgid "Could not check PDF page rotation for XFDF export."
 msgstr "Không thể kiểm tra góc xoay trang PDF để xuất XFDF."
 
-#: src/generator/export.cpp:138
+#: src/generator/export.cpp:153
 msgid "Export to XFDF finished."
-msgstr "Đã xuất XFDF xong."
+msgstr "Đã hoàn tất kết xuất XFDF"
 
 #: rc.cpp:3
 msgid "General"
@@ -1427,10 +1463,6 @@ msgstr "Bật hỗ trợ JavaScript"
 msgid "Cache Management"
 msgstr "Quản lý bộ nhớ đệm"
 
-#: rc.cpp:78
-msgid "PDF"
-msgstr "PDF"
-
 #: rc.cpp:81
 msgid "Optical Character Recognition"
 msgstr "Nhận dạng ký tự quang học (OCR)"
@@ -1502,21 +1534,3 @@ msgstr "Sách điện tử"
 #: rc.cpp:132
 msgid "Page Layout"
 msgstr "Bố cục trang"
-
-#~ msgid "ePUB"
-#~ msgstr "ePUB"
-
-#~ msgid "Kindle (AZW3)"
-#~ msgstr "Kindle (AZW3)"
-
-#~ msgid "Flattened PDF"
-#~ msgstr "PDF đã làm phẳng"
-
-#~ msgid "Export to AZW3 finished."
-#~ msgstr "Đã xuất AZW3 xong."
-
-#~ msgid "Export to ePUB finished."
-#~ msgstr "Đã xuất ePUB xong."
-
-#~ msgid "Export to flattened PDF finished."
-#~ msgstr "Đã xuất PDF làm phẳng xong."

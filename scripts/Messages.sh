@@ -59,6 +59,7 @@ else
     xgettext \
         --from-code=UTF-8 \
         --keyword=i18n \
+        --keyword=ki18n \
         --keyword='i18nc:1c,2' \
         --keyword='i18np:1,2' \
         --keyword='i18ncp:1c,2' \

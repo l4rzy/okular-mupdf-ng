@@ -21,7 +21,10 @@ constexpr int NoticeMs = 3000;
 QIcon exportIcon(const QMimeType& mime)
 {
     const QIcon fallback = QIcon::fromTheme(mime.genericIconName(), QIcon::fromTheme(QStringLiteral("text-x-generic")));
-    return QIcon::fromTheme(mime.iconName(), fallback);
+    const QString iconName = mime.inherits(QStringLiteral("application/vnd.amazon.mobi8-ebook"))
+        ? QStringLiteral("application-x-mobi8-ebook")
+        : mime.iconName();
+    return QIcon::fromTheme(iconName, fallback);
 }
 
 struct ExportAction {
@@ -57,6 +60,11 @@ const ExportAction WorkerExports[] {
       "azw3",
       Model::ExportProfileId::Converted,
       ki18n("Export to AZW3 finished.") },
+    { ki18n("Markdown"),
+      "text/markdown",
+      "md",
+      Model::ExportProfileId::Converted,
+      ki18n("Export to Markdown finished.") },
 };
 
 bool supportsExport(const std::vector<Model::OutputFormatInfo>& formats, const ExportAction& action)
