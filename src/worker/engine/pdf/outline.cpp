@@ -122,13 +122,15 @@ std::vector<OutlineNode> PdfDocument::generateOutline(std::string* error) const
             fz_drop_stext_page(m_context, value);
         };
         const std::unique_ptr<fz_stext_page, decltype(dropText)> owner(text, dropText);
-        for (auto* block = text->first_block; block; block = block->next) {
+        int blockIndex = 0;
+        for (auto* block = text->first_block; block; block = block->next, ++blockIndex) {
             if (block->type != FZ_STEXT_BLOCK_TEXT)
                 continue;
             for (auto* line = block->u.t.first_line; line; line = line->next) {
                 if (!line->first_char || line->wmode != 0)
                     continue;
                 OutlineLine record;
+                record.block = blockIndex;
                 // Text records retain the dominant glyph style, rather than
                 // the maximum size or an all-characters-bold requirement.
                 using Style = std::tuple<std::string, int, bool>;

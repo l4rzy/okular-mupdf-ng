@@ -6,9 +6,12 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <set>
+#include <span>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -57,6 +60,7 @@ constexpr int ContentsSearchPageLimit = 64;
 constexpr double FontSizeBucketsPerPoint = 2;
 constexpr double MaxBodyBoldFraction = 0.5;
 constexpr std::size_t MinBodySampleBytes = 25;
+constexpr std::size_t MinProseSpanBytes = 80;
 constexpr std::size_t MinRepeatedMarginPages = 3;
 constexpr double MinHeadingSizeRatio = 1.22;
 constexpr double MinHeadingBoldFraction = 0.7;
@@ -64,7 +68,8 @@ constexpr double MinBoldHeadingSizeRatio = 1.05;
 constexpr double MinChapterSizeRatio = 1.8;
 constexpr double MaxChapterTitleTopGapEm = 1.5;
 constexpr double MaxFontSizePoints = 1000;
-constexpr int MaxOutlineLevel = 7;
+// Levels are zero-based: seven visible levels, including the root.
+constexpr int MaxOutlineLevel = 6;
 
 // Evidence required before printed contents can override typography.
 constexpr std::size_t MinMatchedContentsTitles = 3;
@@ -109,8 +114,9 @@ std::optional<HeadingNumber> parseHeading(std::string_view text)
         text.remove_suffix(1);
     if (text.empty() || text.size() > MaxGeneratedHeadingBytes)
         return std::nullopt;
+    if (text.front() < '0' || text.front() > '9')
+        return std::nullopt;
     HeadingNumber result;
-    result.title = text;
     while (!text.empty()) {
         unsigned number = 0;
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), number);
@@ -247,8 +253,36 @@ bool hasMatchingStyle(const OutlineLine& a, const OutlineLine& b)
         && std::abs(a.boldFraction - b.boldFraction) < BoldFractionTolerance;
 }
 
+bool endsSentence(std::string_view text)
+{
+    const auto last = text.find_last_not_of(" \t\r\n");
+    return last != std::string_view::npos && text[last] == '.';
+}
+
+bool isUppercaseTitle(std::string_view text)
+{
+    bool hasUppercase = false;
+    while (!text.empty()) {
+        int codepoint = 0;
+        const int length = fz_chartorunen(&codepoint, text.data(), text.size());
+        const auto category = ucdn_get_general_category(static_cast<std::uint32_t>(codepoint));
+        if (category == UCDN_GENERAL_CATEGORY_LL || category == UCDN_GENERAL_CATEGORY_LT)
+            return false;
+        hasUppercase = hasUppercase || category == UCDN_GENERAL_CATEGORY_LU;
+        text.remove_prefix(static_cast<std::size_t>(length));
+    }
+    return hasUppercase;
+}
+
 bool canJoinLines(const OutlineLine& a, const OutlineLine& b)
 {
+    // PDFs often draw the section number and title as separate native lines
+    // on one baseline. Recover the prefix before classifying its hierarchy.
+    if (a.page == b.page && hasMatchingStyle(a, b) && !hasTitleLetters(a.text)
+        && parseHeading(trimText(a.text) + " Title") && hasTitleLetters(b.text)
+        && std::abs((a.top + a.bottom) - (b.top + b.bottom)) <= a.size * 0.7 && b.left >= a.right
+        && b.left - a.right <= a.size * 2)
+        return true;
     if (a.page != b.page || !hasMatchingStyle(a, b) || b.top < a.bottom - a.size * MaxLineOverlapEm
         || b.top - a.bottom > a.size * MaxLineGapEm)
         return false;
@@ -256,14 +290,6 @@ bool canJoinLines(const OutlineLine& a, const OutlineLine& b)
     return std::abs(a.left - b.left) < LeftAlignmentTolerancePoints
         || std::abs(a.right - b.right) < a.size * RightAlignmentToleranceEm
         || std::abs((a.left + a.right) - (b.left + b.right)) < DoubledCenterAlignmentTolerancePoints;
-}
-
-void appendLine(OutlineLine& target, const OutlineLine& next)
-{
-    target.text += " " + trimText(next.text);
-    target.left = std::min(target.left, next.left);
-    target.right = std::max(target.right, next.right);
-    target.bottom = next.bottom;
 }
 
 struct ContentsEntry {
@@ -460,54 +486,196 @@ BodyStyle estimateBodyStyle(const std::vector<OutlineLine>& lines, const std::se
     return body;
 }
 
+struct HeadingSpan {
+    OutlineLine line;
+    bool chapter = false;
+    bool multiline = false;
+    bool tooLong = false;
+};
+
+// Search in reading order, but only borrow context from the same column/block.
+// The bound prevents quadratic work on dense pages.
+const OutlineLine* findLineNeighbor(std::span<const HeadingSpan> spans, std::size_t position, bool above)
+{
+    constexpr std::size_t MaxNeighborSearch = 64;
+    const auto& line = spans[position].line;
+    for (std::size_t distance = 1; distance <= MaxNeighborSearch; ++distance) {
+        if ((above && distance > position) || (!above && distance >= spans.size() - position))
+            break;
+        const auto& other = spans[above ? position - distance : position + distance].line;
+        if (other.page != line.page)
+            break;
+        if ((above && other.top >= line.top) || (!above && other.top <= line.top))
+            continue;
+        const double overlap = std::min(line.right, other.right) - std::max(line.left, other.left);
+        const double width = std::min(line.right - line.left, other.right - other.left);
+        const bool sameBlock = line.block >= 0 && line.block == other.block;
+        if (sameBlock || (width > 0 && overlap >= width * 0.5))
+            return &other;
+    }
+    return nullptr;
+}
+
+std::vector<HeadingSpan> collectHeadingSpans(const std::vector<OutlineLine>& lines,
+                                             const BodyStyle& body,
+                                             const std::unordered_set<std::string>& repeatedMargins)
+{
+    constexpr std::size_t MaxContinuationSearch = 64;
+    std::vector<HeadingSpan> spans;
+    std::vector<bool> consumed(lines.size());
+    const auto isRepeatedMargin = [&](const OutlineLine& line) {
+        return isMarginLine(line) && repeatedMargins.contains(stripEdgeNumbers(line.text));
+    };
+    for (std::size_t first = 0; first < lines.size(); ++first) {
+        if (consumed[first])
+            continue;
+        HeadingSpan span { lines[first] };
+        span.line.text = trimText(span.line.text);
+        span.tooLong = span.line.text.size() > MaxGeneratedHeadingBytes;
+        span.line.text.resize(std::min(span.line.text.size(), MaxGeneratedHeadingBytes + 1));
+        std::size_t last = first;
+        while (true) {
+            std::size_t continuation = lines.size();
+            bool chapter = false;
+            const auto& previous = lines[last];
+            if (isCaption(previous.text) || isContentsLabel(previous.text) || isRepeatedMargin(previous))
+                break;
+            for (std::size_t next = last + 1; next < lines.size() && next - last <= MaxContinuationSearch; ++next) {
+                const auto& line = lines[next];
+                if (line.page != span.line.page)
+                    break;
+                if (consumed[next])
+                    continue;
+                const double gap = line.top - previous.bottom;
+                chapter = last == first && parsePageNumber(span.line.text)
+                    && span.line.size >= body.fontSize * MinChapterSizeRatio
+                    && line.size >= body.fontSize * MinChapterSizeRatio && hasTitleLetters(line.text)
+                    && span.line.fontFamily == line.fontFamily && gap >= -span.line.size * MaxLineOverlapEm
+                    && gap < span.line.size * MaxChapterTitleTopGapEm
+                    && (std::abs(span.line.right - line.right) < span.line.size
+                        || std::abs(span.line.left - line.left) < span.line.size);
+                if (!chapter && gap > previous.size * MaxLineGapEm)
+                    break;
+                // A new numbered entry always starts a new span. Keep code,
+                // captions, and page furniture out of neighboring title spans.
+                const bool boundary = parseHeading(line.text) || line.monospaced != span.line.monospaced
+                    || isCaption(line.text) || isContentsLabel(line.text) || isRepeatedMargin(line)
+                    || (previous.block >= 0 && line.block >= 0 && previous.block != line.block
+                        && endsSentence(previous.text));
+                if (!boundary && (chapter || canJoinLines(previous, line))) {
+                    continuation = next;
+                    break;
+                }
+                // Other columns may interleave in top/left order. Never skip
+                // intervening text in this column to find a convenient match.
+                const double overlap = std::min(previous.right, line.right) - std::max(previous.left, line.left);
+                const double width = std::min(previous.right - previous.left, line.right - line.left);
+                if (width > 0 && overlap >= width * 0.5)
+                    break;
+            }
+            if (continuation == lines.size())
+                break;
+            const auto& next = lines[continuation];
+            consumed[continuation] = true;
+            span.multiline = span.multiline || next.top > previous.top + previous.size * 0.5;
+            if (chapter) {
+                span.chapter = true;
+                span.line.size = next.size;
+                span.line.boldFraction = next.boldFraction;
+            }
+            // Continue consuming an overlong paragraph without retaining its
+            // text or reconsidering its short tail as an independent heading.
+            const auto title = trimText(next.text);
+            span.tooLong = span.tooLong || span.line.text.size() + 1 + title.size() > MaxGeneratedHeadingBytes;
+            if (!span.tooLong)
+                span.line.text += " " + title;
+            span.line.left = std::min(span.line.left, next.left);
+            span.line.right = std::max(span.line.right, next.right);
+            span.line.bottom = std::max(span.line.bottom, next.bottom);
+            last = continuation;
+        }
+        spans.push_back(std::move(span));
+    }
+    return spans;
+}
+
 std::vector<Candidate> findHeadingCandidates(const std::vector<OutlineLine>& lines,
                                              const std::set<int>& contentsPages,
                                              const BodyStyle& body,
                                              const std::unordered_set<std::string>& repeatedMargins)
 {
-    const auto isHeading = [&](const OutlineLine& line) {
-        if (contentsPages.contains(line.page) || line.monospaced || line.text.empty() || isCaption(line.text)
-            || isContentsLabel(line.text))
-            return false;
-        if (isMarginLine(line) && repeatedMargins.contains(stripEdgeNumbers(line.text)))
-            return false;
+    const auto spans = collectHeadingSpans(lines, body, repeatedMargins);
+    const auto isExcluded = [&](const HeadingSpan& span) {
+        const auto& line = span.line;
+        return span.tooLong || contentsPages.contains(line.page) || line.monospaced || line.text.empty()
+            || isCaption(line.text) || isContentsLabel(line.text)
+            || (isMarginLine(line) && repeatedMargins.contains(stripEdgeNumbers(line.text)));
+    };
+    const auto isProminent = [&](const OutlineLine& line) {
         return line.size >= body.fontSize * MinHeadingSizeRatio
             || (line.boldFraction >= MinHeadingBoldFraction && line.size >= body.fontSize
                 && (line.fontFamily != body.fontFamily || line.size >= body.fontSize * MinBoldHeadingSizeRatio));
     };
+    // A body-sized style needs document-level structural support as well as
+    // local whitespace. Learn it from numbered children of prominent headings,
+    // rather than promoting every isolated bold table label or instruction.
+    std::set<std::vector<unsigned>> numberedParents;
+    for (const auto& span : spans) {
+        const auto& line = span.line;
+        if (!isExcluded(span) && isProminent(line) && !isMarginLine(line)) {
+            if (const auto number = parseHeading(line.text))
+                numberedParents.insert(number->components);
+        }
+    }
+    const auto styleKey = [](const OutlineLine& line) {
+        return std::tuple(line.fontFamily,
+                          static_cast<int>(std::round(line.size * FontSizeBucketsPerPoint)),
+                          line.boldFraction >= MinHeadingBoldFraction);
+    };
+    std::set<std::tuple<std::string, int, bool>> supportedStyles;
+    for (const auto& span : spans) {
+        const auto& line = span.line;
+        if (isExcluded(span))
+            continue;
+        auto number = parseHeading(line.text);
+        if (!number || number->components.size() < 2)
+            continue;
+        number->components.pop_back();
+        if (numberedParents.contains(number->components))
+            supportedStyles.insert(styleKey(line));
+    }
+    const auto isHeading = [&](std::size_t index) {
+        const auto& line = spans[index].line;
+        if (isExcluded(spans[index]))
+            return false;
+        if (isProminent(line))
+            return true;
+        const bool supportedStyle = supportedStyles.contains(styleKey(line));
+        if (!supportedStyle)
+            return false;
+        const auto* previous = findLineNeighbor(spans, index, true);
+        const auto* next = findLineNeighbor(spans, index, false);
+        // Body-sized bold headings need a layout transition into ordinary prose.
+        // Neither bold emphasis within a paragraph nor numbering alone suffices.
+        const bool separatedAbove = !previous || line.top - previous->bottom >= line.size * 0.65;
+        const bool introducesProse = next && next->boldFraction < MaxBodyBoldFraction
+            && next->size <= line.size * MinBoldHeadingSizeRatio && !next->monospaced
+            && next->text.size() >= MinBodySampleBytes && next->fontFamily == body.fontFamily
+            && std::abs(line.left - next->left) < LeftAlignmentTolerancePoints && next->right >= line.right
+            && next->top - line.bottom >= 0 && next->top - line.bottom <= line.size * 1.5;
+        const bool separateBlock = line.block >= 0 && next && next->block >= 0 && line.block != next->block
+            && (!previous || previous->block != line.block);
+        return line.size >= body.fontSize * MinMatchingFontSizeRatio && line.boldFraction >= MinHeadingBoldFraction
+            && separatedAbove && introducesProse && separateBlock && !endsSentence(line.text);
+    };
     std::vector<Candidate> result;
-    for (std::size_t i = 0; i < lines.size(); ++i) {
-        if (!isHeading(lines[i]))
+    for (std::size_t i = 0; i < spans.size(); ++i) {
+        const auto& span = spans[i];
+        if (!isHeading(i) || !hasTitleLetters(span.line.text))
             continue;
-        OutlineLine heading = lines[i];
-        heading.text = trimText(heading.text);
-        bool chapter = false;
-        // A display chapter number and its title can use different sizes and
-        // separate blocks. Normal page numbers are too small to qualify.
-        if (parsePageNumber(heading.text) && heading.size >= body.fontSize * MinChapterSizeRatio
-            && i + 1 < lines.size()) {
-            const auto& next = lines[i + 1];
-            if (isHeading(next) && !parsePageNumber(next.text) && heading.page == next.page
-                && heading.fontFamily == next.fontFamily && next.size >= body.fontSize * MinChapterSizeRatio
-                && next.top >= heading.bottom - heading.size * MaxLineOverlapEm
-                && next.top - heading.bottom < heading.size * MaxChapterTitleTopGapEm
-                && (std::abs(heading.right - next.right) < heading.size
-                    || std::abs(heading.left - next.left) < heading.size)) {
-                heading.size = next.size;
-                appendLine(heading, next);
-                chapter = true;
-                ++i;
-            }
-        }
-        while (i + 1 < lines.size() && isHeading(lines[i + 1]) && canJoinLines(heading, lines[i + 1])) {
-            appendLine(heading, lines[++i]);
-        }
-        // Require letters after joining so table values are rejected while a
-        // standalone chapter number can still acquire its title.
-        if (heading.text.size() > MaxGeneratedHeadingBytes || normalizeTitle(heading.text).empty()
-            || !hasTitleLetters(heading.text))
+        if (span.multiline && span.line.text.size() > MinProseSpanBytes && endsSentence(span.line.text))
             continue;
-        result.push_back({ std::move(heading), chapter, 0 });
+        result.push_back({ span.line, span.chapter, 0 });
         if (result.size() > MaxGeneratedOutlineNodes)
             throw std::length_error("generated outline node limit exceeded");
     }
@@ -604,10 +772,11 @@ matchContentsHeadings(const std::vector<Candidate>& candidates, const ContentsBy
         if (found == contentsByTitle.end())
             continue;
         const ContentsEntry* match = nullptr;
-        int distance = MaxContentsPageDistance + 1;
+        std::int64_t distance = MaxContentsPageDistance + 1;
         for (const auto* entry : found->second) {
-            const int current = entry->printedPage ? std::abs(candidate.line.page - (*entry->printedPage + pageOffset))
-                                                   : UnspecifiedContentsPageDistance;
+            const auto current = entry->printedPage
+                ? std::abs(static_cast<std::int64_t>(candidate.line.page) - *entry->printedPage - pageOffset)
+                : UnspecifiedContentsPageDistance;
             if (current < distance) {
                 distance = current;
                 match = entry;
@@ -630,34 +799,80 @@ matchContentsHeadings(const std::vector<Candidate>& candidates, const ContentsBy
 
 void assignTypographyLevels(std::vector<Candidate>& candidates)
 {
-    std::vector<double> ordinarySizes;
-    bool hasSections = false;
-    bool hasChapters = false;
+    std::vector<double> headingSizes;
+    for (const auto& candidate : candidates)
+        headingSizes.push_back(candidate.line.size);
+    const auto sizes = collectSizes(std::move(headingSizes));
+    using Style = std::tuple<int, bool, bool>;
+    const auto styleOf = [&](const Candidate& candidate) {
+        return Style(rankSize(candidate.line.size, sizes),
+                     candidate.line.boldFraction < MinHeadingBoldFraction,
+                     !isUppercaseTitle(candidate.line.text));
+    };
+    // Only the first page and evidence of a different page are needed to
+    // distinguish recurrent heading styles from isolated display typography.
+    std::map<Style, int> firstPages;
+    std::optional<Style> rootStyle;
     for (const auto& candidate : candidates) {
-        hasSections = hasSections || isSectionTitle(candidate.line.text);
-        hasChapters = hasChapters || candidate.chapter;
-        if (!candidate.chapter && !isSectionTitle(candidate.line.text))
-            ordinarySizes.push_back(candidate.line.size);
+        const auto style = styleOf(candidate);
+        const auto [first, inserted] = firstPages.emplace(style, candidate.line.page);
+        if (!inserted && first->second != candidate.line.page && (!rootStyle || style < *rootStyle))
+            rootStyle = style;
     }
-    const auto sizes = collectSizes(std::move(ordinarySizes));
+    if (!rootStyle && !firstPages.empty())
+        rootStyle = firstPages.begin()->first;
+    for (const auto& candidate : candidates) {
+        const auto number = parseHeading(candidate.line.text);
+        if (candidate.chapter || isSectionTitle(candidate.line.text) || (number && number->components.size() == 1)) {
+            if (!rootStyle || styleOf(candidate) < *rootStyle)
+                rootStyle = styleOf(candidate);
+        }
+    }
+
+    struct ActiveHeading {
+        Style style;
+        int level;
+        bool section;
+    };
+
+    std::vector<ActiveHeading> active;
     for (auto& candidate : candidates) {
-        if (isSectionTitle(candidate.line.text))
+        const auto style = styleOf(candidate);
+        const auto number = parseHeading(candidate.line.text);
+        const bool section = isSectionTitle(candidate.line.text);
+        const bool withinSection = !active.empty() && active.front().section && style > active.front().style;
+        if (section) {
             candidate.level = 0;
-        else if (candidate.chapter)
-            candidate.level = hasSections ? 1 : 0;
-        else if (const auto number = parseHeading(candidate.line.text))
-            candidate.level = static_cast<int>(number->components.size()) - 1 + (hasSections ? 1 : 0);
-        else
-            candidate.level = rankSize(candidate.line.size, sizes) + (hasSections ? 1 : 0) + (hasChapters ? 1 : 0);
-        candidate.level = std::min(MaxOutlineLevel, candidate.level);
+        } else if (candidate.chapter || number) {
+            candidate.level =
+                (candidate.chapter ? 0 : static_cast<int>(number->components.size()) - 1) + (withinSection ? 1 : 0);
+        } else {
+            // Matching or stronger styles close the previous heading's scope.
+            // This keeps siblings at the same level even when unrelated font
+            // sizes occur elsewhere in the document.
+            const auto peer = std::find_if(
+                active.rbegin(), active.rend(), [&](const auto& heading) { return heading.style == style; });
+            if (peer != active.rend()) {
+                candidate.level = peer->level;
+            } else {
+                while (!active.empty() && active.back().style > style)
+                    active.pop_back();
+                candidate.level = active.empty() || (rootStyle && style <= *rootStyle) ? 0 : active.back().level + 1;
+            }
+        }
+        candidate.level = std::clamp(candidate.level, 0, MaxOutlineLevel);
+        while (!active.empty() && active.back().level >= candidate.level)
+            active.pop_back();
+        active.push_back({ style, candidate.level, section });
     }
 }
 
 void prepareOutlineLines(std::vector<OutlineLine>& lines)
 {
-    // Reject malformed records before sorting or dividing by page dimensions.
+    // Validate before sorting, estimating styles, or using font metrics.
     std::erase_if(lines, [](const OutlineLine& line) {
         return line.page < 0 || !std::isfinite(line.size) || line.size <= 0 || line.size >= MaxFontSizePoints
+            || !std::isfinite(line.boldFraction) || line.boldFraction < 0 || line.boldFraction > 1
             || !std::isfinite(line.pageWidth) || line.pageWidth <= 0 || !std::isfinite(line.pageHeight)
             || line.pageHeight <= 0 || !std::isfinite(line.left) || !std::isfinite(line.right)
             || !std::isfinite(line.top) || !std::isfinite(line.bottom) || line.right < line.left
@@ -695,10 +910,10 @@ std::vector<Model::OutlineNode> assembleOutline(const std::vector<Candidate>& ca
     };
 
     std::vector<Parent> parents;
-    std::set<std::pair<int, std::string>> emitted;
+    std::set<std::tuple<int, double, double, std::string>> emitted;
     for (const auto& candidate : candidates) {
         const auto& line = candidate.line;
-        if (!emitted.emplace(line.page, headingKey(line.text)).second)
+        if (!emitted.emplace(line.page, line.left, line.top, line.text).second)
             continue;
         while (!parents.empty() && parents.back().level >= candidate.level)
             parents.pop_back();

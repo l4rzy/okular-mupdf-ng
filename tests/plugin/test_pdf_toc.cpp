@@ -132,6 +132,335 @@ private slots:
         QCOMPARE(nodes[2].title, std::string("11.2 Missing parent"));
     }
 
+    void contextualHeadingSelection_data()
+    {
+        QTest::addColumn<bool>("sameFamily");
+        QTest::addColumn<bool>("paragraph");
+        QTest::addColumn<bool>("otherColumn");
+        QTest::addColumn<bool>("supportedStyle");
+        QTest::newRow("isolated-body-bold") << true << false << false << true;
+        QTest::newRow("bold-paragraph") << true << true << false << true;
+        QTest::newRow("large-bold-paragraph") << false << true << false << true;
+        QTest::newRow("neighbor-in-other-column") << true << false << true << true;
+        QTest::newRow("unsupported-body-bold") << true << false << false << false;
+    }
+
+    void contextualHeadingSelection()
+    {
+        QFETCH(bool, sameFamily);
+        QFETCH(bool, paragraph);
+        QFETCH(bool, otherColumn);
+        QFETCH(bool, supportedStyle);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes the document body style.", 0, 50, 100, 12, 450, false);
+        layout.add("1 Main", 0, 50, 140, 24, 220);
+        if (supportedStyle) {
+            layout.add("1.1 Style anchor", 1, 50, 140, 12, 220);
+            layout.lines.back().fontFamily = "Serif";
+        }
+        const double size = sameFamily ? 12 : 18;
+        layout.add(paragraph ? "An emphasized paragraph starts with a sentence." : "Background", 2, 50, 200, size, 220);
+        if (sameFamily)
+            layout.lines.back().fontFamily = "Serif";
+        layout.lines.back().block = 1;
+        if (otherColumn)
+            layout.add("Unrelated bold text in the right column", 2, 330, 201, 12, 220);
+        layout.add("The following paragraph continues with ordinary explanatory prose.",
+                   2,
+                   50,
+                   200 + size * 1.36 + 3,
+                   paragraph ? size : 12,
+                   220,
+                   paragraph);
+        if (sameFamily)
+            layout.lines.back().fontFamily = "Serif";
+        layout.lines.back().block = paragraph ? 1 : 2;
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        if (paragraph || !supportedStyle) {
+            QCOMPARE(nodes.size(), std::size_t(1));
+            QVERIFY(nodes.front().children.empty());
+        } else {
+            QCOMPARE(nodes.size(), std::size_t(1));
+            QCOMPARE(nodes.front().children.size(), otherColumn ? std::size_t(2) : std::size_t(1));
+            QCOMPARE(nodes.front().children.front().title, std::string("Background"));
+        }
+    }
+
+    void marginTextCannotSupplyHeadingEvidence_data()
+    {
+        QTest::addColumn<bool>("repeated");
+        QTest::newRow("isolated-numbered-text") << false;
+        QTest::newRow("excluded-running-header") << true;
+    }
+
+    void marginTextCannotSupplyHeadingEvidence()
+    {
+        QFETCH(bool, repeated);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes the document body style.", 0, 50, 100, 12, 450, false);
+        layout.add("1 Main", 0, 50, 140, 24, 220);
+        for (int page = 1; page <= (repeated ? 3 : 1); ++page) {
+            layout.add("1.1 Style anchor", page, 50, 20, 12, 220);
+            layout.lines.back().fontFamily = "Serif";
+        }
+        layout.add("Background", 4, 50, 200, 12, 220);
+        layout.lines.back().fontFamily = "Serif";
+        layout.lines.back().block = 0;
+        layout.add("The following prose explains the background in detail.", 4, 50, 225, 12, 400, false);
+        layout.lines.back().block = 1;
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes.front().children.size(), repeated ? std::size_t(0) : std::size_t(1));
+    }
+
+    void headingSpanByteLimit_data()
+    {
+        QTest::addColumn<int>("bytes");
+        QTest::addColumn<bool>("padding");
+        QTest::addColumn<bool>("tail");
+        QTest::newRow("below-limit") << 159 << false << false;
+        QTest::newRow("at-limit") << 160 << false << false;
+        QTest::newRow("over-limit") << 161 << false << false;
+        QTest::newRow("trim-before-counting") << 160 << true << false;
+        QTest::newRow("do-not-reclassify-tail") << 161 << false << true;
+    }
+
+    void headingSpanByteLimit()
+    {
+        QFETCH(int, bytes);
+        QFETCH(bool, padding);
+        QFETCH(bool, tail);
+        BookLayout layout;
+        layout.add("Body prose that establishes the document typography.", 0, 50, 80, 10, 450, false);
+        const std::string first(79, 'A');
+        const std::string second(static_cast<std::size_t>(bytes - 80), 'B');
+        layout.add(first, 0, 50, 200, 18, 220);
+        layout.add(second + (padding ? std::string(100, ' ') : ""), 0, 50, 225, 18, 220);
+        if (tail)
+            layout.add("Short tail", 0, 50, 250, 18, 220);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), bytes <= 160 ? std::size_t(1) : std::size_t(0));
+        if (!nodes.empty())
+            QCOMPARE(nodes.front().title, first + " " + second);
+    }
+
+    void separateHeadingNumber_data()
+    {
+        QTest::addColumn<double>("gap");
+        QTest::addColumn<bool>("join");
+        QTest::newRow("adjacent-number") << 8.0 << true;
+        QTest::newRow("other-column") << 250.0 << false;
+    }
+
+    void separateHeadingNumber()
+    {
+        QFETCH(double, gap);
+        QFETCH(bool, join);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes the document body style.", 0, 50, 100, 10, 450, false);
+        layout.add("1", 0, 50, 200, 18, 10);
+        layout.add("INTRODUCTION", 0, 60 + gap, 200, 18, 180);
+        layout.add("1.1", 0, 50, 260, 18, 20);
+        layout.add("Background", 0, 70 + gap, 260, 18, 180);
+        layout.add("Details", 0, 70 + gap, 320, 18, 180);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes[0].title, std::string(join ? "1 INTRODUCTION" : "INTRODUCTION"));
+        QCOMPARE(nodes[0].children.size(), std::size_t(2));
+        QCOMPARE(nodes[0].children[0].title, std::string(join ? "1.1 Background" : "Background"));
+        QCOMPARE(nodes[0].children[1].title, std::string("Details"));
+    }
+
+    void preservesWrappedQuestionTitle()
+    {
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes the document body style.", 0, 50, 100, 10, 450, false);
+        layout.add("1.1 How does this", 0, 50, 200, 18, 220);
+        layout.add("work?", 0, 50, 225, 18, 80);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes[0].title, std::string("1.1 How does this work?"));
+    }
+
+    void classifyCompleteHeadingSpan_data()
+    {
+        QTest::addColumn<bool>("separateNumber");
+        QTest::addColumn<bool>("otherColumn");
+        QTest::newRow("wrapped-body-bold") << false << false;
+        QTest::newRow("number-and-wrapped-title") << true << false;
+        QTest::newRow("interleaved-columns") << true << true;
+    }
+
+    void classifyCompleteHeadingSpan()
+    {
+        QFETCH(bool, separateNumber);
+        QFETCH(bool, otherColumn);
+        BookLayout layout;
+        layout.add("Body prose that establishes the document typography.", 0, 50, 80, 12, 450, false);
+        layout.add("1 Main", 0, 50, 140, 24, 220);
+        if (separateNumber)
+            layout.add("1.1", 0, 50, 200, 12, 20);
+        layout.add(separateNumber ? "A supported heading" : "1.1 A supported heading",
+                   0,
+                   separateNumber ? 80 : 50,
+                   200,
+                   12,
+                   200);
+        if (otherColumn)
+            layout.add("Other column prose must not interrupt the heading.", 0, 350, 210, 12, 200, false);
+        layout.add("continued title", 0, separateNumber ? 80 : 50, 218, 12, 160);
+        layout.add("The following prose explains the complete heading above.", 0, 50, 240, 12, 290, false);
+        for (auto& line : layout.lines) {
+            if (line.top >= 200 && line.left < 300) {
+                line.fontFamily = "Serif";
+                line.block = line.top < 240 ? 1 : 2;
+            }
+        }
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes.front().children.size(), std::size_t(1));
+        QCOMPARE(nodes.front().children.front().title, std::string("1.1 A supported heading continued title"));
+    }
+
+    void adjacentNumberedHeadingsRemainSeparate()
+    {
+        BookLayout layout;
+        layout.add("Body prose that establishes the document typography.", 0, 50, 80, 10, 450, false);
+        layout.add("1 Main", 0, 50, 140, 24, 220);
+        layout.add("1.1 First topic", 0, 50, 200, 18, 220);
+        layout.add("1.2 Second topic", 0, 50, 226, 18, 220);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes.front().children.size(), std::size_t(2));
+        QCOMPARE(nodes.front().children.front().title, std::string("1.1 First topic"));
+        QCOMPARE(nodes.front().children.back().title, std::string("1.2 Second topic"));
+    }
+
+    void localNumberedStyleDeterminesSiblingLevel()
+    {
+        BookLayout layout;
+        layout.add("Body prose that establishes the document typography.", 0, 50, 80, 10, 450, false);
+        layout.add("1 Main", 0, 50, 140, 18, 220);
+        layout.add("1.1 Topic", 0, 50, 200, 18, 220);
+        layout.add("Local sibling", 0, 50, 260, 18, 220);
+        layout.add("2 Other main", 0, 50, 320, 18, 220);
+        layout.add("Another main", 0, 50, 380, 18, 220);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(3));
+        QCOMPARE(nodes.front().children.size(), std::size_t(2));
+        QCOMPARE(nodes.front().children.back().title, std::string("Local sibling"));
+        QCOMPARE(nodes.back().title, std::string("Another main"));
+    }
+
+    void repeatedTitlesOnSamePage_data()
+    {
+        QTest::addColumn<bool>("numbered");
+        QTest::newRow("numbered-peers") << true;
+        QTest::newRow("unnumbered-peers") << false;
+    }
+
+    void repeatedTitlesOnSamePage()
+    {
+        QFETCH(bool, numbered);
+        BookLayout layout;
+        layout.add("Body prose that establishes the document typography.", 0, 50, 80, 10, 450, false);
+        layout.add("1 Main", 0, 50, 140, 24, 220);
+        layout.add(numbered ? "1.1 Topic" : "Topic", 0, 50, 200, 18, 220);
+        layout.add(numbered ? "1.2 Topic" : "Topic", 0, 50, 260, 18, 220);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(1));
+        QCOMPARE(nodes.front().children.size(), std::size_t(2));
+        QVERIFY(nodes.front().children[0].link.viewport.normalizedY
+                < nodes.front().children[1].link.viewport.normalizedY);
+    }
+
+    void isolatedDisplayStylesDoNotDeepenRecurringHeadings()
+    {
+        BookLayout layout;
+        layout.add("Body prose that establishes the document typography.", 0, 50, 80, 10, 450, false);
+        layout.add("Book title", 0, 50, 140, 32, 220);
+        layout.add("First chapter", 1, 50, 140, 22, 220);
+        layout.add("First topic", 1, 50, 220, 18, 220);
+        layout.add("Second chapter", 2, 50, 140, 22, 220);
+        layout.add("Second topic", 2, 50, 220, 18, 220);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(3));
+        QVERIFY(nodes.front().children.empty());
+        QCOMPARE(nodes[1].children.front().title, std::string("First topic"));
+        QCOMPARE(nodes[2].children.front().title, std::string("Second topic"));
+    }
+
+    void repeatedHeadersDoNotConsumeNearbyTitles()
+    {
+        BookLayout layout;
+        for (int page = 0; page < 3; ++page) {
+            layout.add("Running header", page, 50, 60, 18, 220);
+            layout.add("Topic " + std::to_string(page), page, 50, 80, 18, 220);
+            layout.add("Body prose that establishes the document typography.", page, 50, 200, 10, 450, false);
+        }
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(3));
+        for (int page = 0; page < 3; ++page)
+            QCOMPARE(nodes[static_cast<std::size_t>(page)].title, "Topic " + std::to_string(page));
+    }
+
+    void headingStyleHierarchy_data()
+    {
+        QTest::addColumn<bool>("numbered");
+        QTest::newRow("typography") << false;
+        QTest::newRow("numbered-style-calibration") << true;
+    }
+
+    void headingStyleHierarchy()
+    {
+        QFETCH(bool, numbered);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes the document body style.", 0, 50, 100, 10, 450, false);
+        layout.add(numbered ? "1 Main" : "Main", 0, 50, 150, 22, 200);
+        layout.add(numbered ? "1.1 Topic" : "Topic", 0, 50, 220, 18, 200);
+        layout.add("Detail", 0, 50, 290, 18, 200);
+        layout.lines.back().boldFraction = 0;
+        // An unnumbered heading shares its numbered peers' level.
+        layout.add("Another Topic", 0, 50, 360, 18, 200);
+        layout.add("Another Main", 0, 50, 430, 22, 200);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(2));
+        QCOMPARE(nodes[0].children.size(), std::size_t(2));
+        QCOMPARE(nodes[0].children[0].children.size(), std::size_t(1));
+        QCOMPARE(nodes[0].children[0].children[0].title, std::string("Detail"));
+        QCOMPARE(nodes[0].children[1].title, std::string("Another Topic"));
+        QCOMPARE(nodes[1].title, std::string("Another Main"));
+    }
+
+    void sevenHeadingLevels_data()
+    {
+        QTest::addColumn<bool>("numbered");
+        QTest::newRow("numbered") << true;
+        QTest::newRow("typography") << false;
+    }
+
+    void sevenHeadingLevels()
+    {
+        QFETCH(bool, numbered);
+        BookLayout layout;
+        layout.add("Ordinary prose that establishes the document body style.", 0, 50, 100, 10, 450, false);
+        std::string prefix = "1";
+        for (int i = 0; i < 8; ++i) {
+            layout.add(
+                (numbered ? prefix + " " : "") + "Heading " + std::to_string(i), i + 1, 50, 150, 36 - i * 3, 220);
+            prefix += ".1";
+        }
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        const auto* siblings = &nodes;
+        for (int depth = 0; depth < 6; ++depth) {
+            QCOMPARE(siblings->size(), std::size_t(1));
+            siblings = &siblings->front().children;
+        }
+        QCOMPARE(siblings->size(), std::size_t(2));
+        for (const auto& node : *siblings)
+            QVERIFY(node.children.empty());
+    }
+
     void bodyStyleEstimation_data()
     {
         QTest::addColumn<QString>("bodyText");
@@ -389,6 +718,33 @@ private slots:
         QVERIFY(nodes[0].children[0].children.empty());
     }
 
+    void contentsPageDistanceDoesNotOverflow_data()
+    {
+        QTest::addColumn<int>("firstPage");
+        QTest::newRow("ordinary-pages") << 2;
+        QTest::newRow("large-page-offset") << std::numeric_limits<int>::max() - 2;
+    }
+
+    void contentsPageDistanceDoesNotOverflow()
+    {
+        QFETCH(int, firstPage);
+        BookLayout layout;
+        layout.add("Contents", 0, 50, 70, 24, 220);
+        layout.add("Alpha 99999", 0, 50, 130, 13, 220);
+        layout.add("Alpha 1", 0, 50, 180, 13, 220);
+        layout.add("Beta 2", 0, 50, 230, 13, 220);
+        layout.add("Gamma 3", 0, 50, 280, 13, 220);
+        layout.add("Body prose that establishes the document typography.", 1, 50, 100, 11, 450, false);
+        layout.add("Alpha", firstPage, 50, 150, 17, 220);
+        layout.add("Beta", firstPage + 1, 50, 150, 17, 220);
+        layout.add("Gamma", firstPage + 2, 50, 150, 17, 220);
+        const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);
+        QCOMPARE(nodes.size(), std::size_t(3));
+        QCOMPARE(nodes[0].title, std::string("Alpha"));
+        QCOMPARE(nodes[1].title, std::string("Beta"));
+        QCOMPARE(nodes[2].title, std::string("Gamma"));
+    }
+
     void incidentalContentsLabel_data()
     {
         QTest::addColumn<QString>("label");
@@ -427,6 +783,10 @@ private slots:
         QTest::newRow("negative-height") << 2 << -1.0;
         QTest::newRow("nan-top") << 3 << std::numeric_limits<double>::quiet_NaN();
         QTest::newRow("inverted-box") << 4 << 0.0;
+        QTest::newRow("nan-bold") << 5 << std::numeric_limits<double>::quiet_NaN();
+        QTest::newRow("infinite-bold") << 5 << std::numeric_limits<double>::infinity();
+        QTest::newRow("negative-bold") << 5 << -0.1;
+        QTest::newRow("excessive-bold") << 5 << 1.1;
     }
 
     void malformedGeometry()
@@ -437,11 +797,11 @@ private slots:
         layout.add("Ordinary prose that establishes a stable body style.", 1, 50, 300, 11, 400, false);
         layout.add("Invalid heading", 1, 50, 150, 17, 200);
         auto& line = layout.lines.back();
-        const std::array members { &Worker::Engine::OutlineLine::size,
-                                   &Worker::Engine::OutlineLine::pageWidth,
-                                   &Worker::Engine::OutlineLine::pageHeight,
-                                   &Worker::Engine::OutlineLine::top,
-                                   &Worker::Engine::OutlineLine::bottom };
+        const std::array members {
+            &Worker::Engine::OutlineLine::size,       &Worker::Engine::OutlineLine::pageWidth,
+            &Worker::Engine::OutlineLine::pageHeight, &Worker::Engine::OutlineLine::top,
+            &Worker::Engine::OutlineLine::bottom,     &Worker::Engine::OutlineLine::boldFraction
+        };
         line.*members[static_cast<std::size_t>(field)] = value;
         layout.add("Valid heading", 1, 50, 450, 17, 200);
         const auto nodes = Worker::Engine::buildGeneratedOutline(layout.lines);

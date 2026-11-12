@@ -17,7 +17,6 @@ inline constexpr std::size_t MaxGeneratedHeadingBytes = 160;
 
 struct HeadingNumber {
     std::vector<unsigned> components;
-    std::string title;
 };
 
 std::optional<HeadingNumber> parseHeading(std::string_view text);
@@ -31,6 +30,7 @@ struct OutlineLine {
     double boldFraction = 0;
     bool monospaced = false;
     int page = 0;
+    int block = -1; // Native text block ID, scoped to the page; -1 when unavailable.
     double left = 0;
     double top = 0;
     double right = 0;
