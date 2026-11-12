@@ -1,4 +1,14 @@
 -------------------------------------------------------------------
+Thu Nov 12 15:42:39 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.6.3.
+- Add Markdown export for ebooks in Okular and mupdfng-cli.
+- Add ebook line-spacing controls and an option to ignore built-in styles.
+- Improve ebook default styles and simplify EPUB cache identity.
+- Add custom export icons and update certificate-store API compatibility.
+- Report the Git commit and dirty state in Git builds.
+
+-------------------------------------------------------------------
 Sun Nov 08 03:02:11 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.6.2.

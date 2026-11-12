@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.6.2
+Version:        0.6.3
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -111,6 +111,14 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Thu Nov 12 2026 l4rzy <me@23ro.org> - 0.6.3-1
+- Update to version 0.6.3.
+- Add Markdown export for ebooks in Okular and mupdfng-cli.
+- Add ebook line-spacing controls and an option to ignore built-in styles.
+- Improve ebook default styles and simplify EPUB cache identity.
+- Add custom export icons and update certificate-store API compatibility.
+- Report the Git commit and dirty state in Git builds.
+
 * Sat Nov 07 2026 l4rzy <me@23ro.org> - 0.6.2-1
 - Update to version 0.6.2.
 - Improve EPUB layout, sizing, and rendering; preserve reading position when changing layout.
