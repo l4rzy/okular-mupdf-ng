@@ -5,9 +5,9 @@
 #include "generator/config/certmanager/manager_dialog.hpp"
 #include "generator/mupdfng.hpp"
 #include "generator/ui/window_menus.hpp"
-#include "shared/model/theme_colors.hpp"
 #include "mupdfngsettings.h"
 #include "plugin/crypto/nss.hpp"
+#include "shared/model/theme_colors.hpp"
 
 #include <KActionCollection>
 #include <KActionMenu>
@@ -179,8 +179,7 @@ void Main::setupThemeActions()
     m_themeActions = new QActionGroup(this);
     const auto addTheme = [&](const QString& name, const QString& label, std::optional<Model::DocumentTheme> theme) {
         auto* action = new QAction(label, m_themeActions);
-        const auto previewTheme = theme.value_or(
-            static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()));
+        const auto previewTheme = theme.value_or(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()));
         action->setIcon(theme == Model::DocumentTheme::Default ? QIcon::fromTheme(QStringLiteral("edit-undo"))
                                                                : themePreviewIcon(previewTheme));
         action->setCheckable(true);
@@ -269,8 +268,9 @@ void Main::syncThemeActions()
     actionCollection()
         ->action(QStringLiteral("mupdf_theme_inherit"))
         ->setVisible(m_document.settings.theme.has_value());
-    actionCollection()->action(QStringLiteral("mupdf_theme_inherit"))->setIcon(
-        themePreviewIcon(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
+    actionCollection()
+        ->action(QStringLiteral("mupdf_theme_inherit"))
+        ->setIcon(themePreviewIcon(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
     const int theme = static_cast<int>(
         m_document.settings.theme.value_or(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
     for (QAction* action : m_themeActions->actions())
