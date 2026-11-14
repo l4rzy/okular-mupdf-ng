@@ -9,10 +9,10 @@
 
 namespace Mu::Generator::Page {
 
-void Placeholder::setTheme(Model::DocumentTheme theme)
+void Placeholder::setTheme(Model::DocumentTheme theme, std::uint32_t customBackground)
 {
-    const QColor color =
-        theme == Model::DocumentTheme::Default ? QColor { } : QColor::fromRgb(Model::ThemeColor::getBackground(theme));
+    const auto rgb = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme, customBackground));
+    const QColor color = theme == Model::DocumentTheme::Default ? QColor { } : QColor(rgb[0], rgb[1], rgb[2]);
     if (color == m_color)
         return;
     m_color = color;

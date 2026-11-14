@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTabWidget>
@@ -58,6 +59,138 @@ private slots:
         QTest::newRow("layout") << false << true << false;
         QTest::newRow("ocr") << false << false << true;
         QTest::newRow("all") << true << true << true;
+    }
+
+    void detectsConfiguredCustomThemeSlots()
+    {
+        using Mu::Generator::Config::hasCustomTheme;
+        const auto path = m_root.filePath("config/okular-mupdf-ng/themerc");
+        QVERIFY(QDir().mkpath(QFileInfo(path).path()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write("[Custom1]\nName=Magenta\n");
+        file.close();
+        QVERIFY(hasCustomTheme(1));
+        QVERIFY(!hasCustomTheme(2));
+        QVERIFY(!hasCustomTheme(0));
+        QVERIFY(!hasCustomTheme(3));
+
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate));
+        file.write("[Custom1]\nName=Magenta\n\n[Custom2]\nName=Teal\n");
+        file.close();
+        QVERIFY(hasCustomTheme(2));
+    }
+
+    void readsCustomThemeValues()
+    {
+        using Mu::Model::ThemeCustomization;
+
+        const struct {
+            const char* entry;
+            ThemeCustomization expected;
+        } cases[] {
+            { "", { } },
+            { "Background=abcdef", { .backgroundRgb = 0xABCDEF } },
+            { "Foreground=123456", { .foregroundRgb = 0x123456 } },
+            { "Background=+12345", { } },
+            { "Background=0x1234", { } },
+            { "Background=#123456", { } },
+            { "Foreground=1000000", { } },
+            { "Foreground=zzzzzz", { } },
+            { "PageDarknessThreshold=0", { .pageDarknessThreshold = 0 } },
+            { "PageDarknessThreshold=255", { .pageDarknessThreshold = 255 } },
+            { "PageDarknessThreshold=-1", { } },
+            { "PageDarknessThreshold=256", { } },
+            { "ImageDarknessThreshold=0", { .imageDarknessThreshold = 0 } },
+            { "ImageDarknessThreshold=255", { .imageDarknessThreshold = 255 } },
+            { "ImageDarknessThreshold=invalid", { } },
+            { "DarkCoveragePercent=1", { .darkCoveragePercent = 1 } },
+            { "DarkCoveragePercent=99", { .darkCoveragePercent = 99 } },
+            { "DarkCoveragePercent=0", { } },
+            { "DarkCoveragePercent=100", { } },
+            { "ImageDimmingPercent=0", { .imageDimmingPercent = 0 } },
+            { "ImageDimmingPercent=100", { .imageDimmingPercent = 100 } },
+            { "ImageDimmingPercent=101", { } },
+            { "VectorBlendPercent=0", { .vectorBlendPercent = 0 } },
+            { "VectorBlendPercent=100", { .vectorBlendPercent = 100 } },
+            { "VectorBlendPercent=101", { } },
+            { "VectorBlendPercent=9999999999999999999999", { } },
+        };
+
+        QFile file(m_root.filePath("config/okular-mupdf-ng/themerc"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto original = file.readAll();
+        file.close();
+        for (const auto& test : cases) {
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write("[Custom1]\nName=Test\n");
+            file.write(test.entry);
+            file.write("\n");
+            file.close();
+            auto rendering = Mu::Generator::Config::readWorkerSettings().rendering;
+            QVERIFY2(rendering.customTheme1 == test.expected, test.entry);
+            QCOMPARE(rendering.customTheme2, ThemeCustomization { });
+            rendering.documentTheme = Mu::Model::DocumentTheme::Custom1;
+            const auto settings = Mu::Generator::Config::documentSettingsFor(rendering, { }, 0xFFFFFF);
+            QVERIFY2(Mu::Model::isValidDocumentSettings(settings), test.entry);
+        }
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(original);
+    }
+
+    void ignoresInactiveCustomThemeChanges_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<int>("slot");
+        QTest::addColumn<bool>("changed");
+        for (int theme = 0; theme <= int(Mu::Model::DocumentTheme::Custom2); ++theme)
+            for (const int slot : { 1, 2 })
+                QTest::newRow(qPrintable(QStringLiteral("theme-%1-slot-%2").arg(theme).arg(slot)))
+                    << theme << slot << (theme == slot + 3);
+    }
+
+    void ignoresInactiveCustomThemeChanges()
+    {
+        QFETCH(int, theme);
+        QFETCH(int, slot);
+        QFETCH(bool, changed);
+        Mu::Generator::Config::RenderingSettings previous;
+        previous.documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
+        auto current = previous;
+        (slot == 1 ? current.customTheme1 : current.customTheme2).backgroundRgb = 0x123456;
+        QCOMPARE(Mu::Generator::Config::renderingOutputChanged(previous, current), changed);
+        const auto before = Mu::Generator::Config::documentSettingsFor(previous, { }, 0xFFFFFF);
+        const auto after = Mu::Generator::Config::documentSettingsFor(current, { }, 0xFFFFFF);
+        QCOMPARE(before.activeCustomTheme != after.activeCustomTheme, changed);
+    }
+
+    void fallsBackWhenSelectedCustomThemeIsMissing_data()
+    {
+        QTest::addColumn<int>("theme");
+        QTest::addColumn<bool>("custom1Available");
+        QTest::addColumn<bool>("custom2Available");
+        QTest::addColumn<int>("expected");
+        QTest::newRow("custom1-present") << int(Mu::Model::DocumentTheme::Custom1) << true << false
+                                         << int(Mu::Model::DocumentTheme::Custom1);
+        QTest::newRow("custom1-missing") << int(Mu::Model::DocumentTheme::Custom1) << false << true
+                                         << int(Mu::Model::DocumentTheme::Default);
+        QTest::newRow("custom2-present") << int(Mu::Model::DocumentTheme::Custom2) << false << true
+                                         << int(Mu::Model::DocumentTheme::Custom2);
+        QTest::newRow("custom2-missing") << int(Mu::Model::DocumentTheme::Custom2) << true << false
+                                         << int(Mu::Model::DocumentTheme::Default);
+        QTest::newRow("built-in") << int(Mu::Model::DocumentTheme::Dark) << false << false
+                                  << int(Mu::Model::DocumentTheme::Dark);
+    }
+
+    void fallsBackWhenSelectedCustomThemeIsMissing()
+    {
+        QFETCH(int, theme);
+        QFETCH(bool, custom1Available);
+        QFETCH(bool, custom2Available);
+        QFETCH(int, expected);
+        QCOMPARE(static_cast<int>(Mu::Generator::Config::effectiveDocumentTheme(
+                     static_cast<Mu::Model::DocumentTheme>(theme), custom1Available, custom2Available)),
+                 expected);
     }
 
     void documentOverrides()
@@ -388,9 +521,16 @@ private slots:
 
     void buildsDocumentSettings()
     {
-        ::Mu::Generator::Config::RenderingSettings rendering {
-            4, 6, 2, false, 256LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Aggressive
-        };
+        ::Mu::Generator::Config::RenderingSettings rendering { 4,
+                                                               6,
+                                                               2,
+                                                               false,
+                                                               256LL * 1024 * 1024,
+                                                               ::Mu::Model::IdleTrimLevel::Aggressive,
+                                                               false,
+                                                               ::Mu::Model::DocumentTheme::Default,
+                                                               { },
+                                                               { } };
         ::Mu::Generator::Config::EpubSettings epub { 99, -1, 1, 99, true, QStringLiteral("Ym9keXt9") };
 
         const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0x112233);
@@ -407,13 +547,26 @@ private slots:
         QCOMPARE(static_cast<int>(settings.epub.fontFamily), 0);
         QCOMPARE(static_cast<int>(settings.epub.pageSize), 3);
         QCOMPARE(QString::fromStdString(settings.epub.customCssBase64), QStringLiteral("Ym9keXt9"));
+
+        rendering.documentTheme = ::Mu::Model::DocumentTheme::Custom2;
+        rendering.customTheme2.backgroundRgb = 0xDDF4F0;
+        const auto customSettings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0x112233);
+        QCOMPARE(customSettings.documentTheme, ::Mu::Model::DocumentTheme::Custom2);
+        QCOMPARE(customSettings.activeCustomTheme.backgroundRgb, 0xDDF4F0u);
     }
 
     void distinguishesRenderingOutputChanges()
     {
-        const ::Mu::Generator::Config::RenderingSettings original {
-            4, 6, 1, true, 64LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Balanced
-        };
+        const ::Mu::Generator::Config::RenderingSettings original { 4,
+                                                                    6,
+                                                                    1,
+                                                                    true,
+                                                                    64LL * 1024 * 1024,
+                                                                    ::Mu::Model::IdleTrimLevel::Balanced,
+                                                                    false,
+                                                                    ::Mu::Model::DocumentTheme::Default,
+                                                                    { },
+                                                                    { } };
         auto memoryOnly = original;
         memoryOnly.memoryCacheBytes = 128LL * 1024 * 1024;
         QVERIFY(!::Mu::Generator::Config::renderingOutputChanged(original, memoryOnly));
@@ -455,7 +608,9 @@ private slots:
 
     void clampsUnknownIdleTrimLevel()
     {
-        ::Mu::Generator::Config::RenderingSettings rendering { 4, 6, 2, false, 64LL * 1024 * 1024, 99 };
+        ::Mu::Generator::Config::RenderingSettings rendering {
+            4, 6, 2, false, 64LL * 1024 * 1024, 99, false, ::Mu::Model::DocumentTheme::Default, { }, { }
+        };
         const auto settings = ::Mu::Generator::Config::documentSettingsFor(
             rendering, ::Mu::Generator::Config::EpubSettings { }, 0xFFFFFF);
         QCOMPARE(settings.idleTrimAggressiveness, ::Mu::Model::IdleTrimLevel::Balanced);
@@ -469,10 +624,37 @@ private slots:
         // Extreme UI values must clamp into the shared worker bounds, which is
         // the single source of truth the validator enforces.
         const std::array<RenderingSettings, 4> renderings {
-            RenderingSettings { -5, 99, 9, true, -1LL, ::Mu::Model::IdleTrimLevel::Off },
-            RenderingSettings { 0, 0, 0, false, 0LL, -7 },
-            RenderingSettings { 99, 99, 99, true, 1LL << 40, ::Mu::Model::IdleTrimLevel::Aggressive },
-            RenderingSettings { 8, 8, 2, true, 256LL * 1024 * 1024, ::Mu::Model::IdleTrimLevel::Balanced },
+            RenderingSettings { -5,
+                                99,
+                                9,
+                                true,
+                                -1LL,
+                                ::Mu::Model::IdleTrimLevel::Off,
+                                false,
+                                ::Mu::Model::DocumentTheme::Default,
+                                { },
+                                { } },
+            RenderingSettings { 0, 0, 0, false, 0LL, -7, false, ::Mu::Model::DocumentTheme::Default, { }, { } },
+            RenderingSettings { 99,
+                                99,
+                                99,
+                                true,
+                                1LL << 40,
+                                ::Mu::Model::IdleTrimLevel::Aggressive,
+                                false,
+                                ::Mu::Model::DocumentTheme::Default,
+                                { },
+                                { } },
+            RenderingSettings { 8,
+                                8,
+                                2,
+                                true,
+                                256LL * 1024 * 1024,
+                                ::Mu::Model::IdleTrimLevel::Balanced,
+                                false,
+                                ::Mu::Model::DocumentTheme::Default,
+                                { },
+                                { } },
         };
         const std::array<EpubSettings, 3> epubs {
             EpubSettings { -100, -100, -1, -100, false, QStringLiteral("Ym9keXt9") },

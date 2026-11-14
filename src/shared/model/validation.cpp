@@ -213,8 +213,12 @@ bool isValidDocumentSettings(const DocumentSettings& settings, std::string_view*
     if (settings.graphicsAntialiasing < 0 || settings.graphicsAntialiasing > Limit::MaxDocumentAntialiasing
         || settings.textAntialiasing < 0 || settings.textAntialiasing > Limit::MaxDocumentAntialiasing)
         return failWith("antialiasing level is invalid", reason);
-    if (static_cast<std::uint8_t>(settings.documentTheme) > static_cast<std::uint8_t>(DocumentTheme::Dark))
+    if (static_cast<std::uint8_t>(settings.documentTheme) > static_cast<std::uint8_t>(DocumentTheme::Custom2))
         return failWith("document theme is invalid", reason);
+    if (settings.activeCustomTheme.backgroundRgb > 0xFFFFFF || settings.activeCustomTheme.foregroundRgb > 0xFFFFFF
+        || settings.activeCustomTheme.darkCoveragePercent < 1 || settings.activeCustomTheme.darkCoveragePercent > 99
+        || settings.activeCustomTheme.imageDimmingPercent > 100 || settings.activeCustomTheme.vectorBlendPercent > 100)
+        return failWith("custom document theme is invalid", reason);
     if (settings.imageQuality < 0 || settings.imageQuality > Limit::MaxDocumentImageQuality)
         return failWith("image quality is invalid", reason);
     if (settings.memoryCacheBytes < Limit::MinDocumentMemoryCacheBytes

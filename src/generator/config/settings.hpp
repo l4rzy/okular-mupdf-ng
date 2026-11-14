@@ -16,6 +16,7 @@
 #include <cstdint>
 
 #include "plugin/ocr/config.hpp"
+#include "shared/model/theme_colors.hpp"
 #include "shared/model/types.hpp"
 #include "shared/protocol/limits.hpp"
 
@@ -31,6 +32,8 @@ struct RenderingSettings {
     std::int32_t idleTrimAggressiveness = Model::IdleTrimLevel::Balanced;
     bool overprintSimulation = false;
     Model::DocumentTheme documentTheme = Model::DocumentTheme::Default;
+    Model::ThemeCustomization customTheme1;
+    Model::ThemeCustomization customTheme2;
 
     bool operator==(const RenderingSettings& other) const = default;
 };
@@ -101,7 +104,10 @@ documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub
     settings.interpolateImages = rendering.interpolateImages;
     settings.overprintSimulation = rendering.overprintSimulation;
     settings.documentTheme = static_cast<Model::DocumentTheme>(
-        std::clamp(static_cast<int>(rendering.documentTheme), 0, static_cast<int>(Model::DocumentTheme::Dark)));
+        std::clamp(static_cast<int>(rendering.documentTheme), 0, static_cast<int>(Model::DocumentTheme::Custom2)));
+    if (Model::ThemeColor::isCustom(settings.documentTheme))
+        settings.activeCustomTheme =
+            Model::ThemeColor::customization(settings.documentTheme, rendering.customTheme1, rendering.customTheme2);
     settings.memoryCacheBytes =
         std::clamp(rendering.memoryCacheBytes, Limit::MinDocumentMemoryCacheBytes, Limit::MaxDocumentMemoryCacheBytes);
     // Clamp the trim level at the IPC boundary like the EPUB enums; the
@@ -123,6 +129,14 @@ documentSettingsFor(const RenderingSettings& rendering, const EpubSettings& epub
     return settings;
 }
 
+inline bool themeOutputChanged(const RenderingSettings& previous, const RenderingSettings& current) noexcept
+{
+    return previous.documentTheme != current.documentTheme
+        || (Model::ThemeColor::isCustom(current.documentTheme)
+            && Model::ThemeColor::customization(current.documentTheme, previous.customTheme1, previous.customTheme2)
+                != Model::ThemeColor::customization(current.documentTheme, current.customTheme1, current.customTheme2));
+}
+
 inline bool renderingOutputChanged(const RenderingSettings& previous, const RenderingSettings& current) noexcept
 {
     // Cache-size changes affect resource usage, not the pixels Okular must
@@ -130,8 +144,7 @@ inline bool renderingOutputChanged(const RenderingSettings& previous, const Rend
     return previous.graphicsAntialiasing != current.graphicsAntialiasing
         || previous.textAntialiasing != current.textAntialiasing || previous.imageQuality != current.imageQuality
         || previous.interpolateImages != current.interpolateImages
-        || previous.overprintSimulation != current.overprintSimulation
-        || previous.documentTheme != current.documentTheme;
+        || previous.overprintSimulation != current.overprintSimulation || themeOutputChanged(previous, current);
 }
 
 /// Effective worker configuration. Layout values change at document-open boundaries.
@@ -176,6 +189,9 @@ bool readHeuristicSynopsisEnabled();
 LinkPreviewMode readLinkPreviewMode();
 EpubSettings readEpubSettings();
 WorkerSettings readWorkerSettings();
+bool hasCustomTheme(int index);
+QString customThemeName(int index);
+Model::DocumentTheme effectiveDocumentTheme(Model::DocumentTheme theme, bool custom1Available, bool custom2Available);
 OcrSettings readOcrSettings();
 int ocrTriggerModeFor(const OcrSettings& settings);
 void setOcrTriggerMode(OcrSettings& settings, int mode);

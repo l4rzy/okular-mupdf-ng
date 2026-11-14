@@ -370,8 +370,8 @@ bool Main::reparseConfig()
     Config::WorkerSettings settings = Config::readWorkerSettings();
     if (m_document.settings.theme)
         settings.rendering.documentTheme = *m_document.settings.theme;
-    if (!m_pageError.isActive() && settings.rendering.documentTheme != m_settings.rendering.documentTheme)
-        updatePagePlaceholder(settings.rendering.documentTheme);
+    const bool themePlaceholderChanged =
+        !m_pageError.isActive() && Config::themeOutputChanged(m_settings.rendering, settings.rendering);
 
     // Rendering changes.
     const std::uint32_t previousPaperColorRgb = m_paperColorRgb;
@@ -379,9 +379,11 @@ bool Main::reparseConfig()
     const bool paperColorChanged = previousPaperColorRgb != m_paperColorRgb;
     const bool changed = Config::renderingOutputChanged(m_settings.rendering, settings.rendering) || paperColorChanged;
     const bool renderingSettingsChanged = settings.rendering != m_settings.rendering || paperColorChanged;
-    if (renderingSettingsChanged)
+    if (changed)
         m_linkPreview.reset();
     m_settings.rendering = settings.rendering;
+    if (themePlaceholderChanged)
+        updatePagePlaceholder(m_settings.rendering.documentTheme);
 
     // PDF JavaScript changes.
     const bool formJavaScriptChanged = settings.formJavaScriptEnabled != m_settings.formJavaScriptEnabled;
@@ -1316,13 +1318,16 @@ void Main::updatePagePlaceholder(Model::DocumentTheme theme)
     // A themed-to-Default transition clears existing previews once. Fresh
     // unthemed pages use Okular's normal background without visiting this code.
     m_hasPagePlaceholder = enabled;
+    const auto& custom =
+        Model::ThemeColor::customization(theme, m_settings.rendering.customTheme1, m_settings.rendering.customTheme2);
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-    const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
+    const auto rgb = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme, custom.backgroundRgb));
+    const QColor color(rgb[0], rgb[1], rgb[2]);
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
 #else
     m_hasUsedPagePlaceholder |= enabled;
-    m_pagePlaceholder.setTheme(theme);
+    m_pagePlaceholder.setTheme(theme, custom.backgroundRgb);
     for (auto* page : m_okularPages)
         m_pagePlaceholder.seed(*page);
 #endif

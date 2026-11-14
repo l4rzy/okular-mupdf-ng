@@ -258,6 +258,16 @@
                 <string>Dark</string>
                </property>
               </item>
+              <item>
+               <property name="text">
+                <string>Custom 1</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Custom 2</string>
+               </property>
+              </item>
              </widget>
             </item>
            </layout>

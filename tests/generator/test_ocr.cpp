@@ -15,6 +15,7 @@
 #include <QCursor>
 #include <QDateTime>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFile>
 #include <QImage>
 #include <QLabel>
@@ -157,6 +158,16 @@ private slots:
         qputenv("XDG_CONFIG_HOME", m_root.filePath("config").toUtf8());
         qputenv("XDG_DATA_HOME", m_root.filePath("data").toUtf8());
         qputenv("XDG_CACHE_HOME", m_root.filePath("cache").toUtf8());
+        QVERIFY(QDir().mkpath(m_root.filePath("config/okular-mupdf-ng")));
+        QFile themeConfig(m_root.filePath("config/okular-mupdf-ng/themerc"));
+        QVERIFY(themeConfig.open(QIODevice::WriteOnly | QIODevice::Text));
+        themeConfig.write("[Custom1]\nName=Magenta\nBackground=241A2E\nForeground=E8DDF5\n"
+                          "PageDarknessThreshold=128\nImageDarknessThreshold=240\nDarkCoveragePercent=50\n"
+                          "ImageDimmingPercent=80\nVectorBlendPercent=40\n\n"
+                          "[Custom2]\nName=Teal\nBackground=241A2E\nForeground=E8DDF5\n"
+                          "PageDarknessThreshold=128\nImageDarknessThreshold=240\nDarkCoveragePercent=50\n"
+                          "ImageDimmingPercent=80\nVectorBlendPercent=40\n");
+        themeConfig.close();
         QCoreApplication::setLibraryPaths({ QStringLiteral(TEST_PLUGIN_ROOT) });
         qputenv("PATH", QByteArray(TEST_WORKER_DIR) + ':' + qgetenv("PATH"));
         Okular::SettingsCore::instance(QStringLiteral("mupdfng-ocr-test"));
@@ -1034,10 +1045,18 @@ private slots:
         QVERIFY(actions->action(QStringLiteral("mupdf_theme"))->isEnabled());
         QCOMPARE(actions->action(QStringLiteral("mupdf_theme_inherit"))->isVisible(), local);
         const auto menuItems = actions->action(QStringLiteral("mupdf_theme"))->menu()->actions();
-        const QStringList menuOrder { "Inherit", "Default", "Twilight", "Dusk", "Dark" };
-        QCOMPARE(menuItems.size(), menuOrder.size());
-        for (int i = 0; i < menuOrder.size(); ++i)
-            QCOMPARE(menuItems.at(i), actions->action(QStringLiteral("mupdf_theme_") + menuOrder.at(i).toLower()));
+        const QStringList actionNames {
+            "mupdf_theme_inherit", "mupdf_theme_default", "mupdf_theme_twilight", "mupdf_theme_dusk", "mupdf_theme_dark"
+        };
+        QCOMPARE(menuItems.size(), 8);
+        for (int i = 0; i < actionNames.size(); ++i)
+            QCOMPARE(menuItems.at(i), actions->action(actionNames.at(i)));
+        QVERIFY(menuItems.at(5)->isSeparator());
+        QVERIFY(menuItems.at(5)->isVisible());
+        QCOMPARE(menuItems.at(6), actions->action(QStringLiteral("mupdf_theme_custom1")));
+        QCOMPARE(menuItems.at(7), actions->action(QStringLiteral("mupdf_theme_custom2")));
+        QCOMPARE(menuItems.at(6)->text(), Mu::Generator::Config::customThemeName(1));
+        QCOMPARE(menuItems.at(7)->text(), Mu::Generator::Config::customThemeName(2));
         QSignalSpy notices(&document, &Okular::Document::notice);
         QSignalSpy otherNotices(&other, &Okular::Document::notice);
         const auto pageCount = document.pages();
@@ -1093,8 +1112,16 @@ private slots:
             QVERIFY(document.isHistoryClean());
         }
         const QStringList themes {
-            QStringLiteral("Default"), QStringLiteral("Twilight"), QStringLiteral("Dusk"), QStringLiteral("Dark")
+            QStringLiteral("Default"),
+            QStringLiteral("Twilight"),
+            QStringLiteral("Dusk"),
+            QStringLiteral("Dark"),
+            Mu::Generator::Config::customThemeName(1),
+            Mu::Generator::Config::customThemeName(2),
         };
+        const QStringList themeValues { "Default", "Twilight", "Dusk", "Dark", "Custom1", "Custom2" };
+        const QStringList themeActions { "mupdf_theme_default", "mupdf_theme_twilight", "mupdf_theme_dusk",
+                                         "mupdf_theme_dark",    "mupdf_theme_custom1",  "mupdf_theme_custom2" };
         // The theme menu is owned by the generator implementing ConfigInterface.
         auto* configInterface =
             qobject_cast<Okular::ConfigInterface*>(actions->action(QStringLiteral("mupdf_theme"))->parent());
@@ -1103,7 +1130,7 @@ private slots:
             actions->action(QStringLiteral("mupdf_theme_inherit"))->trigger();
         QVERIFY(!actions->action(QStringLiteral("mupdf_theme_inherit"))->isVisible());
         int previousMode = 0;
-        for (const int mode : { 1, 2, 3, 0 }) {
+        for (const int mode : { 1, 2, 3, 4, 5, 0 }) {
             KConfigSkeleton hostSettings;
             KConfigDialog dialog(nullptr, QStringLiteral("document-theme-test"), &hostSettings);
             // Older Okular fillConfigDialog() requires its private BackendConfigDialog.
@@ -1111,7 +1138,7 @@ private slots:
             configInterface->addPages(&dialog);
             auto* theme = dialog.findChild<QComboBox*>(QStringLiteral("kcfg_DocumentTheme"));
             QVERIFY(theme);
-            QCOMPARE(theme->count(), 4);
+            QCOMPARE(theme->count(), 6);
             for (int i = 0; i < themes.size(); ++i)
                 QCOMPARE(theme->itemText(i), themes.at(i));
             auto* buttons = dialog.findChild<QDialogButtonBox*>();
@@ -1125,8 +1152,8 @@ private slots:
             theme->setCurrentIndex(mode);
             ok->click();
             QTRY_VERIFY(observer.refreshes > previousRefreshes);
-            QVERIFY(actions->action(QStringLiteral("mupdf_theme_") + themes.at(mode).toLower())->isChecked());
-            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), themes.at(mode));
+            QVERIFY(actions->action(themeActions.at(mode))->isChecked());
+            QCOMPARE(general.readEntry("ReadingTheme", QStringLiteral("Default")), themeValues.at(mode));
             QVERIFY(document.isHistoryClean());
             QCOMPARE(notices.count(), previousNotices);
             QCOMPARE(otherNotices.count(), 0);
@@ -1443,6 +1470,9 @@ private slots:
         QTRY_COMPARE(otherTools->actions().size(), 6);
         auto* theme = tools->actions().at(3);
         QVERIFY(theme != otherTools->actions().at(3));
+        QCOMPARE(theme->menu()->actions().size(), 8);
+        QVERIFY(theme->menu()->actions().at(5)->isSeparator());
+        QVERIFY(theme->menu()->actions().at(5)->isVisible());
         for (auto* client : clients)
             QVERIFY(client->actionCollection()->associatedWidgets().isEmpty());
         // Simulate the shell switching parts without unregistering generators.
@@ -1488,7 +1518,7 @@ private slots:
         const int remaining = 1 - firstClosed;
         auto* source = clients[remaining]->actionCollection()->action(QStringLiteral("mupdf_theme_dark"));
         QSignalSpy triggered(source, &QAction::triggered);
-        theme->menu()->actions().back()->trigger();
+        theme->menu()->actions().at(4)->trigger();
         QCOMPARE(triggered.count(), 1);
         QVERIFY(!theme->text().endsWith(QStringLiteral("(Local)")));
         // Removing and re-adding a cached client must restore one presentation.
@@ -1648,7 +1678,7 @@ private slots:
         QCOMPARE(menu->actions().size(), 6);
         QVERIFY(!menu->actions().at(4)->isVisible());
         QVERIFY(!menu->actions().at(5)->isVisible());
-        QCOMPARE(client->actionCollection()->actions().count(), 19);
+        QCOMPARE(client->actionCollection()->actions().count(), 21);
         for (QAction* registered : presentation->actionCollection()->actions())
             QCOMPARE(KActionCollection::isShortcutsConfigurable(registered),
                      registered->objectName() == QStringLiteral("mupdf_ocr_toggle")

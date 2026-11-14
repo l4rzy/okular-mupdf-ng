@@ -22,7 +22,7 @@ struct PageProbe {
     bool highlight;
 };
 
-bool isDarkPixel(const unsigned char* pixel) noexcept
+bool isDarkPixel(const unsigned char* pixel, unsigned cutoff) noexcept
 {
     // Packed, alignment-safe loads allow baseline SSE2 to vectorize reductions.
     std::uint32_t rgba;
@@ -34,10 +34,10 @@ bool isDarkPixel(const unsigned char* pixel) noexcept
     const auto blue = (rgba >> 16) & 0xFF;
     // Approximate perceptual luminance with integer weights that sum to 256.
     const auto luminance = Theme::RedWeight * red + Theme::GreenWeight * green + Theme::BlueWeight * blue;
-    return luminance < Theme::PageDarknessCutoff * Theme::LuminanceScale;
+    return luminance < cutoff * Theme::LuminanceScale;
 }
 
-bool hasMostlyDarkBorder(fz_context* context, fz_pixmap* pixmap)
+bool hasMostlyDarkBorder(fz_context* context, fz_pixmap* pixmap, const Model::ThemeCustomization& custom)
 {
     // The page probe supplies an opaque RGBA thumbnail.
     const int width = fz_pixmap_width(context, pixmap);
@@ -49,14 +49,16 @@ bool hasMostlyDarkBorder(fz_context* context, fz_pixmap* pixmap)
     const auto* bottom = top + static_cast<std::size_t>(height - 1) * stride;
     std::size_t darkPixels = 0;
     for (int x = 0; x < width; ++x)
-        darkPixels += isDarkPixel(top + x * 4) + isDarkPixel(bottom + x * 4);
+        darkPixels += isDarkPixel(top + x * 4, custom.pageDarknessThreshold)
+            + isDarkPixel(bottom + x * 4, custom.pageDarknessThreshold);
     for (int y = 1; y < height - 1; ++y) {
         const auto* row = top + static_cast<std::size_t>(y) * stride;
-        darkPixels += isDarkPixel(row) + isDarkPixel(row + (width - 1) * 4);
+        darkPixels += isDarkPixel(row, custom.pageDarknessThreshold)
+            + isDarkPixel(row + (width - 1) * 4, custom.pageDarknessThreshold);
     }
     // Count corners once and require a strict majority, as in the full-page scan.
     const auto borderPixels = 2 * (static_cast<std::size_t>(width) + static_cast<std::size_t>(height)) - 4;
-    return darkPixels > borderPixels / Theme::DarkCoverageDivisor;
+    return darkPixels * 100 > borderPixels * custom.darkCoveragePercent;
 }
 
 ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::array<int, 3>& foreground) noexcept
@@ -75,8 +77,11 @@ ThemePalette makeThemePalette(const std::array<int, 3>& background, const std::a
 
 std::uint32_t readingPaperColor(const Model::DocumentSettings& settings) noexcept
 {
-    return settings.documentTheme == Model::DocumentTheme::Default ? settings.paperColorRgb
-                                                                   : Model::ThemeColor::DefaultBackground;
+    if (settings.documentTheme == Model::DocumentTheme::Default)
+        return settings.paperColorRgb;
+    // Bitmap recoloring needs original white paper; the palette maps it to
+    // the requested background after the page has been composited.
+    return Model::ThemeColor::DefaultBackground;
 }
 
 ThemeRenderPlan planThemeRendering(const Model::DocumentSettings& settings, ThemePageInfo page) noexcept
@@ -86,13 +91,16 @@ ThemeRenderPlan planThemeRendering(const Model::DocumentSettings& settings, Them
     const bool recolorVectors = deviceTheme && !page.mostlyDark;
     // Dark recoloring uses the completed bitmap when drawing operations
     // need compositing, so overlapping operations are themed together.
-    const bool bitmapDark = theme == Model::DocumentTheme::Dark && recolorVectors && page.needsCompositing;
-    const auto paperColor =
-        recolorVectors && !bitmapDark ? Model::ThemeColor::getBackground(theme) : readingPaperColor(settings);
+    const bool bitmapDark = (theme == Model::DocumentTheme::Dark || Model::ThemeColor::isCustom(theme))
+        && recolorVectors && page.needsCompositing;
+    const auto& custom = settings.activeCustomTheme;
+    const auto paperColor = recolorVectors && !bitmapDark
+        ? Model::ThemeColor::getBackground(theme, custom.backgroundRgb)
+        : readingPaperColor(settings);
     return { deviceTheme && !bitmapDark, recolorVectors, paperColor };
 }
 
-bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
+bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap, const Model::ThemeCustomization& custom)
 {
     if (fz_pixmap_components(context, pixmap) != 4)
         fz_throw(context, FZ_ERROR_ARGUMENT, "document theme requires an RGBA viewing pixmap");
@@ -105,10 +113,11 @@ bool isMostlyDarkPixmap(fz_context* context, fz_pixmap* pixmap)
         const auto* pixel = samples + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
         std::uint32_t darkRow = 0;
         for (int x = 0; x < width; ++x, pixel += 4)
-            darkRow += isDarkPixel(pixel);
+            darkRow += isDarkPixel(pixel, custom.pageDarknessThreshold);
         darkPixels += darkRow;
     }
-    return darkPixels > static_cast<std::size_t>(width) * static_cast<std::size_t>(height) / Theme::DarkCoverageDivisor;
+    return darkPixels * 100
+        > static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * custom.darkCoveragePercent;
 }
 
 // Dusk samples the whole page, independently of the requested tile or zoom.
@@ -118,8 +127,11 @@ ThemePageInfo inspectThemePage(fz_context* context,
                                fz_rect bounds,
                                Model::DocumentTheme theme,
                                fz_cookie* cookie,
-                               fz_display_list* list)
+                               fz_display_list* list,
+                               const Model::ThemeCustomization& custom)
 {
+    const Model::ThemeCustomization defaults;
+    const auto& activeCustom = Model::ThemeColor::isCustom(theme) ? custom : defaults;
     fz_pixmap* volatile thumbnail = nullptr;
     fz_device* volatile device = nullptr;
     ThemePageInfo info;
@@ -128,7 +140,7 @@ ThemePageInfo inspectThemePage(fz_context* context,
     {
         if (cookie && cookie->abort)
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
-        if (theme == Model::DocumentTheme::Dusk) {
+        if (theme == Model::DocumentTheme::Dusk || Model::ThemeColor::isCustom(theme)) {
             thumbnail =
                 fz_new_pixmap(context, fz_device_rgb(context), Theme::ThumbnailSize, Theme::ThumbnailSize, nullptr, 1);
             fz_clear_pixmap_with_value(context, thumbnail, 255);
@@ -193,8 +205,8 @@ ThemePageInfo inspectThemePage(fz_context* context,
         if (cookie && cookie->abort)
             fz_throw(context, FZ_ERROR_ABORT, "render cancelled");
         // Require dark edges too: a large inset photograph can dominate a light page.
-        info.mostlyDark =
-            thumbnail && isMostlyDarkPixmap(context, thumbnail) && hasMostlyDarkBorder(context, thumbnail);
+        info.mostlyDark = thumbnail && isMostlyDarkPixmap(context, thumbnail, activeCustom)
+            && hasMostlyDarkBorder(context, thumbnail, activeCustom);
     }
     fz_always(context)
     {
@@ -205,23 +217,20 @@ ThemePageInfo inspectThemePage(fz_context* context,
     return info;
 }
 
-// Dim premultiplied RGBA to 80%, retaining alpha. Packed, alignment-safe
+// Dim premultiplied RGBA, retaining alpha. Packed, alignment-safe
 // loads/stores allow baseline x86-64 compilers to vectorize across pixels.
-void dimImageRow(unsigned char* pixel, int width) noexcept
+void dimImageRow(unsigned char* pixel, int width, unsigned dimmingPercent) noexcept
 {
+    if (dimmingPercent == 100)
+        return;
     for (int x = 0; x < width; ++x, pixel += 4) {
         std::uint32_t rgba;
         std::memcpy(&rgba, pixel, sizeof(rgba));
         if constexpr (std::endian::native == std::endian::big)
             rgba = std::byteswap(rgba);
-        const auto red = ((rgba & 255) * Theme::ImageBrightnessNumerator + Theme::ImageBrightnessDenominator / 2)
-            / Theme::ImageBrightnessDenominator;
-        const auto green =
-            (((rgba >> 8) & 255) * Theme::ImageBrightnessNumerator + Theme::ImageBrightnessDenominator / 2)
-            / Theme::ImageBrightnessDenominator;
-        const auto blue =
-            (((rgba >> 16) & 255) * Theme::ImageBrightnessNumerator + Theme::ImageBrightnessDenominator / 2)
-            / Theme::ImageBrightnessDenominator;
+        const auto red = ((rgba & 255) * dimmingPercent + 50) / 100;
+        const auto green = (((rgba >> 8) & 255) * dimmingPercent + 50) / 100;
+        const auto blue = (((rgba >> 16) & 255) * dimmingPercent + 50) / 100;
         rgba = (rgba & 0xFF000000U) | red | (green << 8) | (blue << 16);
         if constexpr (std::endian::native == std::endian::big)
             rgba = std::byteswap(rgba);
@@ -230,7 +239,11 @@ void dimImageRow(unsigned char* pixel, int width) noexcept
 }
 
 // Transform an RGBA viewing pixmap, preserving premultiplied alpha.
-void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::DocumentTheme theme, const fz_cookie* cookie)
+void applyDocumentTheme(fz_context* context,
+                        fz_pixmap* pixmap,
+                        Model::DocumentTheme theme,
+                        const fz_cookie* cookie,
+                        const Model::ThemeCustomization& custom)
 {
     // Dusk is applied by its image-preserving rendering device.
     if (theme == Model::DocumentTheme::Default || theme == Model::DocumentTheme::Dusk)
@@ -250,10 +263,17 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::DocumentT
         foreground = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
         invertBrightness = true;
         break;
+    case Model::DocumentTheme::Custom1:
+    case Model::DocumentTheme::Custom2:
+        background = Model::ThemeColor::splitRgb(custom.backgroundRgb);
+        foreground = Model::ThemeColor::splitRgb(custom.foregroundRgb);
+        invertBrightness = true;
+        break;
     default:
         return;
     }
     const auto palette = makeThemePalette(background, foreground);
+    const int blendPercent = Model::ThemeColor::isCustom(theme) ? custom.vectorBlendPercent : Theme::VectorBlendPercent;
     const int width = fz_pixmap_width(context, pixmap);
     const int height = fz_pixmap_height(context, pixmap);
     const int stride = fz_pixmap_stride(context, pixmap);
@@ -277,9 +297,9 @@ void applyDocumentTheme(fz_context* context, fz_pixmap* pixmap, Model::DocumentT
                 // A fixed blend preserves antialiased coverage against neutral paper.
                 const int low = std::min({ red, green, blue });
                 const int high = std::max({ red, green, blue });
-                red = low + (high - red) * Theme::SaturationNumerator / Theme::SaturationDenominator;
-                green = low + (high - green) * Theme::SaturationNumerator / Theme::SaturationDenominator;
-                blue = low + (high - blue) * Theme::SaturationNumerator / Theme::SaturationDenominator;
+                red = low + (high - red) * blendPercent / 100;
+                green = low + (high - green) * blendPercent / 100;
+                blue = low + (high - blue) * blendPercent / 100;
             }
             pixel[0] = static_cast<unsigned char>((palette[0][static_cast<std::size_t>(red)] * alpha + 127) / 255);
             pixel[1] = static_cast<unsigned char>((palette[1][static_cast<std::size_t>(green)] * alpha + 127) / 255);

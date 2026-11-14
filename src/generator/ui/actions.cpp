@@ -30,15 +30,20 @@ namespace {
 
 constexpr int ShortNoticeMs = 1500;
 
-QIcon themePreviewIcon(Model::DocumentTheme theme)
+QIcon themePreviewIcon(Model::DocumentTheme theme, const Model::ThemeCustomization& custom)
 {
-    const auto backgroundRgb = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme));
+    const auto backgroundRgb =
+        Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme, custom.backgroundRgb));
     const QColor background(backgroundRgb[0], backgroundRgb[1], backgroundRgb[2]);
     const QColor foreground = [&] {
         if (theme == Model::DocumentTheme::Twilight)
             return QColor(Qt::black);
         if (theme == Model::DocumentTheme::Default)
             return QColor(32, 33, 36);
+        if (Model::ThemeColor::isCustom(theme)) {
+            const auto rgb = Model::ThemeColor::splitRgb(custom.foregroundRgb);
+            return QColor(rgb[0], rgb[1], rgb[2]);
+        }
         const auto rgb = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
         return QColor(rgb[0], rgb[1], rgb[2]);
     }();
@@ -177,11 +182,19 @@ void Main::setupThemeActions()
     actionCollection()->addAction(QStringLiteral("mupdf_theme"), menu);
     KActionCollection::setShortcutsConfigurable(menu, false);
     m_themeActions = new QActionGroup(this);
+    const bool custom1Available = Config::hasCustomTheme(1);
+    const bool custom2Available = Config::hasCustomTheme(2);
+    const auto globalTheme = Config::effectiveDocumentTheme(
+        static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()), custom1Available, custom2Available);
     const auto addTheme = [&](const QString& name, const QString& label, std::optional<Model::DocumentTheme> theme) {
         auto* action = new QAction(label, m_themeActions);
-        const auto previewTheme = theme.value_or(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()));
-        action->setIcon(theme == Model::DocumentTheme::Default ? QIcon::fromTheme(QStringLiteral("edit-undo"))
-                                                               : themePreviewIcon(previewTheme));
+        const auto previewTheme = theme.value_or(globalTheme);
+        action->setIcon(theme == Model::DocumentTheme::Default
+                            ? QIcon::fromTheme(QStringLiteral("edit-undo"))
+                            : themePreviewIcon(previewTheme,
+                                               Model::ThemeColor::customization(previewTheme,
+                                                                                m_settings.rendering.customTheme1,
+                                                                                m_settings.rendering.customTheme2)));
         action->setCheckable(true);
         action->setData(theme ? static_cast<int>(*theme) : -1);
         KActionCollection::setShortcutsConfigurable(action, false);
@@ -193,6 +206,12 @@ void Main::setupThemeActions()
     addTheme(QStringLiteral("mupdf_theme_twilight"), i18n("Twilight"), Model::DocumentTheme::Twilight);
     addTheme(QStringLiteral("mupdf_theme_dusk"), i18n("Dusk"), Model::DocumentTheme::Dusk);
     addTheme(QStringLiteral("mupdf_theme_dark"), i18n("Dark"), Model::DocumentTheme::Dark);
+    m_customThemeSeparator = menu->menu()->addSeparator();
+    m_customThemeSeparator->setVisible(custom1Available || custom2Available);
+    addTheme(QStringLiteral("mupdf_theme_custom1"), Config::customThemeName(1), Model::DocumentTheme::Custom1);
+    addTheme(QStringLiteral("mupdf_theme_custom2"), Config::customThemeName(2), Model::DocumentTheme::Custom2);
+    actionCollection()->action(QStringLiteral("mupdf_theme_custom1"))->setVisible(custom1Available);
+    actionCollection()->action(QStringLiteral("mupdf_theme_custom2"))->setVisible(custom2Available);
     const auto setTheme = [this](std::optional<Model::DocumentTheme> theme) {
         if (theme && !m_document.settings.theme) {
             MuPDFNGSettings::setDocumentTheme(static_cast<int>(*theme));
@@ -265,14 +284,25 @@ void Main::syncThemeActions()
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_dark"))->setEnabled(enabled);
     actionCollection()->action(QStringLiteral("mupdf_theme_toggle_twilight"))->setEnabled(enabled);
     m_themeActions->setEnabled(enabled);
+    const bool custom1Available = Config::hasCustomTheme(1);
+    const bool custom2Available = Config::hasCustomTheme(2);
+    const auto globalTheme = Config::effectiveDocumentTheme(
+        static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()), custom1Available, custom2Available);
     actionCollection()
         ->action(QStringLiteral("mupdf_theme_inherit"))
         ->setVisible(m_document.settings.theme.has_value());
     actionCollection()
         ->action(QStringLiteral("mupdf_theme_inherit"))
-        ->setIcon(themePreviewIcon(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
-    const int theme = static_cast<int>(
-        m_document.settings.theme.value_or(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme())));
+        ->setIcon(themePreviewIcon(globalTheme,
+                                   Model::ThemeColor::customization(globalTheme,
+                                                                    m_settings.rendering.customTheme1,
+                                                                    m_settings.rendering.customTheme2)));
+    actionCollection()->action(QStringLiteral("mupdf_theme_custom1"))->setText(Config::customThemeName(1));
+    actionCollection()->action(QStringLiteral("mupdf_theme_custom2"))->setText(Config::customThemeName(2));
+    actionCollection()->action(QStringLiteral("mupdf_theme_custom1"))->setVisible(custom1Available);
+    actionCollection()->action(QStringLiteral("mupdf_theme_custom2"))->setVisible(custom2Available);
+    m_customThemeSeparator->setVisible(custom1Available || custom2Available);
+    const int theme = static_cast<int>(m_document.settings.theme.value_or(globalTheme));
     for (QAction* action : m_themeActions->actions())
         action->setChecked(action->data().toInt() == theme);
 }
