@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: okular-mupdf-ng\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 23:49-0500\n"
-"PO-Revision-Date: 2026-11-10 23:49-0500\n"
+"POT-Creation-Date: 2026-11-15 13:11-0500\n"
+"PO-Revision-Date: 2026-11-15 13:11-0500\n"
 "Last-Translator: \n"
 "Language-Team: Vietnamese\n"
 "Language: vi\n"
@@ -149,7 +149,7 @@ msgstr "Bình thường"
 msgid "Sparse"
 msgstr "Thưa"
 
-#: src/generator/config/settingswidget.cpp:114 src/generator/ui/actions.cpp:193
+#: src/generator/config/settingswidget.cpp:114 src/generator/ui/actions.cpp:192
 #: src/generator/ui/document_settings.cpp:199
 #: src/generator/ui/document_settings.cpp:223 rc.cpp:30
 msgid "Default"
@@ -495,7 +495,8 @@ msgstr "Quản lý chứng chỉ - %1"
 
 #: src/generator/config/certmanager/manager_dialog.cpp:45
 #: src/generator/config/certmanager/manager_dialog.cpp:162
-#: src/generator/mupdfng.cpp:742 src/generator/mupdfng.cpp:810
+#: src/generator/mupdfng.cpp:742 src/generator/mupdfng.cpp:764
+#: src/generator/mupdfng.cpp:812
 msgid "Unknown"
 msgstr "Không xác định"
 
@@ -926,19 +927,23 @@ msgstr "Hộp cát: Được gia cố một phần [CẢNH BÁO]"
 msgid "Sandbox: Unconfined [CRIT]"
 msgstr "Hộp cát: Không bị giới hạn [NGHIÊM TRỌNG]"
 
-#: src/generator/mupdfng.cpp:768
+#: src/generator/mupdfng.cpp:765
+msgid "Sandbox profile: %1"
+msgstr "Profile hộp cát: %1"
+
+#: src/generator/mupdfng.cpp:770
 msgid "unknown"
 msgstr "không xác định"
 
-#: src/generator/mupdfng.cpp:769
+#: src/generator/mupdfng.cpp:771
 msgid "Worker memory: %1"
 msgstr "Bộ nhớ worker: %1"
 
-#: src/generator/mupdfng.cpp:772
+#: src/generator/mupdfng.cpp:774
 msgid "Worker restarts: %1"
 msgstr "Số lần khởi động lại worker: %1"
 
-#: src/generator/mupdfng.cpp:807
+#: src/generator/mupdfng.cpp:809
 msgid ""
 "The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
 "To open this document, switch Sandbox Enforcement to Relaxed. This will "
@@ -951,56 +956,56 @@ msgstr ""
 "tác này sẽ giảm mức bảo vệ.\n"
 "Lỗi: %1"
 
-#: src/generator/mupdfng.cpp:911
+#: src/generator/mupdfng.cpp:913
 msgid "Switched to Relaxed enforcement. Please reopen the document manually."
 msgstr ""
 "Đã chuyển sang chế độ thực thi Nới lỏng. Vui lòng mở lại tài liệu theo cách "
 "thủ công."
 
-#: src/generator/mupdfng.cpp:946
+#: src/generator/mupdfng.cpp:948
 msgid ""
 "The document could not be reloaded after saving. Restart Okular to continue."
 msgstr ""
 "Không thể tải lại tài liệu sau khi lưu. Hãy khởi động lại Okular để tiếp tục."
 
-#: src/generator/mupdfng.cpp:1030
+#: src/generator/mupdfng.cpp:1032
 msgid "OCR completed for page %1"
 msgstr "Đã hoàn tất OCR cho trang %1"
 
-#: src/generator/mupdfng.cpp:1235
+#: src/generator/mupdfng.cpp:1237
 msgid "Format"
 msgstr "Định dạng"
 
-#: src/generator/mupdfng.cpp:1238 rc.cpp:60
+#: src/generator/mupdfng.cpp:1240 rc.cpp:60
 msgid "Security"
 msgstr "Bảo mật"
 
-#: src/generator/mupdfng.cpp:1240
+#: src/generator/mupdfng.cpp:1242
 msgid "Yes"
 msgstr "Có"
 
-#: src/generator/mupdfng.cpp:1240
+#: src/generator/mupdfng.cpp:1242
 msgid "No"
 msgstr "Không"
 
-#: src/generator/mupdfng.cpp:1241
+#: src/generator/mupdfng.cpp:1243
 msgid "Optimized"
 msgstr "Đã tối ưu hóa"
 
-#: src/generator/mupdfng.cpp:1244
+#: src/generator/mupdfng.cpp:1246
 msgid "Signed (%1 signature)"
 msgid_plural "Signed (%1 signatures)"
 msgstr[0] "Đã ký (%1 chữ ký)"
 
-#: src/generator/mupdfng.cpp:1244
+#: src/generator/mupdfng.cpp:1246
 msgid "Not Signed"
 msgstr "Chưa ký"
 
-#: src/generator/mupdfng.cpp:1245
+#: src/generator/mupdfng.cpp:1247
 msgid "Digital Signatures"
 msgstr "Chữ ký số"
 
-#: src/generator/mupdfng.cpp:1282
+#: src/generator/mupdfng.cpp:1284
 msgid ""
 "This document has no embedded table of contents. A generated table of "
 "contents is being used."
@@ -1008,23 +1013,23 @@ msgstr ""
 "Tài liệu này không có mục lục nhúng. Một mục lục được tạo tự động đang được "
 "sử dụng."
 
-#: src/generator/mupdfng.cpp:1494 src/generator/mupdfng.cpp:1518
+#: src/generator/mupdfng.cpp:1496 src/generator/mupdfng.cpp:1520
 msgid "The PDF layers could not be loaded."
 msgstr "Không thể tải các lớp PDF."
 
-#: src/generator/mupdfng.cpp:1506
+#: src/generator/mupdfng.cpp:1508
 msgid "The PDF layer visibility could not be changed."
 msgstr "Không thể thay đổi trạng thái hiển thị của lớp PDF."
 
-#: src/generator/mupdfng.cpp:1714
+#: src/generator/mupdfng.cpp:1716
 msgid "Strict sandbox enforcement blocks this document."
 msgstr "Chế độ thực thi hộp cát nghiêm ngặt đã chặn tài liệu này."
 
-#: src/generator/mupdfng.cpp:1715 src/generator/mupdfng.cpp:1726
+#: src/generator/mupdfng.cpp:1717 src/generator/mupdfng.cpp:1728
 msgid "MuPDF worker is unavailable."
 msgstr "Worker MuPDF không khả dụng."
 
-#: src/generator/mupdfng.cpp:1722
+#: src/generator/mupdfng.cpp:1724
 msgid "Failed to save PDF document."
 msgstr "Không thể lưu tài liệu PDF."
 
@@ -1168,7 +1173,7 @@ msgstr "Nhập chú thích từ XFDF…"
 msgid "Tesseract OCR"
 msgstr "OCR Tesseract"
 
-#: src/generator/ui/actions.cpp:123 src/generator/ui/actions.cpp:192
+#: src/generator/ui/actions.cpp:123 src/generator/ui/actions.cpp:191
 #: src/generator/ui/document_settings.cpp:200
 #: src/generator/ui/document_settings.cpp:211
 #: src/generator/ui/document_settings.cpp:275
@@ -1199,45 +1204,45 @@ msgstr "OCR Tesseract: %1"
 msgid "Toggle Tesseract OCR"
 msgstr "Bật/tắt OCR Tesseract"
 
-#: src/generator/ui/actions.cpp:176 src/generator/ui/actions.cpp:264
+#: src/generator/ui/actions.cpp:176 src/generator/ui/actions.cpp:263
 #: src/generator/ui/document_settings.cpp:195
 #: src/generator/ui/document_settings.cpp:362
 #: src/generator/ui/document_settings.cpp:363 rc.cpp:27
 msgid "Document Theme"
 msgstr "Theme tài liệu"
 
-#: src/generator/ui/actions.cpp:194 src/generator/ui/document_settings.cpp:199
+#: src/generator/ui/actions.cpp:193 src/generator/ui/document_settings.cpp:199
 #: rc.cpp:33
 msgid "Twilight"
 msgstr "Nhá nhem"
 
-#: src/generator/ui/actions.cpp:195 src/generator/ui/document_settings.cpp:199
+#: src/generator/ui/actions.cpp:194 src/generator/ui/document_settings.cpp:199
 #: rc.cpp:36
 msgid "Dusk"
 msgstr "Chạng vạng"
 
-#: src/generator/ui/actions.cpp:196 src/generator/ui/document_settings.cpp:199
+#: src/generator/ui/actions.cpp:195 src/generator/ui/document_settings.cpp:199
 #: rc.cpp:39
 msgid "Dark"
 msgstr "Tối"
 
-#: src/generator/ui/actions.cpp:211
+#: src/generator/ui/actions.cpp:210
 msgid "Document theme: %1"
 msgstr "Theme tài liệu: %1"
 
-#: src/generator/ui/actions.cpp:232
+#: src/generator/ui/actions.cpp:231
 msgid "Toggle Dusk Mode"
 msgstr "Bật/tắt chế độ chạng vạng"
 
-#: src/generator/ui/actions.cpp:236
+#: src/generator/ui/actions.cpp:235
 msgid "Toggle Dark Mode"
 msgstr "Bật/tắt chế độ tối"
 
-#: src/generator/ui/actions.cpp:240
+#: src/generator/ui/actions.cpp:239
 msgid "Toggle Twilight Mode"
 msgstr "Bật/tắt chế độ nhá nhem"
 
-#: src/generator/ui/actions.cpp:264 src/generator/ui/actions.cpp:287
+#: src/generator/ui/actions.cpp:263 src/generator/ui/actions.cpp:287
 #: src/generator/ui/document_settings.cpp:363
 #: src/generator/ui/document_settings.cpp:364
 msgid "%1 (Local)"

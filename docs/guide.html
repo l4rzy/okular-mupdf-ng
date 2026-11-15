@@ -84,31 +84,36 @@
         <img src="assets/guide/sandbox_warning.png" alt="Okular warning banner reporting that the MuPDF worker is unconfined and cannot protect against malicious documents" width="686" height="63" loading="lazy">
         <figcaption>Example notification for an unconfined worker. Notifications do not change the enforcement policy.</figcaption>
       </figure>
-      <h3>Probe the worker</h3>
-      <p>Run the installed worker as your normal user to check the protections
-        available on your system. For a typical <code>/usr/lib</code> installation:</p>
-      <pre><code>/usr/lib/okular-mupdf-ng/mupdfng-worker --sandbox-check
-/usr/lib/okular-mupdf-ng/mupdfng-worker --sandbox-check=json</code></pre>
-      <p>Example output from an x86_64 Debian-style installation:</p>
-      <pre><code>/usr/lib/x86_64-linux-gnu/okular-mupdf-ng/mupdfng-worker --sandbox-check
-Sandbox: linux profile=mupdfng.linux.v1 isolation=full
+      <h3>Check the worker sandbox</h3>
+      <p>Run the CLI as your normal user to start a worker through the same launcher
+        used by the plugin and report its protections:</p>
+      <pre><code>mupdfng-cli sandbox
+mupdfng-cli sandbox --json</code></pre>
+      <p>Example output when Bubblewrap is enabled:</p>
+      <pre><code>Sandbox: linux profile=mupdfng.linux.bwrap.v1 isolation=full
   linux.no_new_privileges: enforced required=1 version=
   linux.namespaces: enforced required=1 version=
+    Namespaces inherited from Bubblewrap launcher
   linux.resource_limits: enforced required=1 version=
-  linux.landlock: enforced required=1 version=9
+  linux.landlock: enforced required=1 version=10
   linux.seccomp: enforced required=1 version=
-  linux.mdwe: enforced required=0 version=</code></pre>
-      <p>The worker location depends on the package&rsquo;s library directory;
-        it may use <code>lib64</code> or a multiarch directory. For a source build,
-        use <code>./build/bin/mupdfng-worker --sandbox-check</code>.</p>
-      <p>The probe activates the sandbox in a short-lived process and reports
-        the platform, profile, isolation level, individual protections, and diagnostics.
-        The Linux profile requires no-new-privileges, namespaces, resource limits, Landlock, and seccomp;
-        memory protection is optional. JSON output exposes these in <code>protections</code> and
-        <code>diagnostics</code> arrays, with <code>policySatisfied</code> indicating full hardening. Exit code <code>0</code> means fully hardened,
-        <code>1</code> means partially active, and <code>2</code> means unconfined.</p>
-      <p>Strict/Relaxed is the plugin&rsquo;s enforcement policy; the probe reports
-        whether runtime protections can satisfy Strict on this host. It does not
+  linux.mdwe: enforced required=0 version=
+  linux.bubblewrap: enforced required=1 version=</code></pre>
+      <p>Packages with Bubblewrap support launch plugin and CLI workers through <code>bwrap</code>;
+        startup fails if its sandbox cannot be created. Without it, the worker uses
+        the native <code>mupdfng.linux.v1</code> profile. The Landlock version and
+        protection states depend on the host.</p>
+      <p>The report includes the platform, profile, isolation level, individual
+        protections, and diagnostics. The native Linux profile requires
+        no-new-privileges, namespaces, resource limits, Landlock, and seccomp;
+        memory protection is optional. The Bubblewrap profile also requires the
+        launcher&rsquo;s filesystem isolation. JSON includes per-protection
+        <code>diagnostic</code> fields and a general <code>diagnostics</code> array,
+        with <code>policySatisfied</code> indicating full hardening. Exit code
+        <code>0</code> means fully hardened, <code>1</code> means partially active,
+        and <code>2</code> means inactive or startup failed.</p>
+      <p>Strict/Relaxed is the plugin&rsquo;s enforcement policy; the CLI reports
+        whether a newly started worker can satisfy Strict on this host. It does not
         change the policy or inspect an already running Okular worker.</p>
     </section>
 
@@ -177,7 +182,7 @@ sudo apt install tesseract-ocr-eng</code></pre>
         so the <a href="#epub-customisation">ePUB layout settings</a> also apply to them.</p>
       <p>Encrypted books and KFX books split across multiple files are not supported.
         Legacy MOBI is handled separately; it supports uncompressed and PalmDOC-compressed books.</p>
-      <p>Kindle books can <a href="#epub-mobi-export">export to ePUB, PDF, or plain text</a>.
+      <p>Kindle books can <a href="#epub-mobi-export">export to ePUB, PDF, Markdown, or plain text</a>.
         Conversion may change book-specific formatting.</p>
     </section>
 
@@ -188,17 +193,20 @@ sudo apt install tesseract-ocr-eng</code></pre>
       <ol>
         <li>Open <strong>Tools → Document Settings</strong> for a local book and
           uncheck <strong>Use Global</strong> under <strong>Ebook layout</strong>.</li>
-        <li>Set <strong>Font Size</strong>, <strong>Font Family</strong>, and
-          <strong>Page Size</strong>.</li>
+        <li>Set <strong>Font Size</strong>, <strong>Font Family</strong>,
+          <strong>Line Spacing</strong> (Dense, Normal, or Sparse), and <strong>Page Size</strong>.</li>
+        <li>Enable <strong>Ignore ebook&rsquo;s built-in CSS</strong> to discard the book&rsquo;s
+          own styles if needed.</li>
         <li>Expand <strong>Custom CSS</strong> to add your own document styles.</li>
         <li>Apply the settings. The book reloads with the new layout.</li>
       </ol>
       <p>Applied overrides are remembered for this document. Select <strong>Use Global</strong> to remove the layout override. Set defaults for other books
         under <strong>ePUB → Page Layout</strong> in the backend settings.</p>
-      <p>For example, this rule increases inherited line spacing:</p>
-      <pre><code>body { line-height: 1.8; }</code></pre>
-      <p>A document&rsquo;s own rules on individual elements can override inherited
-        styles. Changing the layout can change page counts and text positions.</p>
+      <p>For custom line spacing beyond the presets, override the generated rule:</p>
+      <pre><code>body, body * { line-height: 1.8 !important; }</code></pre>
+      <p>Custom CSS is applied after the generated styles. Use <code>!important</code>
+        when overriding a generated rule that uses it. Changing the layout can change
+        page counts and text positions.</p>
       <!-- Screenshot: ePUB settings, CSS editor, and resulting layout. -->
     </section>
 
@@ -412,6 +420,11 @@ sudo apt install tesseract-ocr-eng</code></pre>
       <p>Choose an output filename. These exports produce reflowable books; the current
         page layout and document theme are not baked into the output. Legacy MOBI
         supports PDF and plain-text export only.</p>
+      <h3>Markdown</h3>
+      <p>For an ePUB, AZW3, or KFX book, choose
+        <strong>File → Export As → Markdown</strong>. This converts the book&rsquo;s
+        source content; the current page layout and document theme are not baked
+        into the output. Legacy MOBI does not support Markdown export.</p>
     </section>
 
     <section id="signatures">
