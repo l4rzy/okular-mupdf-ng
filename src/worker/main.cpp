@@ -52,6 +52,9 @@ cxxopts::Options makeWorkerOptions()
     options.add_options()(
         "socket", "control Unix-domain socket for private plugin IPC", cxxopts::value<std::string>(), "PATH")(
         "fd-socket", "Unix-domain socket for private descriptor transfer", cxxopts::value<std::string>(), "PATH")(
+#ifdef MU_ENABLE_WORKER_BWRAP
+        "parent-pid", "Expected IPC peer PID when launched through a wrapper", cxxopts::value<int>(), "PID")(
+#endif // MU_ENABLE_WORKER_BWRAP
         "tessdata-dir", "Tesseract data directory", cxxopts::value<std::vector<std::string>>(), "PATH")(
         "sandbox-check",
         "Activate the sandbox in this short-lived process and report its status; use --sandbox-check=json for JSON "
@@ -162,8 +165,16 @@ int main(int argc, char* argv[])
     std::vector<std::string> tessDataDirectories;
     auto options = makeWorkerOptions();
     cxxopts::ParseResult result;
+    pid_t parentPid = ::getppid();
     try {
         result = options.parse(argc, argv);
+#ifdef MU_ENABLE_WORKER_BWRAP
+        if (result.count("parent-pid")) {
+            parentPid = result["parent-pid"].as<int>();
+            if (parentPid <= 0)
+                throw cxxopts::exceptions::incorrect_argument_type("parent-pid must be positive");
+        }
+#endif // MU_ENABLE_WORKER_BWRAP
         if (result.count("help")) {
             std::cout << options.help() << "\n";
             std::cout << "This program is launched by the Okular plugin. It does not open document paths or render "
@@ -228,14 +239,14 @@ int main(int argc, char* argv[])
     // This channel uses SCM_RIGHTS to receive document file descriptors and shared memory frames.
     ::Mu::IPC::FdChannel fdChannel;
     std::string error;
-    if (!fdChannel.connect(fdSocketPath.c_str(), &error, ::getppid())) {
+    if (!fdChannel.connect(fdSocketPath.c_str(), &error, parentPid)) {
         MU_LOG(critical, "Mu::Worker", std::string("failed to connect FD channel: ") + error);
         return 2;
     }
 
     // Step 3: Create and start control socket listener to service RPC commands.
     ::Mu::Worker::Runtime::WorkerServer server(
-        socketPath.c_str(), &fdChannel, { }, ::getppid(), std::move(tessDataDirectories));
+        socketPath.c_str(), &fdChannel, { }, parentPid, std::move(tessDataDirectories));
     if (!server.listen(&error)) {
         MU_LOG(critical, "Mu::Worker", std::string("failed to start control socket: ") + error);
         return 2;

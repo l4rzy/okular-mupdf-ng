@@ -14,6 +14,9 @@
 #include <QSocketNotifier>
 #include <QString>
 #include <QStringList>
+#ifdef MU_ENABLE_WORKER_BWRAP
+#include <QTemporaryDir>
+#endif // MU_ENABLE_WORKER_BWRAP
 #include <QTemporaryFile>
 #include <QTimer>
 
@@ -213,6 +216,10 @@ private:
     void cleanupSession();
 
     QProcess m_process;
+#ifdef MU_ENABLE_WORKER_BWRAP
+    qint64 m_workerPid = 0;
+    std::unique_ptr<QTemporaryDir> m_socketDirectory;
+#endif // MU_ENABLE_WORKER_BWRAP
     IPC::CtrlChannel m_ctrl;
     IPC::FdChannel m_fd;
     // Sole-owner unique_ptrs (no QObject parent): m_notifier is recreated per

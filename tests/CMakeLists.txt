@@ -358,6 +358,13 @@ if(MU_DEBUG_BUILD)
 endif()
 add_dependencies(test_plugin_workertransport mupdfng-worker)
 
+if(ENABLE_WORKER_BWRAP)
+    add_layer_test(test_plugin_workerlaunch plugin/test_worker_launch.cpp "plugin;security")
+    target_link_libraries(test_plugin_workerlaunch PRIVATE ng_plugin_worker)
+    target_compile_definitions(test_plugin_workerlaunch PRIVATE TEST_BWRAP_EXECUTABLE="${BWRAP_EXECUTABLE}")
+    target_compile_definitions(test_render_worker PRIVATE MU_ENABLE_WORKER_BWRAP)
+endif()
+
 add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp plugin)
 target_include_directories(test_plugin_workerclientstate PRIVATE ../src)
 target_link_libraries(test_plugin_workerclientstate PRIVATE ng_plugin_worker)

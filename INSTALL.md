@@ -110,6 +110,27 @@ For an already configured build tree, run all tests with:
 ctest --test-dir build --output-on-failure
 ```
 
+### Optional Bubblewrap launcher (Linux)
+
+Configure with `-DENABLE_WORKER_BWRAP=ON` to launch plugin and CLI workers through
+`bwrap`. Bubblewrap must be installed at configuration time and remain available
+at the configured executable path. Startup fails if Bubblewrap cannot create its
+sandbox; there is no direct-launch fallback. This option cannot be combined with
+`DISABLE_WORKER_SANDBOX`.
+With the option off, Bubblewrap helpers, transport state, and the wrapper-only
+`--parent-pid` option are excluded from the build.
+
+The launcher isolates user, network, IPC, UTS, and mount namespaces. It exposes
+system libraries under `/usr`, `/lib`, and `/lib64`, the loader cache, the worker,
+and configured OCR/font paths read-only. Each session shares only its own socket
+directory and gets a private `/tmp`. Documents and outputs still use transferred
+file descriptors. Existing worker hardening remains active.
+
+This initial implementation shares the host PID namespace for IPC authentication.
+It clears the worker environment and supports libraries in standard system paths;
+custom library search paths and sanitizer runtime configuration are not supported.
+Direct worker invocations, including `--sandbox-check`, retain the native sandbox.
+
 ### Test the built plugin in Okular
 
 Build the debug preset, then launch Okular with the plugin and worker from

@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#ifdef MU_ENABLE_WORKER_BWRAP
+#include <charconv>
+#endif // MU_ENABLE_WORKER_BWRAP
 #include <csignal>
 #include <string_view>
 #include <unistd.h>
@@ -55,8 +58,23 @@ extern "C" fz_device* __wrap_fz_new_draw_device(fz_context* context, fz_matrix t
 // This executable is test-only and is never installed.
 int main(int argc, char** argv)
 {
-    if (argc != 5 || std::string_view(argv[1]) != "--socket" || std::string_view(argv[3]) != "--fd-socket")
+#ifdef MU_ENABLE_WORKER_BWRAP
+    const bool validCount = argc == 5 || argc == 7;
+#else
+    const bool validCount = argc == 5;
+#endif // MU_ENABLE_WORKER_BWRAP
+    if (!validCount || std::string_view(argv[1]) != "--socket" || std::string_view(argv[3]) != "--fd-socket")
         return 2;
+    int parentPid = ::getppid();
+#ifdef MU_ENABLE_WORKER_BWRAP
+    if (argc == 7) {
+        const std::string_view value(argv[6]);
+        const auto parsed = std::from_chars(value.data(), value.data() + value.size(), parentPid);
+        if (std::string_view(argv[5]) != "--parent-pid" || parsed.ec != std::errc { }
+            || parsed.ptr != value.data() + value.size() || parentPid <= 0)
+            return 2;
+    }
+#endif // MU_ENABLE_WORKER_BWRAP
     struct sigaction action { };
     action.sa_handler = [](int) {
         pauseNextRender = 1;
@@ -66,9 +84,9 @@ int main(int argc, char** argv)
         return 2;
     Mu::IPC::FdChannel fdChannel;
     std::string error;
-    if (!fdChannel.connect(argv[4], &error, ::getppid()))
+    if (!fdChannel.connect(argv[4], &error, parentPid))
         return 2;
-    Mu::Worker::Runtime::WorkerServer server(argv[2], &fdChannel, { }, ::getppid(), { });
+    Mu::Worker::Runtime::WorkerServer server(argv[2], &fdChannel, { }, parentPid, { });
     if (!server.listen(&error))
         return 2;
     return server.run(&error);

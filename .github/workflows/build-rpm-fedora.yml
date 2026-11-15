@@ -11,16 +11,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - version: '44'
-            arch: x86_64
-            runner: ubuntu-26.04
-            elf-arch: x86-64
-          - version: '44'
+          - version: '45'
             arch: aarch64
             runner: ubuntu-26.04-arm
             elf-arch: ARM aarch64
+            bwrap: 'OFF'
+          - version: '45'
+            arch: x86_64
+            runner: ubuntu-26.04
+            elf-arch: x86-64
+            bwrap: 'ON'
+            # Bubblewrap must create namespaces inside the build container.
+            container-options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
     container:
       image: fedora:${{ matrix.version }}
+      options: ${{ matrix.container-options || '' }}
 
     env:
       CC: clang
@@ -28,6 +33,7 @@ jobs:
       FEDORA_VERSION: ${{ matrix.version }}
       PACKAGE_ARCH: ${{ matrix.arch }}
       ELF_ARCH: ${{ matrix.elf-arch }}
+      WORKER_BWRAP: ${{ matrix.bwrap }}
 
     steps:
       - name: Verify native architecture
@@ -72,6 +78,9 @@ jobs:
             rustup \
             tesseract-langpack-eng \
             zlib-ng-compat-devel
+          if [ "$WORKER_BWRAP" = ON ]; then
+            dnf --assumeyes install bubblewrap
+          fi
 
       - name: Verify build environment
         run: |
@@ -96,6 +105,10 @@ jobs:
 
       - name: Configure CMake
         run: |
+          rpm_requires=okular
+          if [ "$WORKER_BWRAP" = ON ]; then
+            rpm_requires="$rpm_requires, bubblewrap"
+          fi
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=None \
             -DCMAKE_C_COMPILER=clang \
@@ -106,9 +119,10 @@ jobs:
             -DUSE_SYSTEM_MUPDF=OFF \
             -DBUILD_TESTING=ON \
             -DENABLE_MU_DEBUG=ON \
+            -DENABLE_WORKER_BWRAP="$WORKER_BWRAP" \
             -DTESSDATA_DIR=/usr/share/tesseract/tessdata \
             -DCPACK_RPM_PACKAGE_RELEASE_DIST=ON \
-            "-DCPACK_RPM_PACKAGE_REQUIRES=okular"
+            "-DCPACK_RPM_PACKAGE_REQUIRES=$rpm_requires"
 
       - name: Build Fedora RPM package
         run: |
@@ -129,6 +143,9 @@ jobs:
           test "$(rpm --queryformat '%{ARCH}' -qp "$package")" = "$PACKAGE_ARCH"
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
+          if [ "$WORKER_BWRAP" = ON ]; then
+            printf '%s\n' "$requirements" | grep -Fx bubblewrap
+          fi
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
           rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/mupdfng-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfngsettings\.kcfg$'
