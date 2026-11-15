@@ -1,4 +1,14 @@
 -------------------------------------------------------------------
+Sun Nov 15 18:03:30 UTC 2026 - l4rzy <me@23ro.org>
+
+- Update to version 0.6.4.
+- Add optional Bubblewrap isolation for the worker.
+- Report sandbox profiles and protections with mupdfng-cli sandbox and --json.
+- Improve heuristic PDF table-of-contents generation.
+- Fix PDF font reporting and font subsetting in flattened PDF exports.
+- Fix ebook CSS max-width handling and refresh cached layouts.
+
+-------------------------------------------------------------------
 Thu Nov 12 15:42:39 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.6.3.

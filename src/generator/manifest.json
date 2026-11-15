@@ -11,8 +11,8 @@
             }
         ],
         "Copyright": "© 2008 Pino Toscano\n© 2026 l4rzy",
-        "Description": "A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, KFX, and XPS",
-        "Description[vi]": "Một backend an toàn và tốc độ cho Okular dựa trên MuPDF . Hỗ trợ PDF, ePUB, MOBI, AZW3, KFX, và XPS",
+        "Description": "A MuPDF-based secure and fast backend for Okular. Supports PDF, ePUB, MOBI, AZW3, KFX, and XPS.",
+        "Description[vi]": "Một backend an toàn và tốc độ cho Okular dựa trên MuPDF . Hỗ trợ PDF, ePUB, MOBI, AZW3, KFX, và XPS.",
         "License": "GPLv3",
         "MimeTypes": [
             "application/x-pdf",
@@ -27,7 +27,7 @@
         "ServiceTypes": [
             "okular/Generator"
         ],
-        "Version": "0.6.3",
+        "Version": "0.6.4",
         "Website": "https://github.com/l4rzy/okular-mupdf-ng",
         "Icon": "mupdfng"
     },

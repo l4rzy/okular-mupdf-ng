@@ -190,6 +190,7 @@ install(FILES
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME MuPDF-COPYING)
 
+message(STATUS "================================================================")
 message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "LTO for optimized configurations: ${MU_LTO_ENABLED}")
@@ -203,6 +204,8 @@ message(STATUS "Build-tree worker: ${ENABLE_BUILD_TREE_WORKER}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
 message(STATUS "Signature font directory: ${SIGNATURE_FONT_DIR}")
 message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
+message(STATUS "================================================================")
+
 # Both build profiles expose the standard BUILD_TESTING option.
 if(BUILD_TESTING)
     add_subdirectory(tests)

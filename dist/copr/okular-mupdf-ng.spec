@@ -9,7 +9,7 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.6.3
+Version:        0.6.4
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
@@ -111,6 +111,14 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Sun Nov 15 2026 l4rzy <me@23ro.org> - 0.6.4-1
+- Update to version 0.6.4.
+- Add optional Bubblewrap isolation for the worker.
+- Report sandbox profiles and protections with mupdfng-cli sandbox and --json.
+- Improve heuristic PDF table-of-contents generation.
+- Fix PDF font reporting and font subsetting in flattened PDF exports.
+- Fix ebook CSS max-width handling and refresh cached layouts.
+
 * Thu Nov 12 2026 l4rzy <me@23ro.org> - 0.6.3-1
 - Update to version 0.6.3.
 - Add Markdown export for ebooks in Okular and mupdfng-cli.
