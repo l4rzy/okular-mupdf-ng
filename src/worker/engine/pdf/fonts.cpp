@@ -30,34 +30,59 @@ std::vector<Font> PdfDocument::fonts(const std::vector<int>& pages, std::string*
         fail(error, "document is unavailable");
         return { };
     }
-    if (!pdf_specifics(m_context, m_document))
+    pdf_document* pdf = pdf_specifics(m_context, m_document);
+    if (!pdf)
         return { };
 
     // A font resource can be referenced by many pages. Deduplicate by its PDF
     // name while preserving the first resource classification encountered.
     std::vector<Font> result;
     std::set<std::string, std::less<>> seen;
-    fz_page* volatile nativePage = nullptr;
+    std::set<pdf_obj*> visitedResources;
+    std::vector<pdf_obj*> pendingResources;
+    // Resolve and deduplicate before queuing so aliases cannot inflate the worklist.
+    const auto enqueueResources = [&](pdf_obj* resources) {
+        resources = pdf_resolve_indirect_chain(m_context, resources);
+        if (pdf_is_dict(m_context, resources) && visitedResources.insert(resources).second)
+            pendingResources.push_back(resources);
+    };
     fz_try(m_context)
     {
         for (const int page : pages) {
             if (page < 0 || page >= m_pageCount)
                 fz_throw(m_context, FZ_ERROR_ARGUMENT, "page is unavailable");
 
-            nativePage = fz_load_page(m_context, m_document, page);
-            fz_try(m_context)
-            {
-                pdf_page* pdfPage = pdf_page_from_fz_page(m_context, nativePage);
-                pdf_obj* resources = pdfPage ? pdf_page_resources(m_context, pdfPage) : nullptr;
-                pdf_obj* fonts = resources ? pdf_dict_get(m_context, resources, PDF_NAME(Font)) : nullptr;
-                const int fontCount = fonts ? pdf_dict_len(m_context, fonts) : 0;
-
-                // Inspect each font resource attached to the page
+            pdf_obj* pageObject = pdf_lookup_page_obj(m_context, pdf, page);
+            // Fonts in annotation appearances need not occur in page resources.
+            pdf_obj* annots = pdf_dict_get(m_context, pageObject, PDF_NAME(Annots));
+            for (int index = 0; index < pdf_array_len(m_context, annots); ++index) {
+                pdf_obj* appearance = pdf_dict_get(m_context, pdf_array_get(m_context, annots, index), PDF_NAME(AP));
+                for (pdf_obj* key : { PDF_NAME(N), PDF_NAME(R), PDF_NAME(D) }) {
+                    pdf_obj* value = pdf_dict_get(m_context, appearance, key);
+                    if (pdf_is_stream(m_context, value))
+                        enqueueResources(pdf_dict_get(m_context, value, PDF_NAME(Resources)));
+                    else {
+                        for (int state = 0; state < pdf_dict_len(m_context, value); ++state)
+                            enqueueResources(pdf_dict_get(
+                                m_context, pdf_dict_get_val(m_context, value, state), PDF_NAME(Resources)));
+                    }
+                }
+            }
+            enqueueResources(pdf_dict_get_inheritable(m_context, pageObject, PDF_NAME(Resources)));
+            // Walk resource dictionaries iteratively: shared and cyclic Form
+            // XObjects must neither hide fonts nor cause unbounded recursion.
+            while (!pendingResources.empty()) {
+                pdf_obj* resources = pendingResources.back();
+                pendingResources.pop_back();
+                pdf_obj* fonts = pdf_dict_get(m_context, resources, PDF_NAME(Font));
+                const int fontCount = pdf_dict_len(m_context, fonts);
+                // Inspect fonts in this resource dictionary.
                 for (int index = 0; index < fontCount; ++index) {
                     pdf_obj* font = pdf_dict_get_val(m_context, fonts, index);
                     if (!font)
                         continue;
 
+                    enqueueResources(pdf_dict_get(m_context, font, PDF_NAME(Resources)));
                     const char* name = pdf_to_name(m_context, pdf_dict_gets(m_context, font, "BaseFont"));
                     if (!name || !*name)
                         name = pdf_to_name(m_context, pdf_dict_gets(m_context, font, "Name"));
@@ -106,15 +131,16 @@ std::vector<Font> PdfDocument::fonts(const std::vector<int>& pages, std::string*
                                            ? (subset ? FontEmbedType::EmbeddedSubset : FontEmbedType::FullyEmbedded)
                                            : FontEmbedType::NotEmbedded });
                 }
-            }
-            fz_always(m_context)
-            {
-                fz_drop_page(m_context, nativePage);
-                nativePage = nullptr;
-            }
-            fz_catch(m_context)
-            {
-                fz_rethrow(m_context);
+                for (pdf_obj* key : { PDF_NAME(XObject), PDF_NAME(Pattern) }) {
+                    pdf_obj* objects = pdf_dict_get(m_context, resources, key);
+                    for (int index = 0; index < pdf_dict_len(m_context, objects); ++index)
+                        enqueueResources(
+                            pdf_dict_get(m_context, pdf_dict_get_val(m_context, objects, index), PDF_NAME(Resources)));
+                }
+                pdf_obj* graphicsStates = pdf_dict_get(m_context, resources, PDF_NAME(ExtGState));
+                for (int index = 0; index < pdf_dict_len(m_context, graphicsStates); ++index)
+                    enqueueResources(pdf_dict_getp(
+                        m_context, pdf_dict_get_val(m_context, graphicsStates, index), "SMask/G/Resources"));
             }
         }
     }

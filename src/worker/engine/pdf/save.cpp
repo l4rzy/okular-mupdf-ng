@@ -378,6 +378,10 @@ bool PdfDocument::writeBakedPdf(Sys::FileDescriptor outputFd,
                 pdf_dict_del(m_context, pdf_lookup_page_obj(m_context, copy, page), PDF_NAME(Annots));
         }
 
+        // Subset only the finalized flattened copy, after baking every appearance.
+        if (!forPrinting)
+            pdf_subset_fonts(m_context, copy, 0, nullptr);
+
         pdf_write_options options = pdf_default_write_options;
         options.do_garbage = 1;
         options.do_encrypt = PDF_ENCRYPT_NONE;

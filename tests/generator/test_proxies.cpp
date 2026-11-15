@@ -709,6 +709,25 @@ private slots:
         QVERIFY(!::Mu::Generator::Conversion::toModel(&annotation));
     }
 
+    void convertsFontEmbedding_data()
+    {
+        QTest::addColumn<int>("model");
+        QTest::addColumn<int>("okular");
+        using Embed = ::Mu::Model::FontEmbedType;
+        QTest::newRow("not-embedded") << int(Embed::NotEmbedded) << int(Okular::FontInfo::NotEmbedded);
+        QTest::newRow("subset") << int(Embed::EmbeddedSubset) << int(Okular::FontInfo::EmbeddedSubset);
+        QTest::newRow("fully-embedded") << int(Embed::FullyEmbedded) << int(Okular::FontInfo::FullyEmbedded);
+    }
+
+    void convertsFontEmbedding()
+    {
+        QFETCH(int, model);
+        QFETCH(int, okular);
+        ::Mu::Model::Font font;
+        font.embedType = static_cast<::Mu::Model::FontEmbedType>(model);
+        QCOMPARE(int(::Mu::Generator::Conversion::fromModel(font).embedType()), okular);
+    }
+
     void fontAndEmbeddedFileConversions()
     {
         // 1. Font conversion

@@ -100,6 +100,7 @@ target_compile_definitions(test_mupdf PRIVATE
     TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi"
     TEST_BUNDLED_MOBI_TOC=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_SIGNATURE_PDF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/pdf"
+    TEST_SUBSET_FONT_PATH="${PROJECT_SOURCE_DIR}/thirdparty/allura/Allura-Regular.ttf"
     FORM_JS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_calculation.pdf"
     FORM_JS_BUTTON_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_button.pdf"
     FORM_JS_CONTROLS_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/form_javascript_controls.pdf"

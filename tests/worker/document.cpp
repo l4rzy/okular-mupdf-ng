@@ -59,6 +59,66 @@ bool writePdfObjects(const QString& path, const QList<QByteArray>& objects)
     return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
 }
 
+// Both pages share a fully embedded TrueType font but use different glyphs.
+bool writeEmbeddedFontPdf(fz_context* context, const QString& path)
+{
+    pdf_document* volatile pdf = nullptr;
+    fz_font* volatile font = nullptr;
+    pdf_obj* volatile resources = nullptr;
+    pdf_obj* volatile page = nullptr;
+    fz_buffer* volatile contents = nullptr;
+    volatile bool saved = false;
+    fz_try(context)
+    {
+        pdf = pdf_create_document(context);
+        font = fz_new_font_from_file(context, "SubsetTest", TEST_SUBSET_FONT_PATH, 0, 0);
+        resources = pdf_new_dict(context, pdf, 1);
+        auto* fonts = pdf_dict_put_dict(context, resources, PDF_NAME(Font), 1);
+        pdf_dict_puts_drop(context, fonts, "F1", pdf_add_simple_font(context, pdf, font, PDF_SIMPLE_ENCODING_LATIN));
+        for (const char* text : { "BT /F1 24 Tf 72 700 Td (ABCD) Tj ET", "BT /F1 24 Tf 72 700 Td (xyz) Tj ET" }) {
+            contents = fz_new_buffer_from_copied_data(
+                context, reinterpret_cast<const unsigned char*>(text), std::strlen(text));
+            page = pdf_add_page(context, pdf, { 0, 0, 612, 792 }, 0, resources, contents);
+            pdf_insert_page(context, pdf, -1, page);
+            pdf_drop_obj(context, page);
+            page = nullptr;
+            fz_drop_buffer(context, contents);
+            contents = nullptr;
+        }
+        pdf_save_document(context, pdf, QFile::encodeName(path).constData(), &pdf_default_write_options);
+        saved = true;
+    }
+    fz_always(context)
+    {
+        pdf_drop_obj(context, page);
+        fz_drop_buffer(context, contents);
+        pdf_drop_obj(context, resources);
+        fz_drop_font(context, font);
+        pdf_drop_document(context, pdf);
+    }
+    fz_catch(context)
+    {
+        qWarning() << "Could not create embedded font fixture:" << fz_caught_message(context);
+    }
+    return saved;
+}
+
+QByteArray embeddedFontBytes(::Mu::Worker::Engine::PdfDocument& document, int pageNumber = 0)
+{
+    auto* context = document.context();
+    auto* pdf = pdf_specifics(context, document.document());
+    auto* resources =
+        pdf_dict_get_inheritable(context, pdf_lookup_page_obj(context, pdf, pageNumber), PDF_NAME(Resources));
+    auto* fontFile = pdf_dict_getp(context, resources, "Font/F1/FontDescriptor/FontFile2");
+    if (!pdf_is_stream(context, fontFile))
+        return { };
+    auto* buffer = pdf_load_stream(context, fontFile);
+    const auto cleanup = qScopeGuard([&] { fz_drop_buffer(context, buffer); });
+    unsigned char* data = nullptr;
+    const auto size = fz_buffer_storage(context, buffer, &data);
+    return QByteArray(reinterpret_cast<const char*>(data), static_cast<qsizetype>(size));
+}
+
 // Widgets inherit the same field and indirect strings, so repeated references
 // exercise the cost of C++ copies without making the PDF fixture itself large.
 bool writeFormBudgetPdf(const QString& path, const QByteArray& field, int stringLength, int widgets, int pages = 1)
@@ -342,6 +402,111 @@ private slots:
         QVERIFY(fonts.front().file.empty());
         QCOMPARE(int(fonts.front().type), type);
         QCOMPARE(int(fonts.front().embedType), embedding);
+    }
+
+    void enumeratesNestedFonts_data()
+    {
+        QTest::addColumn<QByteArray>("resources");
+        QTest::addColumn<QByteArray>("appearance");
+        QTest::addColumn<bool>("type3");
+        QTest::newRow("shared-cyclic-form")
+            << QByteArray("<< /XObject << /A 6 0 R /B 6 0 R >> >>") << QByteArray() << false;
+        QTest::newRow("nested-form") << QByteArray("<< /XObject << /Outer 11 0 R >> >>") << QByteArray() << false;
+        QTest::newRow("soft-mask-resources")
+            << QByteArray("<< /ExtGState << /GS << /SMask << /S /Alpha /G 6 0 R >> >> >> >>") << QByteArray() << false;
+        QTest::newRow("pattern-resources") << QByteArray("<< /Pattern << /P 6 0 R >> >>") << QByteArray() << false;
+        QTest::newRow("type3-resources") << QByteArray(
+            "<< /Font << /Outer << /Subtype /Type3 /Name /Glyphs /Resources 5 0 R >> >> >>")
+                                         << QByteArray() << true;
+        QTest::newRow("appearance-stream") << QByteArray("<< >>") << QByteArray("<< /N 6 0 R >>") << false;
+        QTest::newRow("appearance-states")
+            << QByteArray("<< >>") << QByteArray("<< /N << /On 6 0 R /Off 11 0 R >> /R 6 0 R /D 6 0 R >>") << false;
+    }
+
+    void enumeratesNestedFonts()
+    {
+        QFETCH(QByteArray, resources);
+        QFETCH(QByteArray, appearance);
+        QFETCH(bool, type3);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("nested-fonts.pdf");
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R >>",
+              "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+              "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources 4 0 R /Annots [9 0 R] >>",
+              resources,
+              "<< /Font << /Full 7 0 R /Subset 8 0 R >> /XObject << /Cycle 6 0 R >> >>",
+              "<< /Type /XObject /Subtype /Form /BBox [0 0 300 300] /Resources 5 0 R /Length 0 >>\nstream\nendstream",
+              "<< /BaseFont /Full /Subtype /TrueType /FontDescriptor << /FontFile2 10 0 R >> >>",
+              "<< /BaseFont /ABCDEF+Subset /Subtype /TrueType /FontDescriptor << /FontFile2 10 0 R >> >>",
+              "<< /Type /Annot /Subtype /Stamp /Rect [0 0 300 300] /AP "
+                  + (appearance.isEmpty() ? QByteArray("<< >>") : appearance) + " >>",
+              "<< /Length 0 >>\nstream\nendstream",
+              "<< /Type /XObject /Subtype /Form /BBox [0 0 300 300] /Resources << /XObject << /Inner 6 0 R >> >> "
+              "/Length 0 >>\nstream\nendstream" }));
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "nested-fonts.pdf", &error), error.c_str());
+        const auto fonts = document.fonts({ 0, 0 }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(fonts.size(), std::size_t(type3 ? 3 : 2));
+        std::set<std::string> names;
+        for (const auto& font : fonts) {
+            names.insert(font.name);
+            QCOMPARE(font.embedType,
+                     font.name == "ABCDEF+Subset" ? ::Mu::Model::FontEmbedType::EmbeddedSubset
+                                                  : ::Mu::Model::FontEmbedType::FullyEmbedded);
+        }
+        QVERIFY(names.contains("Full"));
+        QVERIFY(names.contains("ABCDEF+Subset"));
+        // A second enumeration must not inherit traversal marks from the first.
+        QCOMPARE(document.fonts({ 0 }, &error).size(), fonts.size());
+    }
+
+    void enumeratesDeepFontResources_data()
+    {
+        QTest::addColumn<int>("depth");
+        QTest::addColumn<bool>("inherited");
+        QTest::newRow("inherited-page-resources") << 1 << true;
+        QTest::newRow("deep-resource-chain") << 1024 << false;
+        QTest::newRow("deep-inherited-chain") << 1024 << true;
+    }
+
+    void enumeratesDeepFontResources()
+    {
+        QFETCH(int, depth);
+        QFETCH(bool, inherited);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("deep-fonts.pdf");
+        const QByteArray resourceReference(" /Resources 4 0 R");
+        QList<QByteArray> objects { "<< /Type /Catalog /Pages 2 0 R >>",
+                                    "<< /Type /Pages /Count 1 /Kids [3 0 R]"
+                                        + (inherited ? resourceReference : QByteArray()) + " >>",
+                                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300]"
+                                        + (inherited ? QByteArray() : resourceReference) + " >>" };
+        for (int index = 0; index < depth; ++index) {
+            const auto next = QByteArray::number(5 + index);
+            objects << "<< /XObject << /A << /Resources " + next + " 0 R >> /B << /Resources " + next + " 0 R >> >> >>";
+        }
+        // A soft-mask edge cycles to the root; its fonts must still be reported once.
+        objects << "<< /Font << /F1 << /BaseFont /Deep /Subtype /Type3 >> >> /ExtGState << /GS << /SMask << /G << "
+                   "/Resources 4 0 R >> >> >> >> >>";
+        QVERIFY(writePdfObjects(path, objects));
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "deep-fonts.pdf", &error), error.c_str());
+        const auto fonts = document.fonts({ 0 }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(fonts.size(), std::size_t(1));
+        QCOMPARE(fonts.front().name, std::string("Deep"));
+        QCOMPARE(fonts.front().embedType, ::Mu::Model::FontEmbedType::FullyEmbedded);
     }
 
     void selectsAndDeduplicatesFonts_data()
@@ -1713,6 +1878,80 @@ private slots:
         for (std::size_t index = 0; index < pages.size(); ++index)
             QVERIFY(pixelsMatch(renderPdfUsage(printed, static_cast<int>(index), "View", &error),
                                 renderPdfUsage(document, pages[index], "Print", &error)));
+    }
+
+    void subsetsFontsOnlyForFlattenedExport_data()
+    {
+        QTest::addColumn<int>("profile");
+        QTest::addColumn<std::vector<int>>("pages");
+        using Profile = ::Mu::Model::ExportProfileId;
+        QTest::newRow("flatten-all-shared-font") << int(Profile::Flattened) << std::vector<int> { };
+        QTest::newRow("flatten-selected-page") << int(Profile::Flattened) << std::vector<int> { 1 };
+        QTest::newRow("flatten-reordered-pages") << int(Profile::Flattened) << std::vector<int> { 1, 0 };
+        QTest::newRow("native-keeps-full-font") << int(Profile::Native) << std::vector<int> { };
+        QTest::newRow("print-keeps-full-font") << int(Profile::Print) << std::vector<int> { };
+    }
+
+    void subsetsFontsOnlyForFlattenedExport()
+    {
+        QFETCH(int, profile);
+        QFETCH(std::vector<int>, pages);
+        using Profile = ::Mu::Model::ExportProfileId;
+        const auto exportProfile = static_cast<Profile>(profile);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString source = directory.filePath("source.pdf");
+        const QString target = directory.filePath("export.pdf");
+        ::Mu::Worker::Engine::PdfDocument document;
+        QVERIFY(writeEmbeddedFontPdf(document.context(), source));
+        QFile input(source);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        const auto original = input.readAll();
+        input.seek(0);
+        std::string error;
+        QVERIFY2(document.openFd(::dup(input.handle()), "source.pdf", &error), error.c_str());
+        const auto fullFont = embeddedFontBytes(document);
+        QVERIFY(!fullFont.isEmpty());
+        const auto sourceFonts = document.fonts({ 0, 1 }, &error);
+        QCOMPARE(sourceFonts.size(), std::size_t(1));
+        QCOMPARE(sourceFonts.front().embedType, ::Mu::Model::FontEmbedType::FullyEmbedded);
+        const int fd = ::open(QFile::encodeName(target).constData(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        QVERIFY(fd >= 0);
+        QVERIFY2(document.exportFd(fd, { "pdf", exportProfile, pages }, false, &error), error.c_str());
+        QCOMPARE(embeddedFontBytes(document), fullFont);
+        input.seek(0);
+        QCOMPARE(input.readAll(), original);
+
+        QFile output(target);
+        QVERIFY(output.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument reloaded;
+        QVERIFY2(reloaded.openFd(::dup(output.handle()), "export.pdf", &error), error.c_str());
+        if (pages.empty())
+            pages = { 0, 1 };
+        QCOMPARE(reloaded.pageCount(), static_cast<int>(pages.size()));
+        const auto exportedFonts = reloaded.fonts({ 0 }, &error);
+        QCOMPARE(exportedFonts.size(), std::size_t(1));
+        QCOMPARE(exportedFonts.front().embedType,
+                 exportProfile == Profile::Flattened ? ::Mu::Model::FontEmbedType::EmbeddedSubset
+                                                     : ::Mu::Model::FontEmbedType::FullyEmbedded);
+        for (std::size_t index = 0; index < pages.size(); ++index) {
+            const int page = static_cast<int>(index);
+            const auto exportedFont = embeddedFontBytes(reloaded, page);
+            if (exportProfile == Profile::Flattened) {
+                QVERIFY(!exportedFont.isEmpty());
+                QVERIFY(exportedFont.size() < fullFont.size());
+            } else
+                QCOMPARE(exportedFont, fullFont);
+            QVERIFY(pixelsMatch(renderPdfPage(reloaded, page, 612, 792, &error),
+                                renderPdfPage(document, pages[index], 612, 792, &error)));
+            std::string actualText, expectedText;
+            for (const auto& box : reloaded.textBoxes(page, 72, 72, 1000, true, &error))
+                actualText += box.text;
+            for (const auto& box : document.textBoxes(pages[index], 72, 72, 1000, true, &error))
+                expectedText += box.text;
+            QVERIFY(!expectedText.empty());
+            QCOMPARE(actualText, expectedText);
+        }
     }
 
     void flattenPreservesLiveEdits_data()
