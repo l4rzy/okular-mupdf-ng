@@ -161,7 +161,8 @@ jobs:
           test -n "$worker"
           file "$plugin" | grep -q "$ELF_ARCH"
           file "$worker" | grep -q "$ELF_ARCH"
-          rpm --checksig "$package"
+          # CI packages are unsigned; verify their digests without requiring a signature.
+          rpm --checksig --nosignature "$package"
           rpm --info -qp "$package"
 
       - name: Upload Fedora RPM CI artifact
