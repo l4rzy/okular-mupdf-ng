@@ -38,6 +38,7 @@ namespace {
 struct LinuxStatus {
     std::optional<bool> landlock, seccomp, linuxNamespace, resourceLimits, memoryProtection, noNewPrivileges;
     std::int32_t landlockAbi = 0;
+    bool namespacesInherited = false;
     std::string reason;
 };
 
@@ -56,6 +57,8 @@ Status reportLinuxStatus(const LinuxStatus& activation, bool disabled = false)
     };
     add("linux.no_new_privileges", ProtectionCategory::Process, activation.noNewPrivileges, true);
     add("linux.namespaces", ProtectionCategory::Process, activation.linuxNamespace, true);
+    if (activation.namespacesInherited)
+        result.protections.back().diagnostic = "Namespaces provided by Bubblewrap launcher";
     add("linux.resource_limits", ProtectionCategory::Resources, activation.resourceLimits, true);
     add("linux.landlock", ProtectionCategory::Filesystem, activation.landlock, true);
     if (activation.landlockAbi > 0)
@@ -695,8 +698,13 @@ bool activateSeccomp(LinuxStatus& status)
 ///
 /// Runs the sandbox phases in activation order. Primary controls are required for a fully
 /// hardened status; startup remains best-effort when a phase is unavailable.
-Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories, const std::vector<int>& preservedFds)
+Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
+                         const std::vector<int>& preservedFds,
+                         bool namespacesProvidedByLauncher)
 {
+#ifndef MU_ENABLE_WORKER_BWRAP
+    (void)namespacesProvidedByLauncher;
+#endif // MU_ENABLE_WORKER_BWRAP
 #ifndef __linux__
     (void)readOnlyDirectories;
     (void)preservedFds;
@@ -734,7 +742,10 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories, co
     (void)preservedFds;
 #endif
     // Required: isolate user, network, and IPC namespaces.
-    status.linuxNamespace = activateNamespaces(status);
+#ifdef MU_ENABLE_WORKER_BWRAP
+    status.namespacesInherited = namespacesProvidedByLauncher;
+#endif // MU_ENABLE_WORKER_BWRAP
+    status.linuxNamespace = status.namespacesInherited || activateNamespaces(status);
     // Required: prevent resource exhaustion and disable core-dump exposure.
     status.resourceLimits = applyResourceLimits(status);
     // Required: restrict filesystem access to the configured read-only trees.

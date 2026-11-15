@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -13,6 +16,77 @@
 class TestCliExport : public QObject {
     Q_OBJECT
 private slots:
+
+    void reportsSandboxStatus_data()
+    {
+        QTest::addColumn<QStringList>("arguments");
+        QTest::addColumn<bool>("json");
+        QTest::newRow("human") << QStringList { "--sandbox-check" } << false;
+        QTest::newRow("json") << QStringList { "--sandbox-check=json" } << true;
+        QTest::newRow("command-json") << QStringList { "sandbox-check", "--format", "json" } << true;
+    }
+
+    void reportsSandboxStatus()
+    {
+        QFETCH(QStringList, arguments);
+        QFETCH(bool, json);
+        arguments << "--worker" << QStringLiteral(WORKER_BUILD_PATH);
+        QProcess cli;
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH), arguments);
+        QVERIFY(cli.waitForFinished(30000));
+        QCOMPARE(cli.exitStatus(), QProcess::NormalExit);
+        const auto output = cli.readAllStandardOutput();
+        QVERIFY2(!output.isEmpty(), cli.readAllStandardError().constData());
+        const auto profile = QStringLiteral(EXPECTED_SANDBOX_PROFILE);
+        if (json) {
+            QJsonParseError error;
+            const auto document = QJsonDocument::fromJson(output, &error);
+            QCOMPARE(error.error, QJsonParseError::NoError);
+            const auto report = document.object();
+            QCOMPARE(report.value("platform").toString(), QStringLiteral("linux"));
+            QCOMPARE(report.value("profile").toString(), profile);
+            QVERIFY(report.value("diagnostics").isArray());
+            QStringList ids;
+            for (const auto& entry : report.value("protections").toArray()) {
+                const auto protection = entry.toObject();
+                ids << protection.value("id").toString();
+                QVERIFY(protection.value("state").isString());
+                QVERIFY(protection.value("diagnostic").isString());
+                if (protection.value("id") == "linux.namespaces") {
+                    QCOMPARE(protection.value("diagnostic").toString(),
+                             profile.contains("bwrap") ? QStringLiteral("Namespaces provided by Bubblewrap launcher")
+                                                       : QString());
+                }
+            }
+            QVERIFY(ids.contains("linux.seccomp"));
+            QCOMPARE(ids.contains("linux.bubblewrap"), profile.contains("bwrap"));
+            const auto isolation = report.value("isolation").toString();
+            QCOMPARE(cli.exitCode(), isolation == "full" ? 0 : isolation == "degraded" ? 1 : 2);
+        } else {
+            QVERIFY(output.startsWith("Sandbox: linux profile=" + profile.toUtf8()));
+            QVERIFY(output.contains("linux.seccomp:"));
+            QCOMPARE(output.contains("linux.bubblewrap: enforced"), profile.contains("bwrap"));
+            QCOMPARE(cli.exitCode(),
+                     output.contains("isolation=full")           ? 0
+                         : output.contains("isolation=degraded") ? 1
+                                                                 : 2);
+        }
+    }
+
+    void reportsSandboxStartupFailure()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile worker(directory.filePath("invalid-worker"));
+        QVERIFY(worker.open(QIODevice::WriteOnly));
+        worker.close();
+        QProcess cli;
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH), { "--sandbox-check=json", "--worker", worker.fileName() });
+        QVERIFY(cli.waitForFinished(30000));
+        QCOMPARE(cli.exitCode(), 2);
+        QVERIFY(cli.readAllStandardOutput().isEmpty());
+        QVERIFY(cli.readAllStandardError().contains("could not start the worker"));
+    }
 
     void exportsEpubToAzw3()
     {

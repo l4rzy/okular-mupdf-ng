@@ -175,6 +175,8 @@ private slots:
                 QCOMPARE(protection.value("required").toBool(), id != "linux.mdwe");
                 QVERIFY(protection.value("version").isString());
                 QVERIFY(protection.value("diagnostic").isString());
+                if (id == "linux.namespaces")
+                    QVERIFY(protection.value("diagnostic").toString().isEmpty());
                 QVERIFY(QStringList({ "filesystem", "syscall", "process", "resources", "memory" })
                             .contains(protection.value("category").toString()));
                 const auto state = protection.value("state").toString();

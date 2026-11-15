@@ -68,10 +68,16 @@ struct ImportOptions {
     SharedOptions shared;
 };
 
+struct SandboxOptions {
+    std::string worker;
+    bool json = false;
+};
+
 struct Command {
-    enum class Kind { Help, Version, Ocr, Export, Import };
+    enum class Kind { Help, Version, SandboxCheck, Ocr, Export, Import };
 
     Kind kind = Kind::Help;
+    SandboxOptions sandbox;
     OcrOptions ocr;
     ExportOptions exportOptions;
     ImportOptions importOptions;

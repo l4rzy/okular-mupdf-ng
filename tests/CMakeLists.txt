@@ -183,6 +183,11 @@ target_compile_definitions(test_tools_cli_export PRIVATE
     WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub"
     TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi")
+if(ENABLE_WORKER_BWRAP)
+    target_compile_definitions(test_tools_cli_export PRIVATE EXPECTED_SANDBOX_PROFILE="mupdfng.linux.bwrap.v1")
+else()
+    target_compile_definitions(test_tools_cli_export PRIVATE EXPECTED_SANDBOX_PROFILE="mupdfng.linux.v1")
+endif()
 add_dependencies(test_tools_cli_export mupdfng-cli mupdfng-worker)
 set_tests_properties(test_tools_cli_export PROPERTIES TIMEOUT 150)
 

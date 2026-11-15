@@ -50,6 +50,42 @@ bool readSharedOptions(const QCommandLineParser& parser, SharedOptions& shared, 
     return true;
 }
 
+QCommandLineParser& setupSandboxParser(QCommandLineParser& parser)
+{
+    parser.setApplicationDescription(
+        "Start the worker and report its sandbox profile and protections.\n"
+        "Exit status: 0 fully hardened, 1 partially active, 2 inactive or startup failed.");
+    parser.addHelpOption();
+    parser.addOption({ "worker", "Path to the mupdfng-worker binary (auto-detected otherwise).", "path" });
+    parser.addOption({ "format", "Output format: human or json.", "format", "human" });
+    return parser;
+}
+
+Command parseSandbox(const QStringList& args)
+{
+    Command command;
+    command.kind = Command::Kind::SandboxCheck;
+    QCommandLineParser parser;
+    setupSandboxParser(parser);
+    if (!parser.parse(args)) {
+        command.error = parser.errorText().toStdString();
+        return command;
+    }
+    if (parser.isSet("help")) {
+        command.helpRequested = true;
+        return command;
+    }
+    if (!parser.positionalArguments().isEmpty())
+        command.error = "sandbox-check accepts no positional arguments";
+    else if (parser.values("format").size() > 1)
+        command.error = "sandbox-check format may be specified only once";
+    else if (parser.value("format") != "human" && parser.value("format") != "json")
+        command.error = "sandbox-check: expected human or json format";
+    command.sandbox.worker = parser.value("worker").toStdString();
+    command.sandbox.json = parser.value("format") == "json";
+    return command;
+}
+
 QCommandLineParser& setupOcrParser(QCommandLineParser& parser)
 {
     parser.setApplicationDescription("OCR one document page and print the recognized text.");
@@ -329,6 +365,13 @@ Command parseArgs(const QStringList& argv)
     // generated help text.
     QStringList sub { argv.front() };
     sub.append(argv.mid(2));
+    if (verb == "--sandbox-check" || verb.startsWith("--sandbox-check=")) {
+        if (verb.contains(QLatin1Char('=')))
+            sub << QStringLiteral("--format") << verb.mid(verb.indexOf(QLatin1Char('=')) + 1);
+        return parseSandbox(sub);
+    }
+    if (verb == "sandbox-check")
+        return parseSandbox(sub);
     if (verb == "ocr")
         return parseOcr(sub);
     if (verb == "export")
@@ -342,6 +385,8 @@ Command parseArgs(const QStringList& argv)
 QString helpTextFor(Command::Kind kind)
 {
     QCommandLineParser parser;
+    if (kind == Command::Kind::SandboxCheck)
+        return setupSandboxParser(parser).helpText();
     if (kind == Command::Kind::Ocr)
         return setupOcrParser(parser).helpText();
     if (kind == Command::Kind::Export)
@@ -350,10 +395,12 @@ QString helpTextFor(Command::Kind kind)
         return setupImportParser(parser).helpText();
     return QStringLiteral("usage: mupdfng-cli <command> [options]\n\n"
                           "commands:\n"
+                          "  sandbox-check                report worker sandbox profile and protections\n"
                           "  ocr FILE [PAGE]              OCR one document page, print the recognized text\n"
                           "  export FILE [OUTPUT]         export a document (format from output suffix)\n"
                           "  import FILE XFDF [OUTPUT]    apply XFDF annotations to a PDF\n\n"
                           "options:\n"
+                          "  --sandbox-check[=json]       report worker sandbox status\n"
                           "  -V, --version                print version and exit\n\n"
                           "run 'mupdfng-cli <command> --help' for command options.\n");
 }

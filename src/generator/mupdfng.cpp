@@ -761,6 +761,8 @@ QString Main::generatorExtraDescription() const
     } else {
         result += QStringLiteral("\n") + i18n("Sandbox: Unconfined [CRIT]");
     }
+    const QString profile = status.profile.empty() ? i18n("Unknown") : QString::fromStdString(status.profile);
+    result += QStringLiteral("\n") + i18n("Sandbox profile: %1", profile);
 
     if (m_worker.isConnected()) {
         const std::optional<quint64> workerMemory = m_worker.workerMemoryBytes();

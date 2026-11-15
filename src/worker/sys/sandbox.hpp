@@ -25,10 +25,13 @@ using Status = ::Mu::Model::SandboxStatus;
  * An empty list enforces Landlock with no read exceptions.
  * @param preservedFds Active file descriptors to exempt from Release descriptor closure and, for standard descriptors,
  * from redirection to /dev/null.
+ * @param namespacesProvidedByLauncher Reuse Bubblewrap namespaces after authenticating launcher IPC.
+ * Only honored in MU_ENABLE_WORKER_BWRAP builds; direct launches leave this false.
  * @return Detailed status structure indicating which security layers were successfully engaged.
  */
 Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
-                         const std::vector<int>& preservedFds = { });
+                         const std::vector<int>& preservedFds = { },
+                         bool namespacesProvidedByLauncher = false);
 
 } // namespace Mu::Worker::Sandbox
 

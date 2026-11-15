@@ -150,6 +150,7 @@ private slots:
                  Okular::Document::OpenSuccess);
         const QString description = document.metaData(QStringLiteral("GeneratorExtraDescription"), { }).toString();
         QVERIFY(description.contains(QStringLiteral("MuPDF")));
+        QVERIFY(description.contains(QStringLiteral("Sandbox profile: mupdfng.linux.")));
         if (!Mu::GIT_BUILD.empty())
             QVERIFY(description.contains(
                 QString::fromUtf8(Mu::GIT_BUILD.data(), static_cast<qsizetype>(Mu::GIT_BUILD.size()))));

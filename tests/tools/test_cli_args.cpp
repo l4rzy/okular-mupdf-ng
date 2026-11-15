@@ -13,6 +13,42 @@ class TestToolsCliArgs : public QObject {
 
 private slots:
 
+    void parsesSandboxCheck_data()
+    {
+        QTest::addColumn<QStringList>("arguments");
+        QTest::addColumn<bool>("valid");
+        QTest::addColumn<bool>("json");
+        QTest::newRow("human") << QStringList { "--sandbox-check" } << true << false;
+        QTest::newRow("explicit-human") << QStringList { "--sandbox-check=human" } << true << false;
+        QTest::newRow("json") << QStringList { "--sandbox-check=json" } << true << true;
+        QTest::newRow("command") << QStringList { "sandbox-check" } << true << false;
+        QTest::newRow("command-json") << QStringList { "sandbox-check", "--format", "json" } << true << true;
+        QTest::newRow("invalid-format") << QStringList { "--sandbox-check=xml" } << false << false;
+        QTest::newRow("empty-format") << QStringList { "--sandbox-check=" } << false << false;
+        QTest::newRow("positional") << QStringList { "--sandbox-check", "doc.pdf" } << false << false;
+        QTest::newRow("repeated") << QStringList { "--sandbox-check", "--sandbox-check=json" } << false << false;
+        QTest::newRow("repeated-format") << QStringList { "--sandbox-check=json", "--format", "human" } << false
+                                         << false;
+    }
+
+    void parsesSandboxCheck()
+    {
+        QFETCH(QStringList, arguments);
+        QFETCH(bool, valid);
+        QFETCH(bool, json);
+        arguments.prepend("mupdfng-cli");
+        arguments << "--worker" << "custom-worker";
+        const auto command = Cli::parseArgs(arguments);
+        QCOMPARE(command.kind, Cli::Command::Kind::SandboxCheck);
+        QCOMPARE(command.error.empty(), valid);
+        if (valid) {
+            QCOMPARE(command.sandbox.json, json);
+            QCOMPARE(command.sandbox.worker, std::string("custom-worker"));
+        }
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains("--sandbox-check"));
+        QVERIFY(Cli::helpTextFor(command.kind).contains("--worker"));
+    }
+
     void parsesOcrCommand()
     {
         const Cli::Command command =

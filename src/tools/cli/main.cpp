@@ -21,10 +21,12 @@
 #include "plugin/xfdf/import.hpp"
 #include "shared/compat.hpp"
 #include "shared/model/export.hpp"
+#include "shared/sandbox_report.hpp"
 #include "tools/cli/cli_args.hpp"
 #include "tools/cli/layout_config.hpp"
 
 #include <cstdio>
+#include <iostream>
 #include <unistd.h>
 #include <utility>
 
@@ -146,6 +148,22 @@ int runVersion()
     out() << versionText(buildTimeMupdfVersion(), QString());
     out().flush();
     return ExitOk;
+}
+
+int runSandboxCheck(const SandboxOptions& options)
+{
+    Mu::Plugin::WorkerClient client;
+    if (!client.start(QString::fromStdString(options.worker))) {
+        reportError(QStringLiteral("could not start the worker process"));
+        return ExitJobFailed;
+    }
+    const auto status = client.sandboxStatus();
+    client.stop();
+    if (options.json)
+        Mu::Model::printSandboxStatusJson(std::cout, status);
+    else
+        Mu::Model::printSandboxStatusHuman(std::cout, status);
+    return status.isFullyHardened() ? 0 : status.isPartiallyActive() ? 1 : 2;
 }
 
 // =============================================================================
@@ -498,6 +516,8 @@ int run(const Command& command)
         return showHelp(command);
     if (command.kind == Command::Kind::Version)
         return runVersion();
+    if (command.kind == Command::Kind::SandboxCheck)
+        return runSandboxCheck(command.sandbox);
 
     Mu::Plugin::WorkerClient client;
     const SharedOptions& shared = command.kind == Command::Kind::Ocr ? command.ocr.shared

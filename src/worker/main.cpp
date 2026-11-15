@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <algorithm>
-#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -18,6 +17,7 @@
 #include "runtime/worker_server.hpp"
 #include "shared/compat.hpp"
 #include "shared/logging.hpp"
+#include "shared/sandbox_report.hpp"
 #include "shared/transport/fd_channel.hpp"
 #include "sys/sandbox.hpp"
 
@@ -25,7 +25,6 @@ namespace {
 
 constexpr std::string_view DefaultTessDataDirectory = TESSDATA_DIR;
 constexpr std::string_view SignatureFontDirectory = SIGNATURE_FONT_DIR;
-constexpr unsigned char JsonControlCharLimit = 0x20;
 
 // =============================================================================
 // Worker Paths & Command-Line Options
@@ -63,84 +62,6 @@ cxxopts::Options makeWorkerOptions()
         "FORMAT")("h,help", "Print usage")("version", "Print version");
     options.custom_help("[OPTION...]");
     return options;
-}
-
-// =============================================================================
-// Sandbox Status Formatting
-// =============================================================================
-
-std::string escapeJsonString(const std::string& value)
-{
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (char c : value) {
-        switch (c) {
-        case '\"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        default:
-            if (static_cast<unsigned char>(c) < JsonControlCharLimit) {
-                char buf[7];
-                std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                out += buf;
-            } else
-                out += c;
-        }
-    }
-    return out;
-}
-
-void printSandboxStatusHuman(const Mu::Model::SandboxStatus& status)
-{
-    std::cout << "Sandbox: " << status.platform << " profile=" << status.profile
-              << " isolation=" << Mu::Model::isolationLevelName(status.isolation()) << "\n";
-    for (const auto& protection : status.protections)
-        std::cout << "  " << protection.id << ": " << Mu::Model::protectionStateName(protection.state)
-                  << " required=" << protection.required << " version=" << protection.version << "\n";
-    for (const auto& diagnostic : status.diagnostics)
-        std::cout << "  " << diagnostic << "\n";
-    std::cout.flush();
-}
-
-void printSandboxStatusJson(const Mu::Model::SandboxStatus& status)
-{
-    std::cout << "{\"platform\":\"" << escapeJsonString(status.platform) << "\",\"profile\":\""
-              << escapeJsonString(status.profile) << "\",\"isolation\":\""
-              << Mu::Model::isolationLevelName(status.isolation()) << '\"'
-              << ",\"policySatisfied\":" << (status.isFullyHardened() ? "true" : "false") << ",\"protections\":[";
-    bool first = true;
-    for (const auto& p : status.protections) {
-        if (!first)
-            std::cout << ',';
-        first = false;
-        std::cout << "{\"id\":\"" << escapeJsonString(p.id) << "\",\"category\":\""
-                  << Mu::Model::protectionCategoryName(p.category) << "\",\"state\":\""
-                  << Mu::Model::protectionStateName(p.state) << "\",\"required\":" << (p.required ? "true" : "false")
-                  << ",\"version\":\"" << escapeJsonString(p.version) << "\",\"diagnostic\":\""
-                  << escapeJsonString(p.diagnostic) << "\"}";
-    }
-    std::cout << "],\"diagnostics\":[";
-    first = true;
-    for (const auto& diagnostic : status.diagnostics) {
-        if (!first)
-            std::cout << ',';
-        first = false;
-        std::cout << '\"' << escapeJsonString(diagnostic) << '\"';
-    }
-    std::cout << "]}\n";
-    std::cout.flush();
 }
 
 } // namespace
@@ -210,9 +131,9 @@ int main(int argc, char* argv[])
             const std::vector<int> preserve { STDOUT_FILENO, STDERR_FILENO };
             const auto status = ::Mu::Worker::Sandbox::activate(readOnlyDirectories, preserve);
             if (json)
-                printSandboxStatusJson(status);
+                Mu::Model::printSandboxStatusJson(std::cout, status);
             else
-                printSandboxStatusHuman(status);
+                Mu::Model::printSandboxStatusHuman(std::cout, status);
             if (status.isFullyHardened())
                 return 0;
             if (status.isPartiallyActive())
@@ -258,7 +179,13 @@ int main(int argc, char* argv[])
     // transferred over the FD channel; Seccomp prevents creating new filesystem
     // or network endpoints.
     const std::vector<int> preservedFds = { fdChannel.fd(), server.controlSocketFd() };
-    const auto sandbox = ::Mu::Worker::Sandbox::activate(readOnlyDirectories, preservedFds);
+    bool namespacesProvidedByLauncher = false;
+#ifdef MU_ENABLE_WORKER_BWRAP
+    // The Bubblewrap launcher supplies parent-pid; IPC peer authentication above must succeed first.
+    namespacesProvidedByLauncher = result.count("parent-pid") != 0;
+#endif // MU_ENABLE_WORKER_BWRAP
+    const auto sandbox =
+        ::Mu::Worker::Sandbox::activate(readOnlyDirectories, preservedFds, namespacesProvidedByLauncher);
     server.setSandboxStatus(sandbox);
 
     // Best-effort sandboxing is intentional: worker availability is preferred
