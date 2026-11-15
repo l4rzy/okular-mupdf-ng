@@ -138,7 +138,7 @@ std::string documentCss(const DocumentSettings& settings, std::string_view custo
     // Fixed-width figure wrappers must fit too: image percentages resolve
     // against the wrapper, and captions wrap within that same content box.
     css += "img { height: auto !important; max-width: 100% !important; } "
-           "figure, [role=figure], .figcenter, .figleft, .figright { max-width: 100% !important; } ";
+           "div, table, figure, [role=figure], .figcenter, .figleft, .figright { max-width: 100% !important; } ";
     if (const char* fontRule = fontFamilyCss(settings.epub.fontFamily)) {
         css += ' ';
         css += fontRule;

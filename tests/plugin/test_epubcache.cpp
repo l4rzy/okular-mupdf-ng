@@ -99,16 +99,18 @@ private slots:
         QTest::newRow("pre-figure-containers-outline") << false << quint32(12) << false << engineIdentity;
         QTest::newRow("pre-layout-controls-accelerator") << true << quint32(13) << false << engineIdentity;
         QTest::newRow("pre-layout-controls-outline") << false << quint32(13) << false << engineIdentity;
-        QTest::newRow("current-accelerator") << true << quint32(14) << true << engineIdentity;
-        QTest::newRow("current-outline") << false << quint32(14) << true << engineIdentity;
+        QTest::newRow("pre-text-containers-accelerator") << true << quint32(14) << false << engineIdentity;
+        QTest::newRow("pre-text-containers-outline") << false << quint32(14) << false << engineIdentity;
+        QTest::newRow("current-accelerator") << true << quint32(15) << true << engineIdentity;
+        QTest::newRow("current-outline") << false << quint32(15) << true << engineIdentity;
         const QString otherVariant = engineIdentity.endsWith(QStringLiteral("-bundled-patched"))
             ? engineIdentity.chopped(QStringLiteral("-bundled-patched").size()) + QStringLiteral("-system-vanilla")
             : engineIdentity.chopped(QStringLiteral("-system-vanilla").size()) + QStringLiteral("-bundled-patched");
         for (const bool accelerator : { false, true }) {
             QTest::newRow(accelerator ? "other-build-accelerator" : "other-build-outline")
-                << accelerator << quint32(14) << false << otherVariant;
+                << accelerator << quint32(15) << false << otherVariant;
             QTest::newRow(accelerator ? "other-version-accelerator" : "other-version-outline")
-                << accelerator << quint32(14) << false << QStringLiteral("0.0.0-bundled-patched");
+                << accelerator << quint32(15) << false << QStringLiteral("0.0.0-bundled-patched");
         }
     }
 

@@ -1,188 +1,49 @@
 # Bundled MuPDF patches
 
-`mupdf-1.28.5-mobi-toc.patch` targets the source archive pinned in `cmake/mupdf.version`.
-It adds anchors for legacy MOBI byte-offset links before text transcoding, converts
-`filepos` links to anchor links, and reads the guide's explicit TOC. Nested lists and
-blockquotes form the outline hierarchy; a page-break ends the TOC. Existing heading
-outlines remain the fallback.
-Skipped nesting levels preserve the preceding parent's children, and offsets
-inside comments wait until the comment closes before inserting a destination.
-The reader also clears dropped record streams, frees extracted text on
-transcoding failure, and releases the entry tree if archive construction fails.
-Raw-text/RCDATA elements are skipped when placing byte-offset anchors, and
-UTF-8 continuation checks apply only to UTF-8 input, preserving single-byte
-destinations before transcoding. Synthetic TOC fixtures and allocation-failure
-tests in `tests/worker/mobi.cpp` cover these paths, including under AddressSanitizer
-and LeakSanitizer.
+These patches target the MuPDF version pinned in `cmake/mupdf.version`.
 
-`mupdf-1.28.5-ocr-font-release.patch` releases the OCR device's owned Courier
-font reference during destruction. Text objects and target devices retain their
-own references. Existing image OCR cases in `tests/worker/ocr.cpp` exercise this
-cleanup under LeakSanitizer.
+- `mupdf-1.28.5-mobi-toc.patch`: Resolves legacy MOBI byte-offset links and
+  builds outlines from explicit tables of contents. Fixes cleanup on import errors.
+- `mupdf-1.28.5-ocr-font-release.patch`: Releases the OCR device's owned font
+  reference when the device is destroyed.
+- `mupdf-1.28.5-parent-tree-lifetime.patch`: Keeps the tagged-PDF parent tree
+  alive while page rearrangement copies its entries, preventing use-after-free.
+- `mupdf-1.28.5-html-layout.patch`: Corrects inline image alignment, inline-block
+  flow, `rem` units, table cell sizing, and image width measurement. Applies
+  `max-width` during block, image, and table layout.
+- `mupdf-1.28.6-html-max-width.patch`: Adds CSS `max-width` parsing and its
+  generated property lookup table. Layout support lives in the HTML layout patch.
+- `mupdf-1.28.5-html-table-pagination.patch`: Realigns collapsed-border cells
+  after a row moves to another page, keeping backgrounds and borders aligned.
+- `mupdf-1.28.5-html-media.patch`: Filters linked and inline stylesheets by screen
+  media type. Viewport feature queries and CSS `@media` rules remain unsupported.
+- `mupdf-1.28.5-html-image-width.patch`: Preserves natural image aspect ratios
+  and constrains block images to the available width.
+- `mupdf-1.28.5-html-image-float.patch`: Adds left/right image floats, text
+  wrapping, clearing, and pagination. Tables isolate external floats. Arbitrary
+  floated containers and floats in restartable stories remain unsupported.
+- `mupdf-1.28.5-html-background.patch`: Parses background colors in shorthand
+  declarations without mistaking other components for colors. Background image
+  painting and the complete shorthand grammar remain unsupported.
+- `mupdf-1.28.5-css-attribute-selectors.patch`: Adds prefix, suffix, and substring
+  selectors and corrects token and dash-prefix matching. Attribute namespaces
+  and explicit case flags remain unsupported.
+- `mupdf-1.28.5-form-autosize.patch`: Fits auto-sized plain form text to widget
+  bounds using wrapping and line breaks. Preserves explicit font sizes.
+- `mupdf-1.28.5-radio-unison.patch`: Honors `RadiosInUnison` when selecting and
+  saving radio buttons. Undo across mirrored UI groups still requires host support.
 
-`mupdf-1.28.5-parent-tree-lifetime.patch` retains the original tagged-PDF parent
-number tree while page rearrangement replaces `/ParentTree` and copies retained
-pages' entries. This prevents use-after-free of the borrowed dictionary value.
-Coverage lives in `tests/worker/document.cpp` (`flattenTaggedPageSelection`).
+`mupdf-1.28.5-css-calc.patch` is kept for reference and is not applied.
+CSS `calc()` and viewport units remain unsupported.
 
-`mupdf-1.28.5-html-layout.patch` measures inline images using the same
-baseline offsets as placement, reserving both ascent and descent for vertical
-alignment. Line-relative top/bottom images impose a minimum line height. This
-prevents images aligned to the middle, text edges, or explicit offsets from
-overlapping adjacent blocks or extending beyond page boundaries. Table-driven
-geometry coverage lives in `tests/worker/epub.cpp` (`testImageVerticalAlignment`)
-and opens synthetic HTML directly without plugin CSS overrides.
-The plugin's EPUB layout cache revision also changes so cached page counts and
-outline positions from the unpatched engine are not reused.
-
-Block and image layout also honor CSS `max-width`, including percentages and
-font-relative lengths. Both preliminary measurement and final layout constrain
-the content box, so oversized figure containers wrap their captions and scale
-their images together. This fixes cropped Gutenberg figures such as the Auckland
-illustration in *Round the Globe*, while preserving smaller authored widths.
-`mupdf-1.28.6-html-max-width.patch` adds the CSS property and its regenerated gperf
-table; layout changes share the existing layout patch because they modify the
-same sizing code. Tests in `testFigureMaxWidth` cover figures, generic containers,
-inline/block images, width limits, aspect ratios and repeated reflow. The cache
-revision changes so previous figure pagination is not reused.
-
-Table cell widths resolve percentages against the available table width, and
-font-relative lengths against the cell's font size. Explicit widths retain the
-minimum content width, including padding and borders; later rows cannot shrink
-an earlier cell's minimum. This prevents narrow percentage columns from drawing
-headers over adjacent cells. Synthetic tests cover automatic, percentage and
-fixed widths with both separate and collapsed borders. The EPUB layout cache
-revision changes so old pagination is not reused. These corrections share the
-layout patch because its `rem` conversions touch the same table sizing code.
-
-Images contribute their CSS-constrained intrinsic widths to table and
-inline-block measurement. Percentage widths and maximum widths contribute zero
-to the minimum and use their initial values for the preferred width, avoiding
-the circular dependency on the cell width being calculated. Absolute and
-font-relative maximum widths cap both contributions. Measurements start from
-the source image rather than geometry left by a previous layout. This fixes
-oversized image columns in *Radiotechnik* without discarding text minimum widths
-or shrinking unconstrained image contributions. `testTableImageWidths` covers
-HTML/CSS tables, inline/block images, separate/collapsed borders, repeated
-reflow and unconstrained controls. The EPUB cache revision changes accordingly.
-
-Static and relatively positioned `inline-block` elements use atomic flow nodes
-with their own formatting context, rather than interrupting the surrounding
-paragraph as ordinary blocks. Layout resolves explicit or shrink-to-fit widths,
-padding and borders, and aligns the last internal line to the surrounding
-baseline. Nested links and anchor targets retain their positioned geometry.
-Tests cover zero-line-height labels, superscripts, automatic/relative widths,
-alignment, multiline and nested content, and pagination. This fixes hanging
-footnote labels without publisher-specific CSS overrides. Positioned and floating
-elements retain the existing block positioning path. The EPUB cache revision
-changes to invalidate pagination from before inline-block support.
-
-The same patch preserves CSS `rem` as a distinct unit until layout, resolving
-it against the computed font size of the document element rather than a fixed
-16 points. The root's own `rem` font size uses the initial layout font size.
-The synthetic page box is kept separate from the document root, and each
-chapter/layout owns its root size. Font sizes, spacing, dimensions, line heights
-and vertical alignment share the corrected conversion; `em`, percentages and
-absolute lengths retain their existing behavior. The two HTML fixes are combined
-because they touch the same conversion sites and must remain independently
-verifiable from the other patches on reconfiguration.
-Worker coverage includes inline document roots, repeated relayout, page margins,
-images, tables and restartable stories. A small original EPUB covers separate chapter roots through
-the actual plugin, cold/warm caches, PDF export and reopen. Cache revision 2
-invalidates accelerators and outlines laid out before the `rem` correction.
-
-`mupdf-1.28.5-form-autosize.patch` fits auto-sized plain form values to the
-widget width and height using the renderer's word wrapping and CR, LF and CRLF
-line breaks. Multiline values retain the existing 12-point ceiling and shrink
-only when the wrapped layout does not fit. Explicit PDF font
-sizes, single-line fields and rich text styles retain their existing behavior.
-Worker regression coverage uses synthetic Latin and Japanese text to check line
-endings, empty lines, paragraphs with and without room to wrap, long values,
-single-line fitting and explicit sizes.
-
-`mupdf-1.28.5-radio-unison.patch` makes radio-button clicks honor
-`RadiosInUnison`: without it, only the clicked widget is selected; with it,
-all widgets sharing the selected on-state are selected. Selection compares resolved
-widget identity, including direct dictionaries. The group walk checks indirect
-cycles and limits direct nesting before recursing. Checkboxes retain
-their existing behavior. Worker tests cover duplicate values on one or more
-pages, toggle-to-off rules, idempotent updates, and save/reopen. The generator
-separates repeated in-unison options by occurrence instead of page, so Qt's
-exclusive groups never contain two copies of the same selected option.
-IPC compatibility 0.4.2 carries the flag to the generator.
-Okular records undo per UI group, so uneven sets of mirrored options can still
-omit the previous selection in another group from undo history. Selection and
-persistence follow the PDF flag; fixing that undo limitation requires host support.
-
-`mupdf-1.28.5-html-image-float.patch` supports left/right floating HTML images,
-including their margins, line-by-line text wrapping across paragraph and container
-boundaries, `clear`, and image pagination. Float overflow contributes to document
-height and remains drawable when the enclosing paragraph ends on an earlier page.
-This fixes decorative chapter initials in Gutenberg EPUBs such as *Round the Globe*.
-The scope is static image elements in non-restarting ebook layout. Images in
-tables or positioned containers use the existing block-image path: table rows may
-be laid out repeatedly, and positioned boxes move after layout. Tables isolate
-external float exclusions. Arbitrary floated containers and floats in restartable
-stories remain unsupported. Same-side and opposing image floats share a row when
-their margin boxes fit, otherwise moving to the next available position while
-preserving source order across page breaks. Missing-image
-placeholders keep their normal-flow height, and hidden images are skipped before
-loading. Non-finite image/margin geometry is rejected; clearance requires strict
-forward progress. The list borrows tree-owned boxes and resets for every layout.
-It is ordered by descending margin-box bottom so line lookup stops before expired
-floats; a separate last-float pointer preserves source order without rescanning
-the chapter.
-Table-driven tests cover both sides, inline/block display, clearing, pagination,
-repeated reflow, row retries, positioned/hidden/missing images, zero dimensions,
-negative and overflowing margins, and multiple floats. The EPUB layout cache
-revision changes to invalidate pagination from the previous engine.
-
-`mupdf-1.28.5-html-background.patch` resolves the supported background color from
-shorthand components regardless of their order, resetting an omitted color to
-transparent. Image URLs, repeat/position/size keywords and layer separators no
-longer reach the legacy bare-hex color fallback. Colors are accepted only on the
-final layer. Unsupported components and duplicate colors preserve the preceding
-declaration. CSS-wide `inherit`, `initial` and `unset` retain their color semantics.
-This does not implement background image painting or the complete CSS Backgrounds
-grammar. Synthetic rendering tests cover order, reset, layers, invalid values,
-case and cascade priority; they do not require any external ebook.
-
-`mupdf-1.28.5-html-media.patch` filters HTML link/style media attributes for the
-screen renderer. It accepts media-type lists with `not`/`only` modifiers and
-case-insensitive types. Unsupported feature conditions do not match; commas in
-parentheses or quoted strings do not turn parts of a condition into media types.
-Viewport-dependent media features and CSS `@media` rules remain unsupported.
-The previous blanket match for complex queries is removed. Both linked and inline
-stylesheets use the same filter and synthetic table-driven tests.
-
-`mupdf-1.28.5-css-attribute-selectors.patch` adds prefix (`^=`), suffix (`$=`),
-and substring (`*=`) attribute selectors. It also fixes dash-prefix (`|=`)
-matching and whitespace-token (`~=`) matching, including class selectors,
-and accepts whitespace before attribute values. Empty substring needles never
-match. Worker tests cover missing/empty attributes, case-sensitive matching,
-Unicode, compound/descendant selectors, specificity, malformed-selector recovery,
-long values, and the book's footnote selector. Cache revision 6 invalidates layouts
-from before these rules applied.
-Attribute namespaces and the explicit `i`/`s` case flags remain unsupported.
-
-`mupdf-1.28.5-css-calc.patch` is retained for reference but is not applied by
-CMake. CSS `calc()` and viewport units remain unsupported by this build.
-
-`mupdf-1.28.5-html-table-pagination.patch` reapplies collapsed-border cell
-alignment after moving a table row to the next page. The second layout pass
-resets cells to their content heights; without alignment, shorter cells paint
-their backgrounds and bottom borders above the row bottom. Tests compare stripe
-coverage in short and tall cells for both border models, with and without a page
-break, and with top/middle/bottom alignment. A spanning first column also checks
-that a stripe does not incorrectly fill cells originating in an unshaded row.
-
-CMake applies the patches with `patch -p1 --fuzz=0` for bundled builds. Reconfiguration
-verifies an already-applied patch using a reverse dry run. Unexpected source changes
-fail configuration rather than silently skipping the fix. The patch and affected
-source files are build dependencies so incremental builds refresh the library.
+CMake applies patches with `patch -p1 --fuzz=0` and verifies existing patches
+with a reverse dry run. Unexpected source changes fail configuration. Patches
+and affected sources are build dependencies, so incremental builds refresh MuPDF.
 `USE_SYSTEM_MUPDF=ON` leaves the installed library untouched.
 
-The changes modify MuPDF code licensed under AGPL-3.0-or-later; the original file
-headers and licensing terms remain in the source tree. Regression coverage lives in
-`tests/worker/document.cpp`, `epub.cpp`, `mobi.cpp` and `ocr.cpp`, with additional
-end-to-end coverage in the generator and integration suites.
+Regression tests live in `tests/worker/`, with additional generator and integration
+coverage. EPUB layout changes require a cache revision update to discard stale
+pagination and outlines.
+
+The patched MuPDF code is licensed under AGPL-3.0-or-later. Original license
+headers remain in the source tree.

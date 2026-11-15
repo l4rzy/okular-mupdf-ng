@@ -658,11 +658,12 @@
  	if (border_collapse)
  		spacing = 0;
  
-@@ -2559,13 +2705,15 @@
+@@ -2559,13 +2705,16 @@
  		if (border_collapse)
  			collapse_table_borders(ctx, table, &bci);
  
 +		avail_w = fz_from_css_number(box->style->width, box->s.layout.em, ld->bounds[R] - ld->bounds[L], ld->bounds[R] - ld->bounds[L], box->s.layout.rem);
++		avail_w = constrain_css_width(box, avail_w, ld->bounds[R] - ld->bounds[L]);
 +
  		/* Now walk the cells, populating minw/maxw/fixed. */
  		for (y = 0; y < table->h; y++)

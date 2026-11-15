@@ -2824,6 +2824,150 @@ private slots:
         }
     }
 
+    void testFixedWidthTablesFitPage_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<bool>("collapsed");
+        for (const int width : { 550, 160 }) {
+            for (const bool collapsed : { false, true })
+                QTest::newRow(qPrintable(QString::number(width) + (collapsed ? "-collapsed" : "-separate")))
+                    << width << collapsed;
+        }
+    }
+
+    void testFixedWidthTablesFitPage()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Requires bundled MuPDF table max-width support");
+#endif
+        QFETCH(int, width);
+        QFETCH(bool, collapsed);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage image(270, 300, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QFile file(directory.filePath(QStringLiteral("vegetables.html")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const auto content =
+            QStringLiteral(
+                "<html><head><style>table { width:%1px; margin:0 auto; border-spacing:0; "
+                "border-collapse:%2; } td { padding:1pt; text-align:center; }"
+                "</style></head><body><table><tr>"
+                "<td><img src='data:image/png;base64,%3'/></td><td><img src='data:image/png;base64,%3'/></td>"
+                "</tr><tr><td>Udo comes from Japan and grows like asparagus.</td>"
+                "<td>Chayote is a vegetable pear with edible roots.</td>"
+                "</tr></table></body></html>")
+                .arg(width)
+                .arg(collapsed ? QStringLiteral("collapse") : QStringLiteral("separate"))
+                .arg(QString::fromLatin1(png.toBase64()))
+                .toUtf8();
+        QCOMPARE(file.write(content), content.size());
+        file.close();
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::EpubDocument doc;
+        for (const auto size : { ::Mu::Model::EpubPageSize::A5, ::Mu::Model::EpubPageSize::B5 }) {
+            ::Mu::Model::DocumentSettings settings;
+            settings.epub.pageSize = size;
+            doc.setSettings(settings);
+            std::string error;
+            QVERIFY2(doc.openFd(::dup(file.handle()), "vegetables.html", &error), error.c_str());
+            const auto geometry = doc.pageGeometry(0, &error);
+            const double margin = geometry.widthPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction;
+            const auto inspection = Mu::Test::inspectDocumentText(doc.context(), doc.document());
+            QVERIFY2(inspection.error.isEmpty(), qPrintable(inspection.error));
+            QCOMPARE(inspection.images.size(), 2);
+            for (const auto& bounds : inspection.images) {
+                QVERIFY(bounds.x0 >= margin - 0.02);
+                QVERIFY(bounds.x1 <= geometry.widthPoints - margin + 0.02);
+                QVERIFY(bounds.x1 > bounds.x0);
+            }
+            // Small authored table widths remain small after applying the reader safeguard.
+            const double actualWidth = inspection.images.back().x1 - inspection.images.front().x0 + 2;
+            const double expectedWidth = std::min(double(width), geometry.widthPoints - 2 * margin);
+            QVERIFY(actualWidth <= expectedWidth + 0.02);
+            if (width == 160)
+                QVERIFY(std::abs(actualWidth - expectedWidth) < 0.02);
+            QString text;
+            for (int page = 0; page < doc.pageCount(); ++page) {
+                for (const auto& box : doc.textBoxes(page, 72, 72, 10000, false, &error)) {
+                    QVERIFY(box.left >= margin - 0.02);
+                    QVERIFY(box.right <= geometry.widthPoints - margin + 0.02);
+                    text += QString::fromStdString(box.text);
+                }
+            }
+            QVERIFY2(error.empty(), error.c_str());
+            text.remove(' ');
+            QCOMPARE(text,
+                     QStringLiteral("UdocomesfromJapanandgrowslikeasparagus."
+                                    "Chayoteisavegetablepearwithedibleroots."));
+        }
+    }
+
+    void testFixedWidthTextContainersFitPage_data()
+    {
+        QTest::addColumn<int>("width");
+        QTest::addColumn<int>("inset");
+        QTest::newRow("mountain-panel") << 845 << 10;
+        QTest::newRow("wide-panel") << 910 << 0;
+        QTest::newRow("small-panel") << 160 << 1;
+    }
+
+    void testFixedWidthTextContainersFitPage()
+    {
+#if TEST_SYSTEM_MUPDF
+        QSKIP("Requires bundled MuPDF max-width support");
+#endif
+        QFETCH(int, width);
+        QFETCH(int, inset);
+        QTemporaryFile file;
+        QVERIFY(file.open());
+        const QString paragraph = QStringLiteral("Mount Everest is the loftiest mountain in the world. "
+                                                 "Travelers view the glistening peaks from a point near Darjeeling. ");
+        const QString expected = QStringLiteral("CELEBRATED MOUNTAIN PEAKS") + paragraph.repeated(20)
+            + QStringLiteral("Following paragraph.");
+        const auto content = QStringLiteral("<html><head><style>div.panel { width: %1px; margin: 0 auto; }"
+                                            "p { font-size: 85%; margin: 0 %2em; text-indent: 2em; }"
+                                            "</style></head><body><div class='panel'>"
+                                            "<h4>CELEBRATED MOUNTAIN PEAKS</h4><p>%3</p></div>"
+                                            "<p>Following paragraph.</p></body></html>")
+                                 .arg(width)
+                                 .arg(inset)
+                                 .arg(paragraph.repeated(20))
+                                 .toUtf8();
+        QCOMPARE(file.write(content), content.size());
+        QVERIFY(file.flush());
+        ::Mu::Worker::Engine::EpubDocument doc;
+        for (const auto size : { ::Mu::Model::EpubPageSize::A5, ::Mu::Model::EpubPageSize::B5 }) {
+            ::Mu::Model::DocumentSettings settings;
+            settings.epub.pageSize = size;
+            doc.setSettings(settings);
+            std::string error;
+            QVERIFY2(doc.openFd(::dup(file.handle()), "panel.html", &error), error.c_str());
+            QString text;
+            for (int page = 0; page < doc.pageCount(); ++page) {
+                const auto geometry = doc.pageGeometry(page, &error);
+                const double margin = geometry.widthPoints * ::Mu::Worker::Engine::Constant::PageMarginFraction;
+                for (const auto& box : doc.textBoxes(page, 72, 72, 10000, false, &error)) {
+                    QVERIFY(box.left >= margin - 0.02);
+                    QVERIFY2(box.right <= geometry.widthPoints - margin + 0.02,
+                             qPrintable(QStringLiteral("Text right edge %1 exceeds content edge %2")
+                                            .arg(box.right)
+                                            .arg(geometry.widthPoints - margin)));
+                    text += QString::fromStdString(box.text);
+                }
+            }
+            QVERIFY2(error.empty(), error.c_str());
+            QString normalizedExpected = expected;
+            normalizedExpected.remove(' ');
+            text.remove(' ');
+            QCOMPARE(text, normalizedExpected);
+        }
+    }
+
     void testFigureMaxWidth_data()
     {
         QTest::addColumn<QString>("tag");

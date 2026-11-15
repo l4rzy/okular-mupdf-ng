@@ -28,7 +28,7 @@ namespace {
 constexpr quint32 V3Magic = 0x45504133; // 'EPA3'
 constexpr quint32 V3Version = 3;
 // Bump when bundled layout fixes change pagination without a MuPDF version bump.
-constexpr quint32 LayoutRevision = 14; // EPUB line spacing and publisher style controls change pagination.
+constexpr quint32 LayoutRevision = 15; // Constrain fixed-width text containers and tables to the page.
 constexpr qint64 V3HeaderBytes = 16;
 constexpr qint64 MaxAcceleratorBytes = static_cast<qint64>(Model::MaxEpubAcceleratorBytes);
 constexpr qint64 MaxOutlineCompressedBytes = 8LL * 1024LL * 1024LL;
