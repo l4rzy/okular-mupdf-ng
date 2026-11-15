@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QTest>
+#include <sstream>
 
 #include "shared/protocol/zpp_codec.hpp"
+#include "shared/sandbox_report.hpp"
 
 using namespace Mu::Model;
 
@@ -11,6 +13,39 @@ class TestSandboxStatus : public QObject {
     Q_OBJECT
 
 private slots:
+
+    void printsProtectionDiagnostic_data()
+    {
+        QTest::addColumn<QString>("diagnostic");
+        QTest::newRow("empty") << QString();
+        QTest::newRow("inherited") << QStringLiteral("Namespaces inherited from Bubblewrap launcher");
+    }
+
+    void printsProtectionDiagnostic()
+    {
+        QFETCH(QString, diagnostic);
+        const SandboxStatus status {
+            "linux",
+            "profile.v1",
+            { { "linux.namespaces",
+                ProtectionCategory::Process,
+                ProtectionState::Enforced,
+                true,
+                { },
+                diagnostic.toStdString() },
+              { "linux.resource_limits", ProtectionCategory::Resources, ProtectionState::Enforced, true, { }, { } } },
+            { "general diagnostic" }
+        };
+        std::ostringstream output;
+        printSandboxStatusHuman(output, status);
+        const std::string expectedDiagnostic = diagnostic.isEmpty() ? "" : "    " + diagnostic.toStdString() + "\n";
+        QCOMPARE(output.str(),
+                 "Sandbox: linux profile=profile.v1 isolation=full\n"
+                 "  linux.namespaces: enforced required=1 version=\n"
+                     + expectedDiagnostic
+                     + "  linux.resource_limits: enforced required=1 version=\n"
+                       "  general diagnostic\n");
+    }
 
     void evaluatesPolicy_data()
     {

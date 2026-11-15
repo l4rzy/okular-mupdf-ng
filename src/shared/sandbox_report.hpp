@@ -48,9 +48,12 @@ inline void printSandboxStatusHuman(std::ostream& out, const SandboxStatus& stat
 {
     out << "Sandbox: " << status.platform << " profile=" << status.profile
         << " isolation=" << Mu::Model::isolationLevelName(status.isolation()) << "\n";
-    for (const auto& protection : status.protections)
+    for (const auto& protection : status.protections) {
         out << "  " << protection.id << ": " << Mu::Model::protectionStateName(protection.state)
             << " required=" << protection.required << " version=" << protection.version << "\n";
+        if (!protection.diagnostic.empty())
+            out << "    " << protection.diagnostic << "\n";
+    }
     for (const auto& diagnostic : status.diagnostics)
         out << "  " << diagnostic << "\n";
     out.flush();

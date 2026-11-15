@@ -21,9 +21,8 @@ private slots:
     {
         QTest::addColumn<QStringList>("arguments");
         QTest::addColumn<bool>("json");
-        QTest::newRow("human") << QStringList { "--sandbox-check" } << false;
-        QTest::newRow("json") << QStringList { "--sandbox-check=json" } << true;
-        QTest::newRow("command-json") << QStringList { "sandbox-check", "--format", "json" } << true;
+        QTest::newRow("human") << QStringList { "sandbox" } << false;
+        QTest::newRow("json") << QStringList { "sandbox", "--json" } << true;
     }
 
     void reportsSandboxStatus()
@@ -46,6 +45,7 @@ private slots:
             QCOMPARE(report.value("platform").toString(), QStringLiteral("linux"));
             QCOMPARE(report.value("profile").toString(), profile);
             QVERIFY(report.value("diagnostics").isArray());
+            QVERIFY(!report.value("diagnostics").toArray().contains("Namespaces inherited from Bubblewrap launcher"));
             QStringList ids;
             for (const auto& entry : report.value("protections").toArray()) {
                 const auto protection = entry.toObject();
@@ -54,7 +54,7 @@ private slots:
                 QVERIFY(protection.value("diagnostic").isString());
                 if (protection.value("id") == "linux.namespaces") {
                     QCOMPARE(protection.value("diagnostic").toString(),
-                             profile.contains("bwrap") ? QStringLiteral("Namespaces provided by Bubblewrap launcher")
+                             profile.contains("bwrap") ? QStringLiteral("Namespaces inherited from Bubblewrap launcher")
                                                        : QString());
                 }
             }
@@ -65,6 +65,12 @@ private slots:
         } else {
             QVERIFY(output.startsWith("Sandbox: linux profile=" + profile.toUtf8()));
             QVERIFY(output.contains("linux.seccomp:"));
+            QCOMPARE(output.contains("Namespaces inherited from Bubblewrap launcher"), profile.contains("bwrap"));
+            if (profile.contains("bwrap")) {
+                QVERIFY(output.contains("  linux.namespaces: enforced required=1 version=\n"
+                                        "    Namespaces inherited from Bubblewrap launcher\n"
+                                        "  linux.resource_limits:"));
+            }
             QCOMPARE(output.contains("linux.bubblewrap: enforced"), profile.contains("bwrap"));
             QCOMPARE(cli.exitCode(),
                      output.contains("isolation=full")           ? 0
@@ -81,7 +87,7 @@ private slots:
         QVERIFY(worker.open(QIODevice::WriteOnly));
         worker.close();
         QProcess cli;
-        cli.start(QStringLiteral(MUPDFNG_CLI_PATH), { "--sandbox-check=json", "--worker", worker.fileName() });
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH), { "sandbox", "--json", "--worker", worker.fileName() });
         QVERIFY(cli.waitForFinished(30000));
         QCOMPARE(cli.exitCode(), 2);
         QVERIFY(cli.readAllStandardOutput().isEmpty());

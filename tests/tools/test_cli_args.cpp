@@ -13,25 +13,20 @@ class TestToolsCliArgs : public QObject {
 
 private slots:
 
-    void parsesSandboxCheck_data()
+    void parsesSandbox_data()
     {
         QTest::addColumn<QStringList>("arguments");
         QTest::addColumn<bool>("valid");
         QTest::addColumn<bool>("json");
-        QTest::newRow("human") << QStringList { "--sandbox-check" } << true << false;
-        QTest::newRow("explicit-human") << QStringList { "--sandbox-check=human" } << true << false;
-        QTest::newRow("json") << QStringList { "--sandbox-check=json" } << true << true;
-        QTest::newRow("command") << QStringList { "sandbox-check" } << true << false;
-        QTest::newRow("command-json") << QStringList { "sandbox-check", "--format", "json" } << true << true;
-        QTest::newRow("invalid-format") << QStringList { "--sandbox-check=xml" } << false << false;
-        QTest::newRow("empty-format") << QStringList { "--sandbox-check=" } << false << false;
-        QTest::newRow("positional") << QStringList { "--sandbox-check", "doc.pdf" } << false << false;
-        QTest::newRow("repeated") << QStringList { "--sandbox-check", "--sandbox-check=json" } << false << false;
-        QTest::newRow("repeated-format") << QStringList { "--sandbox-check=json", "--format", "human" } << false
-                                         << false;
+        QTest::newRow("human") << QStringList { "sandbox" } << true << false;
+        QTest::newRow("json") << QStringList { "sandbox", "--json" } << true << true;
+        QTest::newRow("json-value") << QStringList { "sandbox", "--json=xml" } << false << false;
+        QTest::newRow("format-option") << QStringList { "sandbox", "--format", "json" } << false << false;
+        QTest::newRow("positional") << QStringList { "sandbox", "doc.pdf" } << false << false;
+        QTest::newRow("json-positional") << QStringList { "sandbox", "--json", "doc.pdf" } << false << false;
     }
 
-    void parsesSandboxCheck()
+    void parsesSandbox()
     {
         QFETCH(QStringList, arguments);
         QFETCH(bool, valid);
@@ -45,8 +40,26 @@ private slots:
             QCOMPARE(command.sandbox.json, json);
             QCOMPARE(command.sandbox.worker, std::string("custom-worker"));
         }
-        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains("--sandbox-check"));
+        QVERIFY(Cli::helpTextFor(Cli::Command::Kind::Help).contains("sandbox"));
+        QVERIFY(!Cli::helpTextFor(Cli::Command::Kind::Help).contains("sandbox-check"));
         QVERIFY(Cli::helpTextFor(command.kind).contains("--worker"));
+        QVERIFY(Cli::helpTextFor(command.kind).contains("--json"));
+    }
+
+    void rejectsOldSandboxCommands_data()
+    {
+        QTest::addColumn<QString>("argument");
+        QTest::newRow("old-command") << QStringLiteral("sandbox-check");
+        QTest::newRow("human") << QStringLiteral("--sandbox-check");
+        QTest::newRow("explicit-human") << QStringLiteral("--sandbox-check=human");
+        QTest::newRow("json") << QStringLiteral("--sandbox-check=json");
+    }
+
+    void rejectsOldSandboxCommands()
+    {
+        QFETCH(QString, argument);
+        const auto command = Cli::parseArgs({ "mupdfng-cli", argument });
+        QCOMPARE(command.error, "unknown command: " + argument.toStdString());
     }
 
     void parsesOcrCommand()

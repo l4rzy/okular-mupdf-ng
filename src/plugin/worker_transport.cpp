@@ -361,6 +361,10 @@ bool WorkerTransport::start(const QString& binaryPath,
     p->sandbox.profile = "mupdfng.linux.bwrap.v1";
     p->sandbox.protections.push_back(
         { "linux.bubblewrap", ProtectionCategory::Filesystem, ProtectionState::Enforced, true, { }, { } });
+    for (auto& protection : p->sandbox.protections) {
+        if (protection.id == "linux.namespaces")
+            protection.diagnostic = "Namespaces inherited from Bubblewrap launcher";
+    }
 #endif // MU_ENABLE_WORKER_BWRAP
     if (workerInfo)
         *workerInfo = *p;
