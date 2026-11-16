@@ -14,6 +14,7 @@
 #include <QTest>
 #include <QTimeZone>
 
+#include <cmath>
 #include <limits>
 
 #include "generator/conversion/annotation.hpp"
@@ -38,6 +39,9 @@
 #include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"
 #include <okular/core/page.h>
+
+using TextBoxes = std::vector<::Mu::Model::TextBox>;
+Q_DECLARE_METATYPE(TextBoxes)
 
 namespace Mu::Plugin {
 
@@ -552,6 +556,254 @@ private slots:
         Okular::RegularAreaRect outside;
         outside.append({ 0.1, 0.7, 0.5, 0.9 });
         QVERIFY(page->text(&outside).isEmpty());
+    }
+
+    void textPageConversionPreservesBoundaries_data()
+    {
+        QTest::addColumn<TextBoxes>("boxes");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("tight-gaps") << TextBoxes {
+            { "w", 10.0, 20.0, 20.0, 30.0, false }, { "o", 20.5, 20.0, 28.0, 30.0, false },
+            { "r", 28.5, 20.0, 33.0, 30.0, false }, { "d", 33.5, 20.0, 40.0, 30.0, false },
+            { " ", 40.0, 20.0, 45.0, 30.0, false }, { "c", 48.0, 20.0, 55.0, 30.0, false },
+            { "o", 55.5, 20.0, 62.0, 30.0, false }, { "p", 62.5, 20.0, 70.0, 30.0, false },
+            { "y", 70.5, 20.0, 78.0, 30.0, true },
+        } << QStringLiteral("word copy\n");
+        QTest::newRow("narrow-glyphs") << TextBoxes {
+            { "s", 10.0, 20.0, 15.0, 30.0, false },   { "i", 15.62, 20.0, 17.42, 30.0, false },
+            { "l", 18.04, 20.0, 19.84, 30.0, false }, { "l", 20.46, 20.0, 22.26, 30.0, false },
+            { "y", 22.88, 20.0, 27.88, 30.0, true },
+        } << QStringLiteral("silly\n");
+        QTest::newRow("overlaps") << TextBoxes {
+            { "A", 10.0, 20.0, 16.4, 30.0, false },
+            { "l", 16.23, 20.0, 19.43, 30.0, false },
+            { "l", 19.26, 20.0, 22.46, 30.0, true },
+        } << QStringLiteral("All\n");
+        QTest::newRow("touching-space") << TextBoxes {
+            { "a", 10.0, 20.0, 15.0, 30.0, false },
+            { " ", 15.0, 20.0, 18.0, 30.0, false },
+            { "b", 18.0, 20.0, 23.0, 30.0, true },
+        } << QStringLiteral("a b\n");
+        QTest::newRow("line-endings") << TextBoxes {
+            { "one", 10.0, 20.0, 30.0, 30.0, true },
+            { "two", 10.0, 40.0, 30.0, 50.0, true },
+        } << QStringLiteral("one\ntwo\n");
+        QTest::newRow("dehyphenated-lines") << TextBoxes {
+            { "inter", 10.0, 20.0, 40.0, 30.0, false },
+            { "national", 10.0, 40.0, 55.0, 50.0, true },
+        } << QStringLiteral("international\n");
+        QTest::newRow("paragraph-columns") << TextBoxes {
+            { "Left first", 10.0, 20.0, 35.0, 30.0, true },
+            { "Left second", 10.0, 40.0, 35.0, 50.0, true },
+            { "Right first", 60.0, 20.0, 90.0, 30.0, true },
+            { "Right second", 60.0, 40.0, 90.0, 50.0, true },
+        } << QStringLiteral("Left first\nLeft second\nRight first\nRight second\n");
+        QTest::newRow("combining-character") << TextBoxes {
+            { "e", 10.0, 20.0, 15.0, 30.0, false },
+            { "\xcc\x81", 15.6, 20.0, 15.6, 30.0, false },
+            { "x", 15.6, 20.0, 20.6, 30.0, true },
+        } << QStringLiteral("\u00e9x\n");
+        QTest::newRow("supplementary-character") << TextBoxes {
+            { "a", 10.0, 20.0, 15.0, 30.0, false }, { "\xf0\x9f\x98\x80", 15.6, 20.0, 23.0, 30.0, false },
+            { "b", 23.6, 20.0, 28.6, 30.0, true },
+        } << QString::fromUtf8("a\xf0\x9f\x98\x80" "b\n");
+        QTest::newRow("invisible-boxes") << TextBoxes {
+            { "a", 10.0, 20.0, 15.0, 30.0, false },
+            { "", 15.0, 20.0, 16.0, 30.0, false },
+            { "clipped", 110.0, 20.0, 120.0, 30.0, false },
+            { "b", 15.6, 20.0, 20.6, 30.0, true },
+        } << QStringLiteral("ab\n");
+        QTest::newRow("all-clipped") << TextBoxes {
+            { "clipped", 110.0, 20.0, 120.0, 30.0, true },
+            { "point", 10.0, 20.0, 10.0, 20.0, true },
+        } << QString();
+        QTest::newRow("inverted-clipped") << TextBoxes {
+            { "a", 110.0, 40.0, 10.0, 20.0, true },
+        } << QStringLiteral("a\n");
+        const double maximum = std::numeric_limits<double>::max();
+        QTest::newRow("extreme-finite") << TextBoxes {
+            { "a", -maximum, -maximum, maximum, maximum, true },
+        } << QStringLiteral("a\n");
+        QTest::newRow("unterminated-line") << TextBoxes {
+            { "a", 10.0, 20.0, 15.0, 30.0, false },
+            { "b", 15.5, 20.0, 20.5, 30.0, false },
+        } << QStringLiteral("ab");
+    }
+
+    void textPageConversionPreservesBoundaries()
+    {
+        QFETCH(TextBoxes, boxes);
+        QFETCH(QString, expected);
+        Okular::Page target(0, 100.0, 100.0, Okular::Rotation0);
+        target.setTextPage(::Mu::Generator::Conversion::textPage(boxes, 100.0, 100.0));
+
+        QCOMPARE(target.text(), expected);
+    }
+
+    void textPageConversionPreservesCharacterSelection()
+    {
+        const TextBoxes boxes = {
+            { "s", 10.0, 20.0, 15.0, 30.0, false },   { "i", 15.62, 20.0, 17.42, 30.0, false },
+            { "l", 18.04, 20.0, 19.84, 30.0, false }, { "l", 20.46, 20.0, 22.26, 30.0, false },
+            { "y", 22.88, 20.0, 27.88, 30.0, true },
+        };
+        Okular::Page target(0, 100.0, 100.0, Okular::Rotation0);
+        target.setTextPage(::Mu::Generator::Conversion::textPage(boxes, 100.0, 100.0));
+
+        Okular::RegularAreaRect selection;
+        selection.append({ 0.156, 0.2, 0.181, 0.3 });
+        QCOMPARE(target.text(&selection, Okular::TextPage::CentralPixelTextAreaInclusionBehaviour),
+                 QStringLiteral("i"));
+        const auto word = target.wordAt({ 0.165, 0.25 });
+        QVERIFY(word);
+        QCOMPARE(target.text(word.get()).trimmed(), QStringLiteral("silly"));
+        std::unique_ptr<Okular::RegularAreaRect> match(
+            target.findText(1, QStringLiteral("silly"), Okular::FromTop, Qt::CaseSensitive));
+        QVERIFY(match);
+    }
+
+    void textPageConversionRejectsInvalidDimensions_data()
+    {
+        QTest::addColumn<double>("dimension");
+        QTest::addColumn<bool>("valid");
+        QTest::newRow("zero") << 0.0 << false;
+        QTest::newRow("negative") << -1.0 << false;
+        QTest::newRow("nan") << std::numeric_limits<double>::quiet_NaN() << false;
+        QTest::newRow("infinity") << std::numeric_limits<double>::infinity() << false;
+        QTest::newRow("negative-infinity") << -std::numeric_limits<double>::infinity() << false;
+        QTest::newRow("tiny") << std::numeric_limits<double>::denorm_min() << true;
+        QTest::newRow("normal") << 100.0 << true;
+    }
+
+    void textPageConversionRejectsInvalidDimensions()
+    {
+        QFETCH(double, dimension);
+        QFETCH(bool, valid);
+        const TextBoxes boxes { { "a", 0.0, 0.0, 1.0, 1.0, true } };
+        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> ocr { { QStringLiteral("ocr"), 0.0, 0.0, 0.5, 0.5 } };
+        for (const auto& size : { QSizeF(dimension, 100.0), QSizeF(100.0, dimension) }) {
+            std::unique_ptr<Okular::TextPage> page(
+                ::Mu::Generator::Conversion::textPage(boxes, size.width(), size.height()));
+            QCOMPARE(page->text(), valid ? QStringLiteral("a\n") : QString());
+            for (const auto& entity : page->words(nullptr, Okular::TextPage::AnyPixelTextAreaInclusionBehaviour)) {
+                const auto area = entity.area();
+                QVERIFY(std::isfinite(area.left) && std::isfinite(area.top) && std::isfinite(area.right)
+                        && std::isfinite(area.bottom));
+            }
+            std::unique_ptr<Okular::TextPage> merged(
+                ::Mu::Generator::Conversion::mergedTextPage(boxes, size.width(), size.height(), ocr));
+            QCOMPARE(merged->text(), valid ? QStringLiteral("a\nocr") : QString());
+        }
+    }
+
+    void textPageConversionRejectsInvalidCoordinates_data()
+    {
+        QTest::addColumn<double>("invalid");
+        QTest::newRow("nan") << std::numeric_limits<double>::quiet_NaN();
+        QTest::newRow("infinity") << std::numeric_limits<double>::infinity();
+        QTest::newRow("negative-infinity") << -std::numeric_limits<double>::infinity();
+    }
+
+    void textPageConversionRejectsInvalidCoordinates()
+    {
+        QFETCH(double, invalid);
+        for (int coordinate = 0; coordinate < 4; ++coordinate) {
+            double values[] { 10.0, 20.0, 15.0, 30.0 };
+            values[coordinate] = invalid;
+            const TextBoxes boxes { { "invalid", values[0], values[1], values[2], values[3], true },
+                                    { "valid", 20.0, 20.0, 30.0, 30.0, true } };
+            std::unique_ptr<Okular::TextPage> page(::Mu::Generator::Conversion::textPage(boxes, 100.0, 100.0));
+            QCOMPARE(page->text(), QStringLiteral("valid\n"));
+            const QVector<::Mu::Plugin::Caching::OCR::CacheItem> ocr {
+                { QStringLiteral("invalid"), values[0], values[1], values[2], values[3] },
+                { QStringLiteral("valid"), 0.2, 0.2, 0.3, 0.3 },
+            };
+            std::unique_ptr<Okular::TextPage> merged(
+                ::Mu::Generator::Conversion::mergedTextPage({ }, 100.0, 100.0, ocr));
+            QCOMPARE(merged->text(), QStringLiteral("valid"));
+        }
+    }
+
+    void textPageConversionPreservesTableRows_data()
+    {
+        QTest::addColumn<bool>("columnOrder");
+        QTest::addColumn<bool>("rightFirst");
+        QTest::newRow("source-rows") << false << false;
+        QTest::newRow("source-columns") << true << false;
+        QTest::newRow("right-column-first") << true << true;
+    }
+
+    void textPageConversionHandlesDenseWordRows_data()
+    {
+        QTest::addColumn<int>("rows");
+        QTest::newRow("empty") << 0;
+        QTest::newRow("single") << 1;
+        QTest::newRow("many") << 1024;
+        QTest::newRow("dense") << 10000;
+    }
+
+    void textPageConversionHandlesDenseWordRows()
+    {
+        QFETCH(int, rows);
+        TextBoxes boxes;
+        boxes.reserve(static_cast<std::size_t>(rows) * 2);
+        QString expected;
+        // Paint the right column first to exercise every reordered range.
+        for (int column = 1; column >= 0; --column) {
+            for (int row = 0; row < rows; ++row) {
+                const double left = 10.0 + column * 40.0;
+                const double top = 1.0 + row * 12.0;
+                const QString text = QStringLiteral("%1%2").arg(column ? QLatin1Char('R') : QLatin1Char('L')).arg(row);
+                boxes.push_back({ text.toStdString(), left, top, left + 20.0, top + 10.0, true });
+            }
+        }
+        for (int row = 0; row < rows; ++row)
+            expected += QStringLiteral("L%1\n\tR%1\n").arg(row);
+        std::unique_ptr<Okular::TextPage> page(::Mu::Generator::Conversion::textPage(boxes, 100.0, 1.0 + rows * 12.0));
+        QCOMPARE(page->text(), expected);
+    }
+
+    void textPageConversionPreservesTableRows()
+    {
+        QFETCH(bool, columnOrder);
+        QFETCH(bool, rightFirst);
+        TextBoxes boxes;
+        const auto addLine = [&boxes](const std::string& text, double left, double top) {
+            for (const char character : text) {
+                boxes.push_back({ std::string(1, character), left, top, left + 5.0, top + 10.0, false });
+                left += 5.6;
+            }
+            boxes.back().endOfLine = true;
+        };
+        addLine("Heading", 10.0, 10.0);
+        if (rightFirst) {
+            for (int row = 0; row < 6; ++row)
+                addLine("Right" + std::to_string(row), 120.0, 30.0 + row * 15.0);
+        }
+        QString expected = QStringLiteral("Heading");
+        for (int row = 0; row < 6; ++row) {
+            addLine("Left" + std::to_string(row), 10.0, 30.0 + row * 15.0);
+            if (!columnOrder)
+                addLine("Right" + std::to_string(row), 120.0, 30.0 + row * 15.0);
+            expected += QStringLiteral(" Left%1 Right%1").arg(row);
+        }
+        addLine("Following paragraph", 10.0, 140.0);
+        addLine("Footer", 10.0, 180.0);
+        if (columnOrder && !rightFirst) {
+            for (int row = 0; row < 6; ++row)
+                addLine("Right" + std::to_string(row), 120.0, 30.0 + row * 15.0);
+        }
+        expected += QStringLiteral(" Following paragraph Footer");
+        Okular::Page target(0, 200.0, 200.0, Okular::Rotation0);
+        target.setTextPage(::Mu::Generator::Conversion::textPage(boxes, 200.0, 200.0));
+
+        QCOMPARE(target.text().simplified(), expected);
+        // The separator occupies the column gap; it must not enlarge the last
+        // selectable character of the left cell across that gap.
+        Okular::RegularAreaRect gap;
+        gap.append({ 0.3, 0.15, 0.5, 0.2 });
+        QVERIFY(target.text(&gap).trimmed().isEmpty());
     }
 
     void plainTextAssembly()
