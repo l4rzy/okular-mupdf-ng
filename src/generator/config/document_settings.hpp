@@ -23,4 +23,4 @@ DocumentSettings readDocumentSettings(const QString& key);
 bool writeDocumentSettings(const QString& key, const DocumentSettings& settings);
 
 } // namespace Mu::Generator::Config
-#endif
+#endif // MU_GENERATOR_CONFIG_DOCUMENT_SETTINGS_HPP

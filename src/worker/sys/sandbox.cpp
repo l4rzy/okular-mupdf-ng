@@ -17,7 +17,7 @@
 #ifdef MUPDF_HAVE_LIBSECCOMP
 #include <linux/sched.h>
 #include <seccomp.h>
-#endif
+#endif // MUPDF_HAVE_LIBSECCOMP
 #endif // __linux__
 
 #include <algorithm>
@@ -67,7 +67,7 @@ Status reportLinuxStatus(const LinuxStatus& activation, bool disabled = false)
 #ifndef MUPDF_HAVE_LIBSECCOMP
     if (!disabled)
         result.protections.back().state = ProtectionState::Unavailable;
-#endif
+#endif // MUPDF_HAVE_LIBSECCOMP
     add("linux.mdwe", ProtectionCategory::Memory, activation.memoryProtection, false);
     if (!activation.reason.empty())
         result.diagnostics.push_back(activation.reason);
@@ -152,15 +152,15 @@ bool activateLandlock(const std::vector<std::string>& readOnlyDirectories, Linux
 #ifdef LANDLOCK_ACCESS_FS_REFER
     if (abi >= 2)
         ruleset.handled_access_fs |= LANDLOCK_ACCESS_FS_REFER;
-#endif
+#endif // LANDLOCK_ACCESS_FS_REFER
 #ifdef LANDLOCK_ACCESS_FS_TRUNCATE
     if (abi >= 3)
         ruleset.handled_access_fs |= LANDLOCK_ACCESS_FS_TRUNCATE;
-#endif
+#endif // LANDLOCK_ACCESS_FS_TRUNCATE
 #ifdef LANDLOCK_ACCESS_FS_IOCTL_DEV
     if (abi >= 5)
         ruleset.handled_access_fs |= LANDLOCK_ACCESS_FS_IOCTL_DEV;
-#endif
+#endif // LANDLOCK_ACCESS_FS_IOCTL_DEV
 
     // Create the Landlock ruleset file descriptor
     const int rulesetFd = landlockCreate(&ruleset, sizeof(ruleset), 0);
@@ -271,7 +271,7 @@ void tryClearAmbientCapabilities()
     // Optional: kernels without ambient-capability support retain no privilege
     // we intentionally add, so failure does not block worker startup.
     (void)::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0);
-#endif
+#endif // PR_CAP_AMBIENT
 }
 
 // =============================================================================
@@ -355,7 +355,7 @@ bool redirectStandardDescriptors(const std::vector<int>& preservedFds, LinuxStat
         ::close(nullFd);
     return success;
 }
-#endif
+#endif // MU_DEBUG_ENABLED
 
 // =============================================================================
 // Seccomp Syscall Filtering
@@ -392,263 +392,263 @@ bool activateSeccomp(LinuxStatus& status)
     // or any other same-user service.
 #ifdef __NR_accept4
         __NR_accept4,
-#endif
+#endif // __NR_accept4
 #ifdef __NR_access
         __NR_access,
-#endif
+#endif // __NR_access
 #ifdef __NR_arch_prctl
         __NR_arch_prctl,
-#endif
+#endif // __NR_arch_prctl
 #ifdef __NR_brk
         __NR_brk,
-#endif
+#endif // __NR_brk
 #ifdef __NR_clock_gettime
         __NR_clock_gettime,
-#endif
+#endif // __NR_clock_gettime
 #ifdef __NR_clock_nanosleep
         __NR_clock_nanosleep,
-#endif
+#endif // __NR_clock_nanosleep
 #ifdef __NR_close
         __NR_close,
-#endif
+#endif // __NR_close
 #ifdef __NR_dup
         __NR_dup,
-#endif
+#endif // __NR_dup
 #ifdef __NR_dup2
         __NR_dup2,
-#endif
+#endif // __NR_dup2
 #ifdef __NR_dup3
         __NR_dup3,
-#endif
+#endif // __NR_dup3
 #ifdef __NR_epoll_create1
         __NR_epoll_create1,
-#endif
+#endif // __NR_epoll_create1
 #ifdef __NR_epoll_ctl
         __NR_epoll_ctl,
-#endif
+#endif // __NR_epoll_ctl
 #ifdef __NR_epoll_wait
         __NR_epoll_wait,
-#endif
+#endif // __NR_epoll_wait
 #ifdef __NR_eventfd2
         __NR_eventfd2,
-#endif
+#endif // __NR_eventfd2
 #ifdef __NR_exit
         __NR_exit,
-#endif
+#endif // __NR_exit
 #ifdef __NR_exit_group
         __NR_exit_group,
-#endif
+#endif // __NR_exit_group
 #ifdef __NR_faccessat
         __NR_faccessat,
-#endif
+#endif // __NR_faccessat
 #ifdef __NR_faccessat2
         __NR_faccessat2,
-#endif
+#endif // __NR_faccessat2
 #ifdef __NR_fadvise64
         __NR_fadvise64,
-#endif
+#endif // __NR_fadvise64
 #ifdef __NR_fcntl
         __NR_fcntl,
-#endif
+#endif // __NR_fcntl
 #ifdef __NR_fdatasync
         __NR_fdatasync,
-#endif
+#endif // __NR_fdatasync
 #ifdef __NR_fstat
         __NR_fstat,
-#endif
+#endif // __NR_fstat
 #ifdef __NR_fstatfs
         __NR_fstatfs,
-#endif
+#endif // __NR_fstatfs
 #ifdef __NR_fsync
         __NR_fsync,
-#endif
+#endif // __NR_fsync
 #ifdef __NR_ftruncate
         __NR_ftruncate,
-#endif
+#endif // __NR_ftruncate
 #ifdef __NR_futex
         __NR_futex,
-#endif
+#endif // __NR_futex
 #ifdef __NR_getcwd
         __NR_getcwd,
-#endif
+#endif // __NR_getcwd
 #ifdef __NR_getcpu
         __NR_getcpu,
-#endif
+#endif // __NR_getcpu
 #ifdef __NR_getdents64
         __NR_getdents64,
-#endif
+#endif // __NR_getdents64
 #ifdef __NR_getegid
         __NR_getegid,
-#endif
+#endif // __NR_getegid
 #ifdef __NR_geteuid
         __NR_geteuid,
-#endif
+#endif // __NR_geteuid
 #ifdef __NR_getgid
         __NR_getgid,
-#endif
+#endif // __NR_getgid
 #ifdef __NR_getpid
         __NR_getpid,
-#endif
+#endif // __NR_getpid
 #ifdef __NR_getppid
         __NR_getppid,
-#endif
+#endif // __NR_getppid
 #ifdef __NR_getrandom
         __NR_getrandom,
-#endif
+#endif // __NR_getrandom
 #ifdef __NR_getrlimit
         __NR_getrlimit,
-#endif
+#endif // __NR_getrlimit
 #ifdef __NR_getsockopt
         __NR_getsockopt,
-#endif
+#endif // __NR_getsockopt
 #ifdef __NR_gettid
         __NR_gettid,
-#endif
+#endif // __NR_gettid
 #ifdef __NR_getuid
         __NR_getuid,
-#endif
+#endif // __NR_getuid
 #ifdef __NR_ioctl
         __NR_ioctl,
-#endif
+#endif // __NR_ioctl
 #ifdef __NR_lseek
         __NR_lseek,
-#endif
+#endif // __NR_lseek
 #ifdef __NR_madvise
         __NR_madvise,
-#endif
+#endif // __NR_madvise
 #ifdef __NR_membarrier
         __NR_membarrier,
-#endif
+#endif // __NR_membarrier
 #ifdef __NR_memfd_create
         __NR_memfd_create,
-#endif
+#endif // __NR_memfd_create
 #ifdef __NR_mmap
         __NR_mmap,
-#endif
+#endif // __NR_mmap
 #ifdef __NR_mprotect
         __NR_mprotect,
-#endif
+#endif // __NR_mprotect
 #ifdef __NR_mremap
         __NR_mremap,
-#endif
+#endif // __NR_mremap
 #ifdef __NR_munmap
         __NR_munmap,
-#endif
+#endif // __NR_munmap
 #ifdef __NR_nanosleep
         __NR_nanosleep,
-#endif
+#endif // __NR_nanosleep
 #ifdef __NR_newfstatat
         __NR_newfstatat,
-#endif
+#endif // __NR_newfstatat
 #ifdef __NR_openat
         __NR_openat,
-#endif
+#endif // __NR_openat
 #ifdef __NR_poll
         __NR_poll,
-#endif
+#endif // __NR_poll
 #ifdef __NR_ppoll
         __NR_ppoll,
-#endif
+#endif // __NR_ppoll
 #ifdef __NR_prctl
         __NR_prctl,
-#endif
+#endif // __NR_prctl
 #ifdef __NR_pread64
         __NR_pread64,
-#endif
+#endif // __NR_pread64
 #ifdef __NR_prlimit64
         __NR_prlimit64,
-#endif
+#endif // __NR_prlimit64
 #ifdef __NR_pselect6
         __NR_pselect6,
-#endif
+#endif // __NR_pselect6
 #ifdef __NR_pwrite64
         __NR_pwrite64,
-#endif
+#endif // __NR_pwrite64
 #ifdef __NR_read
         __NR_read,
-#endif
+#endif // __NR_read
 #ifdef __NR_readlinkat
         __NR_readlinkat,
-#endif
+#endif // __NR_readlinkat
 #ifdef __NR_recvfrom
         __NR_recvfrom,
-#endif
+#endif // __NR_recvfrom
 #ifdef __NR_recvmsg
         __NR_recvmsg,
-#endif
+#endif // __NR_recvmsg
 #ifdef __NR_rseq
         __NR_rseq,
-#endif
+#endif // __NR_rseq
 #ifdef __NR_rt_sigaction
         __NR_rt_sigaction,
-#endif
+#endif // __NR_rt_sigaction
 #ifdef __NR_rt_sigprocmask
         __NR_rt_sigprocmask,
-#endif
+#endif // __NR_rt_sigprocmask
 #ifdef __NR_rt_sigreturn
         __NR_rt_sigreturn,
-#endif
+#endif // __NR_rt_sigreturn
 #ifdef __NR_sched_getaffinity
         __NR_sched_getaffinity,
-#endif
+#endif // __NR_sched_getaffinity
 #ifdef __NR_sched_setaffinity
         __NR_sched_setaffinity,
-#endif
+#endif // __NR_sched_setaffinity
 #ifdef __NR_sched_yield
         __NR_sched_yield,
-#endif
+#endif // __NR_sched_yield
 #ifdef __NR_sendmsg
         __NR_sendmsg,
-#endif
+#endif // __NR_sendmsg
 #ifdef __NR_sendto
         __NR_sendto,
-#endif
+#endif // __NR_sendto
 #ifdef __NR_set_robust_list
         __NR_set_robust_list,
-#endif
+#endif // __NR_set_robust_list
 #ifdef __NR_set_tid_address
         __NR_set_tid_address,
-#endif
+#endif // __NR_set_tid_address
 #ifdef __NR_setsockopt
         __NR_setsockopt,
-#endif
+#endif // __NR_setsockopt
 #ifdef __NR_shutdown
         __NR_shutdown,
-#endif
+#endif // __NR_shutdown
 #ifdef __NR_statx
         __NR_statx,
-#endif
+#endif // __NR_statx
 #ifdef __NR_sysinfo
         __NR_sysinfo,
-#endif
+#endif // __NR_sysinfo
 #ifdef __NR_tgkill
         __NR_tgkill,
-#endif
+#endif // __NR_tgkill
 // Per-operation CPU and elapsed timers deliver SIGKILL on exhaustion.
 #ifdef __NR_timer_create
         __NR_timer_create,
-#endif
+#endif // __NR_timer_create
 #ifdef __NR_timer_settime
         __NR_timer_settime,
-#endif
+#endif // __NR_timer_settime
 #ifdef __NR_timer_delete
         __NR_timer_delete,
-#endif
+#endif // __NR_timer_delete
 #ifdef __NR_timerfd_create
         __NR_timerfd_create,
-#endif
+#endif // __NR_timerfd_create
 #ifdef __NR_timerfd_settime
         __NR_timerfd_settime,
-#endif
+#endif // __NR_timerfd_settime
 #ifdef __NR_uname
         __NR_uname,
-#endif
+#endif // __NR_uname
 #ifdef __NR_write
         __NR_write,
-#endif
+#endif // __NR_write
 #ifdef __NR_writev
         __NR_writev,
-#endif
+#endif // __NR_writev
     });
 
 // OCR and MuPDF create threads, but the worker must not create child
@@ -659,15 +659,15 @@ bool activateSeccomp(LinuxStatus& status)
         const struct scmp_arg_cmp cloneThread = { 0, SCMP_CMP_MASKED_EQ, CLONE_THREAD, CLONE_THREAD };
         error = seccomp_rule_add_array(filter, SCMP_ACT_ALLOW, __NR_clone, 1, &cloneThread);
     }
-#else
+#else // __NR_clone
     error = -ENOSYS;
     recordIssue(status, "Required syscall is unavailable: clone");
-#endif
+#endif // __NR_clone
 
 #ifdef __NR_clone3
     if (!error)
         error = seccomp_rule_add(filter, SCMP_ACT_ERRNO(ENOSYS), __NR_clone3, 0);
-#endif
+#endif // __NR_clone3
 
     if (!error && seccomp_attr_set(filter, SCMP_FLTATR_CTL_LOG, 1) != 0)
         error = -EINVAL;
@@ -679,13 +679,13 @@ bool activateSeccomp(LinuxStatus& status)
     seccomp_release(filter);
     return true;
 }
-#else
+#else // MUPDF_HAVE_LIBSECCOMP
 bool activateSeccomp(LinuxStatus& status)
 {
     recordIssue(status, "libseccomp was not available at build time");
     return false;
 }
-#endif
+#endif // MUPDF_HAVE_LIBSECCOMP
 
 } // namespace
 #endif // __linux__
@@ -711,12 +711,12 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
     Status unsupported;
 #ifdef __FreeBSD__
     unsupported.platform = "freebsd";
-#else
+#else // __FreeBSD__
     unsupported.platform = "unknown";
-#endif
+#endif // __FreeBSD__
     unsupported.diagnostics.push_back("sandbox activation is not implemented on this platform");
     return unsupported;
-#else
+#else // __linux__
     LinuxStatus status;
     if constexpr (MU_DISABLE_WORKER_SANDBOX) {
         status.reason = "sandbox disabled by build configuration";
@@ -737,10 +737,10 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
     redirectStandardDescriptors(preservedFds, status);
     // Release: remove all inherited descriptors except the active IPC channels.
     closeInheritedDescriptors(preservedFds, status);
-#else
+#else // MU_DEBUG_ENABLED
     // Debug: retain parent descriptors so worker logs remain visible.
     (void)preservedFds;
-#endif
+#endif // MU_DEBUG_ENABLED
     // Required: isolate user, network, and IPC namespaces.
 #ifdef MU_ENABLE_WORKER_BWRAP
     status.namespacesInherited = namespacesProvidedByLauncher;
@@ -754,7 +754,7 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
     status.seccomp = activateSeccomp(status);
 
     return reportLinuxStatus(status);
-#endif
+#endif // __linux__
 }
 
 } // namespace Mu::Worker::Sandbox

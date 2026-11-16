@@ -10,9 +10,9 @@ namespace Mu::Generator::Proxy {
 
 #if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
 QList<Okular::CertificateInfo> CertificateStore::signingCertificates(QWidget*, bool* userCancelled) const
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
 QList<Okular::CertificateInfo> CertificateStore::signingCertificates(bool* userCancelled) const
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
 {
     if (userCancelled)
         *userCancelled = false;

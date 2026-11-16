@@ -22,4 +22,4 @@ inline QList<Model::ExportProgressNotification> exportCompletions(const QSignalS
 }
 
 } // namespace Mu::Test
-#endif
+#endif // MU_TEST_EXPORT_PROGRESS_HPP

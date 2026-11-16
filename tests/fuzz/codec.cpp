@@ -15,7 +15,7 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
-#endif
+#endif // IPC_FUZZ_SEEDS
 
 namespace {
 
@@ -59,7 +59,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
                     Mu::Model::ExportProgressNotification { 42, 2, 10, Mu::Model::ExportPhase::CreatingPages, { } } });
     return 0;
 }
-#else
+#else // IPC_FUZZ_SEEDS
 namespace {
 
 template <typename Message> bool writeSeed(const std::filesystem::path& path, const Message& message)
@@ -118,4 +118,4 @@ int main(int argc, char** argv)
              && writeSeed(directory / "notification-sign-input",
                           NotificationMessage { SignInput { 42, "nonce", "certificate", { 1, 2, 3 } } }));
 }
-#endif
+#endif // IPC_FUZZ_SEEDS

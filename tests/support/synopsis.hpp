@@ -12,9 +12,9 @@ inline qsizetype synopsisCount(const Okular::DocumentSynopsis& synopsis)
 {
 #if MU_OKULAR_STRUCTURED_SYNOPSIS
     return synopsis.children().size();
-#else
+#else // MU_OKULAR_STRUCTURED_SYNOPSIS
     return synopsis.childNodes().size();
-#endif
+#endif // MU_OKULAR_STRUCTURED_SYNOPSIS
 }
 
 inline QString firstSynopsisTitle(const Okular::DocumentSynopsis& synopsis)
@@ -22,9 +22,9 @@ inline QString firstSynopsisTitle(const Okular::DocumentSynopsis& synopsis)
 #if MU_OKULAR_STRUCTURED_SYNOPSIS
     const auto children = synopsis.children();
     return children.isEmpty() ? QString() : children.front().title();
-#else
+#else // MU_OKULAR_STRUCTURED_SYNOPSIS
     return synopsis.documentElement().tagName();
-#endif
+#endif // MU_OKULAR_STRUCTURED_SYNOPSIS
 }
 
 } // namespace Mu::Test

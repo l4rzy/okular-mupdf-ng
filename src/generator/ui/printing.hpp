@@ -8,9 +8,9 @@
 
 #if MU_OKULAR_PRINT_OPTIONS_INTERFACE
 #include <okular/interfaces/printinterface.h>
-#else
+#else // MU_OKULAR_PRINT_OPTIONS_INTERFACE
 #include <okular/core/printoptionswidget.h>
-#endif
+#endif // MU_OKULAR_PRINT_OPTIONS_INTERFACE
 
 #include <QWidget>
 
@@ -33,9 +33,9 @@ class PrintOptionsPage
 #if MU_OKULAR_PRINT_OPTIONS_INTERFACE
     : public QWidget,
       public Okular::PrintOptionsWidgetInterface {
-#else
+#else // MU_OKULAR_PRINT_OPTIONS_INTERFACE
     : public Okular::PrintOptionsWidget {
-#endif
+#endif // MU_OKULAR_PRINT_OPTIONS_INTERFACE
     Q_OBJECT
 
 public:
@@ -43,7 +43,7 @@ public:
 
 #if MU_OKULAR_PRINT_OPTIONS_INTERFACE
     QWidget* widget() override { return this; }
-#endif
+#endif // MU_OKULAR_PRINT_OPTIONS_INTERFACE
     bool ignorePrintMargins() const override;
 
     [[nodiscard]] PrintScaleMode scaleMode() const;

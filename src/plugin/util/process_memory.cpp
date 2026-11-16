@@ -10,7 +10,7 @@
 
 #ifdef Q_OS_LINUX
 #include <unistd.h>
-#endif
+#endif // Q_OS_LINUX
 
 namespace Mu::Plugin::Util {
 
@@ -34,10 +34,10 @@ std::optional<quint64> processResidentBytes(qint64 pid)
     if (pageSize <= 0 || resident > std::numeric_limits<quint64>::max() / static_cast<quint64>(pageSize))
         return std::nullopt;
     return resident * static_cast<quint64>(pageSize);
-#else
+#else // Q_OS_LINUX
     Q_UNUSED(pid);
     return std::nullopt;
-#endif
+#endif // Q_OS_LINUX
 }
 
 } // namespace Mu::Plugin::Util

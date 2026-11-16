@@ -15,7 +15,7 @@
 #include "plugin/util/signature_image.hpp"
 #include "plugin/worker_client.hpp"
 #include "shared/model/types.hpp"
-#endif
+#endif // MUPDF_FORMFIELD_REMOTE_SIGNING
 
 namespace Mu::Generator::Proxy::Form {
 
@@ -214,7 +214,7 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
     Q_UNUSED(data)
     Q_UNUSED(newPath)
     return { Okular::GenericSigningError, QStringLiteral("MuPDF worker support is unavailable") };
-#else
+#else // MUPDF_FORMFIELD_REMOTE_SIGNING
     // Signing is delegated to the worker so private keys and PDF mutation stay
     // outside the generator process.
     if (!m_backend || !m_backend->isConnected()) {
@@ -250,7 +250,7 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
     default:
         return { Okular::GenericSigningError, QString::fromStdString(result.details) };
     }
-#endif
+#endif // MUPDF_FORMFIELD_REMOTE_SIGNING
 }
 
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
@@ -259,12 +259,12 @@ std::pair<Okular::SigningResult, QString> Signature::sign(const Okular::NewSigna
 {
     return signResult(data, newPath);
 }
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
 bool Signature::sign(const Okular::NewSignatureData& data, const QString& newPath) const
 {
     return signResult(data, newPath).first == Okular::SigningSuccess;
 }
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
 
 Signature::SubscriptionHandle Signature::subscribeUpdates(const std::function<void()>&) const
 {

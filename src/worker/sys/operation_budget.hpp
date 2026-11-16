@@ -7,7 +7,7 @@
 #include <chrono>
 #ifdef __linux__
 #include <time.h>
-#endif
+#endif // __linux__
 
 #include "engine/constants.hpp"
 
@@ -29,7 +29,7 @@ private:
 #ifdef __linux__
     timer_t m_cpu { };
     timer_t m_elapsed { };
-#endif
+#endif // __linux__
 };
 
 } // namespace Mu::Worker::Sys

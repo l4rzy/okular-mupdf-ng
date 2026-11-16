@@ -204,7 +204,7 @@ WorkerSettings readWorkerSettings()
     };
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
     settings.formJavaScriptEnabled = MuPDFNGSettings::pdfFormJavaScriptEnabled();
-#endif
+#endif // MU_WORKER_ENABLE_FORM_JAVASCRIPT
     return settings;
 }
 

@@ -60,7 +60,7 @@ int main(int argc, char** argv)
 {
 #ifdef MU_ENABLE_WORKER_BWRAP
     const bool validCount = argc == 5 || argc == 7;
-#else
+#else // MU_ENABLE_WORKER_BWRAP
     const bool validCount = argc == 5;
 #endif // MU_ENABLE_WORKER_BWRAP
     if (!validCount || std::string_view(argv[1]) != "--socket" || std::string_view(argv[3]) != "--fd-socket")

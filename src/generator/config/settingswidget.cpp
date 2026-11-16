@@ -47,7 +47,7 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     m_mupdfsw->kcfg_PdfFormJavaScriptEnabled->setEnabled(false);
     m_mupdfsw->kcfg_PdfFormJavaScriptEnabled->setToolTip(
         Config::wrapToolTip(i18n("PDF form JavaScript support was disabled when this application was built.")));
-#endif
+#endif // MU_WORKER_ENABLE_FORM_JAVASCRIPT
 
     auto* linkPreview = m_mupdfsw->kcfg_LinkPreviewMode;
     linkPreview->addItem(i18n("Off"), MuPDFNGSettings::EnumLinkPreviewMode::Off);

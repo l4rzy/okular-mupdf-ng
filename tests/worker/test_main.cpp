@@ -99,7 +99,7 @@ private slots:
         QTest::newRow("unknown-option") << QStringList { "--unknown-option" } << QByteArray("unknown-option");
 #ifdef MU_ENABLE_WORKER_BWRAP
         QTest::newRow("invalid-parent-pid") << QStringList { "--parent-pid", "0" } << QByteArray("parent-pid");
-#else
+#else // MU_ENABLE_WORKER_BWRAP
         QTest::newRow("wrapper-option-disabled") << QStringList { "--parent-pid", "1" } << QByteArray("parent-pid");
 #endif // MU_ENABLE_WORKER_BWRAP
         QTest::newRow("invalid-report-format")

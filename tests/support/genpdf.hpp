@@ -22,4 +22,4 @@ void createSignaturePDF(fz_context* ctx, const QString& path);
 void createEditableTextFieldPDF(fz_context* ctx, const QString& path);
 void createScannedPDF(fz_context* ctx, const QString& srcTextPdfPath, const QString& scannedPath);
 
-#endif
+#endif // TEST_GENPDF_HPP

@@ -21,7 +21,7 @@
 
 #ifndef TEST_SIGNATURE_PDF_DIR
 #define TEST_SIGNATURE_PDF_DIR "."
-#endif
+#endif // TEST_SIGNATURE_PDF_DIR
 
 namespace {
 

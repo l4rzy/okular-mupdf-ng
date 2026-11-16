@@ -236,7 +236,7 @@ private:
     quint64 m_frameSession = 0;
 #ifdef MU_DEBUG_ENABLED
     std::optional<std::chrono::steady_clock::time_point> m_pageLinksStartedAt;
-#endif
+#endif // MU_DEBUG_ENABLED
     bool m_intentionalStop = false;
     bool m_inFlight = false;
     // Retain the exact opened source for background jobs and PDF TOC identity

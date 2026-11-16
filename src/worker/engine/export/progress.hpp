@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace Mu::Worker::Engine
-#endif
+#endif // MU_WORKER_ENGINE_EXPORT_PROGRESS_HPP

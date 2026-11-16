@@ -19,4 +19,4 @@ inline double normalizeDestinationY(double y, double heightPoints)
 }
 
 } // namespace Mu::Worker::Engine
-#endif
+#endif // MU_WORKER_PDF_DESTINATION_HPP

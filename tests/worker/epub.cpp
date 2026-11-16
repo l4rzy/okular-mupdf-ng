@@ -316,7 +316,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF attribute selector patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, selector);
         QFETCH(QString, attributes);
         QFETCH(bool, matches);
@@ -381,7 +381,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for bundled MuPDF inline-block layout");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, tag);
         QFETCH(QString, width);
         QFETCH(QString, alignment);
@@ -479,7 +479,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for bundled MuPDF inline-block layout");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, content);
         QFETCH(bool, multiline);
         QFETCH(int, height);
@@ -570,7 +570,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for bundled MuPDF inline-block layout");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, width);
         QFETCH(bool, multiline);
         const auto content =
@@ -683,7 +683,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for bundled MuPDF inline-block layout");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QFile html(directory.filePath(QStringLiteral("inline-outline.html")));
@@ -734,7 +734,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF table width patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, headerWidth);
         QFETCH(QString, bodyWidth);
         QFETCH(bool, collapsed);
@@ -825,7 +825,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for bundled MuPDF table image sizing");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(bool, cssTable);
         QFETCH(bool, blockImage);
         QFETCH(QString, imageSizing);
@@ -947,7 +947,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for bundled MuPDF table row pagination");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(bool, collapsed);
         QFETCH(bool, pageBreak);
         QFETCH(QString, alignment);
@@ -1063,7 +1063,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF background shorthand patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, background);
         QFETCH(int, expectedRgb);
         QTemporaryDir directory;
@@ -1134,7 +1134,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF floating image patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, side);
         QFETCH(QString, display);
         QFETCH(bool, pageEnd);
@@ -1270,7 +1270,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF floating image patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, markup);
         QFETCH(QString, extraCss);
         QFETCH(bool, invalid);
@@ -1395,7 +1395,7 @@ private slots:
 #if TEST_SYSTEM_MUPDF
         if (display == QStringLiteral("block"))
             QSKIP("Regression coverage for the bundled MuPDF block image patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, dimensions);
         QFETCH(bool, small);
         QTemporaryDir directory;
@@ -1553,7 +1553,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF stylesheet media patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, media);
         QFETCH(bool, linked);
         QFETCH(bool, applies);
@@ -1614,7 +1614,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF rem patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, rootStyle);
         QFETCH(float, rootScale);
         QFETCH(float, rootFixed);
@@ -1716,7 +1716,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF rem patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QFile html(directory.filePath(QStringLiteral("inline.html")));
@@ -1764,7 +1764,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF rem patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, rootStyle);
         QFETCH(float, rootScale);
         QFETCH(float, rootFixed);
@@ -2752,7 +2752,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Requires bundled MuPDF max-width and attribute selector support");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, container);
         QFETCH(int, width);
         QTemporaryDir directory;
@@ -2839,7 +2839,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Requires bundled MuPDF table max-width support");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(int, width);
         QFETCH(bool, collapsed);
         QTemporaryDir directory;
@@ -2920,7 +2920,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Requires bundled MuPDF max-width support");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(int, width);
         QFETCH(int, inset);
         QTemporaryFile file;
@@ -3002,7 +3002,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF max-width patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, tag);
         QFETCH(QString, width);
         QFETCH(QString, maximum);
@@ -3120,7 +3120,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF image alignment patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, alignment);
         QFETCH(int, imageHeight);
         QFETCH(bool, inlineText);

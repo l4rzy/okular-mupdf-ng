@@ -19,4 +19,4 @@ const ExportProfile* findExportProfile(const std::vector<OutputFormatInfo>& form
                                        std::string* error = nullptr);
 
 } // namespace Mu::Model
-#endif
+#endif // MU_SHARED_MODEL_EXPORT_HPP

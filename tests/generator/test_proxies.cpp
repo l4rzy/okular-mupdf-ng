@@ -406,9 +406,9 @@ private slots:
         const auto result = proxy.sign(data, path);
         QCOMPARE(result.first, Okular::GenericSigningError);
         QVERIFY(!result.second.isEmpty());
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
         QVERIFY(!proxy.sign(data, path));
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
         QVERIFY(!QFile::exists(path));
     }
 
@@ -511,7 +511,7 @@ private slots:
         QVERIFY(!childElement.isOpen());
         QCOMPARE(childElement.url(), QStringLiteral("https://example.com/sec1"));
         QVERIFY(!childElement.viewPort().has_value());
-#else
+#else // MU_OKULAR_STRUCTURED_SYNOPSIS
         const QDomElement rootElement = synopsis->documentElement();
         QCOMPARE(rootElement.tagName(), QStringLiteral("Chapter 1"));
         QCOMPARE(rootElement.attribute(QStringLiteral("Open")), QStringLiteral("true"));
@@ -525,7 +525,7 @@ private slots:
         QVERIFY(!childElement.hasAttribute(QStringLiteral("Open")));
         QCOMPARE(childElement.attribute(QStringLiteral("URL")), QStringLiteral("https://example.com/sec1"));
         QVERIFY(!childElement.hasAttribute(QStringLiteral("DestinationURI")));
-#endif
+#endif // MU_OKULAR_STRUCTURED_SYNOPSIS
     }
 
     void textPageConversionConstructsNormalizedBoxes()
@@ -1757,7 +1757,7 @@ private slots:
         Okular::PrintOptionsWidgetInterface* interface = &page;
         QCOMPARE(interface->widget(), static_cast<QWidget*>(&page));
         QCOMPARE(interface->ignorePrintMargins(), false);
-#endif
+#endif // MU_OKULAR_PRINT_OPTIONS_INTERFACE
         QCOMPARE(page.scaleMode(), PrintScaleMode::FitToPrintableArea);
         QVERIFY(!page.ignorePrintMargins());
 

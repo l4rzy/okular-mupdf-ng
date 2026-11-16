@@ -51,7 +51,7 @@
 
 #ifndef TEST_SIGNATURE_PDF_DIR
 #define TEST_SIGNATURE_PDF_DIR "."
-#endif
+#endif // TEST_SIGNATURE_PDF_DIR
 
 namespace {
 
@@ -564,9 +564,9 @@ private slots:
         bool* cancellationFlag = provideCancellationFlag ? &userCancelled : nullptr;
 #if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
         const auto certificates = baseStore.signingCertificates(nullptr, cancellationFlag);
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
         const auto certificates = baseStore.signingCertificates(cancellationFlag);
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
         if (provideCancellationFlag)
             QVERIFY(!userCancelled);
         const auto certificate =

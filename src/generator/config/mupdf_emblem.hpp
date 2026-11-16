@@ -76,4 +76,4 @@ inline QPainterPath buildSignatureEmblemPath()
 
 } // namespace Mu::Generator::Config
 
-#endif
+#endif // MU_GENERATOR_CONFIG_MUPDF_EMBLEM_HPP

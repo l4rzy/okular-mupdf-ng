@@ -3952,7 +3952,7 @@ private slots:
     {
 #if TEST_SYSTEM_MUPDF
         QSKIP("Regression coverage for the bundled MuPDF radio group patch");
-#endif
+#endif // TEST_SYSTEM_MUPDF
         QFETCH(QString, kind);
         QTemporaryDir directory;
         const auto path = directory.filePath("radio-traversal.pdf");

@@ -13,7 +13,7 @@ extern "C" {
 #include <mupdf/pdf.h>
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
 #include <mupdf/pdf/javascript.h>
-#endif
+#endif // MU_WORKER_ENABLE_FORM_JAVASCRIPT
 }
 
 #include "engine/constants.hpp"
@@ -229,7 +229,7 @@ void PdfDocument::applyFormJavaScriptSetting()
 
     if (m_settings.formJavaScriptEnabled && !pdf_js_supported(m_context, pdf))
         MU_LOG(warning, "Mu::Worker::Pdf", "PDF form JavaScript is unavailable in the linked MuPDF build");
-#endif
+#endif // MU_WORKER_ENABLE_FORM_JAVASCRIPT
 }
 
 void PdfDocument::discardResolvedLinkCache() noexcept

@@ -1174,7 +1174,7 @@ private slots:
         QVERIFY(!updateFormatted.contains(QStringLiteral("CreditCardNumber1234")));
         QVERIFY(updateFormatted.contains(QStringLiteral("[redacted]")));
     }
-#endif
+#endif // MU_DEBUG_ENABLED
 };
 
 QTEST_GUILESS_MAIN(TestTransport)

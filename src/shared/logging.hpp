@@ -23,10 +23,10 @@ void write(Level level, std::string_view component, std::string_view message);
 
 #ifdef MU_DEBUG_ENABLED
 #define MU_LOG_debug(component, message) ::Mu::Log::write(::Mu::Log::Level::Debug, (component), (message))
-#else
+#else // MU_DEBUG_ENABLED
 #define MU_LOG_debug(...)                                                                                              \
     do {                                                                                                               \
     } while (false)
-#endif
+#endif // MU_DEBUG_ENABLED
 
 #endif // MU_SHARED_LOGGING_HPP

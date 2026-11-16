@@ -155,7 +155,7 @@ bool WorkerServer::processFrame(std::string* error, std::optional<std::vector<st
 #ifdef MU_DEBUG_ENABLED
     MU_LOG(debug, "Worker <- Plugin", IPC::Debug::request(request, true));
     const auto started = std::chrono::steady_clock::now();
-#endif
+#endif // MU_DEBUG_ENABLED
 
     // Step 2: Route request to CommandService for document engine execution
     const ResponseMessage response = m_commandService->dispatch(request);
@@ -173,7 +173,7 @@ bool WorkerServer::processFrame(std::string* error, std::optional<std::vector<st
                + std::to_string(
                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started)
                        .count()));
-#endif
+#endif // MU_DEBUG_ENABLED
 
     // Step 3: Serialize and transmit the response back to the plugin host
     if (!writeResponse(response, error)) {

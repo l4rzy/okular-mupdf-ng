@@ -19,4 +19,4 @@ std::optional<std::vector<std::uint8_t>> prepareStampImage(const QString& symbol
 
 } // namespace Mu::Plugin::Util
 
-#endif
+#endif // MU_PLUGIN_UTIL_STAMP_IMAGE_HPP

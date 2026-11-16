@@ -44,9 +44,9 @@ public:
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
     std::pair<Okular::SigningResult, QString> sign(const Okular::NewSignatureData& data,
                                                    const QString& newPath) const override;
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
     bool sign(const Okular::NewSignatureData& data, const QString& newPath) const override;
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
     SubscriptionHandle subscribeUpdates(const std::function<void()>& callback) const override;
     bool unsubscribeUpdates(const SubscriptionHandle& handle) const override;
 

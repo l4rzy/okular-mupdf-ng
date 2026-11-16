@@ -14,7 +14,7 @@
 #include "generator/config/settings.hpp"
 #include "mupdfngsettings.h"
 #include <KSharedConfig>
-#endif
+#endif // HAVE_KDE_CONFIG
 
 namespace Cli = Mu::Tools::Cli;
 namespace Model = Mu::Model;
@@ -116,7 +116,7 @@ private slots:
         MuPDFNGSettings::self()->setSharedConfig(KSharedConfig::openConfig(path, KConfig::SimpleConfig));
         Mu::Generator::Config::reloadSettings();
         compareSettings(actual, Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF));
-#endif
+#endif // HAVE_KDE_CONFIG
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(file.readAll(), contents);
@@ -159,7 +159,7 @@ private slots:
         expected.epub.fontFamily = Model::EpubFontFamily::Monospace;
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
         expected.formJavaScriptEnabled = true;
-#endif
+#endif // MU_WORKER_ENABLE_FORM_JAVASCRIPT
         compareSettings(Cli::readLayoutConfig({ path }), expected);
     }
 
@@ -203,7 +203,7 @@ private slots:
         MuPDFNGSettings::self()->setSharedConfig(config);
         Mu::Generator::Config::reloadSettings();
         compareSettings(actual, Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF));
-#endif
+#endif // HAVE_KDE_CONFIG
     }
 
     void xdgPrecedence()
@@ -237,16 +237,16 @@ private slots:
         const auto actual = Cli::readLayoutConfig();
 #ifdef MU_KCONFIG_LEGACY_PRECEDENCE
         QCOMPARE(actual.epub.fontSize, 14);
-#else
+#else // MU_KCONFIG_LEGACY_PRECEDENCE
         QCOMPARE(actual.epub.fontSize, 15);
-#endif
+#endif // MU_KCONFIG_LEGACY_PRECEDENCE
         QCOMPARE(actual.epub.pageSize, Model::EpubPageSize::A5);
         QCOMPARE(actual.epub.fontFamily, Model::EpubFontFamily::Monospace);
         QCOMPARE(actual.epub.customCssBase64, std::string("Ym9keSB7IGNvbG9yOiByZWQ7IH0="));
 #ifdef HAVE_KDE_CONFIG
         Mu::Generator::Config::reloadSettings();
         compareSettings(actual, Mu::Generator::Config::readWorkerSettings().documentSettings(0xFFFFFF));
-#endif
+#endif // HAVE_KDE_CONFIG
     }
 };
 

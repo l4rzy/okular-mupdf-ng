@@ -32,7 +32,7 @@
 #include "generator/ui/link_preview.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/placeholder.hpp"
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/error.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "generator/proxy/certificate_store.hpp"
@@ -121,9 +121,9 @@ public:
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
     std::pair<Okular::SigningResult, QString> sign(const Okular::NewSignatureData& data,
                                                    const QString& rFilename) override;
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
     bool sign(const Okular::NewSignatureData& data, const QString& rFilename) override;
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
     // Okular Generator Func: returns the certificate store used for signing.
     Okular::CertificateStore* certificateStore() const override;
 
@@ -151,7 +151,7 @@ private:
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     void notifyPageChanged(int page, int flags) override;
     void notifyContentsCleared(int flags) override;
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     std::pair<Okular::SigningResult, QString> signResult(const Okular::NewSignatureData& data,
                                                          const QString& rFilename);
 
@@ -323,7 +323,7 @@ private:
     // Keep late rotation cleanup only for documents that actually used previews.
     bool m_hasUsedPagePlaceholder = false;
     Page::Placeholder m_pagePlaceholder;
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 };
 
 } // namespace Mu::Generator

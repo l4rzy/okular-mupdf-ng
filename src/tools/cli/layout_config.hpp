@@ -16,4 +16,4 @@ Model::DocumentSettings readLayoutConfig();
 Model::DocumentSettings readLayoutConfig(const QStringList& files);
 
 } // namespace Mu::Tools::Cli
-#endif
+#endif // MU_TOOLS_CLI_LAYOUT_CONFIG_HPP

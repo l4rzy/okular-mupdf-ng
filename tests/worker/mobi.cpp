@@ -75,7 +75,7 @@ struct AllocationState {
 };
 
 } // namespace
-#endif
+#endif // TEST_BUNDLED_MOBI_TOC
 
 class TestMobi : public QObject {
     Q_OBJECT
@@ -546,9 +546,9 @@ private slots:
                 QCOMPARE(error, int(FZ_ERROR_SYSTEM));
             }
         }
-#else
+#else // TEST_BUNDLED_MOBI_TOC
         QSKIP("Allocation cleanup requires the bundled MuPDF patch");
-#endif
+#endif // TEST_BUNDLED_MOBI_TOC
     }
 
     void preservesTargetEncoding_data()
@@ -605,9 +605,9 @@ private slots:
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QVERIFY(extracted.contains(before));
         QVERIFY(extracted.contains(after));
-#else
+#else // TEST_BUNDLED_MOBI_TOC
         QSKIP("MOBI targets require the bundled MuPDF patch");
-#endif
+#endif // TEST_BUNDLED_MOBI_TOC
     }
 
     void repairsToc_data()

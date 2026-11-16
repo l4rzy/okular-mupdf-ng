@@ -1164,7 +1164,7 @@ bool Main::doCloseDocument()
     m_okularPages.clear();
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     m_hasUsedPagePlaceholder = false;
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 
     // Step 3: Reset local identity before asking the worker to discard its copy.
     m_document = { };
@@ -1322,12 +1322,12 @@ void Main::updatePagePlaceholder(Model::DocumentTheme theme)
     const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
-#else
+#else // MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     m_hasUsedPagePlaceholder |= enabled;
     m_pagePlaceholder.setTheme(theme);
     for (auto* page : m_okularPages)
         m_pagePlaceholder.seed(*page);
-#endif
+#endif // MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 }
 
 void Main::clearPageDisplayState(int page)
@@ -1366,9 +1366,9 @@ void Main::generatePixmap(Okular::PixmapRequest* request)
         if (!image.isNull())
             signalPartialPixmapRequest(request, image);
     }
-#else
+#else // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
     Okular::Generator::generatePixmap(request);
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 }
 
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
@@ -1390,7 +1390,7 @@ void Main::notifyContentsCleared(int flags)
             m_pagePlaceholder.seed(*page);
 }
 
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 
 // Okular Generator Func: renders a page or tile for Okular.
 QImage Main::image(Okular::PixmapRequest* request)
@@ -1631,10 +1631,10 @@ QVariant Main::metaData(const QString& key, const QVariant& option) const
             && target.viewport.page < m_okularPages.size()) {
 #if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
             return QVariant::fromValue(Conversion::viewportFromModel(target.viewport));
-#else
-            // Released Okular versions parse the serialized viewport string.
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
+      // Released Okular versions parse the serialized viewport string.
             return Conversion::viewportFromModel(target.viewport).toString();
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
         }
         return { };
     }
@@ -1895,12 +1895,12 @@ std::pair<Okular::SigningResult, QString> Main::sign(const Okular::NewSignatureD
 {
     return signResult(data, rFilename);
 }
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
 bool Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
 {
     return signResult(data, rFilename).first == Okular::SigningSuccess;
 }
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
 
 // Okular Generator Func: reports that worker-backed signing is supported.
 bool Main::canSign() const

@@ -32,7 +32,7 @@
 
 #ifndef TESSDATA_DIR
 #define TESSDATA_DIR "/usr/share/tessdata"
-#endif
+#endif // TESSDATA_DIR
 
 namespace {
 

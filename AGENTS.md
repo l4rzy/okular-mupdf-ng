@@ -4,6 +4,7 @@
 - **DRY & Standard-first**: Reuse established std/library facilities. Keep logic deduplicated and functional naming in clear `verbObject` form.
 - **Clean Separation**: Pure decision logic in testable units; keep Qt, IPC, I/O, and worker calls in thin adapters.
 - **Zero Dead Code**: Delete replaced code and unused includes/variables in the same commit. Add comments for clarity.
+- **Preprocessor Readability**: In C++ source and headers, add trailing comments to `#else` and `#endif` directives identifying the matching `#if`, `#ifdef`, or `#ifndef` condition.
 - **Simple & Private Documentation**: Keep documentation, including patch READMEs, concise and focused on behavior and limitations. Do not include private information, local paths, or details identifying user-provided files; use generic examples.
 - **Production Documentation**: In `docs/`, assume installed production packages. Omit build-tree paths and developer configuration instructions.
 

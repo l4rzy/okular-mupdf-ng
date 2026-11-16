@@ -51,4 +51,4 @@ inline bool writeXfdfRotationPdf(const QString& path, int rotation, bool inherit
     return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
 }
 
-#endif
+#endif // TEST_XFDF_FIXTURE_HPP

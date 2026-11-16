@@ -177,14 +177,14 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
         };
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
         signature->setSignFunction(sign);
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
         signature->setSignFunction([sign](const Okular::NewSignatureData& data, const QString& fileName) {
             return sign(data, fileName).first;
         });
-#endif
-        // The preview is drawn by the generator, but the annotation must still
-        // be marked externally drawn so Document refreshes the page raster on
-        // every move or resize.
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
+       // The preview is drawn by the generator, but the annotation must still
+       // be marked externally drawn so Document refreshes the page raster on
+       // every move or resize.
         signature->setFlags(signature->flags() | Okular::Annotation::ExternallyDrawn);
         return;
     }

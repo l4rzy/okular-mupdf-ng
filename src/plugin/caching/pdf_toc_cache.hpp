@@ -17,4 +17,4 @@ std::optional<std::vector<Model::OutlineNode>> loadToc(const QString& cachePath,
 bool saveToc(const QString& cachePath, int pageCount, const std::vector<Model::OutlineNode>& nodes);
 
 } // namespace Mu::Plugin::Caching::PDF
-#endif
+#endif // MU_PLUGIN_PDF_TOC_CACHE_HPP

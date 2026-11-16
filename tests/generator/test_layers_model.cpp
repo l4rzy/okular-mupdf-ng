@@ -122,14 +122,14 @@ private slots:
         QCOMPARE(entries.at(1).title(), QStringLiteral("Second"));
         QVERIFY(first.viewPort().has_value());
         QVERIFY(first.children().front().viewPort().has_value());
-#else
+#else // MU_OKULAR_STRUCTURED_SYNOPSIS
         const auto first = synopsis->documentElement();
         QCOMPARE(first.tagName(), QStringLiteral("First café"));
         QCOMPARE(first.firstChildElement().tagName(), QStringLiteral("Detail"));
         QCOMPARE(first.nextSiblingElement().tagName(), QStringLiteral("Second"));
         QVERIFY(!first.attribute(QStringLiteral("Viewport")).isEmpty());
         QVERIFY(!first.firstChildElement().attribute(QStringLiteral("Viewport")).isEmpty());
-#endif
+#endif // MU_OKULAR_STRUCTURED_SYNOPSIS
     }
 
     void clearsLayerSearchHighlights_data()

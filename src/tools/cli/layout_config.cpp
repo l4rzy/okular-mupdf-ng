@@ -119,7 +119,7 @@ Model::DocumentSettings settingsFor(const Config& config)
         settings.epub.customCssBase64 = css;
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT
     settings.formJavaScriptEnabled = config.boolean(QStringLiteral("General/PdfFormJavaScriptEnabled"), false);
-#endif
+#endif // MU_WORKER_ENABLE_FORM_JAVASCRIPT
     return settings;
 }
 
@@ -149,12 +149,12 @@ Model::DocumentSettings readLayoutConfig()
     readSystem(QStringLiteral("kdeglobals"));
 #ifndef MU_KCONFIG_LEGACY_PRECEDENCE
     readSystem(QStringLiteral("okular-mupdf-ngrc"));
-#endif
+#endif // MU_KCONFIG_LEGACY_PRECEDENCE
     config.readFile(user + QStringLiteral("/system.kdeglobals"));
     config.readFile(user + QStringLiteral("/kdeglobals"));
 #ifdef MU_KCONFIG_LEGACY_PRECEDENCE
     readSystem(QStringLiteral("okular-mupdf-ngrc"));
-#endif
+#endif // MU_KCONFIG_LEGACY_PRECEDENCE
     config.readFile(user + QStringLiteral("/okular-mupdf-ngrc"));
     return settingsFor(config);
 }

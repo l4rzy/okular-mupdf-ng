@@ -35,7 +35,7 @@ void armTimer(timer_t* timer, clockid_t clock, std::chrono::milliseconds duratio
 }
 
 } // namespace
-#endif
+#endif // __linux__
 
 namespace Mu::Worker::Sys {
 
@@ -44,10 +44,10 @@ OperationBudget::OperationBudget(std::chrono::milliseconds cpu, std::chrono::mil
 #ifdef __linux__
     armTimer(&m_cpu, CLOCK_THREAD_CPUTIME_ID, cpu);
     armTimer(&m_elapsed, CLOCK_MONOTONIC, elapsed);
-#else
+#else // __linux__
     (void)cpu;
     (void)elapsed;
-#endif
+#endif // __linux__
 }
 
 OperationBudget::~OperationBudget()
@@ -57,7 +57,7 @@ OperationBudget::~OperationBudget()
         ::perror("could not remove worker operation budget");
         ::_exit(EXIT_FAILURE);
     }
-#endif
+#endif // __linux__
 }
 
 } // namespace Mu::Worker::Sys

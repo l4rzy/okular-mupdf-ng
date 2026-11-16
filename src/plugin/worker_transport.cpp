@@ -22,7 +22,7 @@
 #include <QUuid>
 #ifdef MU_DEBUG_ENABLED
 #include <chrono>
-#endif
+#endif // MU_DEBUG_ENABLED
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -193,12 +193,12 @@ QString WorkerTransport::findBinary(const QString& hint)
     if (QFileInfo::exists(build)) {
         return build;
     }
-#endif
+#endif // WORKER_BUILD_PATH
 #ifdef WORKER_INSTALL_PATH
     const QString install = QStringLiteral(WORKER_INSTALL_PATH);
     if (QFileInfo::exists(install))
         return install;
-#endif
+#endif // WORKER_INSTALL_PATH
     return QStandardPaths::findExecutable(QStringLiteral("mupdfng-worker"));
 }
 
@@ -223,7 +223,7 @@ bool WorkerTransport::start(const QString& binaryPath,
     Util::cleanupStaleTempFiles();
 #ifdef MU_ENABLE_WORKER_BWRAP
     const QString resolvedBinaryPath = QFileInfo(findBinary(binaryPath)).canonicalFilePath();
-#else
+#else // MU_ENABLE_WORKER_BWRAP
     const QString resolvedBinaryPath = findBinary(binaryPath);
 #endif // MU_ENABLE_WORKER_BWRAP
     if (resolvedBinaryPath.isEmpty())
@@ -263,7 +263,7 @@ bool WorkerTransport::start(const QString& binaryPath,
         if (!directory.isEmpty()) {
 #ifdef MU_ENABLE_WORKER_BWRAP
             arguments << QStringLiteral("--tessdata-dir") << QFileInfo(directory).absoluteFilePath();
-#else
+#else // MU_ENABLE_WORKER_BWRAP
             arguments << QStringLiteral("--tessdata-dir") << directory;
 #endif // MU_ENABLE_WORKER_BWRAP
         }
@@ -298,7 +298,7 @@ bool WorkerTransport::start(const QString& binaryPath,
     arguments << QStringLiteral("--parent-pid") << QString::number(QCoreApplication::applicationPid());
     arguments = buildBubblewrapArguments(resolvedBinaryPath, arguments, tmpDir, readOnlyPaths, statusFd);
     m_process.start(QStringLiteral(MU_BWRAP_EXECUTABLE), arguments);
-#else
+#else // MU_ENABLE_WORKER_BWRAP
     m_process.start(resolvedBinaryPath, arguments);
 #endif // MU_ENABLE_WORKER_BWRAP
     if (!m_process.waitForStarted(StartTimeoutMs)) {
@@ -323,7 +323,7 @@ bool WorkerTransport::start(const QString& binaryPath,
     }
     m_workerPid = *childPid;
     const qint64 workerPid = m_workerPid;
-#else
+#else // MU_ENABLE_WORKER_BWRAP
     const qint64 workerPid = m_process.processId();
 #endif // MU_ENABLE_WORKER_BWRAP
 
@@ -432,7 +432,7 @@ void WorkerTransport::cleanupSession()
         completeExport(false, QStringLiteral("worker terminated"));
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt.reset();
-#endif
+#endif // MU_DEBUG_ENABLED
 }
 
 void WorkerTransport::stop()
@@ -468,7 +468,7 @@ std::optional<quint64> WorkerTransport::workerMemoryBytes() const
         return std::nullopt;
 #ifdef MU_ENABLE_WORKER_BWRAP
     return Util::processResidentBytes(m_workerPid);
-#else
+#else // MU_ENABLE_WORKER_BWRAP
     return Util::processResidentBytes(m_process.processId());
 #endif // MU_ENABLE_WORKER_BWRAP
 }
@@ -486,7 +486,7 @@ OpenStatus WorkerTransport::open(const QString& path,
 {
 #ifdef MU_DEBUG_ENABLED
     const auto pageLinksStartedAt = std::chrono::steady_clock::now();
-#endif
+#endif // MU_DEBUG_ENABLED
     auto source = std::make_unique<QFile>(path);
     QFile& file = *source;
     if (!file.open(QIODevice::ReadOnly))
@@ -504,7 +504,7 @@ OpenStatus WorkerTransport::open(const QString& path,
     m_pdfPageCount = 0;
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt = pageLinksStartedAt;
-#endif
+#endif // MU_DEBUG_ENABLED
     auto response = call(req);
     if (!response || response->error) {
         if (response && response->error)
@@ -579,7 +579,7 @@ bool WorkerTransport::close()
     m_linkGeneration = 0;
 #ifdef MU_DEBUG_ENABLED
     m_pageLinksStartedAt.reset();
-#endif
+#endif // MU_DEBUG_ENABLED
     return response && !response->error;
 }
 
@@ -1246,7 +1246,7 @@ std::optional<ResponseMessage> WorkerTransport::call(RequestPayload payload, boo
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
         MU_LOG(
             debug, "Plugin <- Worker", IPC::Debug::response(*response, true) + " elapsedMs=" + std::to_string(elapsed));
-#endif
+#endif // MU_DEBUG_ENABLED
     }
 
     // Dispatch outside the guard destructor so exceptions can propagate normally.
@@ -1315,7 +1315,7 @@ bool WorkerTransport::handleNotification(const NotificationMessage& notification
     if (elapsedMs >= 0)
         detail += " elapsedMs=" + std::to_string(elapsedMs);
     MU_LOG(debug, "Plugin <- Worker", detail);
-#endif
+#endif // MU_DEBUG_ENABLED
 
     if (auto* done = std::get_if<OcrDoneNotification>(&notification.payload)) {
         Q_EMIT ocrDone(done->jobId, done->page);

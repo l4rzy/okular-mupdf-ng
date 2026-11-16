@@ -94,4 +94,4 @@ inline std::vector<OutputFormatInfo> outputFormatsFor(DocumentType type)
 }
 
 } // namespace Mu::Worker::Engine
-#endif
+#endif // MU_WORKER_ENGINE_EXPORT_FORMATS_HPP

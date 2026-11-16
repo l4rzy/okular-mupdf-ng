@@ -59,7 +59,7 @@ extern "C" {
 
 #ifndef WORKER_BUILD_PATH
 #define WORKER_BUILD_PATH ""
-#endif
+#endif // WORKER_BUILD_PATH
 
 class TestIpc : public QObject {
     Q_OBJECT
@@ -657,7 +657,7 @@ private slots:
         QVERIFY(std::any_of(sandbox.protections.begin(), sandbox.protections.end(), [](const auto& protection) {
             return protection.id == "linux.bubblewrap" && protection.state == Mu::Model::ProtectionState::Enforced;
         }));
-#else
+#else // MU_ENABLE_WORKER_BWRAP
         QCOMPARE(sandbox.profile, std::string("mupdfng.linux.v1"));
 #endif // MU_ENABLE_WORKER_BWRAP
         QVERIFY(!sandbox.protections.empty());
@@ -1645,7 +1645,7 @@ private slots:
                 return true;
             }
             return std::chrono::steady_clock::now() - started > std::chrono::seconds(5);
-#else
+#else // MU_ENABLE_WORKER_BWRAP
             int status = 0;
             const pid_t result = ::waitpid(workerPid, &status, WUNTRACED | WNOHANG);
             if (result == workerPid) {
@@ -1720,7 +1720,7 @@ private slots:
         auto resume = qScopeGuard([&] { ::kill(workerPid, SIGCONT); });
 #ifdef MU_ENABLE_WORKER_BWRAP
         QTRY_VERIFY_WITH_TIMEOUT(workerIsStopped(workerPid), 2000);
-#else
+#else // MU_ENABLE_WORKER_BWRAP
         int status = 0;
         QCOMPARE(::waitpid(workerPid, &status, WUNTRACED), workerPid);
         QVERIFY(WIFSTOPPED(status));

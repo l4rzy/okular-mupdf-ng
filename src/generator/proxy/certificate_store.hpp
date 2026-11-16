@@ -13,9 +13,9 @@ class CertificateStore final : public Okular::CertificateStore {
 public:
 #if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70) // Parent-aware certificate store API.
     QList<Okular::CertificateInfo> signingCertificates(QWidget* parent, bool* userCancelled) const override;
-#else
+#else // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
     QList<Okular::CertificateInfo> signingCertificates(bool* userCancelled) const override;
-#endif
+#endif // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
 };
 
 } // namespace Mu::Generator::Proxy

@@ -19,7 +19,7 @@ extern "C" {
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <malloc.h>
-#endif
+#endif // defined(__linux__) && defined(__GLIBC__)
 
 namespace Mu::Worker::Engine {
 
@@ -113,7 +113,7 @@ inline void trimProcessMemory(fz_context* context) noexcept
     }
 #if defined(__linux__) && defined(__GLIBC__)
     malloc_trim(0);
-#endif
+#endif // defined(__linux__) && defined(__GLIBC__)
 }
 
 /// Trims the MuPDF store toward storePercent of its current size, evicting
@@ -132,7 +132,7 @@ inline void trimIdleStore(fz_context* context, unsigned int storePercent) noexce
     }
 #if defined(__linux__) && defined(__GLIBC__)
     malloc_trim(0);
-#endif
+#endif // defined(__linux__) && defined(__GLIBC__)
 }
 
 /// Applies configuration and rendering settings to a Fitz context.

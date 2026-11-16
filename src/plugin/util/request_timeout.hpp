@@ -43,4 +43,4 @@ inline int requestTimeoutFor(const Model::RequestPayload& payload)
 
 } // namespace Mu::Plugin::Util
 
-#endif
+#endif // MU_PLUGIN_UTIL_REQUEST_TIMEOUT_HPP

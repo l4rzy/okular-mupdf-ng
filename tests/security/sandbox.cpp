@@ -21,7 +21,7 @@
 #ifdef __linux__
 #include <linux/landlock.h>
 #include <sys/syscall.h>
-#endif
+#endif // __linux__
 
 #include "sys/operation_budget.hpp"
 #include "sys/sandbox.hpp"
@@ -296,7 +296,7 @@ int runBudgetProbe(BudgetProbe probe)
 #ifdef MUPDF_HAVE_LIBSECCOMP
             if (!isEnforced(status, "linux.seccomp"))
                 _exit(4);
-#endif
+#endif // MUPDF_HAVE_LIBSECCOMP
         }
         switch (probe) {
         case BudgetProbe::RepeatedOperations:
@@ -376,7 +376,7 @@ int runBudgetProbe(BudgetProbe probe)
     (void)::waitpid(pid, &status, 0);
     return -1;
 }
-#endif
+#endif // __linux__
 
 } // namespace
 
@@ -404,14 +404,14 @@ void TestSandbox::testOperationBudgets_data()
     QTest::newRow("background-runaway") << int(BudgetProbe::BackgroundRunaway) << SIGKILL << 0;
     QTest::newRow("timer-allocation-fails-closed") << int(BudgetProbe::UnavailableTimer) << 0 << EXIT_FAILURE;
     QTest::newRow("invalid-budget-fails-closed") << int(BudgetProbe::InvalidBudget) << 0 << EXIT_FAILURE;
-#endif
+#endif // __linux__
 }
 
 void TestSandbox::testOperationBudgets()
 {
 #ifndef __linux__
     QSKIP("Operation budgets are Linux-only");
-#else
+#else // __linux__
     QFETCH(int, probe);
     QFETCH(int, expectedSignal);
     QFETCH(int, expectedExit);
@@ -424,7 +424,7 @@ void TestSandbox::testOperationBudgets()
         QVERIFY(WIFEXITED(status));
         QCOMPARE(WEXITSTATUS(status), expectedExit);
     }
-#endif
+#endif // __linux__
 }
 
 void TestSandbox::testFilesystemAndNetworkRestrictions()
@@ -433,7 +433,7 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
         QSKIP("Worker sandbox disabled by build configuration");
 #ifndef __linux__
     QSKIP("Landlock is Linux-only");
-#else
+#else // __linux__
     QTemporaryDir allowedDir;
     QVERIFY(allowedDir.isValid());
     const QString allowedFile = allowedDir.filePath(QStringLiteral("allowed"));
@@ -478,10 +478,10 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
 #ifdef MU_DEBUG_ENABLED
     QVERIFY(!result.unpreservedClosed);
     QVERIFY(!result.launcherPipeClosed);
-#else
+#else // MU_DEBUG_ENABLED
     QVERIFY(result.unpreservedClosed);
     QVERIFY(result.launcherPipeClosed);
-#endif
+#endif // MU_DEBUG_ENABLED
 
     if (result.landlockActive) {
         QVERIFY(result.allowedRead);
@@ -498,7 +498,7 @@ void TestSandbox::testFilesystemAndNetworkRestrictions()
         QVERIFY(forbiddenOperationIsKilled(context.allowedDirectory, ForbiddenOperation::InternetSocket));
         QVERIFY(forbiddenOperationIsKilled(context.allowedDirectory, ForbiddenOperation::UnixSocket));
     }
-#endif
+#endif // __linux__
 }
 
 void TestSandbox::testMissingDirectoryKeepsLandlock_data()
@@ -514,7 +514,7 @@ void TestSandbox::testMissingDirectoryKeepsLandlock()
         QSKIP("Worker sandbox disabled by build configuration");
 #ifndef __linux__
     QSKIP("Landlock is Linux-only");
-#else
+#else // __linux__
     // Probe the host independently of our activation code. Only known host
     // limitations skip the test; ruleset/activation regressions must still fail.
     const long abi = ::syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
@@ -554,7 +554,7 @@ void TestSandbox::testMissingDirectoryKeepsLandlock()
     QVERIFY(result.allowedRead);
     QVERIFY(result.pathWriteDenied);
     QVERIFY(result.createDenied);
-#endif
+#endif // __linux__
 }
 
 QTEST_GUILESS_MAIN(TestSandbox)

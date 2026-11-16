@@ -45,4 +45,4 @@ struct OutlineLine {
 std::vector<Model::OutlineNode> buildGeneratedOutline(std::vector<OutlineLine> lines);
 
 } // namespace Mu::Worker::Engine
-#endif
+#endif // MU_WORKER_PDF_GENERATED_OUTLINE_HPP

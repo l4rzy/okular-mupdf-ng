@@ -127,4 +127,4 @@ struct SandboxStatus {
 };
 
 } // namespace Mu::Model
-#endif
+#endif // MU_SHARED_MODEL_SANDBOX_STATUS_HPP

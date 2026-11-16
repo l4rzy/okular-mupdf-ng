@@ -149,7 +149,7 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
     };
     for (const auto& node : nodes)
         result->addChild(convert(convert, node));
-#else
+#else // MU_OKULAR_STRUCTURED_SYNOPSIS
     std::function<void(const std::vector<Model::OutlineNode>&, QDomNode&)> addNodes;
     addNodes = [&](const std::vector<Model::OutlineNode>& children, QDomNode& parent) {
         for (const auto& node : children) {
@@ -174,7 +174,7 @@ std::unique_ptr<Okular::DocumentSynopsis> documentSynopsis(const std::vector<Mod
     };
 
     addNodes(nodes, *result);
-#endif
+#endif // MU_OKULAR_STRUCTURED_SYNOPSIS
     return result;
 }
 

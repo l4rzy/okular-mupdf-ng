@@ -170,4 +170,4 @@ namespace Mu::Generator::Config {
 }
 
 } // namespace Mu::Generator::Config
-#endif
+#endif // MU_GENERATOR_CONFIG_OKULAR_EMBLEM_HPP

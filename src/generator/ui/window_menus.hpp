@@ -43,4 +43,4 @@ private:
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_WINDOW_MENUS_HPP

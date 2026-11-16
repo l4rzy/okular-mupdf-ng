@@ -9,4 +9,4 @@ namespace Mu::Generator::Config {
 enum class SignatureEmblem { None = 0, MuPDF = 1, Okular = 2 };
 
 } // namespace Mu::Generator::Config
-#endif
+#endif // MU_GENERATOR_CONFIG_SIGNATURE_EMBLEM_TYPE_HPP

@@ -700,7 +700,7 @@ private slots:
             { 14, std::monostate { }, Model::Error { Model::ErrorCode::InvalidRequest, "op", "msg" } }, true);
         QVERIFY(errorResponseText.find("\033[1;31merror\033[0m") != std::string::npos);
     }
-#endif
+#endif // MU_DEBUG_ENABLED
     void malformedFramesAreRejected()
     {
         using namespace Mu;

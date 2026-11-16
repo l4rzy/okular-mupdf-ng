@@ -52,7 +52,7 @@
 #include "plugin/worker_client.hpp"
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/placeholder.hpp"
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 
 class TestGuiClient : public KXMLGUIClient {
 public:
@@ -472,7 +472,7 @@ private slots:
         document.closeDocument();
     }
 
-#endif
+#endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 
     void linkPreviewShortcut_data()
     {
@@ -1067,7 +1067,7 @@ private slots:
                 QCOMPARE(document.page(page)->placeholderColor(), expectedColor);
                 QCOMPARE(other.page(page)->placeholderColor(), local ? QColor(Qt::white) : expectedColor);
             }
-#endif
+#endif // MU_OKULAR_PAGE_PLACEHOLDER_COLOR
             QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
             QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);
             QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
@@ -1139,7 +1139,7 @@ private slots:
         QCOMPARE(Okular::SettingsCore::paperColor(), originalPaper);
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
         QCOMPARE(other.page(0)->placeholderColor(), QColor(32, 33, 36));
-#endif
+#endif // MU_OKULAR_PAGE_PLACEHOLDER_COLOR
         other.closeDocument();
         QCOMPARE(Okular::SettingsCore::changeColors(), originalChangeColors);
         QCOMPARE(Okular::SettingsCore::renderMode(), originalRenderMode);

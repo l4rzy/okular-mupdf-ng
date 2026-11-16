@@ -424,7 +424,7 @@ private slots:
 #if !TEST_FORM_JAVASCRIPT
         if (javascript)
             QSKIP("PDF form JavaScript support is disabled in this configuration");
-#endif
+#endif // !TEST_FORM_JAVASCRIPT
         const auto config = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
         KConfigGroup(config, QStringLiteral("General")).writeEntry("PdfFormJavaScriptEnabled", javascript);
         config->sync();
@@ -611,7 +611,7 @@ private slots:
     {
 #if !TEST_FORM_JAVASCRIPT
         QSKIP("PDF form JavaScript support is disabled in this configuration");
-#endif
+#endif // !TEST_FORM_JAVASCRIPT
         QFETCH(QByteArray, name);
         QFETCH(QString, value);
         QFETCH(QString, total);

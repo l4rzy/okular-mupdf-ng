@@ -54,4 +54,4 @@ private:
 
 } // namespace Mu::Generator
 
-#endif
+#endif // MU_GENERATOR_LAYERS_MODEL_HPP
