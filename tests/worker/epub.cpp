@@ -38,6 +38,18 @@
 
 namespace {
 
+class ThrowingMetadataDocument final : public ::Mu::Worker::Engine::EpubDocument {
+public:
+    bool throwOnMetadata = false;
+
+    ::Mu::Model::DocumentMetadata metadata(const std::vector<std::string>& keys, std::string* error) const override
+    {
+        if (throwOnMetadata)
+            throw std::bad_alloc();
+        return EpubDocument::metadata(keys, error);
+    }
+};
+
 using ZipEntries = QList<QPair<QByteArray, QByteArray>>;
 
 QByteArray writeEpubArchive(const QString& path, const ZipEntries& entries)
@@ -3447,18 +3459,7 @@ private slots:
     {
         QFETCH(bool, withReferences);
 
-        class ThrowingMetadataDocument final : public ::Mu::Worker::Engine::EpubDocument {
-        public:
-            bool throwOnMetadata = false;
-
-            ::Mu::Model::DocumentMetadata metadata(const std::vector<std::string>& keys,
-                                                   std::string* error) const override
-            {
-                if (throwOnMetadata)
-                    throw std::bad_alloc();
-                return EpubDocument::metadata(keys, error);
-            }
-        } document;
+        ThrowingMetadataDocument document;
 
         QFile source(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
         QVERIFY(source.open(QIODevice::ReadOnly));
@@ -3752,6 +3753,39 @@ private slots:
 
         QVERIFY(::fcntl(outFd, F_GETFD) == -1 && errno == EBADF);
         QVERIFY(::fcntl(inFd, F_GETFD) == -1 && errno == EBADF);
+    }
+
+    void testExportJobsExceptionClosesDescriptorsAndReleasesCapacity()
+    {
+        using namespace ::Mu::Worker;
+        auto event = Sys::createEventFd();
+        QVERIFY(event);
+        const auto factory = +[](::Mu::Model::DocumentType, std::size_t) -> std::unique_ptr<Engine::DocumentBase> {
+            auto document = std::make_unique<ThrowingMetadataDocument>();
+            document->throwOnMetadata = true;
+            return document;
+        };
+        Engine::ExportJobs jobs(std::move(*event), factory);
+        const auto source = QFile::encodeName(QStringLiteral(TEST_EPUB_DIR "/sample.epub"));
+
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            Sys::FileDescriptor input(::open(source.constData(), O_RDONLY | O_CLOEXEC));
+            Sys::FileDescriptor output(::open("/dev/null", O_WRONLY | O_CLOEXEC));
+            QVERIFY(input && output);
+            const auto inputFd = input.release();
+            const auto outputFd = output.release();
+            const auto id =
+                jobs.submit(inputFd, outputFd, {}, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences });
+            QVERIFY(id);
+            const auto completed = waitForExportNotifications(jobs, 1);
+            QCOMPARE(completed.size(), std::size_t(1));
+            QCOMPARE(completed.front().jobId, *id);
+            QCOMPARE(completed.front().phase, ::Mu::Model::ExportPhase::Failed);
+            QCOMPARE(completed.front().error, "background PDF export failed with an exception");
+            QVERIFY(!jobs.active());
+            QVERIFY(::fcntl(inputFd, F_GETFD) == -1 && errno == EBADF);
+            QVERIFY(::fcntl(outputFd, F_GETFD) == -1 && errno == EBADF);
+        }
     }
 
     void testExportJobsBackgroundCompletion()

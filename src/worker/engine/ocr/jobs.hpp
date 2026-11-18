@@ -5,7 +5,7 @@
 #define MU_WORKER_ENGINE_OCR_JOBS_HPP
 
 #include <cstdint>
-#include <deque>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -82,10 +82,8 @@ public:
 
 private:
     struct JobEntry {
-        std::uint64_t id = 0;
-        int page = -1;
         JobStatus status = JobStatus::Queued;
-        std::shared_ptr<CancellationCookie> cookie = std::make_shared<CancellationCookie>();
+        std::shared_ptr<CancellationCookie> cookie;
     };
 
     struct SharedState {
@@ -94,7 +92,7 @@ private:
         // Includes cancelled jobs whose detached threads have not finished OCR.
         std::size_t executingJobs = 0;
         std::map<std::uint64_t, ::Mu::Model::OcrResult> completedResults;
-        std::deque<Notification> notifications;
+        std::list<Notification> notifications;
         ::Mu::Worker::Sys::FileDescriptor event;
         std::uint64_t nextId = 1;
     };

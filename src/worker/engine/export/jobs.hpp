@@ -16,6 +16,8 @@
 
 namespace Mu::Worker::Engine {
 
+class DocumentBase;
+
 /**
  * Background original-source export job runner.
  *
@@ -37,7 +39,9 @@ public:
 
     /// Test seam: constructs the job runner around a caller-provided eventfd
     /// descriptor, which may be invalid to exercise the disabled state.
+    using DocumentFactory = std::unique_ptr<DocumentBase> (*)(Model::DocumentType, std::size_t);
     explicit ExportJobs(::Mu::Worker::Sys::FileDescriptor event);
+    ExportJobs(::Mu::Worker::Sys::FileDescriptor event, DocumentFactory factory);
 
     /// Returns the Linux eventfd descriptor notified on finalization and completion.
     [[nodiscard]] int eventFd() const noexcept;
@@ -68,6 +72,7 @@ private:
         std::optional<ExportProgress> progress;
     };
 
+    DocumentFactory m_factory;
     std::shared_ptr<SharedState> m_state = std::make_shared<SharedState>();
 };
 

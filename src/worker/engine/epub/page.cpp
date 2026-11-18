@@ -5,6 +5,7 @@
 #include "engine/epub/document.hpp"
 
 #include <cmath>
+#include <memory>
 
 namespace Mu::Worker::Engine {
 
@@ -199,6 +200,18 @@ std::vector<Link> EpubDocument::extractPageLinks(
         return result;
     }
 
+    const auto dropLinks = [this](fz_link* links) {
+        fz_try(m_context)
+        {
+            fz_drop_link(m_context, links);
+        }
+        fz_catch(m_context)
+        {
+            fz_ignore_error(m_context);
+        }
+    };
+    const std::unique_ptr<fz_link, decltype(dropLinks)> links(linkList, dropLinks);
+
     std::size_t count = 0;
     for (fz_link* link = linkList; link; link = link->next) {
         if (++count > Constant::MaxPageLinks) {
@@ -244,14 +257,6 @@ std::vector<Link> EpubDocument::extractPageLinks(
         result.push_back({ left, top, right, bottom, std::move(target) });
     }
 
-    fz_try(m_context)
-    {
-        fz_drop_link(m_context, linkList);
-    }
-    fz_catch(m_context)
-    {
-        fz_ignore_error(m_context);
-    }
     return result;
 }
 

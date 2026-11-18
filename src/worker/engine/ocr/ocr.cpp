@@ -440,30 +440,36 @@ std::optional<std::string> findTessdataDirectory(const std::string& language,
             } else if (activeCookie->get()->errors) {
                 failed = true;
             } else {
-                // Step 5: Extract recognized text characters and normalize coordinate quads
-                const std::size_t charCount = countStextChars(text);
-                if (charCount > 0)
-                    result.boxes.reserve(std::min(charCount, Constant::MaxOcrBoxes));
+                try {
+                    // Step 5: Extract recognized text characters and normalize coordinate quads
+                    const std::size_t charCount = countStextChars(text);
+                    if (charCount > 0)
+                        result.boxes.reserve(std::min(charCount, Constant::MaxOcrBoxes));
 
-                for (fz_stext_block* block = text->first_block; block; block = block->next) {
-                    if (block->type != FZ_STEXT_BLOCK_TEXT)
-                        continue;
-                    for (fz_stext_line* line = block->u.t.first_line; line; line = line->next) {
-                        for (fz_stext_char* character = line->first_char; character; character = character->next) {
-                            if (activeCookie->isCancelled())
-                                break;
-                            if (result.boxes.size() >= Constant::MaxOcrBoxes) {
-                                failed = true;
-                                break;
+                    for (fz_stext_block* block = text->first_block; block; block = block->next) {
+                        if (block->type != FZ_STEXT_BLOCK_TEXT)
+                            continue;
+                        for (fz_stext_line* line = block->u.t.first_line; line; line = line->next) {
+                            for (fz_stext_char* character = line->first_char; character; character = character->next) {
+                                if (activeCookie->isCancelled())
+                                    break;
+                                if (result.boxes.size() >= Constant::MaxOcrBoxes) {
+                                    failed = true;
+                                    break;
+                                }
+                                if (auto box = makeOcrTextBox(*character, *nativeText, inverse, bounds))
+                                    result.boxes.push_back(std::move(*box));
                             }
-                            if (auto box = makeOcrTextBox(*character, *nativeText, inverse, bounds))
-                                result.boxes.push_back(std::move(*box));
+                            if (failed || activeCookie->isCancelled())
+                                break;
                         }
                         if (failed || activeCookie->isCancelled())
                             break;
                     }
-                    if (failed || activeCookie->isCancelled())
-                        break;
+                } catch (...) {
+                    // Keep C++ allocation failures inside the MuPDF cleanup boundary.
+                    failed = true;
+                    result.boxes.clear();
                 }
                 result.status = activeCookie->isCancelled() ? ::Mu::Model::OcrStatus::Cancelled
                     : failed                                ? ::Mu::Model::OcrStatus::Failed

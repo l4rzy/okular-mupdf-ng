@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <string_view>
@@ -50,6 +51,8 @@ public:
         : m_context(context)
         , m_entries(entries)
     {
+        // A frame is stored for each level, including the root at depth zero.
+        m_openFrames.reserve(std::min(m_entries.size(), Constant::MaxOutlineDepth + 1));
     }
 
     void write(pdf_document* destination)
@@ -270,11 +273,16 @@ bool EpubDocument::writePdf(Sys::FileDescriptor outputFd,
     std::string pageError;
     std::vector<Link> links;
 
-    // Preparation above may throw C++ exceptions. Transfer ownership only
-    // when MuPDF's error boundary can handle output construction failures.
+    PdfOutlineWriter outlineWriter(m_context, flatOutline);
     FILE* volatile file = stream.release();
-    fz_try(m_context)
-    {
+    std::exception_ptr writeError;
+    const auto discardOutput = [&] {
+        fz_drop_output(m_context, output);
+        if (file)
+            ::fclose(file);
+    };
+
+    const auto writeDocument = [&] {
         output = takeOutputFile(m_context, file);
         destination = pdf_create_document(m_context);
 
@@ -441,7 +449,7 @@ bool EpubDocument::writePdf(Sys::FileDescriptor outputFd,
             // tree, so this must also run after all pages exist. Best-effort: a
             // failed build keeps pages and links and only drops the TOC.
             if (!flatOutline.empty())
-                PdfOutlineWriter(m_context, flatOutline).write(destination);
+                outlineWriter.write(destination);
         }
 
         pdf_update_open_pages(m_context, destination);
@@ -454,6 +462,15 @@ bool EpubDocument::writePdf(Sys::FileDescriptor outputFd,
         fz_drop_output(m_context, output);
         output = nullptr;
         saved = true;
+    };
+    fz_try(m_context)
+    {
+        try {
+            writeDocument();
+        } catch (...) {
+            // Let MuPDF pop its error frame and release native resources first.
+            writeError = std::current_exception();
+        }
     }
     fz_always(m_context)
     {
@@ -475,15 +492,14 @@ bool EpubDocument::writePdf(Sys::FileDescriptor outputFd,
         fz_catch(m_context)
         {
         }
-        fz_drop_output(m_context, output);
-        output = nullptr;
-        if (file) {
-            ::fclose(file);
-            file = nullptr;
-        }
-        fail(error, fz_caught_message(m_context));
+        discardOutput();
+        return fail(error, fz_caught_message(m_context));
     }
 
+    if (writeError) {
+        discardOutput();
+        std::rethrow_exception(writeError);
+    }
     return saved;
 }
 

@@ -14,6 +14,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <memory>
+#include <new>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <thread>
@@ -263,6 +264,42 @@ private slots:
         QVERIFY(result);
         QCOMPARE(result->status, ::Mu::Model::OcrStatus::Success);
         QVERIFY(!completedJobs.take(*completedJob).has_value());
+    }
+
+    void ocrExceptionPublishesFailureAndReleasesCapacity()
+    {
+        const auto runner = +[](int fd,
+                                const std::string&,
+                                int page,
+                                const std::string&,
+                                float,
+                                CancellationCookie*,
+                                const std::string&) -> Model::OcrResult {
+            FileDescriptor input(fd);
+            if (page == 0)
+                throw std::bad_alloc();
+            return { Model::OcrStatus::Success, {} };
+        };
+        OcrJobs jobs(1, runner, 10);
+        const Model::OcrStatus expected[] = { Model::OcrStatus::Failed, Model::OcrStatus::Success };
+        for (int page = 0; page < 2; ++page) {
+            const int fd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+            QVERIFY(fd >= 0);
+            const auto id = jobs.submit(fd, {}, page, "eng", 225.0f);
+            QVERIFY(id);
+            std::string error;
+            auto deadline = MonotonicDeadline::fromMilliseconds(3000);
+            QCOMPARE(waitForFd(jobs.eventFd(), POLLIN, deadline, &error), IoResult::Complete);
+            const auto notifications = jobs.drainNotifications();
+            QCOMPARE(notifications.size(), std::size_t(1));
+            QCOMPARE(notifications.front().id, *id);
+            QCOMPARE(notifications.front().page, page);
+            QVERIFY(::fcntl(fd, F_GETFD) == -1 && errno == EBADF);
+            const auto result = jobs.take(*id);
+            QVERIFY(result);
+            QCOMPARE(result->status, expected[page]);
+            QVERIFY(result->boxes.empty());
+        }
     }
 
     void watchdogCancellationNotifiesAndReleasesCapacity()

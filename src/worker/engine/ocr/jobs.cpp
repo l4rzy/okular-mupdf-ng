@@ -59,8 +59,6 @@ int OcrJobs::eventFd() const noexcept
 std::optional<std::uint64_t> OcrJobs::submit(
     int inputFd, std::string password, int page, std::string language, float dpi, std::string tessDataDirectory)
 {
-    // Owns the descriptor on every return/throw path; ownership transfers to the
-    // worker thread only once it has started.
     Sys::FileDescriptor ownedInput(inputFd);
     if (!ownedInput)
         return std::nullopt;
@@ -75,20 +73,26 @@ std::optional<std::uint64_t> OcrJobs::submit(
 
         id = m_state->nextId++;
         cookie = std::make_shared<CancellationCookie>();
-        m_state->activeJobs.emplace(id, JobEntry { id, page, JobStatus::Queued, cookie });
+        m_state->activeJobs.emplace(id, JobEntry { JobStatus::Queued, cookie });
         ++m_state->executingJobs;
     }
 
     auto state = m_state;
     std::thread worker;
     try {
+        // Prepare both queue nodes before starting so even a job that runs out
+        // of memory can publish a failed completion without allocating.
+        decltype(state->completedResults) completion;
+        completion.try_emplace(id);
         worker = std::thread([state,
                               cookie,
                               runner = m_runner,
                               watchdogTicks = m_watchdogTicks,
                               id,
                               page,
-                              inputFd = ownedInput.get(),
+                              input = std::move(ownedInput),
+                              completion = completion.extract(id),
+                              notification = std::list<Notification> { { id, page } },
                               password = std::move(password),
                               language = std::move(language),
                               tessDataDirectory = std::move(tessDataDirectory),
@@ -102,31 +106,33 @@ std::optional<std::uint64_t> OcrJobs::submit(
                     || cookie->isCancelled()) {
                     if (it != state->activeJobs.end())
                         state->activeJobs.erase(it);
-                    ::close(inputFd);
+                    input.reset();
                     --state->executingJobs;
                     return;
                 }
                 it->second.status = JobStatus::Running;
             }
 
-            // The production watchdog requests cancellation after 60 seconds
-            // even when a malformed page makes MuPDF/Tesseract spend unusually
-            // long in a device callback.
-            std::jthread deadline([cookie, watchdogTicks](std::stop_token watchdogStop) {
-                for (int tick = 0; tick < watchdogTicks && !watchdogStop.stop_requested(); ++tick)
-                    std::this_thread::sleep_for(std::chrono::milliseconds(Constant::OcrWatchdogTickMs));
-                if (!watchdogStop.stop_requested())
-                    cookie->cancel();
-            });
+            auto& result = completion.mapped();
+            try {
+                // The production watchdog requests cancellation after 60 seconds
+                // even when a malformed page makes MuPDF/Tesseract spend unusually
+                // long in a device callback.
+                std::jthread deadline([cookie, watchdogTicks](std::stop_token watchdogStop) {
+                    for (int tick = 0; tick < watchdogTicks && !watchdogStop.stop_requested(); ++tick)
+                        std::this_thread::sleep_for(std::chrono::milliseconds(Constant::OcrWatchdogTickMs));
+                    if (!watchdogStop.stop_requested())
+                        cookie->cancel();
+                });
 
-            // Run isolated synchronous OCR page recognition (adopts and closes
-            // inputFd)
-            auto result = runner(inputFd, password, page, language, dpi, cookie.get(), tessDataDirectory);
-            deadline.request_stop();
-            deadline.join();
+                result = runner(input.release(), password, page, language, dpi, cookie.get(), tessDataDirectory);
+            } catch (...) {
+                // The reserved result already represents failure.
+            }
+            input.reset();
 
-            // Join before checking the cookie so a racing watchdog cannot
-            // cancel after the result is classified. Partial text is discarded.
+            // The watchdog has joined before the result is classified.
+            // Partial text is discarded on cancellation.
             if (cookie->isCancelled() || result.status == Model::OcrStatus::Cancelled) {
                 result.status = Model::OcrStatus::Cancelled;
                 result.boxes.clear();
@@ -140,20 +146,17 @@ std::optional<std::uint64_t> OcrJobs::submit(
                 --state->executingJobs;
                 auto it = state->activeJobs.find(id);
                 if (it != state->activeJobs.end()) {
-                    const int completedPage = it->second.page;
                     state->activeJobs.erase(it);
-                    state->completedResults.emplace(id, std::move(result));
-                    state->notifications.push_back({ id, completedPage });
+                    state->completedResults.insert(std::move(completion));
+                    state->notifications.splice(state->notifications.end(), notification);
                     if (state->event.get() >= 0) {
                         (void)::eventfd_write(state->event.get(), 1);
                     }
                 }
             }
         });
-    } catch (const std::exception& e) {
-        // Thread creation failed before the job ran: release the reserved slot
-        // and let the RAII owner close the input descriptor.
-        MU_LOG(warning, "Mu::Worker::Ocr", std::string("could not start OCR thread: ") + e.what());
+    } catch (const std::exception&) {
+        // Startup failed before the job ran. The input closes through RAII.
         std::lock_guard lock(m_state->mutex);
         m_state->activeJobs.erase(id);
         --m_state->executingJobs;
@@ -161,8 +164,6 @@ std::optional<std::uint64_t> OcrJobs::submit(
     }
     worker.detach();
 
-    // The running thread now owns the input descriptor.
-    (void)ownedInput.release();
     return id;
 }
 

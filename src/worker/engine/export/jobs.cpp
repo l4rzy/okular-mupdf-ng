@@ -4,16 +4,15 @@
 #include "engine/export/jobs.hpp"
 
 #include <exception>
+#include <limits>
 #include <sys/eventfd.h>
 #include <thread>
-#include <unistd.h>
 #include <utility>
 
 #include "engine/document_factory.hpp"
 #include "engine/export/formats.hpp"
 #include "shared/logging.hpp"
 #include "sys/operation_budget.hpp"
-#include <limits>
 
 namespace Mu::Worker::Engine {
 
@@ -27,6 +26,12 @@ ExportJobs::ExportJobs()
 }
 
 ExportJobs::ExportJobs(::Mu::Worker::Sys::FileDescriptor event)
+    : ExportJobs(std::move(event), createDocument)
+{
+}
+
+ExportJobs::ExportJobs(::Mu::Worker::Sys::FileDescriptor event, DocumentFactory factory)
+    : m_factory(factory)
 {
     m_state->event = std::move(event);
     if (m_state->event.get() < 0)
@@ -51,10 +56,10 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
     if (!Model::findExportProfile(outputFormatsFor(type), options, true, std::numeric_limits<std::int32_t>::max()))
         return std::nullopt;
 
-    // Copy settings before reserving the slot. Moving the copy into the closure
-    // keeps its construction noexcept, so thread startup is the only fallible
-    // step after the reservation.
-    ::Mu::Model::DocumentSettings settingsCopy = settings;
+    // Prepare the failure message before starting the job so reporting an
+    // allocation failure does not require another allocation.
+    auto settingsCopy = settings;
+    std::string exceptionError = "background PDF export failed with an exception";
 
     std::uint64_t id = 0;
     {
@@ -76,44 +81,41 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
                               type,
                               settings = std::move(settingsCopy),
                               options = std::move(options),
-                              inputFd = ownedInput.get(),
-                              outputFd = ownedOutput.get()] {
+                              factory = m_factory,
+                              input = std::move(ownedInput),
+                              output = std::move(ownedOutput),
+                              exceptionError = std::move(exceptionError)]() mutable {
             const Sys::OperationBudget budget;
             std::string error;
             bool success = false;
-            {
-                // Private document instance: the session engine is
-                // single-threaded and must never be touched from this thread.
+            try {
+                // The export owns a private document, independent of the session.
                 const auto storeSize = static_cast<std::size_t>(settings.memoryCacheBytes);
-                auto document = createDocument(type, storeSize);
-                if (document)
+                if (auto document = factory(type, storeSize)) {
                     document->setSettings(settings);
-                if (!document) {
-                    ::close(inputFd);
-                    ::close(outputFd);
-                    error = "unsupported ebook type";
-                } else if (document->openFd(inputFd, Model::documentTypeToMime(type), &error)) {
-                    // exportFd adopts and closes the output
-                    // descriptor on every exit path, so ownership simply moves
-                    // to the engine.
-                    success = document->exportFd(outputFd, options, true, &error, [state](int completed, int total) {
-                        std::lock_guard lock(state->mutex);
-                        state->progress->update(completed, total);
-                        // Page counts are sampled by the event loop. Wake it
-                        // immediately only when the finalization phase starts.
-                        if (completed == total)
-                            (void)::eventfd_write(state->event.get(), 1);
-                    });
+                    auto mime = Model::documentTypeToMime(type);
+                    if (document->openFd(input.release(), std::move(mime), &error)) {
+                        const DocumentBase::ExportProgressCallback progress = [state](int completed, int total) {
+                            std::lock_guard lock(state->mutex);
+                            state->progress->update(completed, total);
+                            // The event loop samples page counts. Wake it when finalization starts.
+                            if (completed == total)
+                                (void)::eventfd_write(state->event.get(), 1);
+                        };
+                        success = document->exportFd(output.release(), options, true, &error, progress);
+                    } else if (error.empty()) {
+                        error = "could not open document for PDF export";
+                    }
                 } else {
-                    // Opening consumed the input fd; the output fd is still
-                    // ours.
-                    ::close(outputFd);
-                    error = error.empty() ? "could not open document for PDF export" : error;
+                    error = "unsupported ebook type";
                 }
+                if (!success)
+                    MU_LOG(warning, "Mu::Worker::Export", error);
+            } catch (...) {
+                error.swap(exceptionError);
             }
-
-            if (!success)
-                MU_LOG(warning, "Mu::Worker::Export", "background PDF export failed: " + error);
+            input.reset();
+            output.reset();
 
             {
                 std::lock_guard lock(state->mutex);
@@ -125,21 +127,14 @@ std::optional<std::uint64_t> ExportJobs::submit(int inputFd,
             if (state->event.get() >= 0)
                 (void)::eventfd_write(state->event.get(), 1);
         });
-    } catch (const std::exception& e) {
-        // Thread creation failed before the job ran: no thread owns the
-        // descriptors and no completion will clear the reservation, so roll it
-        // back and let the RAII owners close the descriptors on return.
-        MU_LOG(warning, "Mu::Worker::Export", std::string("could not start export thread: ") + e.what());
+    } catch (const std::exception&) {
+        // Startup failed before the job ran. RAII closes both descriptors.
         std::lock_guard lock(m_state->mutex);
         m_state->active = false;
         m_state->progress.reset();
         return std::nullopt;
     }
     worker.detach();
-
-    // The running thread now owns both descriptors.
-    (void)ownedInput.release();
-    (void)ownedOutput.release();
     return id;
 }
 
