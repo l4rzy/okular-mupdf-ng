@@ -1181,75 +1181,79 @@ bool Main::doCloseDocument()
 // Okular Generator Func: returns the requested document metadata.
 Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo::Key>& keys) const
 {
-    if (m_pageError.isActive())
+    if (!workerReady())
         return { };
-    // Native text extraction is worker-owned.
-    if (workerReady()) {
-        const auto info = m_worker.getDocumentInfo();
-        if (!info.values.empty()) {
-            Okular::DocumentInfo di;
-            const QString mimeString = QString::fromStdString(Model::documentTypeToMime(m_document.type));
-            di.set(Okular::DocumentInfo::MimeType, mimeString);
-            di.set(Okular::DocumentInfo::Pages, QString::number(info.pageCount));
 
-            const auto metadata = [&info](const char* key) {
-                const auto it = info.values.find(key);
-                return it == info.values.end() ? QString() : QString::fromStdString(it->second);
-            };
-            const auto setIfRequested = [&](Okular::DocumentInfo::Key key, const char* field) {
-                if (!keys.contains(key))
-                    return;
-                const QString value = metadata(field);
-                if (!value.isEmpty())
-                    di.set(key, value);
-            };
-
-            // Dates arrive as ISO 8601 UTC instants from the worker; display
-            // parity with the poppler generator means converting to the local
-            // zone and rendering with the locale's long format. Absent or
-            // malformed values are skipped.
-            const auto setDateTimeIfRequested = [&](Okular::DocumentInfo::Key key, const char* field) {
-                if (!keys.contains(key))
-                    return;
-                const QString raw = metadata(field);
-                if (raw.isEmpty())
-                    return;
-                const QDateTime date = QDateTime::fromString(raw, Qt::ISODate);
-                if (!date.isValid())
-                    return;
-                di.set(key, QLocale().toString(date.toLocalTime(), QLocale::LongFormat));
-            };
-
-            setIfRequested(Okular::DocumentInfo::Title, "title");
-            setIfRequested(Okular::DocumentInfo::Subject, "subject");
-            setIfRequested(Okular::DocumentInfo::Author, "author");
-            setIfRequested(Okular::DocumentInfo::Keywords, "keywords");
-            setIfRequested(Okular::DocumentInfo::Creator, "creator");
-            setIfRequested(Okular::DocumentInfo::Producer, "producer");
-
-            setDateTimeIfRequested(Okular::DocumentInfo::CreationDate, "creationDate");
-            setDateTimeIfRequested(Okular::DocumentInfo::ModificationDate, "modificationDate");
-
-            if (keys.contains(Okular::DocumentInfo::CustomKeys)) {
-                const QString fmt = metadata("format");
-                if (!fmt.isEmpty())
-                    di.set(QStringLiteral("format"), fmt, i18n("Format"));
-                const QString sec = metadata("security");
-                if (!sec.isEmpty())
-                    di.set(QStringLiteral("security"), sec, i18n("Security"));
-                di.set(QStringLiteral("linearized"),
-                       metadata("linearized") == QStringLiteral("true") ? i18n("Yes") : i18n("No"),
-                       i18n("Optimized"));
-                const int sigs = metadata("signatureCount").toInt();
-                di.set(QStringLiteral("signatures"),
-                       sigs > 0 ? i18np("Signed (%1 signature)", "Signed (%1 signatures)", sigs) : i18n("Not Signed"),
-                       i18n("Digital Signatures"));
-            }
-            return di;
-        }
-        MU_LOG(warning, "Mu::Generator::Main", "Worker getDocumentInfo failed");
+    using Info = Okular::DocumentInfo;
+    constexpr std::pair<Info::Key, const char*> standardFields[] {
+        { Info::Title, "title" },
+        { Info::Subject, "subject" },
+        { Info::Author, "author" },
+        { Info::Keywords, "keywords" },
+        { Info::Creator, "creator" },
+        { Info::Producer, "producer" },
+        { Info::CreationDate, "creationDate" },
+        { Info::ModificationDate, "modificationDate" },
+    };
+    const bool custom = keys.contains(Info::CustomKeys);
+    QStringList workerKeys;
+    for (const auto& [key, field] : standardFields) {
+        if (keys.contains(key))
+            workerKeys.append(QString::fromLatin1(field));
     }
-    return { };
+    if (custom) {
+        workerKeys.append({ QStringLiteral("format"),
+                            QStringLiteral("security"),
+                            QStringLiteral("linearized"),
+                            QStringLiteral("signatureCount") });
+    }
+
+    Info result;
+    result.set(Info::MimeType, QString::fromStdString(Model::documentTypeToMime(m_document.type)));
+    result.set(Info::Pages, QString::number(m_okularPages.size()));
+    // An empty worker key list requests all metadata, including full-page scans.
+    if (workerKeys.isEmpty())
+        return result;
+
+    const auto info = m_worker.getDocumentInfo(workerKeys);
+    if (info.mimeType.empty()) {
+        MU_LOG(warning, "Mu::Generator::Main", "Worker getDocumentInfo failed");
+        return result;
+    }
+    const auto metadata = [&info](const char* field) {
+        const auto it = info.values.find(field);
+        return it == info.values.end() ? QString() : QString::fromStdString(it->second);
+    };
+    for (const auto& [key, field] : standardFields) {
+        if (!keys.contains(key))
+            continue;
+        QString value = metadata(field);
+        if (key == Info::CreationDate || key == Info::ModificationDate) {
+            const QDateTime date = QDateTime::fromString(value, Qt::ISODate);
+            if (!date.isValid())
+                continue;
+            value = QLocale().toString(date.toLocalTime(), QLocale::LongFormat);
+        }
+        if (!value.isEmpty())
+            result.set(key, value);
+    }
+    if (custom) {
+        const QString format = metadata("format");
+        if (!format.isEmpty())
+            result.set(QStringLiteral("format"), format, i18n("Format"));
+        const QString security = metadata("security");
+        if (!security.isEmpty())
+            result.set(QStringLiteral("security"), security, i18n("Security"));
+        result.set(QStringLiteral("linearized"),
+                   metadata("linearized") == QStringLiteral("true") ? i18n("Yes") : i18n("No"),
+                   i18n("Optimized"));
+        const int signatures = metadata("signatureCount").toInt();
+        result.set(QStringLiteral("signatures"),
+                   signatures > 0 ? i18np("Signed (%1 signature)", "Signed (%1 signatures)", signatures)
+                                  : i18n("Not Signed"),
+                   i18n("Digital Signatures"));
+    }
+    return result;
 }
 
 // Okular Generator Func: returns the document outline from the worker.

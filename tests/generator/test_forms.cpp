@@ -98,6 +98,45 @@ private slots:
         config->sync();
     }
 
+    void requestsDocumentMetadata_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<int>("key");
+        QTest::addColumn<QString>("expected");
+        using Info = Okular::DocumentInfo;
+        QTest::newRow("page-count") << QStringLiteral("forms/application.pdf") << int(Info::Pages)
+                                    << QStringLiteral("2");
+        QTest::newRow("title") << QStringLiteral("layers.pdf") << int(Info::Title)
+                               << QStringLiteral("PDF optional content layer test");
+        QTest::newRow("missing-title") << QStringLiteral("forms/application.pdf") << int(Info::Title) << QString();
+        QTest::newRow("author") << QStringLiteral("digital_signature.pdf") << int(Info::Author)
+                                << QStringLiteral("John Harris");
+    }
+
+    void requestsDocumentMetadata()
+    {
+        QFETCH(QString, name);
+        QFETCH(int, key);
+        QFETCH(QString, expected);
+        using Info = Okular::DocumentInfo;
+        Okular::Document document(nullptr);
+        QCOMPARE(openDocument(document, QStringLiteral(TEST_FORM_DIR "/../") + name), Okular::Document::OpenSuccess);
+        const auto requested = static_cast<Info::Key>(key);
+        const auto info = document.documentInfo({ requested });
+        QCOMPARE(info.get(requested), expected);
+        QCOMPARE(info.get(Info::MimeType), QStringLiteral("application/pdf"));
+        QVERIFY(info.get(QStringLiteral("signatures")).isEmpty());
+
+        const auto details = document.documentInfo({ Info::CustomKeys, Info::CreationDate });
+        QVERIFY(!details.get(QStringLiteral("format")).isEmpty());
+        if (name == QStringLiteral("digital_signature.pdf")) {
+            QVERIFY(!details.get(Info::CreationDate).isEmpty());
+            QCOMPARE(details.get(QStringLiteral("signatures")), QStringLiteral("Signed (1 signature)"));
+        } else {
+            QCOMPARE(details.get(QStringLiteral("signatures")), QStringLiteral("Not Signed"));
+        }
+    }
+
     void verifiesSignatureOnOpen_data()
     {
         QTest::addColumn<bool>("fromData");
