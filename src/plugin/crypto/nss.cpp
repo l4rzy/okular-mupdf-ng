@@ -18,7 +18,10 @@
 #include <secerr.h>
 #pragma pop_macro("slots")
 
+#include <QFileDevice>
+#include <algorithm>
 #include <limits>
+#include <sys/stat.h>
 
 #include "shared/logging.hpp"
 
@@ -237,22 +240,17 @@ bool hashByteRange(QIODevice& source, PK11Context* hash, qint64 offset, qint64 l
     return true;
 }
 
-bool parseAndValidateByteRange(const SignatureField& field,
-                               qint64 sourceSize,
-                               qint64* firstOffset,
-                               qint64* firstLength,
-                               qint64* secondOffset,
-                               qint64* secondLength)
+bool parseAndValidateByteRange(
+    const SignatureField& field, qint64 sourceSize, qint64* firstLength, qint64* secondOffset, qint64* secondLength)
 {
     // Validate ranges before seeking so malformed PDF data cannot cause an
     // out-of-bounds read or an integer calculation outside the source.
     if (field.byteRange.size() != 4)
         return false;
-    *firstOffset = field.byteRange[0];
     *firstLength = field.byteRange[1];
     *secondOffset = field.byteRange[2];
     *secondLength = field.byteRange[3];
-    if (*firstOffset != 0 || *firstLength < 0 || *secondOffset < *firstLength || *secondLength < 0
+    if (field.byteRange[0] != 0 || *firstLength < 0 || *secondOffset < *firstLength || *secondLength < 0
         || *secondOffset > sourceSize || *secondLength > sourceSize - *secondOffset)
         return false;
     return true;
@@ -285,7 +283,42 @@ HashAlgorithm Internal::hashAlgorithmForDigest(SECOidTag digestAlgorithm)
     }
 }
 
-void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool checkOcsp)
+namespace {
+
+struct DigestPrefix {
+    SECOidTag algorithm = SEC_OID_UNKNOWN;
+    qint64 length = 0;
+    NssHashContext state;
+};
+
+NssHashContext hashSignaturePrefix(QIODevice& source, SECOidTag algorithm, qint64 length, DigestPrefix* prefix)
+{
+    if (prefix) {
+        // Each PDF revision starts at offset zero. Clone the digest at the
+        // signature gap so the shared state never includes a skipped range.
+        if (prefix->algorithm != algorithm || prefix->length > length)
+            *prefix = { algorithm, 0, { } };
+        if (!prefix->state) {
+            prefix->state.reset(PK11_CreateDigestContext(algorithm));
+            if (prefix->state && PK11_DigestBegin(prefix->state.get()) != SECSuccess)
+                prefix->state.reset();
+        }
+        if (prefix->state && hashByteRange(source, prefix->state.get(), prefix->length, length - prefix->length)) {
+            prefix->length = length;
+            if (NssHashContext hash { PK11_CloneContext(prefix->state.get()) })
+                return hash;
+        } else {
+            *prefix = { };
+        }
+    }
+
+    NssHashContext hash(PK11_CreateDigestContext(algorithm));
+    if (!hash || PK11_DigestBegin(hash.get()) != SECSuccess || !hashByteRange(source, hash.get(), 0, length))
+        return { };
+    return hash;
+}
+
+void validateSignature(SignatureField& field, QIODevice& source, bool checkOcsp, DigestPrefix* prefix)
 {
     // Validation proceeds in phases: validate the signed range, parse CMS,
     // hash the covered bytes, verify the signature, then classify the signer.
@@ -312,8 +345,8 @@ void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool
         field.signatureStatus = SignatureStatus::GenericError;
         return;
     }
-    qint64 firstOffset = 0, firstLength = 0, secondOffset = 0, secondLength = 0;
-    if (!parseAndValidateByteRange(field, size, &firstOffset, &firstLength, &secondOffset, &secondLength)) {
+    qint64 firstLength = 0, secondOffset = 0, secondLength = 0;
+    if (!parseAndValidateByteRange(field, size, &firstLength, &secondOffset, &secondLength)) {
         field.signatureStatus = SignatureStatus::DecodingError;
         return;
     }
@@ -332,18 +365,14 @@ void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool
     field.certificate = Internal::describeCertificate(certificate.get());
     field.signerName = field.certificate.subjectCommonName;
     field.signerSubjectDn = field.certificate.subjectDistinguishedName;
-    field.hashAlgorithm = Internal::hashAlgorithmForDigest(NSS_CMSSignerInfo_GetDigestAlgTag(cms.signerInfo));
+    const auto algorithm = NSS_CMSSignerInfo_GetDigestAlgTag(cms.signerInfo);
+    field.hashAlgorithm = Internal::hashAlgorithmForDigest(algorithm);
     if (field.hashAlgorithm == HashAlgorithm::Unknown) {
         field.signatureStatus = SignatureStatus::DecodingError;
         return;
     }
-    NssHashContext hash(PK11_CreateDigestContext(NSS_CMSSignerInfo_GetDigestAlgTag(cms.signerInfo)));
-    if (!hash || PK11_DigestBegin(hash.get()) != SECSuccess) {
-        field.signatureStatus = SignatureStatus::GenericError;
-        return;
-    }
-    if (!hashByteRange(source, hash.get(), firstOffset, firstLength)
-        || !hashByteRange(source, hash.get(), secondOffset, secondLength)) {
+    auto hash = hashSignaturePrefix(source, algorithm, firstLength, prefix);
+    if (!hash || !hashByteRange(source, hash.get(), secondOffset, secondLength)) {
         field.signatureStatus = SignatureStatus::GenericError;
         return;
     }
@@ -390,6 +419,39 @@ void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool
     field.certificateStatusCurrent = certificateStatusAt(certdb, certificate.get(), currentTime, checkOcsp);
     field.certificateStatusAtSigningTime = field.certificateStatusCurrent;
     field.certificateStatus = field.certificateStatusCurrent;
+}
+
+} // namespace
+
+void validateDetachedPdfSignature(SignatureField& field, QIODevice& source, bool checkOcsp)
+{
+    validateSignature(field, source, checkOcsp, nullptr);
+}
+
+void validateDetachedPdfSignatures(std::vector<SignatureField*> fields, QIODevice& source, bool checkOcsp)
+{
+    // Reuse prefixes only when the file can be checked for in-place changes.
+    const auto* file = dynamic_cast<QFileDevice*>(&source);
+    struct stat before { }, after { };
+    if (fields.size() < 2 || !file || ::fstat(file->handle(), &before) != 0 || !S_ISREG(before.st_mode)) {
+        for (auto* field : fields)
+            validateDetachedPdfSignature(*field, source, checkOcsp);
+        return;
+    }
+
+    std::ranges::stable_sort(fields, { }, [](const SignatureField* field) {
+        return field->byteRange.size() == 4 ? field->byteRange[1] : 0;
+    });
+    DigestPrefix prefix;
+    for (auto* field : fields)
+        validateSignature(*field, source, checkOcsp, &prefix);
+
+    if (::fstat(file->handle(), &after) != 0 || before.st_size != after.st_size
+        || before.st_mtim.tv_sec != after.st_mtim.tv_sec || before.st_mtim.tv_nsec != after.st_mtim.tv_nsec
+        || before.st_ctim.tv_sec != after.st_ctim.tv_sec || before.st_ctim.tv_nsec != after.st_ctim.tv_nsec) {
+        for (auto* field : fields)
+            resetValidationState(*field);
+    }
 }
 
 } // namespace Mu::Plugin::Crypto

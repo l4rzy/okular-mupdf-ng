@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 #include "shared/model/types.hpp"
 
@@ -65,6 +66,9 @@ enum class NssRuntimeMode {
 /// validation (soft-fail: an unreachable responder keeps the chain-derived
 /// status).
 void validateDetachedPdfSignature(Model::SignatureField& field, QIODevice& source, bool checkOcsp = false);
+
+// Verifies fields against the same source, reusing common digest prefixes.
+void validateDetachedPdfSignatures(std::vector<Model::SignatureField*> fields, QIODevice& source, bool checkOcsp);
 
 } // namespace Mu::Plugin::Crypto
 

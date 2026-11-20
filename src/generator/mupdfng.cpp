@@ -14,7 +14,6 @@
 #include <KConfigDialog>
 #include <KLocalizedString>
 #include <KPluginFactory>
-#include <QBuffer>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -35,6 +34,7 @@
 #include <QUrl>
 #include <atomic>
 #include <functional>
+#include <vector>
 
 #include "generator/config/settings.hpp"
 #include "generator/config/settingswidget.hpp"
@@ -529,20 +529,21 @@ void Main::initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::
     warnIfRepairedDocument(info);
     notifyDegradedSandbox();
 
-    // Phase 4: construct Okular-owned pages. Signature validation reads the
-    // original PDF bytes, which may come from the retained file or in-memory
-    // source.
-    QFile signatureFile(m_document.sourcePath);
-    QBuffer signatureBuffer(&m_document.sourceData);
-    QIODevice* signatureSource = nullptr;
+    // Publish final statuses with the pages. Okular snapshots signature
+    // validity when it builds the signature sidebar.
     if (m_document.type == Model::DocumentType::Pdf) {
-        if (!m_document.sourcePath.isEmpty() && signatureFile.open(QIODevice::ReadOnly))
-            signatureSource = &signatureFile;
-        else if (!m_document.sourceData.isEmpty() && signatureBuffer.open(QIODevice::ReadOnly))
-            signatureSource = &signatureBuffer;
+        std::vector<Model::SignatureField*> signatures;
+        for (auto& page : pageInfos)
+            for (auto& field : page.signatureFields)
+                if (field.signedField)
+                    signatures.push_back(&field);
+        if (!signatures.empty()) {
+            if (auto source = m_worker.openSourceInput())
+                Plugin::Crypto::validateDetachedPdfSignatures(
+                    std::move(signatures), *source, MuPDFNGSettings::self()->useOcsp());
+        }
     }
 
-    const bool canValidateSignatures = signatureSource != nullptr;
     for (Plugin::WorkerClient::PageInfo& pageInfo : pageInfos) {
         const QSizeF s(pageInfo.geometry.widthPoints * dpi().width() / 72.0,
                        pageInfo.geometry.heightPoints * dpi().height() / 72.0);
@@ -562,8 +563,6 @@ void Main::initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::
         QList<Okular::FormField*> formFields;
 
         for (Model::SignatureField& sfd : pageInfo.signatureFields) {
-            if (canValidateSignatures)
-                Plugin::Crypto::validateDetachedPdfSignature(sfd, *signatureSource, MuPDFNGSettings::self()->useOcsp());
             auto* sig = new Proxy::Form::Signature(sfd.objectNumber, std::move(sfd), &m_worker);
             formFields.append(sig);
         }

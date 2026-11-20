@@ -179,6 +179,16 @@ bool WorkerClient::close()
     });
 }
 
+std::unique_ptr<QFile> WorkerClient::openSourceInput() const
+{
+    return sync([](WorkerTransport* transport) {
+        auto input = transport->openSourceInput();
+        if (input)
+            input->moveToThread(nullptr);
+        return input;
+    });
+}
+
 QString WorkerClient::epubCachePath(WorkerTransport* transport) const
 {
     if (!m_epubCache)

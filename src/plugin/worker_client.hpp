@@ -20,6 +20,8 @@
 #include "shared/model/form_backend.hpp"
 #include "shared/model/types.hpp"
 
+class QFile;
+
 namespace Mu::Plugin {
 
 class WorkerTransport;
@@ -70,6 +72,7 @@ public:
                                QList<PageInfo>& pages,
                                Model::DocumentType type = Model::DocumentType::Pdf);
     bool close();
+    [[nodiscard]] std::unique_ptr<QFile> openSourceInput() const;
     /// Cancellation is checked on the calling thread and sets the active
     /// render's shared MuPDF abort flag. The terminal response is still drained
     /// on the transport thread, including any frame produced before cancellation.

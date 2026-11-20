@@ -83,6 +83,8 @@ public:
     /// Closes the open document and clears staged input. Abandons any
     /// in-flight background PDF export silently (result discarded, no signal).
     bool close();
+    /// Reopens the retained source with an independent file position.
+    [[nodiscard]] std::unique_ptr<QFile> openSourceInput() const;
     QImage render(int page,
                   int width,
                   int height,
@@ -194,8 +196,6 @@ private:
         return true;
     }
 
-    /// Reopens the retained source with an independent offset for a background reader.
-    [[nodiscard]] std::unique_ptr<QFile> openSourceInput() const;
     // A request may receive asynchronous notifications while its response is
     // pending; call() serializes that exchange and handles both message kinds.
     std::optional<Model::ResponseMessage> requestOcr(int page, const QString& language, int dpi);

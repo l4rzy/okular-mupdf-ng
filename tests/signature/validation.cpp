@@ -1911,9 +1911,18 @@ private slots:
                         "E=jbharris@adobe.com,CN=John B Harris,O=Adobe Systems Incorporated,L=San Jose,ST=CA,C=US"));
                 QCOMPARE(field.hashAlgorithm, ::Mu::Model::HashAlgorithm::Sha1);
                 auto repeatedField = workerField;
-                ::Mu::Plugin::Crypto::validateDetachedPdfSignature(repeatedField, source);
+                auto shorterField = workerField;
+                --shorterField.byteRange[1];
+                auto expectedShorter = shorterField;
+                ::Mu::Plugin::Crypto::validateDetachedPdfSignature(expectedShorter, source);
+                const auto sourcePosition = source.pos();
+                ::Mu::Plugin::Crypto::validateDetachedPdfSignatures({ &repeatedField, &shorterField }, source, false);
+                QCOMPARE(source.pos(), sourcePosition);
                 QCOMPARE(repeatedField.signatureStatus, field.signatureStatus);
+                QCOMPARE(repeatedField.certificateStatus, field.certificateStatus);
                 QCOMPARE(repeatedField.hashAlgorithm, field.hashAlgorithm);
+                QCOMPARE(repeatedField.signsTotalDocument, field.signsTotalDocument);
+                QCOMPARE(shorterField.signatureStatus, expectedShorter.signatureStatus);
                 if (expectedPluginSignature == static_cast<int>(::Mu::Model::SignatureStatus::Valid)
                     && field.signatureStatus == ::Mu::Model::SignatureStatus::Invalid)
                     QSKIP("NSS rejected the legacy SHA-1 signature under the active system crypto policy");
