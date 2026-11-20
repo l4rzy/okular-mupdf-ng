@@ -11,7 +11,7 @@
 # Task Engineering Lifecycle
 1. **Scope**: Identify the smallest correct fix. Avoid speculative refactors.
 2. **Implement**: Keep types narrow and adapters thin.
-3. **Validate**: Add table-driven unit tests for new behavior. Run `ctest` across all suites.
+3. **Validate**: Add table-driven unit tests for new behavior. Run `ctest` across all suites and verify that coverage is greater than 80% of added and modified executable lines in production code.
 4. **Audit for Regression**: Review `git diff` for dead code, unused headers, unintended side effects, or style violations.
 5. **Format & Clean**: Format with `clang-format` (`./scripts/build.sh format`) before finalizing.
 

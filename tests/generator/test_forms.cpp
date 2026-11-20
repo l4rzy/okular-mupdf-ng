@@ -4,6 +4,7 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QMimeDatabase>
 #include <QPrinter>
@@ -95,6 +96,47 @@ private slots:
         KConfigGroup ocr(config, QStringLiteral("OCR"));
         ocr.writeEntry("OcrTriggerMode", "Never");
         config->sync();
+    }
+
+    void verifiesSignatureOnOpen_data()
+    {
+        QTest::addColumn<bool>("fromData");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<int>("expectedStatus");
+        using Signature = Okular::SignatureInfo;
+        QTest::newRow("file") << false << QStringLiteral("digital_signature.pdf") << int(Signature::SignatureValid);
+        QTest::newRow("data") << true << QStringLiteral("digital_signature.pdf") << int(Signature::SignatureValid);
+        QTest::newRow("digest-mismatch") << false << QStringLiteral("digital_signature2.pdf")
+                                         << int(Signature::SignatureDigestMismatch);
+    }
+
+    void verifiesSignatureOnOpen()
+    {
+        QFETCH(bool, fromData);
+        QFETCH(QString, name);
+        QFETCH(int, expectedStatus);
+        const auto path = QStringLiteral(TEST_FORM_DIR "/../") + name;
+        Okular::Document document(nullptr);
+        if (fromData) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const int fd = ::dup(file.handle());
+            QVERIFY(fd >= 0);
+            QCOMPARE(document.openDocument(QString(), QUrl(QStringLiteral("fd:/%1").arg(fd)), QMimeType()),
+                     Okular::Document::OpenSuccess);
+        } else {
+            QCOMPARE(openDocument(document, path), Okular::Document::OpenSuccess);
+        }
+
+        Okular::FormFieldSignature* signature = nullptr;
+        for (int page = 0; page < static_cast<int>(document.pages()) && !signature; ++page)
+            signature = findField<Okular::FormFieldSignature>(document, page, "Signature2");
+        QVERIFY(signature);
+        const auto status = signature->signatureInfo().signatureStatus();
+        if (expectedStatus == Okular::SignatureInfo::SignatureValid
+            && status == Okular::SignatureInfo::SignatureInvalid)
+            QSKIP("NSS rejected the legacy SHA-1 signature under the active system crypto policy");
+        QCOMPARE(int(status), expectedStatus);
     }
 
     void persistsTextEdits_data()
