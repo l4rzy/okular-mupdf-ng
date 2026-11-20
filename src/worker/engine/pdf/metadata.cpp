@@ -179,7 +179,8 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
 
     if (wanted("signatureCount")) {
         std::size_t signatureCount = 0;
-        for (int page = 0; page < m_pageCount; ++page) {
+        const int pagesToScan = m_hasAcroForm ? m_pageCount : 0;
+        for (int page = 0; page < pagesToScan; ++page) {
             fz_page* nativePage = loadPage(page, error);
             if (!nativePage)
                 return { };

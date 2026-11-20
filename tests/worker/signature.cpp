@@ -107,6 +107,33 @@ class TestWorkerSignature : public QObject {
 
 private slots:
 
+    void metadataCountsSignatures_data()
+    {
+        QTest::addColumn<bool>("withField");
+        QTest::addColumn<bool>("signedField");
+        QTest::newRow("no-acroform") << false << false;
+        QTest::newRow("unsigned-field") << true << false;
+        QTest::newRow("signed-field") << true << true;
+    }
+
+    void metadataCountsSignatures()
+    {
+        QFETCH(bool, withField);
+        QFETCH(bool, signedField);
+        QTemporaryFile source;
+        PdfDocument document;
+        std::string error;
+        QVERIFY2(openSignatureDocument(document, source, error, withField), error.c_str());
+        if (signedField)
+            QVERIFY(setSignatureValue(document));
+
+        QVERIFY(!document.isPageCached(0));
+        const auto metadata = document.metadata({ "signatureCount" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(metadata.values.at("signatureCount"), std::string(signedField ? "1" : "0"));
+        QCOMPARE(document.isPageCached(0), withField);
+    }
+
     void rejectsExistingTargetsWithoutMutation_data()
     {
         QTest::addColumn<int>("scenario");
