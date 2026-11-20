@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QScopeGuard>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 #include <algorithm>
 #include <array>
@@ -834,6 +835,30 @@ private slots:
                 layout.add("Heading", i + 1, 50, 150, 17, 200);
         }
         QVERIFY_THROWS_EXCEPTION(std::length_error, Worker::Engine::buildGeneratedOutline(layout.lines));
+    }
+
+    void contentIdentityDigest_data()
+    {
+        QTest::addColumn<int>("size");
+        QTest::addColumn<QString>("digest");
+        // Reference XXH3-128 digests of the version prefix (including its NUL) followed by 'x' bytes.
+        QTest::newRow("empty") << 0 << QStringLiteral("3fcc7d49fff2dcb8cc275709bc39c1ba");
+        QTest::newRow("small") << 31 << QStringLiteral("0a4dcc43d11a18503d0a4a48eb6d9249");
+        QTest::newRow("full-chunk") << 65536 << QStringLiteral("6881ddcadd695cf0d639d73fed19d041");
+        QTest::newRow("partial-final-chunk") << 65537 << QStringLiteral("14ca9fedc8bafaccc8fbc81ca39c48e4");
+    }
+
+    void contentIdentityDigest()
+    {
+        QFETCH(int, size);
+        QFETCH(QString, digest);
+        QTemporaryFile source;
+        QVERIFY(source.open());
+        QCOMPARE(source.write(QByteArray(size, 'x')), qint64(size));
+        QVERIFY(source.flush());
+        QCOMPARE(Plugin::Caching::PDF::tocCachePath(source.handle()),
+                 Plugin::Caching::directory(QStringLiteral("pdf_toc")) + QLatin1Char('/') + digest
+                     + QStringLiteral(".bin"));
     }
 
     void contentIdentityAndCacheValidation()

@@ -4,7 +4,6 @@
 #include "plugin/caching/cache_file.hpp"
 #include "plugin/caching/epub_cache.hpp"
 
-#include <QCryptographicHash>
 #include <QFile>
 #include <algorithm>
 #include <array>
@@ -12,6 +11,9 @@
 #include <cmath>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#define XXH_INLINE_ALL
+#include <xxhash/xxhash.h>
 
 namespace Mu::Plugin::Caching::PDF {
 namespace {
@@ -41,9 +43,10 @@ QString tocCachePath(int sourceFd)
     struct stat before { }, after { };
     if (::fstat(sourceFd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size < 0)
         return { };
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    hash.addData(QByteArrayView("pdf-generated-toc-v8"));
-    hash.addData(QByteArrayView("\0", 1));
+    XXH3_state_t hash;
+    XXH3_128bits_reset(&hash);
+    constexpr char domain[] = "pdf-generated-toc-v9";
+    XXH3_128bits_update(&hash, domain, sizeof(domain));
     std::array<char, 65536> buffer;
     off_t offset = 0;
     while (offset < before.st_size) {
@@ -53,15 +56,17 @@ QString tocCachePath(int sourceFd)
             continue;
         if (bytes <= 0)
             return { };
-        hash.addData(QByteArrayView(buffer.data(), bytes));
+        XXH3_128bits_update(&hash, buffer.data(), static_cast<std::size_t>(bytes));
         offset += bytes;
     }
     if (::fstat(sourceFd, &after) != 0 || before.st_size != after.st_size
         || before.st_mtim.tv_sec != after.st_mtim.tv_sec || before.st_mtim.tv_nsec != after.st_mtim.tv_nsec
         || before.st_ctim.tv_sec != after.st_ctim.tv_sec || before.st_ctim.tv_nsec != after.st_ctim.tv_nsec)
         return { };
-    return directory(QStringLiteral("pdf_toc")) + QLatin1Char('/') + QString::fromLatin1(hash.result().toHex())
-        + QStringLiteral(".bin");
+    XXH128_canonical_t digest;
+    XXH128_canonicalFromHash(&digest, XXH3_128bits_digest(&hash));
+    const auto hex = QByteArray(reinterpret_cast<const char*>(digest.digest), sizeof(digest.digest)).toHex();
+    return directory(QStringLiteral("pdf_toc")) + QLatin1Char('/') + QString::fromLatin1(hex) + QStringLiteral(".bin");
 }
 
 std::optional<std::vector<Model::OutlineNode>> loadToc(const QString& cachePath, int pageCount)

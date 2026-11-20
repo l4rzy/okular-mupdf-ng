@@ -99,7 +99,7 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %endif
 
 %files -f okular_mupdfng.lang
-%license COPYING thirdparty/mupdf-COPYING thirdparty/allura/OFL.txt
+%license COPYING thirdparty/mupdf-COPYING thirdparty/allura/OFL.txt thirdparty/xxhash/xxHash-LICENSE
 %doc README.md INSTALL.md MATURITY.md
 %{_bindir}/mupdfng-cli
 %dir %{_libdir}/okular-mupdf-ng
