@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/document_fingerprint.hpp"
 #include "engine/mupdf_helpers.hpp"
 #include "engine/pdf/document.hpp"
 
@@ -142,19 +143,11 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
     }
 
     const bool wantHash = wanted("hash");
-    fz_sha256 hash { };
-    constexpr unsigned char separator = 0;
-
+    DocumentFingerprint hash;
     // Hash the same canonical sequence regardless of which metadata keys the
     // caller requests; filtering changes the response, not the document hash.
-    if (wantHash) {
-        fz_sha256_init(&hash);
-        const std::string pageCount = std::to_string(m_pageCount);
-        constexpr std::string_view pageCountKey = "pageCount:";
-        fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(pageCountKey.data()), pageCountKey.size());
-        fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(pageCount.data()), pageCount.size());
-        fz_sha256_update(&hash, &separator, 1);
-    }
+    if (wantHash)
+        hash.addMetadataField("pageCount", std::to_string(m_pageCount));
 
     for (const auto& [name, mupdfKey] : knownKeys) {
         if (!wantHash && !wanted(name))
@@ -166,12 +159,8 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
         if (!found)
             continue;
 
-        if (wantHash) {
-            const std::string field = std::string(name) + ":";
-            fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(field.data()), field.size());
-            fz_sha256_update(&hash, reinterpret_cast<const unsigned char*>(value.data()), value.size());
-            fz_sha256_update(&hash, &separator, 1);
-        }
+        if (wantHash)
+            hash.addMetadataField(name, value);
         if (!wanted(name))
             continue;
 
@@ -219,20 +208,8 @@ DocumentMetadata PdfDocument::metadata(const std::vector<std::string>& keys, std
         result.values.emplace("signatureCount", std::to_string(signatureCount));
     }
 
-    // Finalize hexadecimal metadata digest after all fallible MuPDF lookups
-    // have completed, so C++ string/map lifetimes are ordinary stack lifetimes.
-    if (wantHash) {
-        std::array<unsigned char, 32> digest { };
-        fz_sha256_final(&hash, digest.data());
-        constexpr char hex[] = "0123456789abcdef";
-        std::string value;
-        value.reserve(digest.size() * 2);
-        for (const unsigned char byte : digest) {
-            value.push_back(hex[byte >> 4]);
-            value.push_back(hex[byte & 0x0f]);
-        }
-        result.values.emplace("hash", std::move(value));
-    }
+    if (wantHash)
+        result.values.emplace("hash", hash.hexDigest());
 
     return result;
 }

@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "engine/document_fingerprint.hpp"
 #include "engine/xps/document.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <string_view>
 #include <unistd.h>
 
 namespace Mu::Worker::Engine {
@@ -31,9 +33,8 @@ DocumentMetadata XpsDocument::metadata(const std::vector<std::string>& keys, std
         if (!m_hash) {
             // Metadata hashes collide for XPS files with the same page count.
             // Hash the bytes without disturbing MuPDF's shared stream offset.
-            fz_sha256 hash { };
-            fz_sha256_init(&hash);
-            std::array<unsigned char, Constant::DigestStreamingChunkBytes> buffer;
+            DocumentFingerprint hash;
+            std::array<char, Constant::DigestStreamingChunkBytes> buffer;
             off_t offset = 0;
             for (;;) {
                 const auto bytes = ::pread(::fileno(m_input), buffer.data(), buffer.size(), offset);
@@ -45,19 +46,10 @@ DocumentMetadata XpsDocument::metadata(const std::vector<std::string>& keys, std
                 }
                 if (!bytes)
                     break;
-                fz_sha256_update(&hash, buffer.data(), static_cast<std::size_t>(bytes));
+                hash.addData(std::string_view(buffer.data(), static_cast<std::size_t>(bytes)));
                 offset += bytes;
             }
-            std::array<unsigned char, 32> digest { };
-            fz_sha256_final(&hash, digest.data());
-            constexpr char hex[] = "0123456789abcdef";
-            std::string value;
-            value.reserve(digest.size() * 2);
-            for (const auto byte : digest) {
-                value.push_back(hex[byte >> 4]);
-                value.push_back(hex[byte & 0x0f]);
-            }
-            m_hash = std::move(value);
+            m_hash = hash.hexDigest();
         }
         result.values.emplace("hash", *m_hash);
     }

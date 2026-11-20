@@ -645,7 +645,9 @@ private slots:
         const auto metadata = m_client.getDocumentInfo();
         QCOMPARE(metadata.pageCount, pages.size());
         QVERIFY(metadata.values.contains("hash"));
-        QCOMPARE(metadata.values.at("hash").size(), std::size_t(64));
+        QCOMPARE(metadata.values.at("hash").size(), std::size_t(32));
+        const auto filtered = m_client.getDocumentInfo({ QStringLiteral("title"), QStringLiteral("hash") });
+        QCOMPARE(filtered.values.at("hash"), metadata.values.at("hash"));
         // The worker binary reports its MuPDF version via the ping handshake.
         QCOMPARE(m_client.engineVersion(), std::string(FZ_VERSION));
         QCOMPARE(m_client.usesSystemMuPdf(), bool(TEST_SYSTEM_MUPDF));

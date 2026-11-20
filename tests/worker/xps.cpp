@@ -6,7 +6,6 @@
 #include "plugin/util/document_type.hpp"
 #include "plugin/worker_client.hpp"
 
-#include <QCryptographicHash>
 #include <QFile>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -17,6 +16,7 @@
 #include <fcntl.h>
 #include <limits>
 #include <unistd.h>
+#include <utility>
 
 using namespace Mu;
 
@@ -447,8 +447,10 @@ private slots:
         QFETCH(bool, fromData);
         Plugin::WorkerClient client;
         QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
-        std::string previous;
-        for (const auto* name : { "text-links.xps", "text-links.oxps", "text-links.xps" }) {
+        // Reference XXH3-128 digests of the fixtures, which span more than one read.
+        constexpr auto xps = std::pair { "text-links.xps", "6ae53e0f3ac57373552381c32bc96cba" };
+        constexpr auto oxps = std::pair { "text-links.oxps", "29cedbb9bd6e90568c5d21b109ec0bd7" };
+        for (const auto& [name, expected] : { xps, oxps, xps }) {
             const auto path = QStringLiteral(TEST_XPS_DIR "/") + QString::fromLatin1(name);
             QFile file(path);
             QVERIFY(file.open(QIODevice::ReadOnly));
@@ -460,10 +462,7 @@ private slots:
             const auto hashOnly = client.getDocumentInfo({ QStringLiteral("hash") });
             QCOMPARE(hashOnly.values.size(), std::size_t(1));
             const auto hash = hashOnly.values.at("hash");
-            QCOMPARE(hash, QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex().toStdString());
-            if (!previous.empty())
-                QVERIFY(hash != previous);
-            previous = hash;
+            QCOMPARE(hash, std::string(expected));
             QCOMPARE(client.getDocumentInfo().values.at("hash"), hash);
             const auto formatOnly = client.getDocumentInfo({ QStringLiteral("format") });
             QCOMPARE(formatOnly.values.size(), std::size_t(1));

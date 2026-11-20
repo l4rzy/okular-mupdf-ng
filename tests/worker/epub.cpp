@@ -3431,7 +3431,7 @@ private slots:
         const auto allMeta = doc.metadata({ }, &error);
         QVERIFY2(error.empty(), error.c_str());
         QVERIFY(allMeta.values.find("hash") != allMeta.values.end());
-        QVERIFY(!allMeta.values.at("hash").empty());
+        QCOMPARE(allMeta.values.at("hash").size(), std::size_t(32));
 
         // Filtered metadata query only returns requested keys
         const auto filteredMeta = doc.metadata({ "title" }, &error);
@@ -3446,6 +3446,10 @@ private slots:
         QVERIFY2(error.empty(), error.c_str());
         QCOMPARE(hashOnlyMeta.values.size(), size_t(1));
         QCOMPARE(hashOnlyMeta.values.at("hash"), allMeta.values.at("hash"));
+
+        const auto titleAndHash = doc.metadata({ "title", "hash" }, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(titleAndHash.values.at("hash"), allMeta.values.at("hash"));
     }
 
     void testExportPdfPreparationExceptionClosesStream_data()
