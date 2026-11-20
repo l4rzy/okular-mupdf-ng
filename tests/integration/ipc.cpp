@@ -39,6 +39,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #ifndef MU_ENABLE_WORKER_BWRAP
 #include <sys/wait.h>
@@ -1186,15 +1187,29 @@ private slots:
         QVERIFY(m_client.close());
     }
 
+    void epubOutlineCacheRoundTrip_data()
+    {
+        QTest::addColumn<bool>("replaceAccelerator");
+        QTest::newRow("identical-accelerator") << false;
+        QTest::newRow("regenerated-accelerator") << true;
+    }
+
     void epubOutlineCacheRoundTrip()
     {
+        QFETCH(bool, replaceAccelerator);
+        using namespace Mu::Model;
+        using Cache = Mu::Plugin::Caching::EPUB::Cache;
+        const auto cachePath = Cache::cacheFilePath(m_epub, DocumentSettings { });
+        QVERIFY(!cachePath.isEmpty());
+        QFile::remove(cachePath);
+
         QList<::Mu::Plugin::WorkerClient::PageInfo> pages;
-        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        QCOMPARE(m_client.open(m_epub, { }, pages, DocumentType::Epub), OpenStatus::Success);
         const auto first = m_client.synopsis();
         QVERIFY(first);
         QVERIFY(!first->empty());
 
-        const auto cached = ::Mu::Plugin::Caching::EPUB::Cache::load(m_epub, ::Mu::Model::DocumentSettings { });
+        const auto cached = Cache::loadAt(cachePath);
         QVERIFY(cached);
         QVERIFY(cached->accelerator);
         QVERIFY(cached->outline);
@@ -1202,7 +1217,21 @@ private slots:
         QCOMPARE(cached->outline->front().title, first->front().title);
         QVERIFY(m_client.close());
 
-        QCOMPARE(m_client.open(m_epub, { }, pages, ::Mu::Model::DocumentType::Epub), ::Mu::Model::OpenStatus::Success);
+        if (replaceAccelerator)
+            QVERIFY(Cache::saveAcceleratorAt(cachePath, QByteArrayLiteral("unrecognized accelerator")));
+        // Pin the old inode to distinguish an atomic rewrite of identical bytes from a cache hit.
+        QFile previous(cachePath);
+        QVERIFY(previous.open(QIODevice::ReadOnly));
+        struct stat before { }, after { };
+        QCOMPARE(::fstat(previous.handle(), &before), 0);
+
+        QCOMPARE(m_client.open(m_epub, { }, pages, DocumentType::Epub), OpenStatus::Success);
+        QCOMPARE(::stat(QFile::encodeName(cachePath).constData(), &after), 0);
+        QCOMPARE(after.st_ino != before.st_ino, replaceAccelerator);
+        const auto current = Cache::loadAt(cachePath);
+        QVERIFY(current && current->accelerator);
+        QCOMPARE(*current->accelerator, *cached->accelerator);
+
         const auto second = m_client.synopsis();
         QVERIFY(second);
         QCOMPARE(second->size(), first->size());

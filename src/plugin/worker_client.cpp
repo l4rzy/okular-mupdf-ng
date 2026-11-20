@@ -149,7 +149,7 @@ OpenStatus WorkerClient::open(const QString& path, const QString& password, QLis
                 m_epubCache = EpubCacheSession {
                     path, cachePath, Caching::EPUB::Cache::layoutKey(m_settings), transport->documentEpoch()
                 };
-                if (!produced.empty()) {
+                if (!produced.empty() && produced != accelerator) {
                     const QByteArray bytes(reinterpret_cast<const char*>(produced.data()),
                                            static_cast<qsizetype>(produced.size()));
                     (void)Caching::EPUB::Cache::saveAcceleratorAt(cachePath, bytes);
