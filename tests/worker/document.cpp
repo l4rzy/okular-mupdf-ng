@@ -1289,6 +1289,65 @@ private slots:
             QVERIFY2(error.empty(), error.c_str());
     }
 
+    void unannotatedPageGeometry_data()
+    {
+        QTest::addColumn<QByteArray>("annotations");
+        QTest::addColumn<bool>("loadsPage");
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<int>("fields");
+        QTest::addColumn<int>("links");
+        QTest::newRow("no-annots-entry") << QByteArray() << false << 0 << 0 << 0;
+        QTest::newRow("empty-annots-array") << QByteArray("/Annots []") << false << 0 << 0 << 0;
+        QTest::newRow("malformed-annots") << QByteArray("/Annots 42") << true << 0 << 0 << 0;
+        QTest::newRow("note") << QByteArray("/Annots [4 0 R]") << true << 1 << 0 << 0;
+        QTest::newRow("widget") << QByteArray("/Annots [5 0 R]") << true << 0 << 1 << 0;
+        QTest::newRow("link") << QByteArray("/Annots [6 0 R]") << true << 0 << 0 << 1;
+    }
+
+    void unannotatedPageGeometry()
+    {
+        QFETCH(QByteArray, annotations);
+        QFETCH(bool, loadsPage);
+        QFETCH(int, notes);
+        QFETCH(int, fields);
+        QFETCH(int, links);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("page-geometry.pdf");
+        QVERIFY(writePdfObjects(
+            path,
+            { "<< /Type /Catalog /Pages 2 0 R /PageLabels << /Nums [0 << /S /D /P (Sheet-) /St 7 >>] >> "
+              "/AcroForm << /Fields [5 0 R] >> >>",
+              "<< /Type /Pages /Count 1 /Kids [3 0 R] /MediaBox [0 0 160 120] /CropBox [20 10 140 110] /Rotate 90 >>",
+              "<< /Type /Page /Parent 2 0 R /UserUnit 2 " + annotations + " >>",
+              "<< /Type /Annot /Subtype /Text /Rect [40 40 70 60] /Contents (Note) >>",
+              "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Field) /Rect [40 40 70 60] /P 3 0 R >>",
+              "<< /Type /Annot /Subtype /Link /Rect [40 40 70 60] /A << /S /URI /URI (https://example.test/) >> >>" }));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        ::Mu::Worker::Engine::PdfDocument document;
+        std::string error;
+        QVERIFY2(document.openFd(::dup(file.handle()), "page-geometry.pdf", &error), error.c_str());
+        QVERIFY(!document.isPageCached(0));
+
+        const auto details = document.pageDetails(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(document.isPageCached(0), loadsPage);
+        QCOMPARE(details.annotations.size(), static_cast<std::size_t>(notes));
+        QCOMPARE(details.formFields.size(), static_cast<std::size_t>(fields));
+        QCOMPARE(details.links.size(), static_cast<std::size_t>(links));
+
+        const auto expected = document.pageGeometry(0, &error);
+        QVERIFY2(error.empty(), error.c_str());
+        QCOMPARE(expected.widthPoints, 200.0);
+        QCOMPARE(expected.heightPoints, 240.0);
+        QCOMPARE(expected.label, std::string("Sheet-7"));
+        QCOMPARE(details.geometry.widthPoints, expected.widthPoints);
+        QCOMPARE(details.geometry.heightPoints, expected.heightPoints);
+        QCOMPARE(details.geometry.duration, expected.duration);
+        QCOMPARE(details.geometry.label, expected.label);
+    }
+
     void aggregateMetadataByteLimit_data()
     {
         QTest::addColumn<int>("kind");

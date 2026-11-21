@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -23,6 +25,43 @@ namespace Mu::Worker::Engine {
 using namespace ::Mu::Model;
 
 namespace {
+
+PageGeometry geometryFromBounds(const fz_rect& bounds, const char* label)
+{
+    return { bounds.x1 - bounds.x0, bounds.y1 - bounds.y0, -1.0, label };
+}
+
+std::optional<PageGeometry> readUnannotatedPageGeometry(fz_context* context, fz_document* document, int page)
+{
+    fz_rect bounds { };
+    char label[64] { };
+    bool geometryRead = false;
+    fz_try(context)
+    {
+        auto* pdf = pdf_specifics(context, document);
+        auto* object = pdf ? pdf_lookup_page_obj(context, pdf, page) : nullptr;
+        if (pdf_is_dict(context, object)) {
+            auto* annotations = pdf_dict_get(context, object, PDF_NAME(Annots));
+            if (!annotations || (pdf_is_array(context, annotations) && pdf_array_len(context, annotations) == 0)) {
+                // Widgets and links also live in Annots. With none present,
+                // the same crop transform and label APIs work without a page handle.
+                fz_matrix transform;
+                pdf_page_obj_transform(context, object, &bounds, &transform);
+                bounds = fz_transform_rect(bounds, transform);
+                pdf_page_label(context, pdf, page, label, sizeof(label));
+                geometryRead = true;
+            }
+        }
+    }
+    fz_catch(context)
+    {
+        fz_ignore_error(context);
+        return std::nullopt;
+    }
+    if (!geometryRead)
+        return std::nullopt;
+    return geometryFromBounds(bounds, label);
+}
 
 /// Determines whether a destination type supplies an X or Y target coordinate.
 bool hasDestinationCoordinate(fz_link_dest_type type, bool x)
@@ -107,7 +146,7 @@ PageGeometry PdfDocument::geometryFromPage(fz_page* page, const fz_rect& bounds)
     char label[64] { };
     if (page)
         fz_page_label(m_context, page, label, sizeof(label));
-    return { bounds.x1 - bounds.x0, bounds.y1 - bounds.y0, -1.0, label };
+    return geometryFromBounds(bounds, label);
 }
 
 // =============================================================================
@@ -298,11 +337,19 @@ PdfDocument::extractPageLinks(fz_page* nativePage, const fz_rect& bounds, std::s
 DocumentBase::PageDetails
 PdfDocument::pageDetails(int page, std::string* error, bool includeLinks, ExtractionBudgets* budgets) const
 {
+    PageDetails result;
+    // A loaded page can carry live state, so prefer it over its dictionary.
+    if (m_document && !m_locked && page >= 0 && page < m_pageCount && !m_pageCache.contains(page)) {
+        if (auto geometry = readUnannotatedPageGeometry(m_context, m_document, page)) {
+            result.geometry = std::move(*geometry);
+            return result;
+        }
+    }
+
     fz_page* nativePage = loadPage(page, error);
     if (!nativePage)
         return { };
 
-    PageDetails result;
     ExtractionBudgets pageBudgets;
     ExtractionBudgets& budget = budgets ? *budgets : pageBudgets;
     std::string extractionError;
