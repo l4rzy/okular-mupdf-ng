@@ -16,6 +16,7 @@ fz_device* newThemeDevice(fz_context* context,
                           fz_irect bounds,
                           const fz_cookie* cookie,
                           Model::DocumentTheme theme,
-                          bool recolorVectors = true);
+                          bool recolorVectors = true,
+                          Model::ThemeCustomization custom = { });
 
 } // namespace Mu::Worker::Engine

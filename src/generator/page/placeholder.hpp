@@ -16,7 +16,7 @@ namespace Mu::Generator::Page {
 // All methods run on the generator's GUI thread, including partialImage().
 class Placeholder final : public Okular::DocumentObserver {
 public:
-    void setTheme(Model::DocumentTheme theme);
+    void setTheme(Model::DocumentTheme theme, std::uint32_t customBackground = 0x202124);
     void seed(Okular::Page& page);
     /// Restores missing/rotated previews and removes late previews after reset.
     void refresh(Okular::Page& page);

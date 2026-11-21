@@ -111,9 +111,11 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
         }
 
         const auto theme = m_settings.documentTheme;
+        const auto& custom = m_settings.activeCustomTheme;
         const bool inspectPage = shouldInspectThemePage(theme);
-        const auto pageTheme =
-            inspectPage ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie) : ThemePageInfo { };
+        const auto pageTheme = inspectPage
+            ? inspectThemePage(m_context, nativePage, bounds, theme, request.cookie, nullptr, custom)
+            : ThemePageInfo { };
         const auto themePlan = planThemeRendering(m_settings, pageTheme);
         const auto paperColor = themePlan.paperColor;
         float paper[3] = { static_cast<float>((paperColor >> 16) & 0xFF) / 255.0f,
@@ -132,7 +134,8 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
                                           bbox,
                                           request.cookie,
                                           theme,
-                                          themePlan.recolorVectors);
+                                          themePlan.recolorVectors,
+                                          custom);
             fz_drop_device(m_context, device);
             device = themed;
         }
@@ -145,7 +148,7 @@ bool PdfDocument::renderToBuffer(const RenderRequest& request,
 
         fz_close_device(m_context, device);
         if (!themePlan.useDevice)
-            applyDocumentTheme(m_context, pixmap, theme, request.cookie);
+            applyDocumentTheme(m_context, pixmap, theme, request.cookie, custom);
 
         // Blit sub-tile region into the destination frame buffer with specified row stride
         if (tiled || dstStride != minRowBytes) {

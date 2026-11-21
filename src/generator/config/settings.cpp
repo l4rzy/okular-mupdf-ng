@@ -3,6 +3,8 @@
 
 #include "generator/config/settings.hpp"
 
+#include <KConfig>
+#include <KConfigGroup>
 #include <QDir>
 
 #include <algorithm>
@@ -16,6 +18,34 @@
 namespace Mu::Generator::Config {
 
 namespace {
+
+Model::ThemeCustomization readCustomTheme(const KConfigGroup& group)
+{
+    Model::ThemeCustomization theme;
+    const auto readRgb = [&group](const QString& key, std::uint32_t fallback) {
+        const QString value = group.readEntry(key, QString());
+        bool valid = false;
+        const auto rgb = value.toUInt(&valid, 16);
+        const bool hex = std::all_of(value.cbegin(), value.cend(), [](QChar ch) {
+            const auto c = ch.unicode();
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        });
+        return valid && value.size() == 6 && hex ? rgb : fallback;
+    };
+    const auto readByte = [&group](const char* key, std::uint8_t fallback, int minimum, int maximum) {
+        bool valid = false;
+        const int value = group.readEntry(key, QString()).toInt(&valid);
+        return valid && value >= minimum && value <= maximum ? static_cast<std::uint8_t>(value) : fallback;
+    };
+    theme.backgroundRgb = readRgb(QStringLiteral("Background"), theme.backgroundRgb);
+    theme.foregroundRgb = readRgb(QStringLiteral("Foreground"), theme.foregroundRgb);
+    theme.pageDarknessThreshold = readByte("PageDarknessThreshold", theme.pageDarknessThreshold, 0, 255);
+    theme.imageDarknessThreshold = readByte("ImageDarknessThreshold", theme.imageDarknessThreshold, 0, 255);
+    theme.darkCoveragePercent = readByte("DarkCoveragePercent", theme.darkCoveragePercent, 1, 99);
+    theme.imageDimmingPercent = readByte("ImageDimmingPercent", theme.imageDimmingPercent, 0, 100);
+    theme.vectorBlendPercent = readByte("VectorBlendPercent", theme.vectorBlendPercent, 0, 100);
+    return theme;
+}
 
 // =============================================================================
 // Configuration Value Normalization
@@ -119,6 +149,32 @@ int epubPageSizeForConfig(int value) noexcept
 
 } // namespace
 
+bool hasCustomTheme(int index)
+{
+    if (index < 1 || index > 2)
+        return false;
+    const KConfig config(QStringLiteral("okular-mupdf-ng/themerc"), KConfig::SimpleConfig);
+    return config.hasGroup(QStringLiteral("Custom%1").arg(index));
+}
+
+QString customThemeName(int index)
+{
+    if (index < 1 || index > 2)
+        return { };
+    const KConfig config(QStringLiteral("okular-mupdf-ng/themerc"), KConfig::SimpleConfig);
+    const QString fallback = QStringLiteral("Custom %1").arg(index);
+    const QString name = config.group(QStringLiteral("Custom%1").arg(index)).readEntry("Name", fallback).trimmed();
+    return name.isEmpty() ? fallback : name;
+}
+
+Model::DocumentTheme effectiveDocumentTheme(Model::DocumentTheme theme, bool custom1Available, bool custom2Available)
+{
+    if ((theme == Model::DocumentTheme::Custom1 && !custom1Available)
+        || (theme == Model::DocumentTheme::Custom2 && !custom2Available))
+        return Model::DocumentTheme::Default;
+    return theme;
+}
+
 // =============================================================================
 // Runtime Settings Snapshots
 // =============================================================================
@@ -188,6 +244,7 @@ EpubSettings readEpubSettings()
 
 WorkerSettings readWorkerSettings()
 {
+    const KConfig themes(QStringLiteral("okular-mupdf-ng/themerc"), KConfig::SimpleConfig);
     // One reader keeps the session-scope pair coherent: rendering values are
     // normalized into worker-facing units; EPUB values come from
     // readEpubSettings() (page size in model order, CSS sanitized).
@@ -199,7 +256,11 @@ WorkerSettings readWorkerSettings()
           memoryCacheBytesForConfig(MuPDFNGSettings::memoryLimit()),
           idleTrimAggressivenessForConfig(MuPDFNGSettings::idleTrimLevel()),
           MuPDFNGSettings::overprintSimulation(),
-          static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()) },
+          effectiveDocumentTheme(static_cast<Model::DocumentTheme>(MuPDFNGSettings::documentTheme()),
+                                 themes.hasGroup(QStringLiteral("Custom1")),
+                                 themes.hasGroup(QStringLiteral("Custom2"))),
+          readCustomTheme(themes.group(QStringLiteral("Custom1"))),
+          readCustomTheme(themes.group(QStringLiteral("Custom2"))) },
         readEpubSettings(),
     };
 #ifdef MU_WORKER_ENABLE_FORM_JAVASCRIPT

@@ -196,11 +196,17 @@ void Main::showDocumentSettings()
     auto* themeForm = new QVBoxLayout(themeGroup);
     auto* theme = new QComboBox(themeGroup);
     theme->setObjectName(QStringLiteral("documentTheme"));
-    const QStringList themes { i18n("Default"), i18n("Twilight"), i18n("Dusk"), i18n("Dark") };
     theme->addItem(i18n("Use Global"), -1);
-    for (int i = 0; i < themes.size(); ++i)
-        theme->addItem(themes.at(i), i);
-    theme->setCurrentIndex(m_document.settings.theme ? static_cast<int>(*m_document.settings.theme) + 1 : 0);
+    theme->addItem(i18n("Default"), static_cast<int>(Model::DocumentTheme::Default));
+    theme->addItem(i18n("Twilight"), static_cast<int>(Model::DocumentTheme::Twilight));
+    theme->addItem(i18n("Dusk"), static_cast<int>(Model::DocumentTheme::Dusk));
+    theme->addItem(i18n("Dark"), static_cast<int>(Model::DocumentTheme::Dark));
+    if (Config::hasCustomTheme(1))
+        theme->addItem(Config::customThemeName(1), static_cast<int>(Model::DocumentTheme::Custom1));
+    if (Config::hasCustomTheme(2))
+        theme->addItem(Config::customThemeName(2), static_cast<int>(Model::DocumentTheme::Custom2));
+    const int selectedTheme = m_document.settings.theme ? static_cast<int>(*m_document.settings.theme) : -1;
+    theme->setCurrentIndex(theme->findData(selectedTheme));
     addSettingRow(themeForm, i18n("Theme"), theme);
     main->addWidget(themeGroup);
 

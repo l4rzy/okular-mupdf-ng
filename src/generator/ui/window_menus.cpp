@@ -17,6 +17,8 @@
 #include <QTimer>
 #include <okular/interfaces/viewerinterface.h>
 
+#include <algorithm>
+
 namespace Mu::Generator {
 
 class WindowMenus final : public QObject, public KXMLGUIClient {
@@ -80,6 +82,11 @@ public:
                     continue;
                 auto* menu = actionCollection()->action(source->objectName())->menu();
                 for (QAction* child : source->menu()->actions()) {
+                    if (child->isSeparator()) {
+                        auto* separator = menu->addSeparator();
+                        separator->setVisible(child->isVisible());
+                        continue;
+                    }
                     auto* action = actionCollection()->action(child->objectName());
                     if (!action) {
                         action = new QAction(child->text(), this);
@@ -158,6 +165,18 @@ private:
                 action->setChecked(source->isChecked());
             } else
                 action->setEnabled(false);
+        }
+        for (QAction* action : actionCollection()->actions()) {
+            const auto* source = collection ? collection->action(action->objectName()) : nullptr;
+            if (!source || !source->menu() || !action->menu())
+                continue;
+            const auto sourceChildren = source->menu()->actions();
+            const auto targetChildren = action->menu()->actions();
+            const auto count = std::min(sourceChildren.size(), targetChildren.size());
+            for (qsizetype i = 0; i < count; ++i) {
+                if (sourceChildren.at(i)->isSeparator() && targetChildren.at(i)->isSeparator())
+                    targetChildren.at(i)->setVisible(sourceChildren.at(i)->isVisible());
+            }
         }
         auto* mode = actionCollection()->action(QStringLiteral("mupdf_ocr_off"));
         for (QAction* action : m_unavailable)

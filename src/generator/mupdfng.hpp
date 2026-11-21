@@ -43,6 +43,7 @@
 #include "plugin/worker_client.hpp"
 
 class QActionGroup;
+class QAction;
 
 namespace Mu::Generator {
 
@@ -255,6 +256,7 @@ private:
     std::unique_ptr<MenuRegistration> m_menuRegistration;
     QActionGroup* m_ocrActions = nullptr;
     QActionGroup* m_themeActions = nullptr;
+    QAction* m_customThemeSeparator = nullptr;
     QActionGroup* m_ocrUnavailableActions = nullptr;
     bool m_observingVisiblePages = false;
 

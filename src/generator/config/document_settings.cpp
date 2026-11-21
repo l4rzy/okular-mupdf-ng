@@ -42,8 +42,10 @@ DocumentSettings readDocumentSettings(const QString& key)
     const KConfig config(QString::fromLatin1(SettingsFile), KConfig::SimpleConfig);
     const KConfigGroup group(&config, key);
     const int theme = group.readEntry("Theme", -1);
-    if (theme >= 0 && theme <= static_cast<int>(Model::DocumentTheme::Dark))
-        settings.theme = static_cast<Model::DocumentTheme>(theme);
+    if (theme >= 0 && theme <= static_cast<int>(Model::DocumentTheme::Custom2)) {
+        settings.theme =
+            effectiveDocumentTheme(static_cast<Model::DocumentTheme>(theme), hasCustomTheme(1), hasCustomTheme(2));
+    }
     if (group.hasKey("FontSize")) {
         EpubSettings layout;
         layout.fontSize = group.readEntry("FontSize", layout.fontSize);

@@ -423,7 +423,8 @@ private slots:
             settings.interpolateImages = false;
             settings.memoryCacheBytes = 128ULL * 1024ULL * 1024ULL;
             settings.idleTrimAggressiveness = Model::IdleTrimLevel::Aggressive;
-            settings.documentTheme = Model::DocumentTheme::Dark;
+            settings.documentTheme = Model::DocumentTheme::Custom1;
+            settings.activeCustomTheme = { 0x112233, 0xDDEEFF, 111, 177, 62, 73, 28 };
             settings.epub.fontSize = 17;
             settings.epub.lineSpacing = Model::EpubLineSpacing::Sparse;
             settings.epub.ignoreBuiltinCss = true;
@@ -438,7 +439,15 @@ private slots:
             QVERIFY(::Mu::IPC::ZppCodec::decode(*encoded, &decoded, &error));
             const auto& output = std::get<Model::SettingsRequest>(decoded.payload).settings;
             QCOMPARE(output.graphicsAntialiasing, 4);
-            QCOMPARE(output.documentTheme, Model::DocumentTheme::Dark);
+            QCOMPARE(output.documentTheme, Model::DocumentTheme::Custom1);
+            QCOMPARE(output.activeCustomTheme.backgroundRgb, settings.activeCustomTheme.backgroundRgb);
+            QCOMPARE(output.activeCustomTheme.foregroundRgb, settings.activeCustomTheme.foregroundRgb);
+            QCOMPARE(output.activeCustomTheme.pageDarknessThreshold, settings.activeCustomTheme.pageDarknessThreshold);
+            QCOMPARE(output.activeCustomTheme.imageDarknessThreshold,
+                     settings.activeCustomTheme.imageDarknessThreshold);
+            QCOMPARE(output.activeCustomTheme.darkCoveragePercent, settings.activeCustomTheme.darkCoveragePercent);
+            QCOMPARE(output.activeCustomTheme.imageDimmingPercent, settings.activeCustomTheme.imageDimmingPercent);
+            QCOMPARE(output.activeCustomTheme.vectorBlendPercent, settings.activeCustomTheme.vectorBlendPercent);
             QCOMPARE(output.memoryCacheBytes, 128ULL * 1024ULL * 1024ULL);
             QCOMPARE(output.idleTrimAggressiveness, Model::IdleTrimLevel::Aggressive);
             QCOMPARE(output.epub.fontSize, 17);
@@ -1035,6 +1044,39 @@ private slots:
             QCOMPARE(reason, std::string_view("annotation extension is invalid"));
     }
 
+    void validatesCustomThemes()
+    {
+        using namespace Mu::Model;
+
+        const struct {
+            ThemeCustomization theme;
+            bool valid;
+        } cases[] {
+            { { }, true },
+            { { 0, 0xFFFFFF, 0, 255, 1, 0, 100 }, true },
+            { { 0xFFFFFF, 0, 255, 0, 99, 100, 0 }, true },
+            { { .backgroundRgb = 0x1000000 }, false },
+            { { .foregroundRgb = 0xFFFFFFFF }, false },
+            { { .darkCoveragePercent = 0 }, false },
+            { { .darkCoveragePercent = 100 }, false },
+            { { .darkCoveragePercent = 255 }, false },
+            { { .imageDimmingPercent = 101 }, false },
+            { { .imageDimmingPercent = 255 }, false },
+            { { .vectorBlendPercent = 101 }, false },
+            { { .vectorBlendPercent = 255 }, false },
+        };
+
+        for (const auto& test : cases) {
+            DocumentSettings settings;
+            settings.documentTheme = DocumentTheme::Custom1;
+            settings.activeCustomTheme = test.theme;
+            std::string_view reason;
+            QCOMPARE(isValidDocumentSettings(settings, &reason), test.valid);
+            if (!test.valid)
+                QCOMPARE(reason, std::string_view("custom document theme is invalid"));
+        }
+    }
+
     void validationHelpers()
     {
         using namespace ::Mu::Model;
@@ -1056,13 +1098,17 @@ private slots:
         QVERIFY(!isValidOcrPageRequest({ { 0 }, 0, 225, "eng" }, &reason));
 
         DocumentSettings invalidTheme;
-        invalidTheme.documentTheme = static_cast<DocumentTheme>(4);
+        invalidTheme.documentTheme = static_cast<DocumentTheme>(6);
         QVERIFY(!isValidDocumentSettings(invalidTheme, &reason));
         DocumentSettings validSettings;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
         validSettings.documentTheme = DocumentTheme::Twilight;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
         validSettings.documentTheme = DocumentTheme::Dusk;
+        QVERIFY(isValidDocumentSettings(validSettings, &reason));
+        validSettings.documentTheme = DocumentTheme::Custom1;
+        QVERIFY(isValidDocumentSettings(validSettings, &reason));
+        validSettings.documentTheme = DocumentTheme::Custom2;
         QVERIFY(isValidDocumentSettings(validSettings, &reason));
         validSettings.memoryCacheBytes = ::Mu::Limit::MaxDocumentMemoryCacheBytes + 1;
         QVERIFY(!isValidDocumentSettings(validSettings, &reason));

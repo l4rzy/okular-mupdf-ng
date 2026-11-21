@@ -125,7 +125,8 @@ bool createBlendPdf(fz_context* ctx, const QString& path, const QByteArray& blen
         resources = pdf_new_dict(ctx, document, 1);
         pdf_dict_putp_drop(ctx, resources, "ExtGState/B/BM", pdf_new_name(ctx, blend.constData()));
         pdf_dict_putp_drop(ctx, resources, "ExtGState/B/ca", pdf_new_real(ctx, alpha));
-        constexpr char commands[] = "1 g 0 0 64 64 re f q /B gs 16 16 16 16 re f Q";
+        // Leave half the paper unpainted to exercise the renderer's initial background.
+        constexpr char commands[] = "1 g 0 0 32 64 re f q /B gs 16 16 16 16 re f Q";
         contents =
             fz_new_buffer_from_copied_data(ctx, reinterpret_cast<const unsigned char*>(commands), sizeof(commands) - 1);
         if (knockout) {
@@ -195,12 +196,19 @@ private slots:
             { DocumentTheme::Dark, { }, { true, true, DarkBackground } },
             { DocumentTheme::Dark, { false, true }, { false, true, DefaultBackground } },
             { DocumentTheme::Dark, { true, true }, { true, false, DefaultBackground } },
+            { DocumentTheme::Custom1, { }, { true, true, 0xDDF4F0 } },
+            { DocumentTheme::Custom2, { }, { true, true, 0xDDF4F0 } },
+            { DocumentTheme::Custom1, { false, true }, { false, true, DefaultBackground } },
+            { DocumentTheme::Custom2, { false, true }, { false, true, DefaultBackground } },
+            { DocumentTheme::Custom1, { true, false }, { true, false, DefaultBackground } },
+            { DocumentTheme::Custom2, { true, true }, { true, false, DefaultBackground } },
         };
 
         for (const auto& test : cases) {
             Mu::Model::DocumentSettings settings;
             settings.documentTheme = test.theme;
             settings.paperColorRgb = 0x123456;
+            settings.activeCustomTheme.backgroundRgb = 0xDDF4F0;
             const auto plan = Mu::Worker::Engine::planThemeRendering(settings, test.page);
             QCOMPARE(plan.useDevice, test.expected.useDevice);
             QCOMPARE(plan.recolorVectors, test.expected.recolorVectors);
@@ -211,27 +219,29 @@ private slots:
     void dimsImageRows_data()
     {
         QTest::addColumn<int>("width");
-        QTest::newRow("empty") << 0;
-        QTest::newRow("single-pixel") << 1;
-        QTest::newRow("short-tail") << 3;
-        QTest::newRow("vector-sized") << 16;
-        QTest::newRow("all-byte-values-with-tail") << 257;
+        QTest::addColumn<int>("brightness");
+        for (const int width : { 0, 1, 3, 16, 257 })
+            for (const int brightness : { 0, 1, 37, 80, 99, 100 })
+                QTest::newRow(qPrintable(QStringLiteral("%1-pixels-%2-percent").arg(width).arg(brightness)))
+                    << width << brightness;
     }
 
     void dimsImageRows()
     {
         QFETCH(int, width);
+        QFETCH(int, brightness);
         QByteArray pixels(width * 4 + 2, char(0xAB));
         for (int i = 0; i < width * 4; ++i)
             pixels[i + 1] = static_cast<char>((i / 4 + (i % 4) * 67) % 256);
         const auto original = pixels;
         // Start unaligned and guard both ends, including the scalar tail.
-        Mu::Worker::Engine::dimImageRow(reinterpret_cast<unsigned char*>(pixels.data() + 1), width);
+        Mu::Worker::Engine::dimImageRow(
+            reinterpret_cast<unsigned char*>(pixels.data() + 1), width, unsigned(brightness));
         QCOMPARE(pixels.front(), char(0xAB));
         QCOMPARE(pixels.back(), char(0xAB));
         for (int i = 0; i < width * 4; ++i) {
             const auto value = static_cast<unsigned char>(original[i + 1]);
-            const auto expected = i % 4 == 3 ? value : (unsigned(value) * 4 + 2) / 5;
+            const auto expected = i % 4 == 3 ? value : (unsigned(value) * unsigned(brightness) + 50) / 100;
             QCOMPARE(static_cast<unsigned char>(pixels[i + 1]), expected);
         }
     }
@@ -257,6 +267,19 @@ private slots:
         QTest::newRow("dark-below-threshold") << 3 << QByteArray::fromHex("9f9f9fff") << false << true;
         QTest::newRow("dark-at-threshold") << 3 << QByteArray::fromHex("a0a0a0ff") << false << false;
         QTest::newRow("dark-luminosity-mask") << 3 << QByteArray::fromHex("ffffffff") << true << false;
+        for (const int theme : { 4, 5 }) {
+            const auto prefix = QByteArray::number(theme) + '-';
+            QTest::newRow((prefix + "below-custom-threshold").constData())
+                << theme << QByteArray::fromHex("c7c7c7ff") << false << true;
+            QTest::newRow((prefix + "at-custom-threshold").constData())
+                << theme << QByteArray::fromHex("c8c8c8ff") << false << false;
+            QTest::newRow((prefix + "transparent-dark").constData())
+                << theme << QByteArray::fromHex("40404080") << false << true;
+            QTest::newRow((prefix + "transparent-light").constData())
+                << theme << QByteArray::fromHex("80808080") << false << false;
+            QTest::newRow((prefix + "luminosity-mask").constData())
+                << theme << QByteArray::fromHex("ffffffff") << true << false;
+        }
     }
 
     void themesImages()
@@ -266,6 +289,10 @@ private slots:
         QFETCH(bool, softMask);
         QFETCH(bool, preserved);
         using namespace Mu::Worker::Engine;
+        const auto documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
+        Mu::Model::ThemeCustomization custom;
+        if (Mu::Model::ThemeColor::isCustom(documentTheme))
+            custom = { theme == 4 ? 0x241A2Eu : 0xDDF4F0u, theme == 4 ? 0xE8DDF5u : 0x163D3Au, 128, 200, 50, 37, 17 };
         PdfDocument owner;
         auto* ctx = owner.context();
         auto* source = fz_new_pixmap(ctx, fz_device_rgb(ctx), int(rgba.size() / 4), 1, nullptr, 1);
@@ -279,8 +306,7 @@ private slots:
             fz_clear_pixmap(ctx, output);
             auto* target = fz_new_draw_device(ctx, fz_identity, output);
             auto* device = themed
-                ? newThemeDevice(
-                      ctx, target, fz_identity, { 0, 0, 4, 4 }, nullptr, static_cast<Mu::Model::DocumentTheme>(theme))
+                ? newThemeDevice(ctx, target, fz_identity, { 0, 0, 4, 4 }, nullptr, documentTheme, true, custom)
                 : fz_keep_device(ctx, target);
             if (softMask) {
                 const float black = 0, grey = 0.5f;
@@ -304,11 +330,11 @@ private slots:
 
         auto expected = pixels[0];
         if (theme == int(Mu::Model::DocumentTheme::Dusk) || preserved) {
-            dimImageRow(reinterpret_cast<unsigned char*>(expected.data()), 1);
+            dimImageRow(reinterpret_cast<unsigned char*>(expected.data()), 1, custom.imageDimmingPercent);
         } else {
             auto* pixmap = fz_new_pixmap_with_data(
                 ctx, fz_device_rgb(ctx), 1, 1, nullptr, 1, 4, reinterpret_cast<unsigned char*>(expected.data()));
-            applyDocumentTheme(ctx, pixmap, Mu::Model::DocumentTheme::Dark, nullptr);
+            applyDocumentTheme(ctx, pixmap, documentTheme, nullptr, custom);
             fz_drop_pixmap(ctx, pixmap);
         }
         for (int channel = 0; channel < 3; ++channel)
@@ -912,18 +938,25 @@ private slots:
 
     void preservesDarkBlendModes_data()
     {
+        QTest::addColumn<int>("theme");
         QTest::addColumn<QByteArray>("blend");
         QTest::addColumn<float>("alpha");
         QTest::addColumn<bool>("knockout");
-        QTest::newRow("difference") << QByteArray("Difference") << 1.0f << false;
-        QTest::newRow("multiply") << QByteArray("Multiply") << 1.0f << false;
-        QTest::newRow("translucent-difference") << QByteArray("Difference") << 0.5f << false;
-        QTest::newRow("translucent-multiply") << QByteArray("Multiply") << 0.5f << false;
-        QTest::newRow("knockout") << QByteArray("Normal") << 1.0f << true;
+        for (const int theme : { 3, 4, 5 }) {
+            const auto prefix = QByteArray::number(theme) + '-';
+            QTest::newRow((prefix + "difference").constData()) << theme << QByteArray("Difference") << 1.0f << false;
+            QTest::newRow((prefix + "multiply").constData()) << theme << QByteArray("Multiply") << 1.0f << false;
+            QTest::newRow((prefix + "translucent-difference").constData())
+                << theme << QByteArray("Difference") << 0.5f << false;
+            QTest::newRow((prefix + "translucent-multiply").constData())
+                << theme << QByteArray("Multiply") << 0.5f << false;
+            QTest::newRow((prefix + "knockout").constData()) << theme << QByteArray("Normal") << 1.0f << true;
+        }
     }
 
     void preservesDarkBlendModes()
     {
+        QFETCH(int, theme);
         QFETCH(QByteArray, blend);
         QFETCH(float, alpha);
         QFETCH(bool, knockout);
@@ -932,9 +965,18 @@ private slots:
         const auto path = m_tempDir.filePath("theme-blends.pdf");
         QVERIFY(createBlendPdf(document.context(), path, blend, alpha, knockout));
         QVERIFY(openDocument(document, path));
+        auto settings = document.settings();
+        settings.documentTheme = static_cast<Mu::Model::DocumentTheme>(theme);
+        settings.activeCustomTheme.backgroundRgb = theme == 4 ? 0x241A2E : 0xDDF4F0;
+        settings.activeCustomTheme.foregroundRgb = theme == 4 ? 0xE8DDF5 : 0x163D3A;
         auto* page = fz_load_page(document.context(), document.document(), 0);
-        const auto info = inspectThemePage(
-            document.context(), page, fz_bound_page(document.context(), page), Mu::Model::DocumentTheme::Dark, nullptr);
+        const auto info = inspectThemePage(document.context(),
+                                           page,
+                                           fz_bound_page(document.context(), page),
+                                           settings.documentTheme,
+                                           nullptr,
+                                           nullptr,
+                                           settings.activeCustomTheme);
         fz_drop_page(document.context(), page);
         QVERIFY(info.needsCompositing);
         QVERIFY(!info.mostlyDark);
@@ -943,10 +985,8 @@ private slots:
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, expected.data(), stride));
         auto* pixmap = fz_new_pixmap_with_data(
             document.context(), fz_device_rgb(document.context()), width, width, nullptr, 1, stride, expected.data());
-        applyDocumentTheme(document.context(), pixmap, Mu::Model::DocumentTheme::Dark, nullptr);
+        applyDocumentTheme(document.context(), pixmap, settings.documentTheme, nullptr, settings.activeCustomTheme);
         fz_drop_pixmap(document.context(), pixmap);
-        auto settings = document.settings();
-        settings.documentTheme = Mu::Model::DocumentTheme::Dark;
         document.setSettings(settings);
         QVERIFY(document.renderToBuffer({ 0, width, width, std::nullopt }, actual.data(), stride));
         QCOMPARE(actual, expected);
@@ -1117,10 +1157,15 @@ private slots:
         std::vector<std::uint8_t> originalPrint;
         QVERIFY2(renderPrintOutput(originalPrint), error.c_str());
         const int count = document->pageCount();
-        for (const auto theme :
-             { Mu::Model::DocumentTheme::Dark, Mu::Model::DocumentTheme::Twilight, Mu::Model::DocumentTheme::Dusk }) {
+        for (const auto theme : { Mu::Model::DocumentTheme::Dark,
+                                  Mu::Model::DocumentTheme::Twilight,
+                                  Mu::Model::DocumentTheme::Dusk,
+                                  Mu::Model::DocumentTheme::Custom1,
+                                  Mu::Model::DocumentTheme::Custom2 }) {
             auto settings = document->settings();
             settings.documentTheme = theme;
+            settings.activeCustomTheme.backgroundRgb = theme == Mu::Model::DocumentTheme::Custom1 ? 0x241A2E : 0xDDF4F0;
+            settings.activeCustomTheme.foregroundRgb = theme == Mu::Model::DocumentTheme::Custom1 ? 0xE8DDF5 : 0x163D3A;
             document->setSettings(settings);
             QCOMPARE(document->pageCount(), count);
             std::vector<std::uint8_t> themed(height * stride);
