@@ -9,10 +9,10 @@
 %bcond_without tests
 
 Name:           okular-mupdf-ng
-Version:        0.6.4
+Version:        0.6.5
 Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
-License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1
+License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1 AND BSD-2-Clause
 URL:            https://github.com/l4rzy/okular-mupdf-ng
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 Source1:        https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/%{mupdf_version}/mupdf-%{mupdf_version}-source.tar.gz
@@ -111,6 +111,12 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %{_datadir}/okular-mupdf-ng/Allura-Regular.ttf
 
 %changelog
+* Fri Nov 20 2026 l4rzy <me@23ro.org> - 0.6.5-1
+- Fix text selection and reading order in tables.
+- Keep the worker running when background OCR or PDF export fails.
+- Speed up metadata loading, signature verification, and caching.
+- Rebuild existing OCR and generated PDF outline caches as needed.
+
 * Sun Nov 15 2026 l4rzy <me@23ro.org> - 0.6.4-1
 - Update to version 0.6.4.
 - Add optional Bubblewrap isolation for the worker.

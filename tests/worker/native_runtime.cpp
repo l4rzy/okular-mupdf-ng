@@ -278,14 +278,14 @@ private slots:
             FileDescriptor input(fd);
             if (page == 0)
                 throw std::bad_alloc();
-            return { Model::OcrStatus::Success, {} };
+            return { Model::OcrStatus::Success, { } };
         };
         OcrJobs jobs(1, runner, 10);
         const Model::OcrStatus expected[] = { Model::OcrStatus::Failed, Model::OcrStatus::Success };
         for (int page = 0; page < 2; ++page) {
             const int fd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
             QVERIFY(fd >= 0);
-            const auto id = jobs.submit(fd, {}, page, "eng", 225.0f);
+            const auto id = jobs.submit(fd, { }, page, "eng", 225.0f);
             QVERIFY(id);
             std::string error;
             auto deadline = MonotonicDeadline::fromMilliseconds(3000);

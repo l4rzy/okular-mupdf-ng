@@ -18,5 +18,9 @@ The bundled Allura font is copyright 2010 The Allura Project Authors
 Font License, version 1.1. Its full license is installed as
 /usr/share/doc/okular-mupdf-ng/Allura-OFL.txt.
 
+The bundled xxHash code is copyright 2012-2023 Yann Collet and is
+distributed under the BSD 2-Clause License. Its full license is installed
+as /usr/share/doc/okular-mupdf-ng/xxHash-LICENSE.
+
 Other third-party code retains its own copyright and license notices in the
 source distribution. See the corresponding files under thirdparty/.

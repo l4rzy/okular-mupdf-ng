@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Sat Nov 21 01:18:06 UTC 2026 - l4rzy <me@23ro.org>
+
+- Fix text selection and reading order in tables.
+- Keep the worker running when background OCR or PDF export fails.
+- Speed up metadata loading, signature verification, and caching.
+- Rebuild existing OCR and generated PDF outline caches as needed.
+
+-------------------------------------------------------------------
 Sun Nov 15 18:03:30 UTC 2026 - l4rzy <me@23ro.org>
 
 - Update to version 0.6.4.

@@ -4,12 +4,12 @@ pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with cmake/mupdf.version.
 _mupdfver=1.28.6
-pkgver=0.6.4
+pkgver=0.6.5
 pkgrel=1
 pkgdesc="Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, KFX, and XPS"
 arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
-license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1')
+license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1 AND BSD-2-Clause')
 # nss is required at configure time via pkg_check_modules(NSS REQUIRED); mupdf
 # provides the headers and pkg-config file for the dynamic variant; mold links
 # the two large static archives much faster than lld and is a hard requirement

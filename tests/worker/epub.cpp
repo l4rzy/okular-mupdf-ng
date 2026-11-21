@@ -3779,7 +3779,7 @@ private slots:
             const auto inputFd = input.release();
             const auto outputFd = output.release();
             const auto id =
-                jobs.submit(inputFd, outputFd, {}, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences });
+                jobs.submit(inputFd, outputFd, { }, { "pdf", ::Mu::Model::ExportProfileId::SourceWithReferences });
             QVERIFY(id);
             const auto completed = waitForExportNotifications(jobs, 1);
             QCOMPARE(completed.size(), std::size_t(1));
