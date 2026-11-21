@@ -22,8 +22,9 @@ namespace Mu::Generator {
 
 bool Main::canImportXfdf() const
 {
-    return document() && m_document.type == Model::DocumentType::Pdf && !m_okularPages.isEmpty() && workerReady()
-        && m_annotationProxy.supports(Okular::AnnotationProxy::Addition) && document()->isAllowed(Okular::AllowNotes);
+    const auto* proxy = annotationProxy();
+    return document() && !m_okularPages.isEmpty() && proxy && proxy->supports(Okular::AnnotationProxy::Addition)
+        && document()->isAllowed(Okular::AllowNotes);
 }
 
 void Main::importXfdf()

@@ -247,6 +247,33 @@ private slots:
         config->sync();
     }
 
+    void nativeSaveCapabilities_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<bool>("canSave");
+        QTest::newRow("pdf") << QStringLiteral(TEST_PDF_PATH) << true;
+        QTest::newRow("xps") << QStringLiteral(TEST_XPS_DIR "/text-links.xps") << false;
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_DIR "/sample.epub") << false;
+    }
+
+    void nativeSaveCapabilities()
+    {
+        QFETCH(QString, source);
+        QFETCH(bool, canSave);
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(source, QUrl::fromLocalFile(source), QMimeDatabase().mimeTypeForFile(source)),
+                 Okular::Document::OpenSuccess);
+        QCOMPARE(document.canSaveChanges(), canSave);
+        QCOMPARE(document.canSaveChanges(Okular::Document::SaveAnnotationsCapability), canSave);
+        if (!canSave)
+            QVERIFY(!document.canSign());
+        const QString target = m_root.filePath(QStringLiteral("native-save.pdf"));
+        QCOMPARE(document.saveChanges(target), canSave);
+        QCOMPARE(QFile::exists(target), canSave);
+        if (canSave)
+            QVERIFY(QFile::remove(target));
+    }
+
     void printsPdfWithoutPostScriptConversion_data()
     {
         QTest::addColumn<QString>("source");

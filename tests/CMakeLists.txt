@@ -312,6 +312,7 @@ target_link_libraries(test_generator_epub PRIVATE Qt6::Gui Qt6::PrintSupport Oku
 target_compile_definitions(test_generator_epub PRIVATE
     TEST_BUNDLED_MUPDF=$<NOT:$<BOOL:${USE_SYSTEM_MUPDF}>>
     TEST_EPUB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/epub"
+    TEST_XPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/xps"
     TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi"
     TEST_PDF_PATH="${CMAKE_CURRENT_SOURCE_DIR}/pdf/ocr_images.pdf"
     TEST_PLUGIN_ROOT="$<TARGET_FILE_DIR:okularGenerator_mupdfng>/.."

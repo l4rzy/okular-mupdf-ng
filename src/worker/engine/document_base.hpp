@@ -84,6 +84,8 @@ public:
 
     [[nodiscard]] virtual Model::DocumentType type() const noexcept = 0;
 
+    [[nodiscard]] virtual Model::DocumentCapabilities capabilities() const { return { }; }
+
     /// Opens a document from an inherited open file descriptor.
     /// Takes ownership of `fd` regardless of success or failure.
     [[nodiscard]] virtual bool openFd(int fd, std::string displayName, std::string* error = nullptr) = 0;

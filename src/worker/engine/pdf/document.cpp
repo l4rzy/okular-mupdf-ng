@@ -251,6 +251,15 @@ bool PdfDocument::isLocked() const noexcept
     return m_locked;
 }
 
+DocumentCapabilities PdfDocument::capabilities() const
+{
+    if (!isOpen() || isLocked())
+        return { };
+    return { .editAnnotations = true,
+             .sign = pdf_can_be_saved_incrementally(m_context, pdf_specifics(m_context, m_document)) != 0,
+             .layers = true };
+}
+
 int PdfDocument::pageCount() const noexcept
 {
     return m_pageCount;

@@ -173,6 +173,45 @@ private slots:
 
     void cleanupTestCase() { ::Mu::Plugin::Caching::clearRootForTesting(); }
 
+    void documentCapabilities_data()
+    {
+        using Mu::Model::DocumentType;
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<DocumentType>("type");
+        QTest::addColumn<bool>("fromData");
+        QTest::newRow("pdf") << m_pdf << DocumentType::Pdf << false;
+        QTest::newRow("pdf-data") << m_pdf << DocumentType::Pdf << true;
+        QTest::newRow("xps") << QStringLiteral(TEST_XPS_DIR "/text-links.xps") << DocumentType::Xps << false;
+        QTest::newRow("epub") << m_epub << DocumentType::Epub << false;
+        QTest::newRow("mobi") << QStringLiteral(TEST_MOBI_DIR "/basic-utf8.mobi") << DocumentType::Mobi << false;
+        QTest::newRow("kindle") << QStringLiteral(TEST_MOBI_DIR "/sample.azw3") << DocumentType::Kindle << false;
+    }
+
+    void documentCapabilities()
+    {
+        using namespace Mu::Model;
+        QFETCH(QString, source);
+        QFETCH(DocumentType, type);
+        QFETCH(bool, fromData);
+        QList<PageInfo> pages;
+        if (fromData) {
+            QFile file(source);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(m_client.openData(file.readAll(), { }, pages, type), OpenStatus::Success);
+        } else {
+            QCOMPARE(m_client.open(source, { }, pages, type), OpenStatus::Success);
+        }
+
+        const auto metadata = m_client.getDocumentInfo({ QStringLiteral("hash") });
+        QCOMPARE(metadata.pageCount, pages.size());
+        const auto& capabilities = metadata.capabilities;
+        const bool pdf = type == DocumentType::Pdf;
+        QCOMPARE(capabilities.saveChanges, pdf);
+        QCOMPARE(capabilities.editAnnotations, pdf);
+        QCOMPARE(capabilities.sign, pdf);
+        QCOMPARE(capabilities.layers, pdf);
+    }
+
     void workerRestartCountSurvivesManualStart_data()
     {
         QTest::addColumn<bool>("validBinary");
@@ -634,6 +673,7 @@ private slots:
         QCOMPARE(m_client.open(broken, { }, pages), ::Mu::Model::OpenStatus::Success);
         const auto metadata = m_client.getDocumentInfo({ QStringLiteral("repaired") });
         QCOMPARE(metadata.values.at("repaired"), std::string("true"));
+        QVERIFY(!metadata.capabilities.sign);
         QVERIFY(m_client.close());
     }
 

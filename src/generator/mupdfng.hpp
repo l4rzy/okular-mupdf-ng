@@ -283,6 +283,7 @@ private:
         QString settingsKey;
         Config::DocumentSettings settings;
         Model::DocumentType type = Model::DocumentType::Pdf;
+        Model::DocumentCapabilities capabilities;
         bool hasXfaForm = false;
         // Snapshot on open; changing this option does not refresh the sidebar.
         bool heuristicSynopsisEnabled = true;

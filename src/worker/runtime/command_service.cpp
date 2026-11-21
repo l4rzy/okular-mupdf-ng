@@ -1077,6 +1077,9 @@ ResponseMessage CommandService::documentInfo(const RequestMessage& r, const Meta
     if (!e.empty())
         return failure(r.id, ErrorCode::Internal, "metadata", e);
 
+    value.capabilities = m_document->capabilities();
+    value.capabilities.saveChanges =
+        findExportProfile(outputFormats(), nativePdfExportOptions(), false, value.pageCount) != nullptr;
     return success(r.id, MetadataResponse { std::move(value) });
 }
 

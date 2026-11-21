@@ -421,7 +421,7 @@ bool PdfDocument::signFd(const Model::SignRequest& request,
     }
 
     // Incremental saving is required so existing signatures or revisions are not invalidated
-    if (!pdf_can_be_saved_incrementally(m_context, pdf_specifics(m_context, m_document))) {
+    if (!capabilities().sign) {
         ::close(outputFd);
         return fail(error, "document cannot be saved incrementally");
     }

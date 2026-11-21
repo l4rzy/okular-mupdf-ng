@@ -8,6 +8,11 @@
 
 namespace Mu::Model {
 
+inline ExportOptions nativePdfExportOptions()
+{
+    return { "pdf", ExportProfileId::Native };
+}
+
 bool isValidExportOptions(const ExportOptions& options, std::string_view* reason = nullptr) noexcept;
 
 // Returns a borrowed profile only if this exact operation is supported. Empty

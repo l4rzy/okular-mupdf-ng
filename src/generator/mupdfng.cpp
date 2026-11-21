@@ -5,6 +5,7 @@
 #include "generator/mupdfng.hpp"
 #include "generator/ui/window_menus.hpp"
 #include "shared/build_info.hpp"
+#include "shared/model/export.hpp"
 #include "shared/model/theme_colors.hpp"
 
 #include <okular/core/fileprinter.h>
@@ -503,6 +504,7 @@ void Main::initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::
     // the source and the password.
     const auto info = m_worker.getDocumentInfo(
         { QStringLiteral("title"), QStringLiteral("hash"), QStringLiteral("repaired"), QStringLiteral("hasXfaForm") });
+    m_document.capabilities = info.capabilities;
     m_document.heuristicSynopsisEnabled = Config::readHeuristicSynopsisEnabled();
     m_document.generatedSynopsisNoticeShown = false;
     m_document.hasXfaForm = info.values.contains("hasXfaForm") && info.values.at("hasXfaForm") == "true";
@@ -1074,7 +1076,7 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
     }
 
     // Restore the layer state before rebuilding the UI.
-    if (m_document.type == Model::DocumentType::Pdf) {
+    if (metadata.capabilities.layers) {
         const auto layers = m_worker.layers();
         if (!layers
             || (m_layersModel
@@ -1110,6 +1112,7 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
         }
     }
     // Phase 4: publish the clean state before accepting edits again.
+    m_document.capabilities = metadata.capabilities;
     m_formsDirty = markFormChangesDirty && formValuesChanged;
     m_annotationsDirty = false;
     m_formCoordinator->setAvailable(true);
@@ -1492,7 +1495,7 @@ void Main::loadLayers()
     m_layersModel.reset();
     ++m_layerRevision;
     m_defaultLayerVisibility = true;
-    if (m_document.type != Model::DocumentType::Pdf)
+    if (!m_document.capabilities.layers)
         return;
     const auto layers = m_worker.layers();
     if (!layers) {
@@ -1702,11 +1705,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
 // Okular Generator Func: reports the supported save options.
 bool Main::supportsOption(SaveOption option) const
 {
-    if (Model::isReflowableDocument(m_document.type))
-        return false;
-    if (m_pageError.isActive())
-        return false;
-    return option == SaveChanges;
+    return option == SaveChanges && workerReady() && m_document.capabilities.saveChanges;
 }
 
 // Okular Generator Func: saves the current document through the worker.
@@ -1721,7 +1720,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
         return false;
     }
     if (workerReady()) {
-        if (m_worker.exportDocument(fileName, { "pdf", Model::ExportProfileId::Native }))
+        if (m_worker.exportDocument(fileName, Model::nativePdfExportOptions()))
             return true;
         if (errorText)
             *errorText = i18n("Failed to save PDF document.");
@@ -1739,7 +1738,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
 // Okular Generator Func: returns the annotation adapter used by Okular.
 Okular::AnnotationProxy* Main::annotationProxy() const
 {
-    if (Model::isReflowableDocument(m_document.type))
+    if (!m_document.capabilities.editAnnotations || !workerReady())
         return nullptr;
     return &m_annotationProxy;
 }
@@ -1854,6 +1853,8 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
                      ? QStringLiteral("MuPDF worker is unavailable")
                      : QStringLiteral("Strict sandbox enforcement blocks this document") };
     if (workerReady()) {
+        if (!m_document.capabilities.sign)
+            return { Okular::GenericSigningError, i18n("This document does not support signing.") };
         const Okular::NormalizedRect rect = data.boundingRectangle();
         const QString commonName = Plugin::Crypto::signingCertificateCommonName(data.certNickname());
         if (commonName.isEmpty())
@@ -1908,11 +1909,7 @@ bool Main::sign(const Okular::NewSignatureData& data, const QString& rFilename)
 // Okular Generator Func: reports that worker-backed signing is supported.
 bool Main::canSign() const
 {
-    if (Model::isReflowableDocument(m_document.type))
-        return false;
-    if (m_pageError.isActive())
-        return false;
-    return !Plugin::Crypto::signingCertificates().isEmpty();
+    return m_document.capabilities.sign && workerReady() && !Plugin::Crypto::signingCertificates().isEmpty();
 }
 
 // Okular Generator Func: returns the certificate store used for signing.

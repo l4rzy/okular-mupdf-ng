@@ -423,11 +423,20 @@ struct DocumentSettings {
     DocumentTheme documentTheme = DocumentTheme::Default;
 };
 
+/// Operations supported by the current document.
+struct DocumentCapabilities {
+    bool saveChanges = false;
+    bool editAnnotations = false;
+    bool sign = false;
+    bool layers = false;
+};
+
 /// Document metadata values and basic document identity.
 struct DocumentMetadata {
     std::map<std::string, std::string, std::less<>> values;
     std::int32_t pageCount = 0;
     std::string mimeType;
+    DocumentCapabilities capabilities { };
 };
 
 /// Hierarchical outline entry with an optional destination and children.
