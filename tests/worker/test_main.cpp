@@ -97,11 +97,12 @@ private slots:
         QTest::newRow("missing-fd-endpoint") << QStringList { "--socket", "unused" } << QByteArray("fd-socket");
         QTest::newRow("missing-option-value") << QStringList { "--socket" } << QByteArray("socket");
         QTest::newRow("unknown-option") << QStringList { "--unknown-option" } << QByteArray("unknown-option");
-#ifdef MU_ENABLE_WORKER_BWRAP
+#ifdef __linux__
         QTest::newRow("invalid-parent-pid") << QStringList { "--parent-pid", "0" } << QByteArray("parent-pid");
-#else // MU_ENABLE_WORKER_BWRAP
-        QTest::newRow("wrapper-option-disabled") << QStringList { "--parent-pid", "1" } << QByteArray("parent-pid");
-#endif // MU_ENABLE_WORKER_BWRAP
+        QTest::newRow("bwrap-without-launcher") << QStringList { "--bwrap" } << QByteArray("bwrap requires");
+        QTest::newRow("bwrap-standalone-check")
+            << QStringList { "--bwrap", "--parent-pid", "1", "--sandbox-check" } << QByteArray("bwrap requires");
+#endif // __linux__
         QTest::newRow("invalid-report-format")
             << QStringList { "--sandbox-check=xml" } << QByteArray("expected no format or '=json'");
         QTest::newRow("empty-report-format")

@@ -51,9 +51,10 @@ cxxopts::Options makeWorkerOptions()
     options.add_options()(
         "socket", "control Unix-domain socket for private plugin IPC", cxxopts::value<std::string>(), "PATH")(
         "fd-socket", "Unix-domain socket for private descriptor transfer", cxxopts::value<std::string>(), "PATH")(
-#ifdef MU_ENABLE_WORKER_BWRAP
+#ifdef __linux__
+        "bwrap", "Use namespaces supplied by the authenticated Bubblewrap launcher")(
         "parent-pid", "Expected IPC peer PID when launched through a wrapper", cxxopts::value<int>(), "PID")(
-#endif // MU_ENABLE_WORKER_BWRAP
+#endif // __linux__
         "tessdata-dir", "Tesseract data directory", cxxopts::value<std::vector<std::string>>(), "PATH")(
         "sandbox-check",
         "Activate the sandbox in this short-lived process and report its status; use --sandbox-check=json for JSON "
@@ -87,15 +88,21 @@ int main(int argc, char* argv[])
     auto options = makeWorkerOptions();
     cxxopts::ParseResult result;
     pid_t parentPid = ::getppid();
+    bool namespacesProvidedByLauncher = false;
     try {
         result = options.parse(argc, argv);
-#ifdef MU_ENABLE_WORKER_BWRAP
+#ifdef __linux__
         if (result.count("parent-pid")) {
             parentPid = result["parent-pid"].as<int>();
             if (parentPid <= 0)
                 throw cxxopts::exceptions::incorrect_argument_type("parent-pid must be positive");
         }
-#endif // MU_ENABLE_WORKER_BWRAP
+        namespacesProvidedByLauncher = result.count("bwrap") != 0;
+        if (namespacesProvidedByLauncher
+            && (MU_DISABLE_WORKER_SANDBOX || !result.count("parent-pid") || result.count("sandbox-check")))
+            throw cxxopts::exceptions::incorrect_argument_type(
+                "bwrap requires an enabled sandbox and an IPC launcher PID");
+#endif // __linux__
         if (result.count("help")) {
             std::cout << options.help() << "\n";
             std::cout << "This program is launched by the Okular plugin. It does not open document paths or render "
@@ -179,11 +186,7 @@ int main(int argc, char* argv[])
     // transferred over the FD channel; Seccomp prevents creating new filesystem
     // or network endpoints.
     const std::vector<int> preservedFds = { fdChannel.fd(), server.controlSocketFd() };
-    bool namespacesProvidedByLauncher = false;
-#ifdef MU_ENABLE_WORKER_BWRAP
-    // The Bubblewrap launcher supplies parent-pid; IPC peer authentication above must succeed first.
-    namespacesProvidedByLauncher = result.count("parent-pid") != 0;
-#endif // MU_ENABLE_WORKER_BWRAP
+    // Trust the launcher request only after the FD channel authenticates its peer PID.
     const auto sandbox =
         ::Mu::Worker::Sandbox::activate(readOnlyDirectories, preservedFds, namespacesProvidedByLauncher);
     server.setSandboxStatus(sandbox);

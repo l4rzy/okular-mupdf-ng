@@ -112,13 +112,13 @@ ctest --test-dir build --output-on-failure
 
 ### Optional Bubblewrap launcher (Linux)
 
-Configure with `-DENABLE_WORKER_BWRAP=ON` to launch plugin and CLI workers through
-`bwrap`. Bubblewrap must be installed at configuration time and remain available
-at the configured executable path. Startup fails if Bubblewrap cannot create its
-sandbox; there is no direct-launch fallback. This option cannot be combined with
-`DISABLE_WORKER_SANDBOX`.
-With the option off, Bubblewrap helpers, transport state, and the wrapper-only
-`--parent-pid` option are excluded from the build.
+Linux builds use the built-in launcher by default. Install Bubblewrap and set
+`MUPDFNG_WORKER_SANDBOX=bwrap` in the environment that starts Okular or
+`mupdfng-cli` to launch workers through `bwrap` on `PATH`. An unset variable
+or any other value selects the built-in sandbox. Unrecognized nonempty values
+log a warning. The runtime setting replaces the former `ENABLE_WORKER_BWRAP`
+CMake option. Worker startup fails if Bubblewrap is requested and unavailable,
+cannot create its sandbox, or worker sandboxing was disabled for the build.
 
 The launcher isolates user, network, IPC, UTS, and mount namespaces. It exposes
 system libraries under `/usr`, `/lib`, and `/lib64`, the loader cache, the worker,

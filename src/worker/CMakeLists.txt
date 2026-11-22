@@ -105,9 +105,6 @@ add_executable(mupdfng-worker
     runtime/worker_server.cpp
     sys/sandbox.cpp
 )
-if(ENABLE_WORKER_BWRAP)
-    target_compile_definitions(mupdfng-worker PRIVATE MU_ENABLE_WORKER_BWRAP)
-endif()
 target_link_libraries(mupdfng-worker PRIVATE
     ng_worker_core
     MuPDF::Engine

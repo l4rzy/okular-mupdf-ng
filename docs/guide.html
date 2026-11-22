@@ -99,9 +99,12 @@ mupdfng-cli sandbox --json</code></pre>
   linux.seccomp: enforced required=1 version=
   linux.mdwe: enforced required=0 version=
   linux.bubblewrap: enforced required=1 version=</code></pre>
-      <p>Packages with Bubblewrap support launch plugin and CLI workers through <code>bwrap</code>;
-        startup fails if its sandbox cannot be created. Without it, the worker uses
-        the native <code>mupdfng.linux.v1</code> profile. The Landlock version and
+      <p>On Linux, install Bubblewrap and start Okular or the CLI with
+        <code>MUPDFNG_WORKER_SANDBOX=bwrap</code> to use the Bubblewrap profile.
+        For example, run <code>MUPDFNG_WORKER_SANDBOX=bwrap mupdfng-cli sandbox</code>.
+        Worker startup fails if <code>bwrap</code> is missing or cannot create its
+        sandbox. An unset variable or any other value selects the default
+        <code>mupdfng.linux.v1</code> profile. The Landlock version and
         protection states depend on the host.</p>
       <p>The report includes the platform, profile, isolation level, individual
         protections, and diagnostics. The native Linux profile requires

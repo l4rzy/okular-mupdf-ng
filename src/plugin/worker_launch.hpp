@@ -3,8 +3,8 @@
 
 #pragma once
 
-#ifdef MU_ENABLE_WORKER_BWRAP
 #include <QByteArray>
+#include <QProcess>
 #include <QStringList>
 #include <optional>
 
@@ -20,5 +20,13 @@ QStringList buildBubblewrapArguments(const QString& worker,
 // Bubblewrap reports the child's host PID, independently of the worker's IPC.
 std::optional<qint64> parseBubblewrapPid(const QByteArray& status);
 
+// Returns the worker's host PID or zero on failure. The caller owns process cleanup.
+qint64 startBubblewrap(QProcess& process,
+                       const QString& launcher,
+                       const QString& worker,
+                       QStringList arguments,
+                       const QString& socketDirectory,
+                       const QStringList& tessDataDirectories,
+                       int timeoutMs);
+
 } // namespace Mu::Plugin
-#endif // MU_ENABLE_WORKER_BWRAP

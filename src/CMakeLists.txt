@@ -126,12 +126,9 @@ endif()
 target_compile_definitions(ng_plugin_worker PRIVATE
     WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
 )
-if(ENABLE_WORKER_BWRAP)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(ng_plugin_worker PRIVATE plugin/worker_launch.cpp)
-    # Public because worker_transport.hpp has backend-specific private members.
-    target_compile_definitions(ng_plugin_worker PUBLIC MU_ENABLE_WORKER_BWRAP)
     target_compile_definitions(ng_plugin_worker PRIVATE
-        MU_BWRAP_EXECUTABLE="${BWRAP_EXECUTABLE}"
         MU_BWRAP_TESSDATA_DIR="${TESSDATA_DIR}"
         MU_BWRAP_SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
     )

@@ -184,11 +184,6 @@ target_compile_definitions(test_tools_cli_export PRIVATE
     WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
     TEST_EPUB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/epub/sample.epub"
     TEST_MOBI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/mobi")
-if(ENABLE_WORKER_BWRAP)
-    target_compile_definitions(test_tools_cli_export PRIVATE EXPECTED_SANDBOX_PROFILE="mupdfng.linux.bwrap.v1")
-else()
-    target_compile_definitions(test_tools_cli_export PRIVATE EXPECTED_SANDBOX_PROFILE="mupdfng.linux.v1")
-endif()
 add_dependencies(test_tools_cli_export mupdfng-cli mupdfng-worker)
 set_tests_properties(test_tools_cli_export PROPERTIES TIMEOUT 150)
 
@@ -365,11 +360,9 @@ if(MU_DEBUG_BUILD)
 endif()
 add_dependencies(test_plugin_workertransport mupdfng-worker)
 
-if(ENABLE_WORKER_BWRAP)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_layer_test(test_plugin_workerlaunch plugin/test_worker_launch.cpp "plugin;security")
     target_link_libraries(test_plugin_workerlaunch PRIVATE ng_plugin_worker)
-    target_compile_definitions(test_plugin_workerlaunch PRIVATE TEST_BWRAP_EXECUTABLE="${BWRAP_EXECUTABLE}")
-    target_compile_definitions(test_render_worker PRIVATE MU_ENABLE_WORKER_BWRAP)
 endif()
 
 add_layer_test(test_plugin_workerclientstate plugin/test_worker_client_state.cpp plugin)

@@ -7,6 +7,7 @@
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -19,24 +20,55 @@ private slots:
 
     void reportsSandboxStatus_data()
     {
-        QTest::addColumn<QStringList>("arguments");
+        QTest::addColumn<QString>("mode");
         QTest::addColumn<bool>("json");
-        QTest::newRow("human") << QStringList { "sandbox" } << false;
-        QTest::newRow("json") << QStringList { "sandbox", "--json" } << true;
+        QTest::newRow("default-human") << QString() << false;
+        QTest::newRow("empty-mode") << QStringLiteral("") << true;
+        QTest::newRow("builtin-json") << QStringLiteral("builtin") << true;
+        QTest::newRow("unknown-mode") << QStringLiteral("unknown") << true;
+#if defined(__linux__) && !MU_DISABLE_WORKER_SANDBOX
+        QTest::newRow("bwrap-human") << QStringLiteral("bwrap") << false;
+        QTest::newRow("bwrap-json") << QStringLiteral("bwrap") << true;
+#endif // defined(__linux__) && !MU_DISABLE_WORKER_SANDBOX
     }
 
     void reportsSandboxStatus()
     {
-        QFETCH(QStringList, arguments);
+        QFETCH(QString, mode);
         QFETCH(bool, json);
-        arguments << "--worker" << QStringLiteral(WORKER_BUILD_PATH);
+        const bool wrapped = mode == "bwrap";
+        if (wrapped) {
+            const auto bwrap = QStandardPaths::findExecutable(QStringLiteral("bwrap"));
+            if (bwrap.isEmpty())
+                QSKIP("Bubblewrap is unavailable");
+            QProcess probe;
+            probe.start(bwrap, { "--unshare-user", "--unshare-net", "--ro-bind", "/", "/", "--", "/usr/bin/true" });
+            QVERIFY(probe.waitForFinished(5000));
+            const auto error = probe.readAllStandardError();
+            if (error.startsWith("bwrap:")
+                && (error.contains("Operation not permitted") || error.contains("Permission denied")
+                    || error.contains("No permissions to create a new namespace")))
+                QSKIP(error.constData());
+            QCOMPARE(probe.exitCode(), 0);
+        }
+        QStringList arguments { "sandbox", "--worker", QStringLiteral(WORKER_BUILD_PATH) };
+        if (json)
+            arguments << "--json";
+        auto environment = QProcessEnvironment::systemEnvironment();
+        if (mode.isNull())
+            environment.remove(QStringLiteral("MUPDFNG_WORKER_SANDBOX"));
+        else
+            environment.insert(QStringLiteral("MUPDFNG_WORKER_SANDBOX"), mode);
         QProcess cli;
+        cli.setProcessEnvironment(environment);
         cli.start(QStringLiteral(MUPDFNG_CLI_PATH), arguments);
         QVERIFY(cli.waitForFinished(30000));
         QCOMPARE(cli.exitStatus(), QProcess::NormalExit);
         const auto output = cli.readAllStandardOutput();
-        QVERIFY2(!output.isEmpty(), cli.readAllStandardError().constData());
-        const auto profile = QStringLiteral(EXPECTED_SANDBOX_PROFILE);
+        const auto errorOutput = cli.readAllStandardError();
+        QVERIFY2(!output.isEmpty(), errorOutput.constData());
+        QCOMPARE(errorOutput.contains("Falling back to the built-in sandbox."), mode == "unknown");
+        const auto profile = wrapped ? QStringLiteral("mupdfng.linux.bwrap.v1") : QStringLiteral("mupdfng.linux.v1");
         if (json) {
             QJsonParseError error;
             const auto document = QJsonDocument::fromJson(output, &error);
@@ -54,24 +86,23 @@ private slots:
                 QVERIFY(protection.value("diagnostic").isString());
                 if (protection.value("id") == "linux.namespaces") {
                     QCOMPARE(protection.value("diagnostic").toString(),
-                             profile.contains("bwrap") ? QStringLiteral("Namespaces inherited from Bubblewrap launcher")
-                                                       : QString());
+                             wrapped ? QStringLiteral("Namespaces inherited from Bubblewrap launcher") : QString());
                 }
             }
             QVERIFY(ids.contains("linux.seccomp"));
-            QCOMPARE(ids.contains("linux.bubblewrap"), profile.contains("bwrap"));
+            QCOMPARE(ids.contains("linux.bubblewrap"), wrapped);
             const auto isolation = report.value("isolation").toString();
             QCOMPARE(cli.exitCode(), isolation == "full" ? 0 : isolation == "degraded" ? 1 : 2);
         } else {
             QVERIFY(output.startsWith("Sandbox: linux profile=" + profile.toUtf8()));
             QVERIFY(output.contains("linux.seccomp:"));
-            QCOMPARE(output.contains("Namespaces inherited from Bubblewrap launcher"), profile.contains("bwrap"));
-            if (profile.contains("bwrap")) {
+            QCOMPARE(output.contains("Namespaces inherited from Bubblewrap launcher"), wrapped);
+            if (wrapped) {
                 QVERIFY(output.contains("  linux.namespaces: enforced required=1 version=\n"
                                         "    Namespaces inherited from Bubblewrap launcher\n"
                                         "  linux.resource_limits:"));
             }
-            QCOMPARE(output.contains("linux.bubblewrap: enforced"), profile.contains("bwrap"));
+            QCOMPARE(output.contains("linux.bubblewrap: enforced"), wrapped);
             QCOMPARE(cli.exitCode(),
                      output.contains("isolation=full")           ? 0
                          : output.contains("isolation=degraded") ? 1
@@ -89,6 +120,40 @@ private slots:
         QProcess cli;
         cli.start(QStringLiteral(MUPDFNG_CLI_PATH), { "sandbox", "--json", "--worker", worker.fileName() });
         QVERIFY(cli.waitForFinished(30000));
+        QCOMPARE(cli.exitCode(), 2);
+        QVERIFY(cli.readAllStandardOutput().isEmpty());
+        QVERIFY(cli.readAllStandardError().contains("could not start the worker"));
+    }
+
+    void rejectsUnavailableBubblewrap_data()
+    {
+        QTest::addColumn<bool>("hasLauncher");
+        QTest::newRow("missing-launcher") << false;
+#if defined(__linux__) && !MU_DISABLE_WORKER_SANDBOX
+        QTest::newRow("failed-launcher") << true;
+#endif // defined(__linux__) && !MU_DISABLE_WORKER_SANDBOX
+    }
+
+    void rejectsUnavailableBubblewrap()
+    {
+        QFETCH(bool, hasLauncher);
+        QTemporaryDir path;
+        QVERIFY(path.isValid());
+        if (hasLauncher) {
+            QFile launcher(path.filePath(QStringLiteral("bwrap")));
+            QVERIFY(launcher.open(QIODevice::WriteOnly));
+            QVERIFY(launcher.write("#!/bin/sh\nexit 1\n") > 0);
+            QVERIFY(launcher.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+            launcher.close();
+        }
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("MUPDFNG_WORKER_SANDBOX"), QStringLiteral("bwrap"));
+        environment.insert(QStringLiteral("PATH"), path.path());
+        QProcess cli;
+        cli.setProcessEnvironment(environment);
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH),
+                  { "sandbox", "--json", "--worker", QStringLiteral(WORKER_BUILD_PATH) });
+        QVERIFY(cli.waitForFinished(10000));
         QCOMPARE(cli.exitCode(), 2);
         QVERIFY(cli.readAllStandardOutput().isEmpty());
         QVERIFY(cli.readAllStandardError().contains("could not start the worker"));

@@ -61,6 +61,9 @@ private slots:
 
     void isolatesFilesystem()
     {
+        const auto launcher = QStandardPaths::findExecutable(QStringLiteral("bwrap"));
+        if (launcher.isEmpty())
+            QSKIP("Bubblewrap is unavailable");
         QTemporaryDir session;
         QVERIFY(session.isValid());
         QTemporaryFile secret;
@@ -94,7 +97,7 @@ private slots:
                                            "test ! -w /usr && test -w /tmp && test -w \"$2\" && "
                                            "test -r \"$3\" && ! (echo modified > \"$3\") 2>/dev/null && "
                                            "test ! -r \"/proc/$4/root$1\" && readlink /proc/self/ns/net");
-        process.start(QStringLiteral(TEST_BWRAP_EXECUTABLE),
+        process.start(launcher,
                       buildBubblewrapArguments(shell,
                                                { "-c",
                                                  script,
@@ -109,7 +112,12 @@ private slots:
         QVERIFY(process.waitForStarted());
         QVERIFY(process.waitForFinished(10000));
         QCOMPARE(process.exitStatus(), QProcess::NormalExit);
-        QVERIFY2(process.exitCode() == 0, process.readAllStandardError().constData());
+        const auto error = process.readAllStandardError();
+        if (error.startsWith("bwrap:")
+            && (error.contains("Operation not permitted") || error.contains("Permission denied")
+                || error.contains("No permissions to create a new namespace")))
+            QSKIP(error.constData());
+        QVERIFY2(process.exitCode() == 0, error.constData());
         QVERIFY(status.seek(0));
         QVERIFY(parseBubblewrapPid(status.readAll()));
         const auto network = process.readAllStandardOutput().trimmed();

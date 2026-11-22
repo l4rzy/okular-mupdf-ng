@@ -58,7 +58,7 @@ Status reportLinuxStatus(const LinuxStatus& activation, bool disabled = false)
     add("linux.no_new_privileges", ProtectionCategory::Process, activation.noNewPrivileges, true);
     add("linux.namespaces", ProtectionCategory::Process, activation.linuxNamespace, true);
     if (activation.namespacesInherited)
-        result.protections.back().diagnostic = "Namespaces provided by Bubblewrap launcher";
+        result.protections.back().diagnostic = "Namespaces inherited from Bubblewrap launcher";
     add("linux.resource_limits", ProtectionCategory::Resources, activation.resourceLimits, true);
     add("linux.landlock", ProtectionCategory::Filesystem, activation.landlock, true);
     if (activation.landlockAbi > 0)
@@ -702,10 +702,8 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
                          const std::vector<int>& preservedFds,
                          bool namespacesProvidedByLauncher)
 {
-#ifndef MU_ENABLE_WORKER_BWRAP
-    (void)namespacesProvidedByLauncher;
-#endif // MU_ENABLE_WORKER_BWRAP
 #ifndef __linux__
+    (void)namespacesProvidedByLauncher;
     (void)readOnlyDirectories;
     (void)preservedFds;
     Status unsupported;
@@ -742,9 +740,7 @@ Sandbox::Status activate(const std::vector<std::string>& readOnlyDirectories,
     (void)preservedFds;
 #endif // MU_DEBUG_ENABLED
     // Required: isolate user, network, and IPC namespaces.
-#ifdef MU_ENABLE_WORKER_BWRAP
     status.namespacesInherited = namespacesProvidedByLauncher;
-#endif // MU_ENABLE_WORKER_BWRAP
     status.linuxNamespace = status.namespacesInherited || activateNamespaces(status);
     // Required: prevent resource exhaustion and disable core-dump exposure.
     status.resourceLimits = applyResourceLimits(status);

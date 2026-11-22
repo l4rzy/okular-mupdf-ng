@@ -41,9 +41,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
-#ifndef MU_ENABLE_WORKER_BWRAP
-#include <sys/wait.h>
-#endif // MU_ENABLE_WORKER_BWRAP
 #include <thread>
 #include <unistd.h>
 
@@ -72,14 +69,12 @@ class TestIpc : public QObject {
     QString m_encryptedPdf;
     QString m_epub;
 
-#ifdef MU_ENABLE_WORKER_BWRAP
     static bool workerIsStopped(pid_t pid)
     {
         // Also works when Bubblewrap, rather than this process, owns the worker.
         QFile status(QStringLiteral("/proc/%1/status").arg(pid));
         return status.open(QIODevice::ReadOnly) && status.readAll().contains("\nState:\tT");
     }
-#endif // MU_ENABLE_WORKER_BWRAP
 
     static QByteArray imageHash(const QImage& image)
     {
@@ -695,14 +690,15 @@ private slots:
 
         const auto sandbox = m_client.sandboxStatus();
         QCOMPARE(sandbox.platform, std::string("linux"));
-#ifdef MU_ENABLE_WORKER_BWRAP
-        QCOMPARE(sandbox.profile, std::string("mupdfng.linux.bwrap.v1"));
-        QVERIFY(std::any_of(sandbox.protections.begin(), sandbox.protections.end(), [](const auto& protection) {
-            return protection.id == "linux.bubblewrap" && protection.state == Mu::Model::ProtectionState::Enforced;
-        }));
-#else // MU_ENABLE_WORKER_BWRAP
-        QCOMPARE(sandbox.profile, std::string("mupdfng.linux.v1"));
-#endif // MU_ENABLE_WORKER_BWRAP
+        const bool wrapped = qgetenv("MUPDFNG_WORKER_SANDBOX") == "bwrap";
+        QCOMPARE(sandbox.profile, wrapped ? "mupdfng.linux.bwrap.v1" : "mupdfng.linux.v1");
+        QCOMPARE(std::any_of(sandbox.protections.begin(),
+                             sandbox.protections.end(),
+                             [](const auto& protection) {
+                                 return protection.id == "linux.bubblewrap"
+                                     && protection.state == Mu::Model::ProtectionState::Enforced;
+                             }),
+                 wrapped);
         QVERIFY(!sandbox.protections.empty());
         if constexpr (MU_DISABLE_WORKER_SANDBOX) {
             for (const auto& protection : sandbox.protections)
@@ -1710,21 +1706,11 @@ private slots:
         bool pausedDuringDrawing = false;
         const auto started = std::chrono::steady_clock::now();
         const auto shouldAbort = [&] {
-#ifdef MU_ENABLE_WORKER_BWRAP
             if (workerIsStopped(workerPid)) {
                 pausedDuringDrawing = true;
                 return true;
             }
             return std::chrono::steady_clock::now() - started > std::chrono::seconds(5);
-#else // MU_ENABLE_WORKER_BWRAP
-            int status = 0;
-            const pid_t result = ::waitpid(workerPid, &status, WUNTRACED | WNOHANG);
-            if (result == workerPid) {
-                pausedDuringDrawing = WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP;
-                return true;
-            }
-            return result < 0 || std::chrono::steady_clock::now() - started > std::chrono::seconds(5);
-#endif // MU_ENABLE_WORKER_BWRAP
         };
         const QRect tile = tiled ? QRect(0, 0, 1024, 1024) : QRect { };
         QVERIFY(m_client.render(0, 2048, 2048, tile, shouldAbort).isNull());
@@ -1789,13 +1775,7 @@ private slots:
         QVERIFY(socket >= 0);
         QCOMPARE(::kill(workerPid, SIGSTOP), 0);
         auto resume = qScopeGuard([&] { ::kill(workerPid, SIGCONT); });
-#ifdef MU_ENABLE_WORKER_BWRAP
         QTRY_VERIFY_WITH_TIMEOUT(workerIsStopped(workerPid), 2000);
-#else // MU_ENABLE_WORKER_BWRAP
-        int status = 0;
-        QCOMPARE(::waitpid(workerPid, &status, WUNTRACED), workerPid);
-        QVERIFY(WIFSTOPPED(status));
-#endif // MU_ENABLE_WORKER_BWRAP
 
         std::atomic<bool> cancel { false };
         auto active = std::async(std::launch::async,

@@ -3,14 +3,13 @@
 
 #include "plugin/worker_transport.hpp"
 #include "shared/model/export.hpp"
+#include <algorithm>
 #include <limits>
 
 #include <QCoreApplication>
-#ifdef MU_ENABLE_WORKER_BWRAP
+#ifdef __linux__
 #include "plugin/worker_launch.hpp"
-#include <QDir>
-#include <QElapsedTimer>
-#endif // MU_ENABLE_WORKER_BWRAP
+#endif // __linux__
 #include <QFile>
 #include <QFileInfo>
 #include <QMetaObject>
@@ -44,6 +43,7 @@
 #include "shared/protocol/zpp_codec.hpp"
 #include "shared/transport/fd_channel.hpp"
 #include "shared/transport/frame_buffer.hpp"
+#include "shared/transport/poll.hpp"
 
 namespace Mu::Plugin {
 
@@ -58,8 +58,8 @@ constexpr int StartTimeoutMs = 5000;
 constexpr int StopTimeoutMs = 3000;
 constexpr int KillTimeoutMs = 1000;
 /// Control-channel connect polling while the socket file appears.
-constexpr int ControlConnectAttempts = 60;
-constexpr int ControlConnectRetryMs = 50;
+constexpr int ControlConnectTimeoutMs = 3000;
+constexpr int ControlConnectMaxRetryMs = 50;
 
 struct MappedFrame {
     void* mapping = nullptr;
@@ -221,11 +221,24 @@ bool WorkerTransport::start(const QString& binaryPath,
     // fresh endpoint UUID makes any leftover files pure hygiene; the binary is
     // validated before any endpoint or process is created.
     Util::cleanupStaleTempFiles();
-#ifdef MU_ENABLE_WORKER_BWRAP
-    const QString resolvedBinaryPath = QFileInfo(findBinary(binaryPath)).canonicalFilePath();
-#else // MU_ENABLE_WORKER_BWRAP
-    const QString resolvedBinaryPath = findBinary(binaryPath);
-#endif // MU_ENABLE_WORKER_BWRAP
+    const auto profile = qgetenv("MUPDFNG_WORKER_SANDBOX");
+    const bool useBubblewrap = profile == "bwrap";
+    if (!profile.isEmpty() && !useBubblewrap && profile != "builtin")
+        MU_LOG(warning, "Mu::Plugin", "Unknown MUPDFNG_WORKER_SANDBOX value. Falling back to the built-in sandbox.");
+    QString launcher;
+    if (useBubblewrap) {
+#ifdef __linux__
+        if (!MU_DISABLE_WORKER_SANDBOX)
+            launcher = QStandardPaths::findExecutable(QStringLiteral("bwrap"));
+#endif // __linux__
+        if (launcher.isEmpty()) {
+            MU_LOG(warning, "Mu::Plugin", "Bubblewrap requires an enabled Linux sandbox and bwrap on PATH");
+            return failStart();
+        }
+    }
+    QString resolvedBinaryPath = findBinary(binaryPath);
+    if (useBubblewrap)
+        resolvedBinaryPath = QFileInfo(resolvedBinaryPath).canonicalFilePath();
     if (resolvedBinaryPath.isEmpty())
         return failStart();
 
@@ -233,23 +246,24 @@ bool WorkerTransport::start(const QString& binaryPath,
     // directory. The worker learns both paths exclusively through argv, and the
     // FD socket file must already exist before the worker is spawned because it
     // connects over it before binding the control socket.
-    const QString baseUuid = QUuid::createUuid().toString(QUuid::Id128);
     QString tmpDir = Util::tempDirectory();
     if (tmpDir.isEmpty()) {
         MU_LOG(critical, "Mu::Plugin", "unable to create the per-user temp directory");
         return failStart();
     }
-#ifdef MU_ENABLE_WORKER_BWRAP
-    // Expose only this session's sockets, not other workers or staged documents.
-    m_socketDirectory = std::make_unique<QTemporaryDir>(tmpDir + QStringLiteral("/bw-XXXXXX"));
-    if (!m_socketDirectory->isValid())
-        return failStart();
-    tmpDir = m_socketDirectory->path();
-#endif // MU_ENABLE_WORKER_BWRAP
-    m_socketPath =
-        tmpDir + QStringLiteral("/worker-%1-%2-ctrl.sock").arg(QCoreApplication::applicationPid()).arg(baseUuid);
-    m_fdSocketPath =
-        tmpDir + QStringLiteral("/worker-%1-%2-fd.sock").arg(QCoreApplication::applicationPid()).arg(baseUuid);
+    if (useBubblewrap) {
+        // Expose only this session's sockets, not other workers or staged documents.
+        m_socketDirectory = std::make_unique<QTemporaryDir>(tmpDir + QStringLiteral("/bw-XXXXXX"));
+        if (!m_socketDirectory->isValid())
+            return failStart();
+        tmpDir = m_socketDirectory->path();
+    }
+    const QString socketBase = tmpDir
+        + QStringLiteral("/worker-%1-%2")
+              .arg(QCoreApplication::applicationPid())
+              .arg(QUuid::createUuid().toString(QUuid::Id128));
+    m_socketPath = socketBase + QStringLiteral("-ctrl.sock");
+    m_fdSocketPath = socketBase + QStringLiteral("-fd.sock");
     std::string e;
     if (!m_fd.listen(m_fdSocketPath.toStdString(), &e))
         return failStart();
@@ -261,111 +275,65 @@ bool WorkerTransport::start(const QString& binaryPath,
     QStringList arguments { QStringLiteral("--socket"), m_socketPath, QStringLiteral("--fd-socket"), m_fdSocketPath };
     for (const QString& directory : tessDataDirectories) {
         if (!directory.isEmpty()) {
-#ifdef MU_ENABLE_WORKER_BWRAP
-            arguments << QStringLiteral("--tessdata-dir") << QFileInfo(directory).absoluteFilePath();
-#else // MU_ENABLE_WORKER_BWRAP
-            arguments << QStringLiteral("--tessdata-dir") << directory;
-#endif // MU_ENABLE_WORKER_BWRAP
+            arguments << QStringLiteral("--tessdata-dir")
+                      << (useBubblewrap ? QFileInfo(directory).absoluteFilePath() : directory);
         }
     }
-#ifdef MU_ENABLE_WORKER_BWRAP
-    QTemporaryFile statusFile;
-    if (!statusFile.open())
-        return failStart();
-    QFile statusReader(statusFile.fileName());
-    if (!statusReader.open(QIODevice::ReadOnly))
-        return failStart();
-    const int statusFd = statusFile.handle();
-    m_process.setChildProcessModifier([this, statusFd] {
-        if (::fcntl(statusFd, F_SETFD, 0) < 0)
-            m_process.failChildProcessModifier("preserve Bubblewrap status descriptor", errno);
-    });
-    QStringList readOnlyPaths;
-    QStringList candidates { QStringLiteral("/usr"),
-                             QStringLiteral("/lib"),
-                             QStringLiteral("/lib64"),
-                             QStringLiteral("/etc/ld.so.cache"),
-                             QStringLiteral(MU_BWRAP_TESSDATA_DIR),
-                             QStringLiteral(MU_BWRAP_SIGNATURE_FONT_DIR) };
-    candidates.append(tessDataDirectories);
-    for (const auto& candidate : candidates) {
-        if (!candidate.isEmpty()) {
-            const QString path = QDir::cleanPath(QFileInfo(candidate).absoluteFilePath());
-            if (QFileInfo::exists(path) && !readOnlyPaths.contains(path))
-                readOnlyPaths.append(path);
+    if (!useBubblewrap) {
+        m_process.start(resolvedBinaryPath, arguments);
+        if (!m_process.waitForStarted(StartTimeoutMs)) {
+            MU_LOG(warning, "Mu::Plugin", "worker launch failed: " + m_process.errorString().toStdString());
+            return failStart();
         }
+        m_workerPid = m_process.processId();
     }
-    arguments << QStringLiteral("--parent-pid") << QString::number(QCoreApplication::applicationPid());
-    arguments = buildBubblewrapArguments(resolvedBinaryPath, arguments, tmpDir, readOnlyPaths, statusFd);
-    m_process.start(QStringLiteral(MU_BWRAP_EXECUTABLE), arguments);
-#else // MU_ENABLE_WORKER_BWRAP
-    m_process.start(resolvedBinaryPath, arguments);
-#endif // MU_ENABLE_WORKER_BWRAP
-    if (!m_process.waitForStarted(StartTimeoutMs)) {
-        MU_LOG(warning, "Mu::Plugin", "worker launch failed: " + m_process.errorString().toStdString());
+#ifdef __linux__
+    else {
+        m_workerPid = startBubblewrap(m_process,
+                                      launcher,
+                                      resolvedBinaryPath,
+                                      std::move(arguments),
+                                      m_socketDirectory->path(),
+                                      tessDataDirectories,
+                                      StartTimeoutMs);
+    }
+#endif // __linux__
+    if (m_workerPid <= 0)
         return failStart();
-    }
-#ifdef MU_ENABLE_WORKER_BWRAP
-    m_process.setChildProcessModifier({ });
-    QElapsedTimer startup;
-    startup.start();
-    std::optional<qint64> childPid;
-    while (startup.elapsed() < StartTimeoutMs) {
-        statusReader.seek(0);
-        childPid = parseBubblewrapPid(statusReader.read(4096));
-        if (childPid || m_process.state() == QProcess::NotRunning)
-            break;
-        m_process.waitForFinished(10);
-    }
-    if (!childPid) {
-        MU_LOG(warning, "Mu::Plugin", "Bubblewrap did not report a worker PID; refusing direct launch");
-        return failStart();
-    }
-    m_workerPid = *childPid;
-    const qint64 workerPid = m_workerPid;
-#else // MU_ENABLE_WORKER_BWRAP
-    const qint64 workerPid = m_process.processId();
-#endif // MU_ENABLE_WORKER_BWRAP
 
     // Phase 5: establish the authenticated channels. The worker connects the FD
     // channel before binding the control socket (worker main steps 2-3), so the
     // plugin accepts the FD side first, then polls for the control connection.
-    // Each connect attempt is bounded by the handshake deadline; refusals only
-    // occur while the control socket file has not yet appeared.
-    if (!m_fd.accept(&e, workerPid)) {
+    // Start with a short retry interval so a socket that is almost ready
+    // doesn't cost a full 50 ms. Bound all retries by the handshake deadline.
+    if (!m_fd.accept(&e, m_workerPid))
         return failStart();
-    }
-    for (int i = 0; i < ControlConnectAttempts && !m_ctrl.valid(); ++i) {
-        if (m_ctrl.connect(m_socketPath.toStdString(), workerPid, &e))
+    const auto deadline = IPC::MonotonicDeadline::fromMilliseconds(ControlConnectTimeoutMs);
+    const auto controlPath = m_socketPath.toStdString();
+    for (int retryMs = 1; !deadline.expired(); retryMs = std::min(retryMs * 2, ControlConnectMaxRetryMs)) {
+        if (m_ctrl.connect(controlPath, m_workerPid, &e, deadline.pollTimeoutMilliseconds()))
             break;
-        QThread::msleep(static_cast<unsigned long>(ControlConnectRetryMs));
+        QThread::msleep(static_cast<unsigned long>(std::min(retryMs, deadline.pollTimeoutMilliseconds())));
     }
-    if (!m_ctrl.valid()) {
+    if (!m_ctrl.valid())
         return failStart();
-    }
 
     // Phase 6: handshake and enable the working session. Ping reports protocol
     // compatibility, sandbox status, and engine version; the notifier is
     // enabled only while no synchronous RPC is in flight, because call()
     // drains notifications as part of its response loop.
     auto pong = call(PingRequest { std::string(IPC::COMPAT) });
-    if (!pong || pong->error) {
+    if (!pong || pong->error)
         return failStart();
-    }
     auto* p = std::get_if<PingResponse>(&pong->payload);
-    if (!p || p->compat != IPC::COMPAT) {
+    if (!p || p->compat != IPC::COMPAT)
         return failStart();
+    if (useBubblewrap) {
+        // The authenticated worker PID came from Bubblewrap's status descriptor.
+        p->sandbox.profile = "mupdfng.linux.bwrap.v1";
+        p->sandbox.protections.push_back(
+            { "linux.bubblewrap", ProtectionCategory::Filesystem, ProtectionState::Enforced, true, { }, { } });
     }
-#ifdef MU_ENABLE_WORKER_BWRAP
-    // The parent knows which launcher completed; do not trust a worker flag as proof.
-    p->sandbox.profile = "mupdfng.linux.bwrap.v1";
-    p->sandbox.protections.push_back(
-        { "linux.bubblewrap", ProtectionCategory::Filesystem, ProtectionState::Enforced, true, { }, { } });
-    for (auto& protection : p->sandbox.protections) {
-        if (protection.id == "linux.namespaces")
-            protection.diagnostic = "Namespaces inherited from Bubblewrap launcher";
-    }
-#endif // MU_ENABLE_WORKER_BWRAP
     if (workerInfo)
         *workerInfo = *p;
     // Sole ownership by m_notifier (no QObject parent): recreated per session
@@ -407,10 +375,7 @@ void WorkerTransport::cleanupSession()
         }
     }
     m_fd.close();
-#ifdef MU_ENABLE_WORKER_BWRAP
     m_workerPid = 0;
-    m_process.setChildProcessModifier({ });
-#endif // MU_ENABLE_WORKER_BWRAP
     // Plugin generated these paths, so it owns cleanup regardless of how the worker exited.
     if (!m_socketPath.isEmpty()) {
         QFile::remove(m_socketPath);
@@ -420,9 +385,7 @@ void WorkerTransport::cleanupSession()
         QFile::remove(m_fdSocketPath);
         m_fdSocketPath.clear();
     }
-#ifdef MU_ENABLE_WORKER_BWRAP
     m_socketDirectory.reset();
-#endif // MU_ENABLE_WORKER_BWRAP
     clearDocumentState();
     m_signingAuthorization = { };
     m_activeSignPassword.fill(u'\0');
@@ -466,11 +429,7 @@ std::optional<quint64> WorkerTransport::workerMemoryBytes() const
     // through a separate call, so the worker may have exited in between.
     if (m_process.state() != QProcess::Running)
         return std::nullopt;
-#ifdef MU_ENABLE_WORKER_BWRAP
     return Util::processResidentBytes(m_workerPid);
-#else // MU_ENABLE_WORKER_BWRAP
-    return Util::processResidentBytes(m_process.processId());
-#endif // MU_ENABLE_WORKER_BWRAP
 }
 
 // =============================================================================
