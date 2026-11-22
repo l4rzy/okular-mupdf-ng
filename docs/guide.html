@@ -353,7 +353,7 @@ sudo apt install tesseract-ocr-eng</code></pre>
         <li>Save the PDF, or use <strong>Save As</strong> to keep a separate copy.</li>
       </ol>
       <p>Use undo and redo to revise edits. To share PDF annotations separately,
-        use <a href="#pdf-export">XFDF export</a>; to bake them into page
+        use <a href="#xfdf-annotations">XFDF export</a>. To bake them into page
         content, use <a href="#pdf-export">flattened PDF export</a>.</p>
       <!-- Screenshot: Annotation tools and annotation properties. -->
       <h3 id="pdf-forms">PDF Forms</h3>
@@ -390,12 +390,14 @@ sudo apt install tesseract-ocr-eng</code></pre>
         they no longer remain editable controls in that copy. Keep the original PDF
         if you need to edit them later. The export leaves the open source document
         unchanged and ignores document themes.</p>
-      <h3>XFDF annotation file</h3>
+      <h3 id="xfdf-annotations">XFDF annotation file</h3>
       <p>Choose <strong>File → Export As → Annotation File (XFDF)</strong>, then
         save the output and share it with the corresponding PDF. The file picker may
         use an <code>.xml</code> extension; its contents are XFDF. This keeps
-        annotations separate from the PDF. XFDF export does not support PDFs
-        containing rotated pages.</p>
+        annotations separate from the PDF.</p>
+      <p>To import annotations, open the corresponding PDF and choose
+        <strong>Edit → Import Annotations from XFDF…</strong>. Import and export
+        require a PDF with no rotated pages.</p>
       <p>Document themes affect viewing only, so printing and exports use the
         document&rsquo;s original colors.</p>
     </section>

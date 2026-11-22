@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report an issue with PDF or EPUB/MOBI handling
+about: Report an issue with okular-mupdf-ng
 title: "[Bug]: "
 ---
 
@@ -12,6 +12,8 @@ Document type:
 - [ ] PDF
 - [ ] EPUB
 - [ ] MOBI
+- [ ] AZW3 or KFX
+- [ ] XPS or OpenXPS
 
 What happens with Okular using official backend:
 What happens with official mupdf reader:

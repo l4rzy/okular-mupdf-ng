@@ -84,7 +84,7 @@ and the source-tree layout.
 - Twilight, Dusk, and Dark prefer Okular's per-page [placeholder color API](https://invent.kde.org/graphics/okular/-/merge_requests/1527) when available.
   Older Okular versions use shared placeholder pixmaps and incomplete loading images. Extreme zoom or
   uncovered tile regions can still show default white placeholder with this fallback.
-- AWZ3 and KFX support relies on [boko](https://github.com/zacharydenton/boko) to convert the formats to ePUB in-memory.
+- AZW3 and KFX support relies on [boko](https://github.com/zacharydenton/boko) to convert the formats to ePUB in-memory.
 
 See the [feature maturity matrix](MATURITY.md) for feature-specific maturity and
 automated test coverage.
@@ -127,7 +127,7 @@ unless otherwise indicated.
 
 Third-party components retain their respective licenses and copyright notices:
 
-- **MuPDF**, including its [signature emblem](src/generator/config/signature_emblem.hpp):
+- **MuPDF**, including its [signature emblem](src/generator/config/mupdf_emblem.hpp):
   [GNU Affero General Public License v3.0 or later](thirdparty/mupdf-COPYING)
   (`AGPL-3.0-or-later`). The worker links against MuPDF; its license applies to
   the engine as well as the emblem. GPLv3 permits this combination, with the

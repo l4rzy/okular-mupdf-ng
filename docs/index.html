@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>okular-mupdf-ng — Sandboxed MuPDF Backend for Okular</title>
-  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.">
+  <meta name="description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3, KFX, and XPS/OpenXPS processing, document themes, built-in OCR, and digital signatures.">
   <meta name="author" content="l4rzy">
   <meta name="robots" content="index, follow, max-image-preview:large">
   <meta name="theme-color" content="#232629">
@@ -15,14 +15,14 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:url" content="https://l4rzy.github.io/okular-mupdf-ng/">
   <meta property="og:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
-  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.">
+  <meta property="og:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3, KFX, and XPS/OpenXPS processing, document themes, built-in OCR, and digital signatures.">
   <meta property="og:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <meta property="og:image:alt" content="okular-mupdf-ng screenshot">
   <meta property="og:image:width" content="1665">
   <meta property="og:image:height" content="963">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="okular-mupdf-ng — Sandboxed MuPDF Backend for Okular">
-  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.">
+  <meta name="twitter:description" content="A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3, KFX, and XPS/OpenXPS processing, document themes, built-in OCR, and digital signatures.">
   <meta name="twitter:image:alt" content="okular-mupdf-ng document viewer screenshot">
   <meta name="twitter:image" content="https://l4rzy.github.io/okular-mupdf-ng/assets/screenshot.png">
   <script type="application/ld+json">
@@ -30,7 +30,7 @@
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "okular-mupdf-ng",
-      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3 and KFX processing, document themes, built-in OCR, and digital signatures.",
+      "description": "A MuPDF-based backend for Okular on Linux, with sandboxed PDF, ePUB, MOBI, AZW3, KFX, and XPS/OpenXPS processing, document themes, built-in OCR, and digital signatures.",
       "url": "https://l4rzy.github.io/okular-mupdf-ng/",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Linux",
@@ -161,6 +161,8 @@
 
     <section class="wrap" id="features">
       <h2>Feature comparison</h2>
+      <p>See the <a href="https://github.com/l4rzy/okular-mupdf-ng/blob/main/MATURITY.md" rel="noopener">feature maturity matrix</a>
+        for ratings and test coverage.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -209,8 +211,8 @@
               <td class="no">✗</td>
             </tr>
             <tr>
-              <td><a href="guide.html#pdf-export">Annotation export</a></td>
-              <td>Export PDF annotations to XFDF</td>
+              <td><a href="guide.html#xfdf-annotations">XFDF annotations</a></td>
+              <td>Import and export annotations for PDFs without rotated pages</td>
               <td class="yes">✓</td>
               <td class="no">✗</td>
             </tr>

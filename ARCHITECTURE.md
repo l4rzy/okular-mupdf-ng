@@ -100,8 +100,9 @@ returned image to the requested display size. Invalid request geometry is reject
 Persistent cache code lives in `src/plugin/caching/` and is owned by the host,
 not the sandboxed worker.
 
-- Generated PDF TOCs are cached by source SHA-256 and heading algorithm revision;
-  embedded outlines take precedence, and empty generated TOCs are cached too.
+- Generated PDF TOCs are cached by a 128-bit XXH3 source hash and heading
+  algorithm revision. Embedded outlines take precedence, and empty generated
+  TOCs are cached too.
 - OCR results are cached per document identity, language, DPI, and page. A
   valid empty OCR page is retained as a cache hit.
 - EPUB uses one cache file per document and layout fingerprint. The file has
@@ -117,7 +118,7 @@ The worker is a capability process. The parent is the capability broker: it
 passes only the descriptors and configured read-only resource directories the
 worker needs.
 
-On Linux, hardening is applied after IPC endpoints are established:
+On Linux, the worker applies its hardening after IPC endpoints are established:
 
 - Landlock restricts filesystem access to the build-time tessdata directory,
   the bundled signature-font directory, and optional configured tessdata directories.
@@ -128,6 +129,10 @@ On Linux, hardening is applied after IPC endpoints are established:
 - Resource limits cap address space at 4 GiB. Per-operation CPU and elapsed-time
   budgets terminate the worker on exhaustion; release builds also disable
   worker core dumps and close nonessential inherited descriptors.
+
+The optional [Bubblewrap launcher](INSTALL.md#optional-bubblewrap-launcher-linux)
+sets up namespaces before the worker starts. The worker reuses those namespaces
+and applies the remaining built-in protections.
 
 Worker sandbox activation is best-effort for portability, and the worker reports
 its actual status through the initial ping. The Okular generator defaults to
@@ -143,7 +148,7 @@ although document processing is exclusively through private host IPC.
 ## Build and test layout
 
 The default build downloads and statically links the pinned MuPDF found
-in `cmake/mupdf.version`. MuPDF is built with PDF, EPUB, and MOBI support while
+in `cmake/mupdf.version`. MuPDF is built with PDF, EPUB, MOBI, and XPS support while
 unused document formats and curl support are disabled. PDF form JavaScript is
 enabled by default (`ENABLE_FORM_JAVASCRIPT=ON`); bundled builds include MuJS
 when this option is enabled. Linker garbage collection
