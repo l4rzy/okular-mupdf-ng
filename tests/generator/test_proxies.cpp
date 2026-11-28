@@ -35,8 +35,8 @@
 #include "generator/proxy/form/text.hpp"
 #include "generator/ui/printing.hpp"
 #include "paperbox_model.hpp"
+#include "plugin/form_backend.hpp"
 #include "plugin/worker_client.hpp"
-#include "shared/form_backend.hpp"
 #include <okular/core/page.h>
 
 using TextBoxes = std::vector<::Mu::Model::TextBox>;
@@ -56,7 +56,7 @@ static std::optional<Model::FormUpdateResponse> echoFormUpdate(const Model::Form
     return response;
 }
 
-class FormBackendFake final : public Mu::FormBackend {
+class FormBackendFake final : public Mu::Plugin::FormBackend {
 public:
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const override
     {

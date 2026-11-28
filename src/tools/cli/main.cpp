@@ -20,10 +20,10 @@
 #include "plugin/worker_client.hpp"
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
-#include "shared/compat.hpp"
-#include "shared/sandbox_report.hpp"
 #include "tools/cli/cli_args.hpp"
 #include "tools/cli/layout_config.hpp"
+#include "tools/cli/sandbox_report.hpp"
+#include "tools/cli/version.hpp"
 
 #include <cstdio>
 #include <iostream>

@@ -43,5 +43,5 @@ Build-Depends: debhelper-compat (= 13),
  tesseract-ocr-eng
 Debtransform-Tar: okular-mupdf-ng-@VERSION@.tar.gz
 Debtransform-Files-Tar:
-Debtransform-Files: mupdf-1.28.6-source.tar.gz vendor.tar.gz
+Debtransform-Files: mupdf-1.28.7-source.tar.gz vendor.tar.gz
 Debtransform-Release: 1

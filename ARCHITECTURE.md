@@ -26,9 +26,8 @@ rendered frame alive for the lifetime of its `QImage`. It also handles OCR
 scheduling, NSS database selection and certificate management, and XFDF
 conversion. The CLI uses the same adapter and builds without KDE.
 
-`src/shared/` holds application-facing helpers. Callers use Paperbox directly
-for operations with native types. The Qt adapter handles events, lifecycle
-transitions, and operations that need Qt types.
+Callers use Paperbox directly for operations with native types. The Qt adapter
+handles events, lifecycle transitions, and operations that need Qt types.
 
 ## Paperbox and the worker
 

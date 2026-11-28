@@ -12,7 +12,7 @@
 #include <csignal>
 #include <unistd.h>
 
-#include "shared/logging.hpp"
+#include <paperbox/logging.hpp>
 
 namespace Mu::Plugin::Util {
 
@@ -28,11 +28,13 @@ inline QString tempDirectory()
     // reached by stale-file cleanup.
     const QString path = QDir::tempPath() + QStringLiteral("/okular-mupdf-ng-%1").arg(::getuid());
     if (!QDir().mkpath(path)) {
-        MU_LOG(warning, "Mu::Plugin", "failed to create temp directory " + path.toStdString());
+        paperbox::log::write(
+            paperbox::log::Level::Warning, "Mu::Plugin", "failed to create temp directory " + path.toStdString());
         return { };
     }
     if (!QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner)) {
-        MU_LOG(warning, "Mu::Plugin", "failed to lock down temp directory " + path.toStdString());
+        paperbox::log::write(
+            paperbox::log::Level::Warning, "Mu::Plugin", "failed to lock down temp directory " + path.toStdString());
         return { };
     }
     return path;

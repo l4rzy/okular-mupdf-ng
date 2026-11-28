@@ -34,6 +34,5 @@ ctest --test-dir build -LE slow --output-on-failure            # Run all tests e
 # Architecture Map
 - `src/generator/`: Okular Generator UI plugin & settings (KDE / KF6 / Okular SDK).
 - `src/plugin/`: Qt adapter for Paperbox and host-side OCR scheduling, certificate management, and XFDF.
-- `src/shared/`: Application logging, build information, and adapter interfaces.
 - `thirdparty/paperbox/`: Pinned native host, shared models, and sandboxed worker.
 - `tests/`: Okular generator, Qt adapter, and CLI suites. Paperbox maintains its native backend suites.

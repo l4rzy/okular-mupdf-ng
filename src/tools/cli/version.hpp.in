@@ -1,0 +1,15 @@
+#ifndef MU_CLI_VERSION_HPP
+#define MU_CLI_VERSION_HPP
+
+#include <string_view>
+
+namespace Mu {
+
+// Build-time MuPDF version used if the worker cannot report its runtime version.
+inline constexpr std::string_view MUPDF_VERSION = "@MUPDF_REQUIRED_VERSION@";
+
+inline constexpr std::string_view VERSION = "@MU_COMPAT_VERSION@";
+
+} // namespace Mu
+
+#endif // MU_CLI_VERSION_HPP

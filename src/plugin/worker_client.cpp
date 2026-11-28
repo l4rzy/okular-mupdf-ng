@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "plugin/worker_client.hpp"
 #include "plugin/caching/cache_root.hpp"
-#include "shared/logging.hpp"
+#include <paperbox/logging.hpp>
 #include <paperbox/nss.hpp>
 
 #include <QFile>
@@ -63,7 +63,9 @@ bool WorkerClient::start(const QString& binaryPath, const QStringList& tessDataD
             return false;
         options.bubblewrap = nativePath(launcher);
     } else if (!profile.isEmpty() && profile != "builtin") {
-        MU_LOG(warning, "Mu::Plugin", "Unknown MUPDFNG_WORKER_SANDBOX value. Falling back to the built-in sandbox.");
+        paperbox::log::write(paperbox::log::Level::Warning,
+                             "Mu::Plugin",
+                             "Unknown MUPDFNG_WORKER_SANDBOX value. Falling back to the built-in sandbox.");
     }
     return m_client.start(std::move(options));
 }

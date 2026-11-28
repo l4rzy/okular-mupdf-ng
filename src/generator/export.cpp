@@ -82,7 +82,7 @@ bool supportsExport(const std::vector<Model::OutputFormatInfo>& formats, const E
 Okular::ExportFormat::List Main::exportFormats() const
 {
     Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
-    if (const auto available = m_worker.paperboxClient().outputFormats()) {
+    if (const auto available = m_paperboxClient.outputFormats()) {
         for (const auto& action : WorkerExports) {
             if (!supportsExport(*available, action))
                 continue;
@@ -111,7 +111,7 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 {
     if (!workerReady())
         return false;
-    const auto available = m_worker.paperboxClient().outputFormats();
+    const auto available = m_paperboxClient.outputFormats();
     if (!available)
         return false;
     for (const auto& action : WorkerExports) {
@@ -167,8 +167,8 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
         if (!workerReady())
             return false;
         bool extracted = false;
-        const auto boxes = m_worker.paperboxClient().getTextBoxesForPage(
-            page, dpi().width(), dpi().height(), /*skipAnnots=*/true, &extracted);
+        const auto boxes =
+            m_paperboxClient.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true, &extracted);
         if (!extracted)
             return false;
         stream << Conversion::plainText(boxes);

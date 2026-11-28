@@ -4,7 +4,7 @@
 #ifndef MU_TOOLS_CLI_ARGS_HPP
 #define MU_TOOLS_CLI_ARGS_HPP
 
-#include "shared/build_info.hpp"
+#include "build_info.hpp"
 
 #include <QStringList>
 

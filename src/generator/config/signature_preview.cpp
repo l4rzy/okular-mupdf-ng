@@ -13,7 +13,7 @@
 
 #include "generator/config/mupdf_emblem.hpp"
 #include "plugin/util/signing_timestamp.hpp"
-#include "shared/logging.hpp"
+#include <paperbox/logging.hpp>
 
 namespace Mu::Generator::Config {
 namespace {
@@ -24,14 +24,15 @@ QString loadSignatureFont()
         const int fontId =
             QFontDatabase::addApplicationFont(QString::fromUtf8(SIGNATURE_FONT_DIR "/Allura-Regular.ttf"));
         if (fontId < 0) {
-            MU_LOG(warning,
-                   "Mu::Generator::Config",
-                   std::string("could not load signature font from " SIGNATURE_FONT_DIR));
+            paperbox::log::write(paperbox::log::Level::Warning,
+                                 "Mu::Generator::Config",
+                                 std::string("could not load signature font from " SIGNATURE_FONT_DIR));
             return QString { };
         }
         const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
         if (families.isEmpty()) {
-            MU_LOG(warning, "Mu::Generator::Config", "signature font exposes no font families");
+            paperbox::log::write(
+                paperbox::log::Level::Warning, "Mu::Generator::Config", "signature font exposes no font families");
             return QString { };
         }
         return families.front();

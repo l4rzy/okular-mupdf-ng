@@ -28,4 +28,4 @@ if(MU_GIT_EXECUTABLE AND EXISTS "${MU_SOURCE_DIR}/.git")
     endif()
 endif()
 
-configure_file("${MU_SOURCE_DIR}/src/shared/build_info.hpp.in" "${MU_BUILD_INFO_FILE}" @ONLY)
+configure_file("${MU_SOURCE_DIR}/cmake/build_info.hpp.in" "${MU_BUILD_INFO_FILE}" @ONLY)

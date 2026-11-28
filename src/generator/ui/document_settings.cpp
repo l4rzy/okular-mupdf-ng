@@ -43,7 +43,7 @@ void addSettingRow(QVBoxLayout* layout, const QString& text, QWidget* control)
 }
 
 void restoreReflowPosition(Okular::Document* doc,
-                           Plugin::WorkerClient& worker,
+                           const paperbox::WorkerClient& client,
                            double width,
                            double pageHeight,
                            Okular::DocumentViewport target,
@@ -68,7 +68,7 @@ void restoreReflowPosition(Okular::Document* doc,
              index <= std::min(static_cast<int>(doc->pages()) - 1, target.pageNumber + 8);
              ++index) {
             bool success = false;
-            auto next = worker.paperboxClient().getTextBoxesForPage(index, width, pageHeight, true, &success);
+            auto next = client.getTextBoxesForPage(index, width, pageHeight, true, &success);
             if (!success || boxes.size() + next.size() > 100'000) {
                 boxes.clear();
                 break;
@@ -157,9 +157,9 @@ bool Main::applyDocumentSettings(const Config::DocumentSettings& settings)
     const int page = static_cast<int>(doc->currentPage());
     const double oldY = oldViewport.rePos.enabled ? std::clamp(oldViewport.rePos.normalizedY, 0.0, 1.0) : 0;
     const double progress = (page + oldY) / doc->pages();
-    const auto snippet = Conversion::captureReflowText(
-        m_worker.paperboxClient().getTextBoxesForPage(page, dpi().width(), dpi().height(), true),
-        oldY * doc->page(page)->height());
+    const auto snippet =
+        Conversion::captureReflowText(m_paperboxClient.getTextBoxesForPage(page, dpi().width(), dpi().height(), true),
+                                      oldY * doc->page(page)->height());
     doc->closeDocument();
     if (doc->openDocument(path, url, mime, password) != Okular::Document::OpenSuccess) {
         Config::writeDocumentSettings(key, previous);
@@ -168,7 +168,7 @@ bool Main::applyDocumentSettings(const Config::DocumentSettings& settings)
         Q_EMIT error(i18n("Could not reload the book with the new layout."), 5000);
         return false;
     }
-    restoreReflowPosition(doc, m_worker, dpi().width(), dpi().height(), oldViewport, progress, snippet);
+    restoreReflowPosition(doc, m_paperboxClient, dpi().width(), dpi().height(), oldViewport, progress, snippet);
     return true;
 }
 

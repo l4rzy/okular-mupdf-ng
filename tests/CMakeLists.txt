@@ -18,7 +18,7 @@ endif()
 
 function(add_layer_test target source label)
     add_executable(${target} ${source} ${ARGN})
-    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Test ng_shared)
+    target_link_libraries(${target} PRIVATE Qt6::Core Qt6::Test ng_common)
     add_test(NAME ${target} COMMAND ${target})
     set_tests_properties(${target} PROPERTIES
         LABELS "${label}"
@@ -27,7 +27,6 @@ function(add_layer_test target source label)
 endfunction()
 
 add_layer_test(test_security_sandbox_status security/sandbox_status.cpp security)
-target_include_directories(test_security_sandbox_status PRIVATE ../src)
 
 # mupdfng-cli argument parsing: pure decision logic, no worker needed.
 add_layer_test(test_tools_cliargs tools/test_cli_args.cpp tools ../src/tools/cli/cli_args.cpp)

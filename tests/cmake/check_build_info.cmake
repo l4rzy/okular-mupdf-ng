@@ -3,8 +3,8 @@
 set(repository "${TEST_ROOT}/repository")
 set(header "${TEST_ROOT}/build_info.hpp")
 file(REMOVE_RECURSE "${TEST_ROOT}")
-file(MAKE_DIRECTORY "${repository}/src/shared")
-file(COPY "${PROJECT_SOURCE_DIR}/src/shared/build_info.hpp.in" DESTINATION "${repository}/src/shared")
+file(MAKE_DIRECTORY "${repository}/cmake")
+file(COPY "${PROJECT_SOURCE_DIR}/cmake/build_info.hpp.in" DESTINATION "${repository}/cmake")
 
 function(runGit)
     execute_process(
@@ -40,7 +40,7 @@ checkBuildInfo("${repository}" "")
 # Signing and hooks belong to the developer's workflow, not fixture setup.
 runGit(config commit.gpgsign true)
 runGit(config tag.gpgsign true)
-runGit(add src/shared/build_info.hpp.in)
+runGit(add cmake/build_info.hpp.in)
 runGit(commit -q -m Initial)
 runGit(rev-parse --short=7 HEAD)
 set(hash "${git_output}")
@@ -51,9 +51,9 @@ file(WRITE "${repository}/ignored.txt" "ignored output")
 checkBuildInfo("${repository}" "${hash}")
 
 # Both unstaged and staged tracked edits must update an existing header.
-file(APPEND "${repository}/src/shared/build_info.hpp.in" "\n")
+file(APPEND "${repository}/cmake/build_info.hpp.in" "\n")
 checkBuildInfo("${repository}" "${hash} - dirty")
-runGit(add src/shared/build_info.hpp.in)
+runGit(add cmake/build_info.hpp.in)
 checkBuildInfo("${repository}" "${hash} - dirty")
 runGit(commit -q -m Update)
 runGit(rev-parse --short=7 HEAD)
@@ -79,6 +79,6 @@ checkBuildInfo("${repository}" "" "-DMU_GIT_EXECUTABLE=")
 checkBuildInfo("${repository}" "" "-DMU_GIT_EXECUTABLE=${TEST_ROOT}/missing-git")
 
 # An archive nested inside another repository must not inherit its revision.
-file(MAKE_DIRECTORY "${repository}/archive/src/shared")
-file(COPY "${PROJECT_SOURCE_DIR}/src/shared/build_info.hpp.in" DESTINATION "${repository}/archive/src/shared")
+file(MAKE_DIRECTORY "${repository}/archive/cmake")
+file(COPY "${PROJECT_SOURCE_DIR}/cmake/build_info.hpp.in" DESTINATION "${repository}/archive/cmake")
 checkBuildInfo("${repository}/archive" "")

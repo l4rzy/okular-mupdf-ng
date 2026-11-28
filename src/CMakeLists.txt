@@ -1,16 +1,13 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-add_library(ng_shared INTERFACE)
-target_include_directories(ng_shared INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_GENERATED_INCLUDE_DIR}")
-target_link_libraries(ng_shared INTERFACE Paperbox::paperbox)
-if(MU_DEBUG_BUILD)
-    target_compile_definitions(ng_shared INTERFACE MU_DEBUG_ENABLED)
-endif()
+add_library(ng_common INTERFACE)
+target_include_directories(ng_common INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_GENERATED_INCLUDE_DIR}")
+target_link_libraries(ng_common INTERFACE Paperbox::paperbox)
 
 add_library(ng_cli_layout STATIC tools/cli/layout_config.cpp)
 set_target_properties(ng_cli_layout PROPERTIES AUTOMOC OFF POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(ng_cli_layout PUBLIC Qt6::Core ng_shared)
+target_link_libraries(ng_cli_layout PUBLIC Qt6::Core ng_common)
 if(BUILD_OKULAR_GENERATOR AND KF6Config_VERSION VERSION_LESS "6.29.0")
     # KConfig 6.29 moved user globals after cascaded application defaults.
     target_compile_definitions(ng_cli_layout PUBLIC MU_KCONFIG_LEGACY_PRECEDENCE)
@@ -24,9 +21,6 @@ endif()
 add_executable(mupdfng-cli
     tools/cli/main.cpp
     tools/cli/cli_args.cpp
-)
-target_include_directories(mupdfng-cli PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(mupdfng-cli PRIVATE
     ng_plugin_worker
@@ -45,10 +39,10 @@ install(TARGETS mupdfng-cli
 add_library(ng_plugin_crypto STATIC
     plugin/crypto/nss_state.cpp
     plugin/crypto/certificate_database.cpp)
-target_link_libraries(ng_plugin_crypto PUBLIC Qt6::Core ng_shared Paperbox::nss)
+target_link_libraries(ng_plugin_crypto PUBLIC Qt6::Core ng_common Paperbox::nss)
 
 add_library(ng_plugin_worker STATIC plugin/worker_client.cpp)
-target_link_libraries(ng_plugin_worker PUBLIC Qt6::Core Qt6::Gui ng_shared Paperbox::nss PRIVATE ng_plugin_util)
+target_link_libraries(ng_plugin_worker PUBLIC Qt6::Core Qt6::Gui ng_common Paperbox::nss PRIVATE ng_plugin_util)
 target_compile_definitions(ng_plugin_worker PRIVATE WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}")
 add_dependencies(ng_plugin_worker paperbox-worker)
 if(ENABLE_BUILD_TREE_WORKER)
@@ -66,7 +60,7 @@ add_library(ng_plugin_util STATIC
   plugin/xfdf/export.cpp
   plugin/xfdf/import.cpp)
 target_include_directories(ng_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(ng_plugin_util PUBLIC Qt6::Core Qt6::Gui ng_shared)
+target_link_libraries(ng_plugin_util PUBLIC Qt6::Core Qt6::Gui ng_common)
 
 set_target_properties(ng_plugin_crypto ng_plugin_worker ng_plugin_util
     PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -231,6 +225,10 @@ kcoreaddons_add_plugin(okularGenerator_mupdfng
     SOURCES ${okularGenerator_mupdfng_SRCS}
 )
 add_dependencies(okularGenerator_mupdfng ng_build_info)
+# Keep the embedded Paperbox implementation private to the Okular plugin.
+target_link_options(okularGenerator_mupdfng PRIVATE
+    "LINKER:--exclude-libs,$<TARGET_FILE_NAME:Paperbox::paperbox>"
+    "LINKER:--exclude-libs,$<TARGET_FILE_NAME:Paperbox::nss>")
 qt_add_resources(okularGenerator_mupdfng "mupdfng_xmlgui"
     PREFIX "/kxmlgui5/okular_mupdfng"
     BASE "generator/ui"
@@ -244,7 +242,9 @@ target_include_directories(okularGenerator_mupdfng PRIVATE
     ${OKULAR_CORE_INCLUDE_DIR}
 )
 
-target_compile_definitions(okularGenerator_mupdfng PRIVATE TESSDATA_DIR="${TESSDATA_DIR}")
+target_compile_definitions(okularGenerator_mupdfng PRIVATE
+    TESSDATA_DIR="${TESSDATA_DIR}"
+    MU_DEBUG_ENABLED=$<BOOL:${MU_DEBUG_BUILD}>)
 if(ENABLE_FORM_JAVASCRIPT)
     target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_WORKER_ENABLE_FORM_JAVASCRIPT)
 endif()
@@ -258,7 +258,7 @@ target_link_libraries(okularGenerator_mupdfng
     ng_plugin_ocr
     ng_plugin_util
     ng_plugin_worker
-    ng_shared
+    ng_common
     Okular::Core
     KF6::I18n
     KF6::ConfigCore

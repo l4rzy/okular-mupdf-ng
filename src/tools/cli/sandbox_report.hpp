@@ -1,91 +1,74 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MU_SHARED_SANDBOX_REPORT_HPP
-#define MU_SHARED_SANDBOX_REPORT_HPP
+#ifndef MU_CLI_SANDBOX_REPORT_HPP
+#define MU_CLI_SANDBOX_REPORT_HPP
 
 #include <paperbox/model/sandbox_status.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <ostream>
 #include <string_view>
 
 namespace Mu::Cli {
 
-using paperbox::model::ProtectionCategory;
-using paperbox::model::ProtectionState;
-
-enum class IsolationLevel : std::uint8_t { Unknown, Full, Degraded, None };
-
-[[nodiscard]] constexpr std::string_view protectionStateName(ProtectionState state) noexcept
+inline std::string_view protectionStateName(paperbox::model::ProtectionState state)
 {
+    using enum paperbox::model::ProtectionState;
     switch (state) {
-    case ProtectionState::Unknown:
+    case Unknown:
         return "unknown";
-    case ProtectionState::Enforced:
+    case Enforced:
         return "enforced";
-    case ProtectionState::Unavailable:
+    case Unavailable:
         return "unavailable";
-    case ProtectionState::Disabled:
+    case Disabled:
         return "disabled";
-    case ProtectionState::Failed:
+    case Failed:
         return "failed";
     }
     return "unknown";
 }
 
-[[nodiscard]] constexpr std::string_view protectionCategoryName(ProtectionCategory category) noexcept
+inline std::string_view protectionCategoryName(paperbox::model::ProtectionCategory category)
 {
+    using enum paperbox::model::ProtectionCategory;
     switch (category) {
-    case ProtectionCategory::Filesystem:
+    case Filesystem:
         return "filesystem";
-    case ProtectionCategory::Network:
+    case Network:
         return "network";
-    case ProtectionCategory::Syscall:
+    case Syscall:
         return "syscall";
-    case ProtectionCategory::Process:
+    case Process:
         return "process";
-    case ProtectionCategory::Resources:
+    case Resources:
         return "resources";
-    case ProtectionCategory::Memory:
+    case Memory:
         return "memory";
-    case ProtectionCategory::Transport:
+    case Transport:
         return "transport";
-    case ProtectionCategory::Other:
+    case Other:
         return "other";
     }
     return "other";
 }
 
-[[nodiscard]] constexpr std::string_view isolationLevelName(IsolationLevel level) noexcept
+inline std::string_view isolationName(const paperbox::model::SandboxStatus& status)
 {
-    switch (level) {
-    case IsolationLevel::Unknown:
-        return "unknown";
-    case IsolationLevel::Full:
-        return "full";
-    case IsolationLevel::Degraded:
-        return "degraded";
-    case IsolationLevel::None:
-        return "none";
-    }
-    return "unknown";
-}
-
-[[nodiscard]] inline IsolationLevel isolation(const paperbox::model::SandboxStatus& status) noexcept
-{
+    // Keep these labels consistent between the text and JSON reports.
     if (status.platform.empty() || status.profile.empty())
-        return IsolationLevel::Unknown;
+        return "unknown";
     if (status.isFullyHardened())
-        return IsolationLevel::Full;
+        return "full";
     if (status.isPartiallyActive())
-        return IsolationLevel::Degraded;
-    if (status.protections.empty()
-        || std::any_of(status.protections.begin(), status.protections.end(), [](const auto& p) {
-               return p.required && p.state == ProtectionState::Unknown;
-           }))
-        return IsolationLevel::Unknown;
-    return IsolationLevel::None;
+        return "degraded";
+    if (status.protections.empty() || std::ranges::any_of(status.protections, [](const auto& protection) {
+            return protection.required && protection.state == paperbox::model::ProtectionState::Unknown;
+        }))
+        return "unknown";
+    return "none";
 }
 
 inline std::string escapeJsonString(const std::string& value)
@@ -123,8 +106,8 @@ inline std::string escapeJsonString(const std::string& value)
 
 inline void printSandboxStatusHuman(std::ostream& out, const paperbox::model::SandboxStatus& status)
 {
-    out << "Sandbox: " << status.platform << " profile=" << status.profile
-        << " isolation=" << isolationLevelName(isolation(status)) << "\n";
+    out << "Sandbox: " << status.platform << " profile=" << status.profile << " isolation=" << isolationName(status)
+        << "\n";
     for (const auto& protection : status.protections) {
         out << "  " << protection.id << ": " << protectionStateName(protection.state)
             << " required=" << protection.required << " version=" << protection.version << "\n";
@@ -139,7 +122,7 @@ inline void printSandboxStatusHuman(std::ostream& out, const paperbox::model::Sa
 inline void printSandboxStatusJson(std::ostream& out, const paperbox::model::SandboxStatus& status)
 {
     out << "{\"platform\":\"" << escapeJsonString(status.platform) << "\",\"profile\":\""
-        << escapeJsonString(status.profile) << "\",\"isolation\":\"" << isolationLevelName(isolation(status)) << '\"'
+        << escapeJsonString(status.profile) << "\",\"isolation\":\"" << isolationName(status) << '\"'
         << ",\"policySatisfied\":" << (status.isFullyHardened() ? "true" : "false") << ",\"protections\":[";
     bool first = true;
     for (const auto& p : status.protections) {
@@ -165,4 +148,4 @@ inline void printSandboxStatusJson(std::ostream& out, const paperbox::model::San
 
 } // namespace Mu::Cli
 
-#endif // MU_SHARED_SANDBOX_REPORT_HPP
+#endif // MU_CLI_SANDBOX_REPORT_HPP

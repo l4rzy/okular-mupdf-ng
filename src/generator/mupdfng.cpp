@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/mupdfng.hpp"
+#include "build_info.hpp"
 #include "generator/ui/window_menus.hpp"
 #include "paperbox_model.hpp"
-#include "shared/build_info.hpp"
 
 #include <okular/core/fileprinter.h>
 #include <okular/core/page.h>
@@ -55,13 +55,17 @@
 #include "plugin/util/render_image.hpp"
 #include "plugin/util/signature_image.hpp"
 #include "plugin/util/temp_dir.hpp"
-#include "shared/logging.hpp"
+#include <paperbox/logging.hpp>
 
 K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "manifest.json")
 
 namespace Mu::Generator {
 
 namespace {
+
+namespace Log = paperbox::log;
+constexpr auto LogComponent = "Mu::Generator::Main";
+constexpr bool DebugLogging = MU_DEBUG_ENABLED;
 
 // Okular notification durations in milliseconds. Positive values are the
 // on-screen timeout; a negative value asks Okular to derive the timeout from
@@ -167,12 +171,13 @@ Main::Main(QObject* parent, const QVariantList& args)
     // Step 3: Start the isolated worker. The worker binary path is embedded at compile time by CMake.
     // WorkerClient::start() will also try PATH and install-dir fallbacks.
     if (!m_worker.start(QString(), Config::readTessDataDirectories())) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to start paperbox-worker");
+        Log::write(Log::Level::Warning, LogComponent, "failed to start paperbox-worker");
     }
     // Step 4: Invalidate asynchronous UI state before handling worker failure.
     connect(&m_worker, &Plugin::WorkerClient::workerDied, this, [this](int code) {
         m_linkPreview.reset();
-        MU_LOG(warning, "Mu::Generator::Main", std::string("paperbox-worker died with code ") + std::to_string(code));
+        Log::write(
+            Log::Level::Warning, LogComponent, std::string("paperbox-worker died with code ") + std::to_string(code));
         m_ocrController->reset();
         m_annotationProxy.setAvailable(false);
         m_formCoordinator->setAvailable(false);
@@ -229,7 +234,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         &Plugin::WorkerClient::workerUnavailable,
         this,
         [this] {
-            MU_LOG(critical, "Mu::Generator::Main", "worker restart limit reached; displaying error image");
+            Log::write(Log::Level::Critical, LogComponent, "worker restart limit reached; displaying error image");
             failClosed(i18n("The document renderer stopped responding. Restart Okular to try again."));
         },
         Qt::QueuedConnection);
@@ -238,7 +243,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         &Plugin::WorkerClient::pageLinksReady,
         this,
         [this](quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, QString error) {
-            if (epoch != m_worker.paperboxClient().documentEpoch())
+            if (epoch != m_paperboxClient.documentEpoch())
                 return;
             for (const auto& pageLinks : pages) {
                 if (pageLinks.page >= 0 && pageLinks.page < m_okularPages.size())
@@ -246,13 +251,13 @@ Main::Main(QObject* parent, const QVariantList& args)
                         ->setObjectRects(Conversion::objectRects(pageLinks.links, &m_linkPreview, pageLinks.page));
             }
             if (!error.isEmpty()) {
-                MU_LOG(warning,
-                       "Mu::Generator::Main",
-                       std::string("asynchronous page-link loading stopped: ") + error.toStdString());
+                Log::write(Log::Level::Warning,
+                           LogComponent,
+                           std::string("asynchronous page-link loading stopped: ") + error.toStdString());
             } else if (resourceLimited) {
-                MU_LOG(warning, "Mu::Generator::Main", "asynchronous page-link loading hit its resource limit");
-            } else {
-                MU_LOG(debug, "Mu::Generator::Main", "asynchronous page-link loading completed");
+                Log::write(Log::Level::Warning, LogComponent, "asynchronous page-link loading hit its resource limit");
+            } else if constexpr (DebugLogging) {
+                Log::write(Log::Level::Debug, LogComponent, "asynchronous page-link loading completed");
             }
         },
         Qt::QueuedConnection);
@@ -269,11 +274,12 @@ Main::Main(QObject* parent, const QVariantList& args)
                 Q_EMIT notice(i18n("Finalizing PDF…"), NoticeMs);
                 break;
             case Model::ExportPhase::Succeeded:
-                MU_LOG(debug, "Mu::Generator::Main", "PDF export completed");
+                if constexpr (DebugLogging)
+                    Log::write(Log::Level::Debug, LogComponent, "PDF export completed");
                 Q_EMIT notice(i18n("Export to PDF finished."), NoticeMs);
                 break;
             case Model::ExportPhase::Failed:
-                MU_LOG(warning, "Mu::Generator::Main", "PDF export failed: " + progress.error);
+                Log::write(Log::Level::Warning, LogComponent, "PDF export failed: " + progress.error);
                 Q_EMIT warning(i18n("Export to PDF failed: %1", QString::fromStdString(progress.error)), LongWarningMs);
                 break;
             }
@@ -289,11 +295,12 @@ Main::Main(QObject* parent, const QVariantList& args)
                                source == Plugin::OCR::Controller::CompletionSource::OcrCompleted);
             });
     connect(m_ocrController.get(), &Plugin::OCR::Controller::failed, this, [this](int page) {
-        MU_LOG(warning, "Mu::Generator::Main", std::string("OCR failed for page ") + std::to_string(page + 1));
+        Log::write(Log::Level::Warning, LogComponent, std::string("OCR failed for page ") + std::to_string(page + 1));
         Q_EMIT warning(i18n("OCR failed for page %1", page + 1), WarningMs);
     });
     m_linkPreview.setResolver([this](const QString& uri) { return m_worker.resolveLink(uri); });
-    MU_LOG(debug, "Mu::Generator::Main", "Scheduling cache vacuum");
+    if constexpr (DebugLogging)
+        Log::write(Log::Level::Debug, LogComponent, "Scheduling cache vacuum");
     scheduleCacheVacuum();
 }
 
@@ -335,11 +342,11 @@ void Main::scheduleCacheVacuum()
         QThreadPool::globalInstance()->start(QRunnable::create([guard, root = Plugin::Caching::cacheRoot()] {
             const auto cutoff = std::chrono::system_clock::now() - std::chrono::days(Config::CacheRetentionDays);
             const auto result = paperbox::pruneCaches(root, cutoff);
-            MU_LOG(debug,
-                   "Mu::Generator::Main",
-                   std::string("cache vacuum removed ") + std::to_string(result.filesRemoved) + " files in "
-                       + std::to_string(result.dirsRemoved) + " directories");
-            (void)result;
+            if constexpr (DebugLogging)
+                Log::write(Log::Level::Debug,
+                           LogComponent,
+                           std::string("cache vacuum removed ") + std::to_string(result.filesRemoved) + " files in "
+                               + std::to_string(result.dirsRemoved) + " directories");
             if (!guard)
                 return;
             QMetaObject::invokeMethod(
@@ -407,8 +414,8 @@ bool Main::reparseConfig()
 
     // Propagate changed settings to the worker process.
     if (pushWorkerSettings && workerReady()
-        && !m_worker.paperboxClient().setSettings(m_settings.documentSettings(m_paperColorRgb)))
-        MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
+        && !m_paperboxClient.setSettings(m_settings.documentSettings(m_paperColorRgb)))
+        Log::write(Log::Level::Warning, LogComponent, "failed to apply settings after configuration reload");
 
     if (reopenForJavaScript) {
         // Disable worker-backed edits during the source refresh; a failure is
@@ -435,9 +442,11 @@ bool Main::updateSandboxGate()
     if (newBlocked == m_pageError.isActive() || !document())
         return true;
 
-    MU_LOG(debug,
-           "Mu::Generator::Main",
-           std::string("sandbox enforcement changed: ") + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
+    if constexpr (DebugLogging)
+        Log::write(Log::Level::Debug,
+                   LogComponent,
+                   std::string("sandbox enforcement changed: ")
+                       + (newBlocked ? "relaxed -> strict" : "strict -> relaxed"));
     if (newBlocked) {
         if (m_formsDirty || m_annotationsDirty) {
             // Closing and reopening would discard UI mutations that have
@@ -600,8 +609,8 @@ bool Main::prepareDocumentOpen(const QString& settingsKey)
 
     loadDocumentSettings(settingsKey);
     refreshPaperColor();
-    if (!m_worker.paperboxClient().setSettings(m_settings.documentSettings(m_paperColorRgb))) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
+    if (!m_paperboxClient.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+        Log::write(Log::Level::Warning, LogComponent, "failed to push render settings before opening the document");
         return false;
     }
     return true;
@@ -611,8 +620,8 @@ bool Main::prepareDocumentOpen(const QString& settingsKey)
 Okular::Document::OpenResult
 Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& pages, const QString& password)
 {
-    if (!m_worker.paperboxClient().isConnected()) {
-        MU_LOG(warning, "Mu::Generator::Main", "worker is not connected; cannot open document");
+    if (!m_paperboxClient.isConnected()) {
+        Log::write(Log::Level::Warning, LogComponent, "worker is not connected; cannot open document");
         return Okular::Document::OpenError;
     }
 
@@ -624,7 +633,8 @@ Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& 
 
     const auto docType = Plugin::Util::documentTypeForFile(fileName);
     if (docType == Model::DocumentType::Unknown) {
-        MU_LOG(warning, "Mu::Generator::Main", std::string("unsupported document type: ") + fileName.toStdString());
+        Log::write(
+            Log::Level::Warning, LogComponent, std::string("unsupported document type: ") + fileName.toStdString());
         return Okular::Document::OpenError;
     }
 
@@ -653,8 +663,8 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
                                                                     QVector<Okular::Page*>& pages,
                                                                     const QString& password)
 {
-    if (!m_worker.paperboxClient().isConnected()) {
-        MU_LOG(warning, "Mu::Generator::Main", "worker is not connected; cannot open document data");
+    if (!m_paperboxClient.isConnected()) {
+        Log::write(Log::Level::Warning, LogComponent, "worker is not connected; cannot open document data");
         return Okular::Document::OpenError;
     }
 
@@ -666,7 +676,7 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
 
     const auto docType = Plugin::Util::documentTypeForData(fileData);
     if (docType == Model::DocumentType::Unknown) {
-        MU_LOG(warning, "Mu::Generator::Main", "unsupported document data");
+        Log::write(Log::Level::Warning, LogComponent, "unsupported document data");
         return Okular::Document::OpenError;
     }
 
@@ -711,7 +721,7 @@ void Main::warnIfRepairedDocument(const Model::DocumentMetadata& info)
 // offers no banner retraction when the preference flips off mid-session.
 void Main::notifyDegradedSandbox()
 {
-    auto sandboxStatus = m_worker.paperboxClient().sandboxStatus();
+    auto sandboxStatus = m_paperboxClient.sandboxStatus();
 
     auto warningMessage = [sandboxStatus]() {
         if (sandboxStatus.isPartiallyActive())
@@ -731,20 +741,20 @@ void Main::notifyDegradedSandbox()
 QString Main::generatorExtraDescription() const
 {
     QString engineVersion = i18n("Unknown");
-    if (m_worker.paperboxClient().isConnected()) {
-        const std::string workerVersion = m_worker.paperboxClient().engineVersion();
+    if (m_paperboxClient.isConnected()) {
+        const std::string workerVersion = m_paperboxClient.engineVersion();
         if (!workerVersion.empty())
             engineVersion = QString::fromStdString(workerVersion);
     }
 
-    QString result = m_worker.paperboxClient().usesSystemMuPdf() ? i18n("MuPDF: %1 (system library)", engineVersion)
-                                                                 : i18n("MuPDF: %1 (bundled, patched)", engineVersion);
+    QString result = m_paperboxClient.usesSystemMuPdf() ? i18n("MuPDF: %1 (system library)", engineVersion)
+                                                        : i18n("MuPDF: %1 (bundled, patched)", engineVersion);
     if (!Mu::GIT_BUILD.empty()) {
         const QString gitBuild = QString::fromUtf8(Mu::GIT_BUILD.data(), static_cast<qsizetype>(Mu::GIT_BUILD.size()));
         result.prepend(i18n("[git build: %1]", gitBuild) + QLatin1Char('\n'));
     }
 
-    const Model::SandboxStatus status = m_worker.paperboxClient().sandboxStatus();
+    const Model::SandboxStatus status = m_paperboxClient.sandboxStatus();
     if (status.isFullyHardened()) {
         result += QStringLiteral("\n") + i18n("Sandbox: Fully hardened [OK]");
     } else if (status.isPartiallyActive()) {
@@ -755,14 +765,14 @@ QString Main::generatorExtraDescription() const
     const QString profile = status.profile.empty() ? i18n("Unknown") : QString::fromStdString(status.profile);
     result += QStringLiteral("\n") + i18n("Sandbox profile: %1", profile);
 
-    if (m_worker.paperboxClient().isConnected()) {
-        const std::optional<quint64> workerMemory = m_worker.paperboxClient().workerMemoryBytes();
+    if (m_paperboxClient.isConnected()) {
+        const std::optional<quint64> workerMemory = m_paperboxClient.workerMemoryBytes();
         const QString memoryText =
             workerMemory ? QLocale().formattedDataSize(static_cast<qint64>(*workerMemory)) : i18n("unknown");
         result += QStringLiteral("\n") + i18n("Worker memory: %1", memoryText);
     }
 
-    result += QStringLiteral("\n") + i18n("Worker restarts: %1", m_worker.paperboxClient().restartCount());
+    result += QStringLiteral("\n") + i18n("Worker restarts: %1", m_paperboxClient.restartCount());
 
     return result;
 }
@@ -771,7 +781,7 @@ QString Main::generatorExtraDescription() const
 bool Main::sandboxGated() const
 {
     return Config::readSandboxEnforcement() == Config::SandboxEnforcement::Strict
-        && !m_worker.paperboxClient().sandboxStatus().isFullyHardened();
+        && !m_paperboxClient.sandboxStatus().isFullyHardened();
 }
 
 // Gates every worker-backed generator operation on an explicit session state.
@@ -786,7 +796,7 @@ bool Main::workerReady() const
 void Main::closeWorkerDocument()
 {
     m_linkPreview.reset();
-    m_worker.paperboxClient().close();
+    m_paperboxClient.close();
 }
 
 // Localized Strict-gate guidance shown on the placeholder card and in
@@ -794,7 +804,7 @@ void Main::closeWorkerDocument()
 QString Main::sandboxGateMessage() const
 {
     QStringList diagnostics;
-    for (const auto& diagnostic : m_worker.paperboxClient().sandboxStatus().diagnostics)
+    for (const auto& diagnostic : m_paperboxClient.sandboxStatus().diagnostics)
         diagnostics.push_back(QString::fromStdString(diagnostic));
     const QString reason = diagnostics.join(QStringLiteral("; "));
     return i18n("The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
@@ -900,7 +910,7 @@ void Main::reopenWithheldDocument()
     }
     const QUrl url = doc->currentDocument();
     if (!url.isLocalFile()) {
-        MU_LOG(warning, "Mu::Generator::Main", "cannot auto-reopen a document without a local file");
+        Log::write(Log::Level::Warning, LogComponent, "cannot auto-reopen a document without a local file");
         Q_EMIT warning(i18n("Switched to Relaxed enforcement. Please reopen the document manually."), AutoDurationMs);
         notifyDegradedSandbox();
         return;
@@ -908,11 +918,12 @@ void Main::reopenWithheldDocument()
     const QString docFile = url.toLocalFile();
     const QString password = m_document.password;
     const QMimeType mime = QMimeDatabase().mimeTypeForFile(docFile);
-    MU_LOG(debug, "Mu::Generator::Main", "sandbox gate relaxed; reopening withheld document");
+    if constexpr (DebugLogging)
+        Log::write(Log::Level::Debug, LogComponent, "sandbox gate relaxed; reopening withheld document");
     doc->closeDocument();
     // On failure the generator signals are disconnected, so this is log-only.
     if (doc->openDocument(docFile, url, mime, password) != Okular::Document::OpenSuccess)
-        MU_LOG(warning, "Mu::Generator::Main", "document reopen failed after enforcement change");
+        Log::write(Log::Level::Warning, LogComponent, "document reopen failed after enforcement change");
     notifyDegradedSandbox();
 }
 
@@ -1010,8 +1021,7 @@ void Main::applyOcrResult(int page, std::vector<Model::TextBox> boxes, std::uint
     QMutexLocker locker(userMutex());
     auto* target = m_okularPages.at(page);
     bool success = false;
-    const auto native =
-        m_worker.paperboxClient().getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
+    const auto native = m_paperboxClient.getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
     if (!success)
         return;
     auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
@@ -1038,15 +1048,15 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
     // so any failure here leaves the UI and availability state unchanged.
     QList<Plugin::WorkerClient::PageInfo> pages;
     refreshPaperColor();
-    if (!m_worker.paperboxClient().setSettings(m_settings.documentSettings(m_paperColorRgb))) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after worker restart");
+    if (!m_paperboxClient.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+        Log::write(Log::Level::Warning, LogComponent, "failed to apply settings after worker restart");
         return false;
     }
     const auto openStatus = m_document.sourcePath.isEmpty()
         ? m_worker.openData(m_document.sourceData, m_document.password, pages, m_document.type)
         : m_worker.open(m_document.sourcePath, m_document.password, pages, m_document.type);
     if (openStatus != Model::OpenStatus::Success) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to reopen document after worker restart");
+        Log::write(Log::Level::Warning, LogComponent, "failed to reopen document after worker restart");
         return false;
     }
 
@@ -1058,20 +1068,19 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
         && (m_document.hash.isEmpty()
             || (hash != metadata.values.end() && QString::fromStdString(hash->second) == m_document.hash));
     if (!documentMatches) {
-        MU_LOG(warning, "Mu::Generator::Main", "reopened document does not match the active document");
+        Log::write(Log::Level::Warning, LogComponent, "reopened document does not match the active document");
         closeWorkerDocument();
         return false;
     }
 
     // Restore the layer state before rebuilding the UI.
     if (metadata.capabilities.layers) {
-        const auto layers = m_worker.paperboxClient().layers();
+        const auto layers = m_paperboxClient.layers();
         if (!layers
             || (m_layersModel
-                && !m_layersModel->restoreLayers(*layers,
-                                                 [this](const Model::SetLayerRequest& request) {
-                                                     return m_worker.paperboxClient().setLayer(request);
-                                                 }))
+                && !m_layersModel->restoreLayers(
+                    *layers,
+                    [this](const Model::SetLayerRequest& request) { return m_paperboxClient.setLayer(request); }))
             || (!m_layersModel && !layers->entries.empty())) {
             closeWorkerDocument();
             return false;
@@ -1118,7 +1127,8 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
         }
     }
     m_ocrController->reset();
-    MU_LOG(debug, "Mu::Generator::Main", "reopened document from retained source");
+    if constexpr (DebugLogging)
+        Log::write(Log::Level::Debug, LogComponent, "reopened document from retained source");
     return true;
 }
 
@@ -1210,7 +1220,7 @@ Okular::DocumentInfo Main::generateDocumentInfo(const QSet<Okular::DocumentInfo:
 
     const auto info = m_worker.getDocumentInfo(workerKeys);
     if (info.mimeType.empty()) {
-        MU_LOG(warning, "Mu::Generator::Main", "Worker getDocumentInfo failed");
+        Log::write(Log::Level::Warning, LogComponent, "Worker getDocumentInfo failed");
         return result;
     }
     const auto metadata = [&info](const char* field) {
@@ -1265,7 +1275,7 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
     const bool allowHeuristic = m_document.heuristicSynopsisEnabled;
     locker.unlock();
     bool generated = false;
-    const auto nodes = m_worker.paperboxClient().synopsis(allowHeuristic, &generated);
+    const auto nodes = m_paperboxClient.synopsis(allowHeuristic, &generated);
     if (!nodes)
         return nullptr;
     auto synopsis = Conversion::documentSynopsis(*nodes);
@@ -1292,7 +1302,7 @@ Okular::FontInfo::List Main::fontsForPage(int page)
     if (m_pageError.isActive())
         return { };
     if (workerReady()) {
-        const std::vector<Model::Font> source = m_worker.paperboxClient().fonts(page);
+        const std::vector<Model::Font> source = m_paperboxClient.fonts(page);
         Okular::FontInfo::List result;
         for (const auto& font : source) {
             result.append(Conversion::fromModel(font));
@@ -1421,7 +1431,7 @@ QImage Main::image(Okular::PixmapRequest* request)
         // Cancellation is optional; discarding obsolete images remains mandatory.
         const std::function<bool()> cancellation =
             m_cancelObsoleteRenders.load() ? shouldAbort : std::function<bool()> { };
-        const auto workerEpoch = m_worker.paperboxClient().documentEpoch();
+        const auto workerEpoch = m_paperboxClient.documentEpoch();
         bool includeLinks = false;
         {
             QMutexLocker lock(&m_linkMutex);
@@ -1433,19 +1443,19 @@ QImage Main::image(Okular::PixmapRequest* request)
         if (shouldAbort())
             return { };
         if (img.isNull()) {
-            MU_LOG(warning,
-                   "Mu::Generator::Main",
-                   std::string("Worker render failed for page ") + std::to_string(pageNum));
+            Log::write(Log::Level::Warning,
+                       LogComponent,
+                       std::string("Worker render failed for page ") + std::to_string(pageNum));
             return { };
         }
         const QSize sourceSize = img.size();
         img = Plugin::Util::normalizeRenderImage(std::move(img), expectedSize);
-        if (img.size() != sourceSize)
-            MU_LOG(debug,
-                   "Mu::Generator::Main",
-                   "normalized render frame from " + std::to_string(sourceSize.width()) + "x"
-                       + std::to_string(sourceSize.height()) + " to " + std::to_string(img.width()) + "x"
-                       + std::to_string(img.height()));
+        if (DebugLogging && img.size() != sourceSize)
+            Log::write(Log::Level::Debug,
+                       LogComponent,
+                       "normalized render frame from " + std::to_string(sourceSize.width()) + "x"
+                           + std::to_string(sourceSize.height()) + " to " + std::to_string(img.width()) + "x"
+                           + std::to_string(img.height()));
         // A pending signature is display-only and owned by the generator; the
         // worker is only told about it when the user finishes signing.
         const Okular::NormalizedRect renderedRegion =
@@ -1456,7 +1466,7 @@ QImage Main::image(Okular::PixmapRequest* request)
         if (includeLinks && links.generation && links.error.empty()) {
             auto install = [this, request, pageNum, workerEpoch, revision, links = std::move(links.links)] {
                 QMutexLocker lock(&m_linkMutex);
-                if (workerEpoch != m_worker.paperboxClient().documentEpoch() || revision != m_layerRevision.load()
+                if (workerEpoch != m_paperboxClient.documentEpoch() || revision != m_layerRevision.load()
                     || request->shouldAbortRender() || m_installedLinkPages.contains(pageNum) || pageNum < 0
                     || pageNum >= m_okularPages.size())
                     return;
@@ -1487,7 +1497,7 @@ void Main::loadLayers()
     m_defaultLayerVisibility = true;
     if (!m_document.capabilities.layers)
         return;
-    const auto layers = m_worker.paperboxClient().layers();
+    const auto layers = m_paperboxClient.layers();
     if (!layers) {
         Q_EMIT warning(i18n("The PDF layers could not be loaded."), WarningMs);
         return;
@@ -1498,7 +1508,7 @@ void Main::loadLayers()
         if (!workerReady())
             return std::optional<Model::LayersResponse> { };
         m_linkPreview.reset();
-        return m_worker.paperboxClient().setLayer(request);
+        return m_paperboxClient.setLayer(request);
     });
     connect(m_layersModel.get(), &LayersModel::changeFailed, this, [this] {
         Q_EMIT warning(i18n("The PDF layer visibility could not be changed."), WarningMs);
@@ -1581,7 +1591,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         if (!workerReady())
             return nullptr;
         const std::vector<Model::TextBox> workerBoxes =
-            m_worker.paperboxClient().getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
+            m_paperboxClient.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
         return finish(Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height()));
     }
 
@@ -1589,8 +1599,8 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     // Both cached and fresh results use the same merge with the current native layer.
     if (workerReady()) {
         bool success = false;
-        const std::vector<Model::TextBox> workerBoxes = m_worker.paperboxClient().getTextBoxesForPage(
-            pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true, &success);
+        const std::vector<Model::TextBox> workerBoxes =
+            m_paperboxClient.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true, &success);
         if (!success)
             return nullptr;
         if (m_defaultLayerVisibility.load()) {
@@ -1621,10 +1631,10 @@ QVariant Main::metaData(const QString& key, const QVariant& option) const
     if (key == QLatin1String("NamedViewport") && workerReady() && !option.toString().isEmpty()) {
         // Okular's public named-destination API is synchronous. Only this URI
         // is resolved; speculative hover resolution uses the preview pool.
-        const auto epoch = m_worker.paperboxClient().documentEpoch();
+        const auto epoch = m_paperboxClient.documentEpoch();
         const auto target = m_worker.resolveLink(option.toString());
-        if (epoch == m_worker.paperboxClient().documentEpoch() && target.valid && !target.external
-            && target.viewport.page >= 0 && target.viewport.page < m_okularPages.size()) {
+        if (epoch == m_paperboxClient.documentEpoch() && target.valid && !target.external && target.viewport.page >= 0
+            && target.viewport.page < m_okularPages.size()) {
 #if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
             return QVariant::fromValue(Conversion::viewportFromModel(target.viewport));
 #else // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
@@ -1677,7 +1687,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
     if (!m_embeddedFilesCache) {
         if (!workerReady())
             return nullptr;
-        const auto source = m_worker.paperboxClient().embeddedFiles();
+        const auto source = m_paperboxClient.embeddedFiles();
         if (!source)
             return nullptr;
         m_embeddedFilesCache = std::make_unique<QList<Okular::EmbeddedFile*>>();

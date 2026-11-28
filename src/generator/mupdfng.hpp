@@ -240,11 +240,9 @@ private:
     // Must be called while userMutex() is held; releases cached embedded files.
     void clearEmbeddedFilesCache();
 
-    // -----------------------------------------------------------------------
-    // Trusted plugin facade for all worker operations. It owns the IPC client
-    // and keeps MuPDF outside the Okular process.
-    // -----------------------------------------------------------------------
+    // The Qt adapter owns the Paperbox session used by both members.
     Plugin::WorkerClient m_worker;
+    const paperbox::WorkerClient& m_paperboxClient = m_worker.paperboxClient();
     LinkPreview m_linkPreview;
     // Owns asynchronous OCR scheduling, focus tracking, and result retention;
     // Okular-facing glue (TextPage building, notifications) lives here.

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # Keep these values in sync with thirdparty/paperbox/cmake/mupdf.version.
-%global mupdf_version 1.28.6
-%global mupdf_sha256 dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
+%global mupdf_version 1.28.7
+%global mupdf_sha256 4052527c5064dc15033f8c2d842665afd409be520c9f52945ef703e5dec9d3ea
 %global _vpath_builddir build
 %global tessdata_dir %{_datadir}/tesseract/tessdata
 

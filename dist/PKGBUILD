@@ -3,7 +3,7 @@ pkgbase=okular-mupdf-ng
 pkgname=(okular-mupdf-ng okular-mupdf-ng-dynamic)
 _pkgname=okular-mupdf-ng
 # Keep the MuPDF version and checksum in sync with thirdparty/paperbox/cmake/mupdf.version.
-_mupdfver=1.28.6
+_mupdfver=1.28.7
 pkgver=0.6.5
 pkgrel=1
 pkgdesc="Secure and fast MuPDF-based Okular backend for PDF, ePUB, MOBI, AZW3, KFX, and XPS"
@@ -35,7 +35,7 @@ source=("$_pkgname::git+file://$startdir/.."
         "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
 sha256sums=('SKIP'
             'SKIP'
-            'dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101')
+            '4052527c5064dc15033f8c2d842665afd409be520c9f52945ef703e5dec9d3ea')
 _PREFIX="${PREFIX:-/usr}"
 
 pkgver() {

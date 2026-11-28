@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plugin/util/document_type.hpp"
-#include "shared/logging.hpp"
+#include <paperbox/logging.hpp>
 
 #include <QBuffer>
 #include <QFile>
@@ -90,7 +90,8 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
     // ZIP containers permit EPUB and XPS fallbacks.
     const bool isUnidentifiedBinary = contentMime == QStringLiteral("application/octet-stream");
     if (!isUnidentifiedBinary && !isZipContainerMime(contentMime)) {
-        MU_LOG(critical, "Mu::Plugin", "Unsupported common container type; aborting");
+        paperbox::log::write(
+            paperbox::log::Level::Critical, "Mu::Plugin", "Unsupported common container type; aborting");
         return Model::DocumentType::Unknown;
     }
 
@@ -98,12 +99,12 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
     // application/zip or application/java-archive; the extension is the only
     // remaining signal.
     if (suffixLower == QStringLiteral("epub")) {
-        MU_LOG(warning, "Mu::Plugin", "Falling back to epub suffix");
+        paperbox::log::write(paperbox::log::Level::Warning, "Mu::Plugin", "Falling back to epub suffix");
         return Model::DocumentType::Epub;
     }
 
     if (suffixLower == QStringLiteral("xps") || suffixLower == QStringLiteral("oxps")) {
-        MU_LOG(warning, "Mu::Plugin", "Falling back to xps/oxps suffix");
+        paperbox::log::write(paperbox::log::Level::Warning, "Mu::Plugin", "Falling back to xps/oxps suffix");
         return Model::DocumentType::Xps;
     }
 
@@ -114,7 +115,7 @@ Model::DocumentType resolveDocumentType(const QString& contentMime, const QStrin
             return Model::DocumentType::Kindle;
     }
 
-    MU_LOG(critical, "Mu::Plugin", "Unsupported MIME type; aborting");
+    paperbox::log::write(paperbox::log::Level::Critical, "Mu::Plugin", "Unsupported MIME type; aborting");
     return Model::DocumentType::Unknown;
 }
 

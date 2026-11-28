@@ -3,8 +3,8 @@
 
 #include <QTest>
 
-#include "shared/compat.hpp"
 #include "tools/cli/cli_args.hpp"
+#include "tools/cli/version.hpp"
 
 namespace Cli = Mu::Tools::Cli;
 

@@ -11,7 +11,7 @@
 #include <functional>
 
 #include "paperbox_model.hpp"
-#include "shared/form_backend.hpp"
+#include "plugin/form_backend.hpp"
 #include <paperbox/client.hpp>
 
 namespace Mu::Plugin {

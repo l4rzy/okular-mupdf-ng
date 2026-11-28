@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cctype>
 
-#include "shared/compat.hpp"
+#include "tools/cli/version.hpp"
 
 namespace Mu::Tools::Cli {
 

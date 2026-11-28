@@ -129,7 +129,7 @@ if(NOT MU_COMPAT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
 endif()
 set(MU_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(MU_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(MU_BUILD_INFO_FILE "${MU_GENERATED_INCLUDE_DIR}/shared/build_info.hpp")
+set(MU_BUILD_INFO_FILE "${MU_GENERATED_INCLUDE_DIR}/build_info.hpp")
 include(cmake/build_info.cmake)
 # Check on every build: commits, tags, and local edits can change without a
 # CMake reconfiguration. configure_file leaves an unchanged header untouched.
@@ -141,8 +141,8 @@ add_custom_target(ng_build_info
     BYPRODUCTS "${MU_BUILD_INFO_FILE}"
     VERBATIM)
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/compat.hpp.in"
-    "${MU_GENERATED_INCLUDE_DIR}/shared/compat.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/cli/version.hpp.in"
+    "${MU_GENERATED_INCLUDE_DIR}/tools/cli/version.hpp"
     @ONLY)
 
 set(MUPDF_WORKER_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/okular-mupdf-ng")
