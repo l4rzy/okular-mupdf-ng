@@ -8,10 +8,9 @@
 #include <algorithm>
 
 #include "mupdfngsettings.h"
-#include "plugin/caching/vacuum.hpp"
+#include "paperbox_model.hpp"
 #include "plugin/util/ocr_options.hpp"
 #include "plugin/util/signing_timestamp.hpp"
-#include "shared/model/validation.hpp"
 
 namespace Mu::Generator::Config {
 
@@ -389,13 +388,14 @@ QDateTime readCacheLastVacuum()
 {
     // Empty or hand-edited values decode to an invalid time, which the
     // vacuum throttle treats as "never vacuumed".
-    return Plugin::Caching::Vacuum::parseLastVacuum(MuPDFNGSettings::cacheLastVacuum());
+    const auto value = MuPDFNGSettings::cacheLastVacuum();
+    const auto parsed = QDateTime::fromString(value, Qt::ISODateWithMs);
+    return parsed.isValid() ? parsed : QDateTime::fromString(value, Qt::ISODate);
 }
 
 void writeCacheLastVacuum(const QDateTime& time)
 {
-    MuPDFNGSettings::self()->setCacheLastVacuum(time.isValid() ? Plugin::Caching::Vacuum::formatLastVacuum(time)
-                                                               : QString());
+    MuPDFNGSettings::self()->setCacheLastVacuum(time.isValid() ? time.toUTC().toString(Qt::ISODate) : QString());
     MuPDFNGSettings::self()->save();
 }
 

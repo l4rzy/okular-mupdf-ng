@@ -16,7 +16,10 @@
 #include <QWindow>
 #include <QtConcurrentRun>
 
+#include <algorithm>
+#include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <utility>
 
 #include "generator/config/certmanager/dialog_utils.hpp"
@@ -25,8 +28,7 @@
 #include "generator/config/signature_preview.hpp"
 #include "generator/config/tooltip.hpp"
 #include "mupdfngsettings.h"
-#include "plugin/caching/cache_file.hpp"
-#include "plugin/caching/vacuum.hpp"
+#include "plugin/caching/cache_root.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "ui_settingswidget.h"
 
@@ -214,10 +216,10 @@ MuPDFNGSettingsWidget::MuPDFNGSettingsWidget(QWidget* parent)
     });
     m_mupdfsw->cacheRetentionLabel->setText(i18np("Automatically removes cached files older than %1 day.",
                                                   "Automatically removes cached files older than %1 days.",
-                                                  Plugin::Caching::Vacuum::StaleDays));
+                                                  Config::CacheRetentionDays));
     m_mupdfsw->cacheResultLabel->hide();
     auto* cacheMenu = new QMenu(m_mupdfsw->cacheStorageButton);
-    using CacheKind = Plugin::Caching::Vacuum::CacheKind;
+    using CacheKind = paperbox::CacheKind;
     cacheMenu->addAction(i18n("Vacuum PDF TOCs"), this, [this] { refreshCacheUsage(CacheKind::PdfToc); });
     cacheMenu->addAction(i18n("Vacuum ePUB Accels"), this, [this] { refreshCacheUsage(CacheKind::EpubAccelerator); });
     cacheMenu->addAction(i18n("Vacuum OCR"), this, [this] { refreshCacheUsage(CacheKind::Ocr); });
@@ -236,27 +238,34 @@ MuPDFNGSettingsWidget::~MuPDFNGSettingsWidget()
 // Cache Usage & Cleanup
 // =============================================================================
 
-void MuPDFNGSettingsWidget::updateCacheMenu(const Plugin::Caching::Vacuum::CacheUsage* usage)
+namespace {
+
+QString formatCacheSize(std::uint64_t bytes)
+{
+    constexpr auto maxSize = static_cast<std::uint64_t>(std::numeric_limits<qint64>::max());
+    return QLocale().formattedDataSize(static_cast<qint64>(std::min(bytes, maxSize)));
+}
+
+} // namespace
+
+void MuPDFNGSettingsWidget::updateCacheMenu(const paperbox::CacheUsage* usage)
 {
     const auto actions = m_mupdfsw->cacheStorageButton->menu()->actions();
-    const auto setLabel = [&](int index, const QString& label, qint64 bytes) {
-        actions.at(index)->setText(usage ? i18nc("Cache cleanup action and its storage size",
-                                                 "%1 (%2)",
-                                                 label,
-                                                 QLocale().formattedDataSize(bytes))
-                                         : label);
+    const auto setLabel = [&](int index, const QString& label, std::uint64_t bytes) {
+        actions.at(index)->setText(
+            usage ? i18nc("Cache cleanup action and its storage size", "%1 (%2)", label, formatCacheSize(bytes))
+                  : label);
     };
     setLabel(0, i18n("Vacuum PDF TOCs"), usage ? usage->pdfTocBytes : 0);
     setLabel(1, i18n("Vacuum ePUB Accels"), usage ? usage->epubAcceleratorBytes : 0);
     setLabel(2, i18n("Vacuum OCR"), usage ? usage->ocrBytes : 0);
 }
 
-void MuPDFNGSettingsWidget::refreshCacheUsage(std::optional<Plugin::Caching::Vacuum::CacheKind> vacuum)
+void MuPDFNGSettingsWidget::refreshCacheUsage(std::optional<paperbox::CacheKind> vacuum)
 {
     if (!m_mupdfsw->cacheStorageButton->isEnabled())
         return;
-    namespace Cache = Plugin::Caching;
-    using Result = std::pair<Cache::Vacuum::VacuumResult, Cache::Vacuum::CacheUsage>;
+    using Result = std::pair<paperbox::CacheCleanup, paperbox::CacheUsage>;
     m_mupdfsw->cacheStorageButton->setEnabled(false);
     m_mupdfsw->cacheStorageButton->setText(vacuum ? i18n("Vacuuming…") : i18n("Calculating…"));
     updateCacheMenu();
@@ -279,17 +288,17 @@ void MuPDFNGSettingsWidget::refreshCacheUsage(std::optional<Plugin::Caching::Vac
             m_mupdfsw->cacheResultLabel->setText(i18n("Could not calculate cache storage size."));
             m_mupdfsw->cacheResultLabel->show();
         } else {
-            m_mupdfsw->cacheStorageButton->setText(i18n("Using %1", QLocale().formattedDataSize(usage.totalBytes())));
+            m_mupdfsw->cacheStorageButton->setText(i18n("Using %1", formatCacheSize(usage.totalBytes())));
             updateCacheMenu(&usage);
         }
     });
     // Capture only values: closing settings destroys the watcher, while the
     // filesystem task can finish without touching widgets or pending settings.
-    const QString root = Cache::directory(QString());
+    const auto root = Plugin::Caching::cacheRoot();
     watcher->setFuture(QtConcurrent::run([root, vacuum] {
         if (vacuum)
-            return Result { Cache::Vacuum::clearCaches(root, *vacuum), { } };
-        return Result { { }, Cache::Vacuum::measureCacheUsage(root) };
+            return Result { paperbox::clearCaches(root, *vacuum), { } };
+        return Result { { }, paperbox::measureCacheUsage(root) };
     }));
 }
 

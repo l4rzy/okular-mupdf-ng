@@ -1,300 +1,64 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "plugin/caching/cache_root.hpp"
+
 #include <QDataStream>
+#include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTest>
 
-#include <limits>
+#include <paperbox/cache.hpp>
 
-#include "plugin/caching/cache_file.hpp"
-#include "plugin/caching/ocr_cache.hpp"
-#include "plugin/caching/ocr_constants.hpp"
-
-class TestOCRCache : public QObject {
+class TestLegacyOcrCache : public QObject {
     Q_OBJECT
-
-private:
-    QTemporaryDir m_root;
-    const QString m_hash = QStringLiteral("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
 
 private slots:
 
-    void initTestCase()
+    void readsQtCache_data()
     {
-        QVERIFY(m_root.isValid());
-        ::Mu::Plugin::Caching::setRootForTesting(m_root.filePath("ocr-cache"));
-    }
-
-    void cleanupTestCase() { ::Mu::Plugin::Caching::clearRootForTesting(); }
-
-    void readBoundedEnforcesLimit()
-    {
-        const QString path = m_root.filePath(QStringLiteral("bounded.bin"));
-        QFile file(path);
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        QCOMPARE(file.write("12345"), qint64(5));
-        file.close();
-
-        const auto exact = ::Mu::Plugin::Caching::readBounded(path, 5);
-        QVERIFY(exact);
-        QCOMPARE(*exact, QByteArray("12345"));
-        QVERIFY(!::Mu::Plugin::Caching::readBounded(path, 4));
-        QVERIFY(!::Mu::Plugin::Caching::readBounded(path, -1));
-    }
-
-    void cacheKeyNormalization()
-    {
-        // Null/empty inputs
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::normalizeKey(QString(), QStringLiteral("eng"), 300));
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::normalizeKey(m_hash, QString(), 300));
-
-        // String with .traineddata and _300dpi suffix
-        const auto key1 =
-            ::Mu::Plugin::Caching::OCR::Cache::normalizeKey(m_hash, QStringLiteral("eng.traineddata"), 300);
-        QVERIFY(key1.has_value());
-        QCOMPARE(key1->documentHash, m_hash);
-        QCOMPARE(key1->language, QStringLiteral("eng"));
-        QCOMPARE(key1->dpi, 300);
-
-        const auto key2 =
-            ::Mu::Plugin::Caching::OCR::Cache::normalizeKey(m_hash, QStringLiteral("eng_150dpi.traineddata"), 0);
-        QVERIFY(key2.has_value());
-        QCOMPARE(key2->language, QStringLiteral("eng"));
-        QCOMPARE(key2->dpi, 150);
-
-        // Explicit DPI override
-        const auto key3 = ::Mu::Plugin::Caching::OCR::Cache::normalizeKey(m_hash, QStringLiteral("eng_150dpi"), 300);
-        QVERIFY(key3.has_value());
-        QCOMPARE(key3->language, QStringLiteral("eng"));
-        QCOMPARE(key3->dpi, 300);
-
-        // Path equivalence
-        QCOMPARE(::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(*key1, 5),
-                 ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 5, QStringLiteral("eng_300dpi")));
-
-        // Direct typed CacheKey operations
-        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> items { { QStringLiteral("K"), 0.1, 0.1, 0.2, 0.2 } };
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(*key1, 5, items));
-        const auto loaded = ::Mu::Plugin::Caching::OCR::Cache::load(*key1, 5);
-        QVERIFY(loaded.present);
-        QCOMPARE(loaded.items.size(), 1);
-        QCOMPARE(loaded.items.at(0).ch, QStringLiteral("K"));
-    }
-
-    void ignoresLegacyFullPageResults_data()
-    {
+        QTest::addColumn<QString>("text");
         QTest::addColumn<int>("storedDpi");
-        QTest::newRow("same-dpi") << 150;
-        QTest::newRow("higher-dpi-fallback") << 300;
+        QTest::newRow("empty-hit") << QString() << 150;
+        QTest::newRow("utf16-text") << QStringLiteral("Résumé") << 150;
+        QTest::newRow("higher-dpi") << QStringLiteral("Text") << 300;
     }
 
-    void ignoresLegacyFullPageResults()
+    void readsQtCache()
     {
+        QFETCH(QString, text);
         QFETCH(int, storedDpi);
-        using namespace Mu::Plugin::Caching::OCR;
-        const QString hash = m_hash + QString::number(storedDpi);
-        const auto images = Cache::normalizeKey(hash, QStringLiteral("eng"), storedDpi);
-        const auto requested = Cache::normalizeKey(hash, QStringLiteral("eng"), 150);
-        QVERIFY(images && requested);
-        QVERIFY(Cache::save(*images, 0, { { QStringLiteral("old full page"), 0, 0, 1, 1 } }));
-        const QString path = Cache::getCacheFilePath(*images, 0);
-        QString legacyPath = path;
-        legacyPath.replace(QStringLiteral("v1.bin"), QStringLiteral(".bin"));
-        QVERIFY(path != legacyPath);
-        QVERIFY(QFile::rename(path, legacyPath));
-        QVERIFY(!Cache::load(*requested, 0).present);
-        QVERIFY(Cache::save(*images, 0, { { QStringLiteral("addition"), .1, .1, .2, .2 } }));
-        const auto loaded = Cache::load(*requested, 0);
-        QVERIFY(loaded.present);
-        QCOMPARE(loaded.items.size(), 1);
-        QCOMPARE(loaded.items.front().ch, QStringLiteral("addition"));
-    }
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("XDG_CACHE_HOME", QFile::encodeName(directory.path()));
 
-    void corruptionAndInvalidInputAreRemoved()
-    {
-        const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 1, QStringLiteral("eng"));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(m_hash, 1, QStringLiteral("eng"), { }));
-        QCOMPARE(QFileInfo(path).size(), qint64(8));
-        const auto emptyRes = ::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 1, QStringLiteral("eng"));
-        QVERIFY(emptyRes.present);
-        QVERIFY(emptyRes.items.isEmpty());
-        QVERIFY(QFile::exists(path));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(
-            m_hash, 1, QStringLiteral("eng"), { { QStringLiteral("x"), 0, 0, .1, .1 } }));
-        QFile file(path);
-        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        QCOMPARE(file.write("bad cache"), qint64(9));
-        file.close();
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 1, QStringLiteral("eng")).present);
-        QVERIFY(!QFile::exists(path));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath({ }, 1, QStringLiteral("eng")).isEmpty());
-    }
-
-    void invalidCoordinatesAreRemoved()
-    {
-        const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 2, QStringLiteral("eng"));
-        QByteArray raw;
-        QDataStream stream(&raw, QIODevice::WriteOnly);
-        stream.setVersion(QDataStream::Qt_6_0);
-        stream << QStringLiteral("x") << std::numeric_limits<double>::quiet_NaN() << 0.0 << 0.1 << 0.1;
-
-        QByteArray fileData;
-        QDataStream headerStream(&fileData, QIODevice::WriteOnly);
-        headerStream.setVersion(QDataStream::Qt_6_0);
-        headerStream << quint32(0x4F435232) << quint32(1);
-        fileData.append(qCompress(raw));
-
-        QFile file(path);
-        QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        QVERIFY(file.write(fileData) > 0);
-        file.close();
-
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 2, QStringLiteral("eng")).present);
-        QVERIFY(!QFile::exists(path));
-    }
-
-    void oversizedCacheFilesAreRemoved()
-    {
-        // Both tests exercise the load()-miss + purge path; there is no
-        // Cache::exists() API, so both boundary sizes are covered here.
-        const int pages[] = { 3, 7 };
-        const qsizetype extras[] = { 10, 1 };
-        for (int i = 0; i < 2; ++i) {
-            const QString path =
-                ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, pages[i], QStringLiteral("eng"));
-            QFile file(path);
-            QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
-            QVERIFY(file.open(QIODevice::WriteOnly));
-            const QByteArray data(
-                static_cast<qsizetype>(::Mu::Plugin::OCR::Constant::MAX_CACHE_COMPRESSED_BYTES) + extras[i], '\0');
-            QCOMPARE(file.write(data), qint64(data.size()));
-            file.close();
-
-            QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, pages[i], QStringLiteral("eng")).present);
-            QVERIFY(!QFile::exists(path));
+        const QString cacheDir = directory.filePath(QStringLiteral("mupdfng/ocr/document"));
+        QVERIFY(QDir().mkpath(cacheDir));
+        QFile legacy(QDir(cacheDir).filePath(QStringLiteral("p0_eng_%1dpiv1.bin").arg(storedDpi)));
+        QVERIFY(legacy.open(QIODevice::WriteOnly));
+        QDataStream header(&legacy);
+        header.setVersion(QDataStream::Qt_6_0);
+        header << quint32(0x4f435232) << quint32(text.isEmpty() ? 0 : 1);
+        if (!text.isEmpty()) {
+            QByteArray payload;
+            QDataStream record(&payload, QIODevice::WriteOnly);
+            record.setVersion(QDataStream::Qt_6_0);
+            record << text << 0.1 << 0.2 << 0.8 << 0.9;
+            const auto compressed = qCompress(payload, 1);
+            QCOMPARE(legacy.write(compressed), compressed.size());
         }
-    }
+        legacy.close();
 
-    void oversizedDeclaredPayloadIsRemoved()
-    {
-        const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 4, QStringLiteral("eng"));
-        QByteArray data = qCompress(QByteArray(64, '\0'));
-        const quint32 declared = static_cast<quint32>(::Mu::Plugin::OCR::Constant::MAX_CACHE_RAW_BYTES) + 1;
-        data[0] = char(declared >> 24);
-        data[1] = char(declared >> 16);
-        data[2] = char(declared >> 8);
-        data[3] = char(declared);
-
-        QByteArray fileData;
-        QDataStream headerStream(&fileData, QIODevice::WriteOnly);
-        headerStream.setVersion(QDataStream::Qt_6_0);
-        headerStream << quint32(0x4F435232) << quint32(1);
-        fileData.append(data);
-
-        QFile file(path);
-        QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        QCOMPARE(file.write(fileData), qint64(fileData.size()));
-        file.close();
-
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 4, QStringLiteral("eng")).present);
-        QVERIFY(!QFile::exists(path));
-    }
-
-    void decompressionBombIsRemoved()
-    {
-        const QString path = ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 5, QStringLiteral("eng"));
-        QByteArray data =
-            qCompress(QByteArray(static_cast<qsizetype>(::Mu::Plugin::OCR::Constant::MAX_CACHE_RAW_BYTES + 1), '\0'));
-        data[0] = 0;
-        data[1] = 0;
-        data[2] = 0;
-        data[3] = 4;
-
-        QByteArray fileData;
-        QDataStream headerStream(&fileData, QIODevice::WriteOnly);
-        headerStream.setVersion(QDataStream::Qt_6_0);
-        headerStream << quint32(0x4F435232) << quint32(1);
-        fileData.append(data);
-
-        QFile file(path);
-        QVERIFY(QFileInfo(path).dir().mkpath(QStringLiteral(".")));
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        QCOMPARE(file.write(fileData), qint64(fileData.size()));
-        file.close();
-
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 5, QStringLiteral("eng")).present);
-        QVERIFY(!QFile::exists(path));
-    }
-
-    void hashIsTheCacheIdentity()
-    {
-        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> items {
-            { QStringLiteral("H"), .1, .1, .2, .2 },
-            { QStringLiteral("i"), .2, .1, .3, .2 },
-        };
-        const QString path =
-            ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 6, QStringLiteral("eng_300dpi"));
-        QVERIFY(path.startsWith(m_root.path()));
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(m_hash, 6, QStringLiteral("eng_300dpi"), items));
-        QVERIFY(QFile::exists(path));
-        QCOMPARE(::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 6, QStringLiteral("eng_300dpi")), path);
-        QVERIFY(!path.contains(QStringLiteral(".pdf")));
-        QVERIFY(path
-                != ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(
-                    QStringLiteral("different-hash"), 6, QStringLiteral("eng_300dpi")));
-
-        const auto res = ::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 6, QStringLiteral("eng_150dpi"));
-        QVERIFY(res.present);
-        QCOMPARE(res.items.size(), 2);
-        QCOMPARE(res.items.at(0).ch + res.items.at(1).ch, QStringLiteral("Hi"));
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 6, QStringLiteral("deu_150dpi")).present);
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 7, QStringLiteral("eng_150dpi")).present);
-    }
-
-    void typedDpiIsolation()
-    {
-        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> items {
-            { QStringLiteral("A"), 0.1, 0.1, 0.2, 0.2 },
-        };
-        const QString path300 =
-            ::Mu::Plugin::Caching::OCR::Cache::getCacheFilePath(m_hash, 8, QStringLiteral("eng"), 300);
-        QVERIFY(::Mu::Plugin::Caching::OCR::Cache::save(m_hash, 8, QStringLiteral("eng"), 300, items));
-        QVERIFY(QFile::exists(path300));
-
-        // Loading or checking exists with 150dpi resolves 300dpi cache
-        const auto res = ::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("eng"), 150);
-        QVERIFY(res.present);
-        QCOMPARE(res.items.size(), 1);
-        QCOMPARE(res.items.at(0).ch, QStringLiteral("A"));
-
-        // Language isolation remains intact
-        QVERIFY(!::Mu::Plugin::Caching::OCR::Cache::load(m_hash, 8, QStringLiteral("deu"), 150).present);
-    }
-
-    void convertsCacheItems()
-    {
-        using ::Mu::Plugin::Caching::OCR::Cache;
-        const std::vector<::Mu::Model::TextBox> boxes {
-            { "hello", 0.1, 0.2, 0.3, 0.4, false },
-            { "wörld", 0.5, 0.6, 0.7, 0.8, true },
-        };
-        const auto items = Cache::convertToCacheItems(boxes);
-        QCOMPARE(items.size(), 2);
-        QCOMPARE(items.at(0).ch, QStringLiteral("hello"));
-        QCOMPARE(items.at(0).l, 0.1);
-        QCOMPARE(items.at(0).t, 0.2);
-        QCOMPARE(items.at(0).r, 0.3);
-        QCOMPARE(items.at(0).b, 0.4);
-        QCOMPARE(items.at(1).ch, QString::fromUtf8("wörld"));
-        QVERIFY(Cache::convertToCacheItems({ }).isEmpty());
+        const auto result = paperbox::loadCachedOcr(Mu::Plugin::Caching::cacheRoot(), "document", 0, "eng", 150);
+        QVERIFY(result.has_value());
+        QCOMPARE(result->size(), text.isEmpty() ? 0u : 1u);
+        if (!text.isEmpty()) {
+            QCOMPARE(QString::fromStdString(result->front().text), text);
+            QCOMPARE(result->front().top, 0.2);
+        }
     }
 };
 
-QTEST_GUILESS_MAIN(TestOCRCache)
-
+QTEST_GUILESS_MAIN(TestLegacyOcrCache)
 #include "test_ocrcache.moc"

@@ -91,6 +91,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          submodules: true
 
       - name: Prepare release notes
         run: |
@@ -124,11 +125,25 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Attach packages to GitHub release
+      - name: Archive the release source and pinned Paperbox
+        run: |
+          set -euo pipefail
+          version=${GITHUB_REF_NAME#v}
+          prefix="okular-mupdf-ng-$version"
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          git archive --prefix="$prefix/" HEAD | tar -xf - -C "$scratch"
+          paperbox_commit=$(git rev-parse HEAD:thirdparty/paperbox)
+          git -C thirdparty/paperbox archive --prefix="$prefix/thirdparty/paperbox/" "$paperbox_commit" \
+            | tar -xf - -C "$scratch"
+          tar -czf "release-assets/$prefix.tar.gz" -C "$scratch" "$prefix"
+
+      - name: Attach packages and source to GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             release-assets/okular-mupdf-ng-[0-9]*.pkg.tar.zst
+            release-assets/okular-mupdf-ng-[0-9]*.tar.gz
           body_path: release-notes.md
           generate_release_notes: false
         env:

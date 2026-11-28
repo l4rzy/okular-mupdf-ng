@@ -51,6 +51,7 @@ jobs:
             libkf6kio-dev \
             libnss3-dev \
             libnss3-tools \
+            libmd-dev \
             libseccomp-dev \
             llvm-21 \
             ninja-build \
@@ -69,14 +70,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
 
-      - name: Download bundled MuPDF source
-        run: python3 ./scripts/download-mupdf.py
+      - name: Prepare Paperbox build inputs
+        run: |
+          python3 thirdparty/paperbox/script/download-mupdf.py
+          cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
 
       - name: Configure coverage build
         run: |
@@ -92,7 +96,7 @@ jobs:
             -DENABLE_SANITIZERS=OFF \
             -DENABLE_LTO=OFF \
             -DENABLE_BUILD_TREE_WORKER=ON \
-            -DSIGNATURE_FONT_DIR="$PWD/thirdparty/allura" \
+            -DSIGNATURE_FONT_DIR="$PWD/thirdparty/paperbox/thirdparty/allura" \
             -DTESSDATA_DIR=/usr/share/tesseract-ocr/5/tessdata
 
       - name: Build

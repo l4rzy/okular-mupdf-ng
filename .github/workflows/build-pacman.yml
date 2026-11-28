@@ -56,6 +56,7 @@ jobs:
             mupdf \
             openssl \
             nss \
+            libmd \
             libseccomp \
             zlib \
             tesseract-data-eng \

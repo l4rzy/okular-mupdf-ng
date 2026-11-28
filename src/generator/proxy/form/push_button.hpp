@@ -9,7 +9,7 @@
 #include <okular/core/form.h>
 
 #include "generator/proxy/form/coordinator.hpp"
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator::Proxy::Form {
 

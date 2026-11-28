@@ -5,7 +5,7 @@
 #define MU_GENERATOR_LINK_PREVIEW_HPP
 
 #include "generator/ui/link_preview_policy.hpp"
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 #include <QCache>
 #include <QHash>

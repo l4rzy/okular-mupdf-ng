@@ -34,7 +34,7 @@ bool parseInt(const std::string& text, int& value)
 
 void addSharedOptions(QCommandLineParser& parser)
 {
-    parser.addOption({ "worker", "Path to the mupdfng-worker binary (auto-detected otherwise).", "path" });
+    parser.addOption({ "worker", "Path to the paperbox-worker binary (auto-detected otherwise).", "path" });
     parser.addOption({ "password", "Password for encrypted documents.", "password" });
     parser.addOption({ "timeout", "Timeout in seconds for worker jobs.", "seconds", QString::number(120) });
 }
@@ -56,7 +56,7 @@ QCommandLineParser& setupSandboxParser(QCommandLineParser& parser)
         "Start the worker and report its sandbox profile and protections.\n"
         "Exit status: 0 fully hardened, 1 partially active, 2 inactive or startup failed.");
     parser.addHelpOption();
-    parser.addOption({ "worker", "Path to the mupdfng-worker binary (auto-detected otherwise).", "path" });
+    parser.addOption({ "worker", "Path to the paperbox-worker binary (auto-detected otherwise).", "path" });
     parser.addOption({ "json", "Print the sandbox report as JSON." });
     return parser;
 }
@@ -404,9 +404,8 @@ QString versionText(const QString& mupdfVersion,
                                       : QStringLiteral("%1: MuPDF %2").arg(source, mupdfVersion);
     if (systemMuPdf.has_value())
         engine += *systemMuPdf ? QStringLiteral(" (system library)") : QStringLiteral(" (bundled, patched)");
-    QString version =
-        QStringLiteral("mupdfng-cli %1")
-            .arg(QString::fromUtf8(::Mu::IPC::COMPAT.data(), static_cast<qsizetype>(::Mu::IPC::COMPAT.size())));
+    QString version = QStringLiteral("mupdfng-cli %1")
+                          .arg(QString::fromUtf8(::Mu::VERSION.data(), static_cast<qsizetype>(::Mu::VERSION.size())));
     if (!gitBuild.empty())
         version += QStringLiteral(" [git build %1]")
                        .arg(QString::fromUtf8(gitBuild.data(), static_cast<qsizetype>(gitBuild.size())));

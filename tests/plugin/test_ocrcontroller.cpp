@@ -8,11 +8,11 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "plugin/caching/cache_file.hpp"
+#include "plugin/caching/cache_root.hpp"
+#include <paperbox/cache.hpp>
 
 #include "plugin/ocr/controller.hpp"
 #include "plugin/ocr/policy.hpp"
-#include "shared/transport/frame_buffer.hpp"
 
 using Mu::Plugin::OCR::Controller;
 using Mu::Plugin::OCR::VisiblePage;
@@ -29,18 +29,17 @@ private Q_SLOTS:
         QTest::addColumn<int>("nativeCount");
         QTest::addColumn<unsigned>("threshold");
         QTest::addColumn<bool>("knownNeighbour");
-        QTest::addColumn<int>("expectedNativeReads");
         QTest::addColumn<int>("expectedCompletions");
-        QTest::newRow("unknown-focus") << false << true << -1 << 10000u << false << 1 << 1;
-        QTest::newRow("observed-focus") << false << true << 0 << 20u << false << 0 << 1;
-        QTest::newRow("observed-neighbour") << false << true << 0 << 20u << true << 0 << 2;
-        QTest::newRow("below-threshold") << false << true << 19 << 20u << false << 0 << 1;
-        QTest::newRow("at-threshold") << false << true << 20 << 20u << false << 0 << 0;
-        QTest::newRow("above-threshold") << false << true << 21 << 20u << false << 0 << 0;
-        QTest::newRow("zero-threshold") << false << true << 0 << 0u << false << 0 << 0;
-        QTest::newRow("forced") << true << false << -1 << 20u << false << 0 << 3;
-        QTest::newRow("forced-with-native-text") << true << true << 100 << 20u << false << 0 << 3;
-        QTest::newRow("disabled") << false << false << -1 << 20u << false << 0 << 0;
+        QTest::newRow("unknown-focus") << false << true << -1 << 10000u << false << 1;
+        QTest::newRow("observed-focus") << false << true << 0 << 20u << false << 1;
+        QTest::newRow("observed-neighbour") << false << true << 0 << 20u << true << 2;
+        QTest::newRow("below-threshold") << false << true << 19 << 20u << false << 1;
+        QTest::newRow("at-threshold") << false << true << 20 << 20u << false << 0;
+        QTest::newRow("above-threshold") << false << true << 21 << 20u << false << 0;
+        QTest::newRow("zero-threshold") << false << true << 0 << 0u << false << 0;
+        QTest::newRow("forced") << true << false << -1 << 20u << false << 3;
+        QTest::newRow("forced-with-native-text") << true << true << 100 << 20u << false << 3;
+        QTest::newRow("disabled") << false << false << -1 << 20u << false << 0;
     }
 
     void schedulingAvoidsUnnecessaryTextRequests()
@@ -50,12 +49,18 @@ private Q_SLOTS:
         QFETCH(int, nativeCount);
         QFETCH(unsigned, threshold);
         QFETCH(bool, knownNeighbour);
-        QFETCH(int, expectedNativeReads);
         QFETCH(int, expectedCompletions);
         QTemporaryDir root;
         QVERIFY(root.isValid());
-        Mu::Plugin::Caching::setRootForTesting(root.path());
-        const auto restoreCacheRoot = qScopeGuard([] { Mu::Plugin::Caching::clearRootForTesting(); });
+        const auto oldCacheHome = qgetenv("XDG_CACHE_HOME");
+        qputenv("XDG_CACHE_HOME", QFile::encodeName(root.path()));
+        const auto restoreCacheRoot = qScopeGuard([&] {
+            if (oldCacheHome.isNull())
+                qunsetenv("XDG_CACHE_HOME");
+            else
+                qputenv("XDG_CACHE_HOME", oldCacheHome);
+        });
+        const auto cacheRoot = Mu::Plugin::Caching::cacheRoot();
         const QString path = root.filePath(QStringLiteral("native.pdf"));
         {
             QPdfWriter writer(path);
@@ -80,22 +85,15 @@ private Q_SLOTS:
         config.autoTrigger = automatic;
         config.triggerThreshold = threshold;
         config.debounceMs = 5;
-        for (int page = 0; page < 3; ++page)
-            QVERIFY(Mu::Plugin::Caching::OCR::Cache::save(
-                config.documentHash, page, config.language, config.dpi, { { QString::number(page), 0, 0, 1, 1 } }));
+        for (int page = 0; page < 3; ++page) {
+            const Mu::Model::TextBox boxes[] = { { std::to_string(page), 0, 0, 1, 1 } };
+            QVERIFY(paperbox::storeCachedOcr(cacheRoot, "scheduling", page, "eng", config.dpi, boxes));
+        }
 
         Controller controller(&backend);
         QSignalSpy completed(&controller, &Controller::completed);
         QSignalSpy started(&controller, &Controller::started);
         QSignalSpy failed(&controller, &Controller::failed);
-        const QImage before = backend.render(0, 64, 64);
-        QVERIFY(!before.isNull());
-        const auto requestId = [](const QImage& image) {
-            return reinterpret_cast<const Mu::IPC::FrameBufferHeader*>(image.constBits()
-                                                                       - sizeof(Mu::IPC::FrameBufferHeader))
-                ->requestId;
-        };
-
         std::optional<Mu::Plugin::OCR::NativeTextObservation> nativeText;
         if (nativeCount >= 0)
             nativeText = Mu::Plugin::OCR::NativeTextObservation { 1, static_cast<std::size_t>(nativeCount) };
@@ -105,11 +103,6 @@ private Q_SLOTS:
         QTRY_COMPARE(completed.count(), expectedCompletions);
         QTest::qWait(50);
         QCOMPARE(completed.count(), expectedCompletions);
-        // Cached results require no worker RPCs. Only an unknown focus may
-        // extract native text; the final render adds one request.
-        const QImage after = backend.render(0, 64, 64);
-        QVERIFY(!after.isNull());
-        QCOMPARE(requestId(after), requestId(before) + 1 + static_cast<quint64>(expectedNativeReads));
         QCOMPARE(started.count(), 0);
         QCOMPARE(failed.count(), 0);
         for (const auto& completion : completed)
@@ -130,8 +123,15 @@ private Q_SLOTS:
         QFETCH(int, scenario);
         QTemporaryDir root;
         QVERIFY(root.isValid());
-        Mu::Plugin::Caching::setRootForTesting(root.path());
-        const auto restoreCacheRoot = qScopeGuard([] { Mu::Plugin::Caching::clearRootForTesting(); });
+        const auto oldCacheHome = qgetenv("XDG_CACHE_HOME");
+        qputenv("XDG_CACHE_HOME", QFile::encodeName(root.path()));
+        const auto restoreCacheRoot = qScopeGuard([&] {
+            if (oldCacheHome.isNull())
+                qunsetenv("XDG_CACHE_HOME");
+            else
+                qputenv("XDG_CACHE_HOME", oldCacheHome);
+        });
+        const auto cacheRoot = Mu::Plugin::Caching::cacheRoot();
         Mu::Plugin::WorkerClient backend;
         QVERIFY(backend.start(QStringLiteral(WORKER_BUILD_PATH)));
         QList<Mu::Plugin::WorkerClient::PageInfo> pages;
@@ -144,11 +144,10 @@ private Q_SLOTS:
         config.pageCount = 1;
         config.force = true;
         config.debounceMs = 5;
-        const auto key =
-            Mu::Plugin::Caching::OCR::Cache::normalizeKey(config.documentHash, config.language, config.dpi);
-        QVERIFY(key);
-        Mu::Plugin::Caching::OCR::Cache::save(*key, 0, { { QStringLiteral("cached"), 0.1, 0.1, 0.9, 0.9 } });
-        QVERIFY(Mu::Plugin::Caching::OCR::Cache::load(*key, 0).present);
+        const auto hash = config.documentHash.toStdString();
+        const Mu::Model::TextBox boxes[] = { { "cached", 0.1, 0.1, 0.9, 0.9 } };
+        QVERIFY(paperbox::storeCachedOcr(cacheRoot, hash, 0, "eng", config.dpi, boxes));
+        QVERIFY(paperbox::loadCachedOcr(cacheRoot, hash, 0, "eng", config.dpi));
         Controller controller(&backend);
         QSignalSpy completed(&controller, &Controller::completed);
         QSignalSpy started(&controller, &Controller::started);
@@ -173,7 +172,7 @@ private Q_SLOTS:
         const auto ready = controller.takeReady(0);
         QVERIFY(ready);
         QCOMPARE(ready->size(), 1);
-        QCOMPARE(ready->front().ch, QStringLiteral("cached"));
+        QCOMPARE(ready->front().text, std::string("cached"));
         QVERIFY(!controller.takeReady(0));
         controller.reset();
         controller.observeVisiblePages({ { 0, 1.0 } }, config);

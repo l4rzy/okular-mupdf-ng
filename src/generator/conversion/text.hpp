@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef MU_GENERATOR_CONVERSION_TEXT_HPP
-#define MU_GENERATOR_CONVERSION_TEXT_HPP
+#ifndef PAPERBOX_GENERATOR_CONVERSION_TEXT_HPP
+#define PAPERBOX_GENERATOR_CONVERSION_TEXT_HPP
 
 #include <okular/core/textpage.h>
 
@@ -10,8 +10,7 @@
 #include <QVector>
 #include <optional>
 
-#include "plugin/ocr/ocr.hpp"
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator::Conversion {
 
@@ -20,7 +19,7 @@ Okular::TextPage* textPage(const std::vector<Model::TextBox>& boxes, qreal width
 Okular::TextPage* mergedTextPage(const std::vector<Model::TextBox>& nativeBoxes,
                                  qreal width,
                                  qreal height,
-                                 const QVector<Plugin::Caching::OCR::CacheItem>& additions);
+                                 const std::vector<Model::TextBox>& additions);
 /// Assembles worker text boxes into plain text, preserving source lines
 /// (newlines follow endOfLine boxes; empty boxes contribute no text).
 QString plainText(const std::vector<Model::TextBox>& boxes);
@@ -31,4 +30,4 @@ std::optional<double> findReflowText(const std::vector<Model::TextBox>& boxes, c
 
 } // namespace Mu::Generator::Conversion
 
-#endif // MU_GENERATOR_CONVERSION_TEXT_HPP
+#endif // PAPERBOX_GENERATOR_CONVERSION_TEXT_HPP

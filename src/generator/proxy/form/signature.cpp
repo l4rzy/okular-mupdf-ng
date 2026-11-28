@@ -11,11 +11,8 @@
 #include "generator/conversion/certificate.hpp"
 #include "generator/conversion/signing.hpp"
 
-#ifdef MUPDF_FORMFIELD_REMOTE_SIGNING
 #include "plugin/util/signature_image.hpp"
 #include "plugin/worker_client.hpp"
-#include "shared/model/types.hpp"
-#endif // MUPDF_FORMFIELD_REMOTE_SIGNING
 
 namespace Mu::Generator::Proxy::Form {
 
@@ -208,16 +205,7 @@ Okular::SignatureInfo Signature::signatureInfo() const
 std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::NewSignatureData& data,
                                                                 const QString& newPath) const
 {
-#ifndef MUPDF_FORMFIELD_REMOTE_SIGNING
-    // Keep the feature compile-time gated; builds without remote signing still
-    // expose verification information but cannot create a new signature.
-    Q_UNUSED(data)
-    Q_UNUSED(newPath)
-    return { Okular::GenericSigningError, QStringLiteral("MuPDF worker support is unavailable") };
-#else // MUPDF_FORMFIELD_REMOTE_SIGNING
-    // Signing is delegated to the worker so private keys and PDF mutation stay
-    // outside the generator process.
-    if (!m_backend || !m_backend->isConnected()) {
+    if (!m_backend || !m_backend->paperboxClient().isConnected()) {
         return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
     }
     auto appearance = Conversion::toModelSignatureAppearance(data, Config::readSignatureAppearance());
@@ -225,8 +213,7 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
         return { Okular::GenericSigningError, QStringLiteral("Could not render signature emblem") };
     appearance->backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
         data.backgroundImagePath(), rect().width(), rect().height());
-    const auto result = m_backend->sign({ { },
-                                          m_data.page,
+    const auto result = m_backend->sign({ m_data.page,
                                           { },
                                           data.certNickname().toStdString(),
                                           data.certSubjectCommonName().toStdString(),
@@ -234,23 +221,7 @@ std::pair<Okular::SigningResult, QString> Signature::signResult(const Okular::Ne
                                           std::move(*appearance) },
                                         data.password(),
                                         newPath);
-    switch (result.result) {
-    case Model::SigningResult::Success:
-        return { Okular::SigningSuccess, QString() };
-    case Model::SigningResult::FieldAlreadySigned:
-        return { Okular::FieldAlreadySigned, QString::fromStdString(result.details) };
-    case Model::SigningResult::KeyMissing:
-        return { Okular::KeyMissing, QString::fromStdString(result.details) };
-    case Model::SigningResult::WriteFailed:
-        return { Okular::SignatureWriteFailed, QString::fromStdString(result.details) };
-    case Model::SigningResult::UserCancelled:
-        return { Okular::UserCancelled, QString::fromStdString(result.details) };
-    case Model::SigningResult::BadPassphrase:
-        return { Okular::BadPassphrase, QString::fromStdString(result.details) };
-    default:
-        return { Okular::GenericSigningError, QString::fromStdString(result.details) };
-    }
-#endif // MUPDF_FORMFIELD_REMOTE_SIGNING
+    return Conversion::toOkularSigningResult(result);
 }
 
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.

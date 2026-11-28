@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-#include "shared/model/validation.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Tools::Cli {
 namespace {

@@ -32,6 +32,7 @@ pkgbase = okular-mupdf-ng-git
 	depends = kxmlgui
 	depends = libjpeg-turbo
 	depends = libgcc
+	depends = libmd
 	depends = libseccomp
 	depends = libstdc++
 	depends = nspr
@@ -42,7 +43,9 @@ pkgbase = okular-mupdf-ng-git
 	provides = okular-mupdf-ng
 	conflicts = okular-mupdf-ng
 	source = okular-mupdf-ng::git+https://github.com/l4rzy/okular-mupdf-ng.git
+	source = paperbox::git+https://github.com/l4rzy/paperbox
 	source = https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/1.28.6/mupdf-1.28.6-source.tar.gz
+	sha256sums = SKIP
 	sha256sums = SKIP
 	sha256sums = dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
 

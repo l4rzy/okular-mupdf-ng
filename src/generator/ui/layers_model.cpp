@@ -7,7 +7,7 @@
 #include <QSignalBlocker>
 #include <okular/core/document.h>
 
-#include "shared/model/validation.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator {
 

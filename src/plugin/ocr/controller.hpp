@@ -13,8 +13,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
-#include "plugin/caching/ocr_cache.hpp"
 #include "plugin/ocr/config.hpp"
 #include "plugin/ocr/policy.hpp"
 #include "plugin/worker_client.hpp"
@@ -47,12 +47,12 @@ public:
     void observe(int page, Config config, std::optional<NativeTextObservation> nativeText = std::nullopt);
     // Takes the retained result for @p page, if any. Called from Okular render
     // threads, so it is the only cross-thread surface of this class.
-    [[nodiscard]] std::optional<QVector<Caching::OCR::CacheItem>> takeReady(int page);
+    [[nodiscard]] std::optional<std::vector<Model::TextBox>> takeReady(int page);
     void reset();
 
 signals:
     void started(int page);
-    void completed(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source);
+    void completed(int page, std::vector<Model::TextBox> boxes, CompletionSource source);
     // Emitted after a page exhausts its retries so the UI can report the
     // failure instead of leaving an unexplained empty selection.
     void failed(int page);
@@ -71,29 +71,29 @@ private:
     // configuration changes.
     void invalidate();
     // Retains a result for takeReady() and announces it.
-    void deliver(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source);
+    void deliver(int page, std::vector<Model::TextBox> boxes, CompletionSource source);
 
-    struct ActiveJob {
-        quint64 jobId = 0;
-        int page = -1;
-        Caching::OCR::CacheKey cacheKey;
+    struct CacheRequest {
+        int page;
+        QString language;
+        int dpi;
     };
 
-    struct PendingCache {
-        int page = -1;
-        Caching::OCR::CacheKey key;
+    struct ActiveJob {
+        quint64 jobId;
+        CacheRequest request;
     };
 
     WorkerClient* m_backend;
     QTimer m_debounce;
     QTimer m_retryTimer;
-    QFutureWatcher<Caching::OCR::CacheLoadResult> m_cacheWatcher;
+    QFutureWatcher<std::optional<std::vector<Model::TextBox>>> m_cacheWatcher;
     FocusPolicy m_focus;
     PageQueue m_queue;
     RetryPolicy m_retry;
     Config m_config;
     std::optional<ActiveJob> m_activeJob;
-    std::optional<PendingCache> m_pendingCache;
+    std::optional<CacheRequest> m_pendingCache;
     // Native text counts are enough for OCR threshold decisions. The cache is
     // document-scoped because reset() is called whenever the worker document changes.
     QHash<int, std::size_t> m_nativeTextBoxCounts;
@@ -101,7 +101,7 @@ private:
     // that do not immediately handle the signal can still fetch them. Guarded
     // by m_readyMutex because textPage() reads it from render threads while
     // completion runs on the controller's thread.
-    QHash<int, QVector<Caching::OCR::CacheItem>> m_readyResults;
+    QHash<int, std::vector<Model::TextBox>> m_readyResults;
     mutable QMutex m_readyMutex;
     int m_lastFocusPage = -1;
     std::uint64_t m_generation = 0;

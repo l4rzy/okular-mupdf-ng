@@ -67,17 +67,34 @@ Build from source — see [Building and testing](#building-and-testing).
   KDE Frameworks 6 and Okular 6 development packages.
 - For Clang LTO: LLVM tools (`llvm-ar`, `llvm-ranlib`) and the matching LLVMgold
   plugin for mold/GNU ld. Install `llvm`; on openSUSE also install `llvm-gold`.
-- NSS/NSPR for certificate and signature operations.
+- NSS/NSPR for certificate and signature operations, and libmd for the Paperbox host.
 - System libraries required by bundled MuPDF: FreeType, JPEG, Brotli, and Zlib.
   JBIG2, OpenJPEG, HarfBuzz, Gumbo, LCMS2, Tesseract, and Leptonica are bundled.
 - `python3 >=3.12` when using the bundled MuPDF source for the first time (verified with sha256).
-- `patch` for applying the bundled MuPDF fixes during CMake configuration.
+- `patch` for applying fixes to the build dependencies.
 - AZW3 and KFX support requires Rust and Cargo 1.91 or newer.
 
 ## Building and testing
 
 The Makefile delegates to `scripts/build.sh`; both interfaces are equivalent.
-The script uses Ninja and builds MuPDF with all available CPUs.
+The script uses Ninja and prepares the pinned Paperbox worker inputs. The
+plugin and CLI both link Paperbox and its NSS adapter statically. They share an
+installed `paperbox-worker` executable.
+
+For a Git checkout, initialize the pinned Paperbox submodule:
+
+```bash
+git submodule update --init thirdparty/paperbox
+```
+
+For direct CMake and Ninja builds, prepare the worker dependencies first:
+
+```bash
+python3 thirdparty/paperbox/script/download-mupdf.py
+cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
+```
+
+`-DUSE_SYSTEM_MUPDF=ON` lets the Paperbox worker use a compatible system MuPDF.
 
 ```bash
 # Debug build and full test suite
@@ -109,6 +126,8 @@ For an already configured build tree, run all tests with:
 ```bash
 ctest --test-dir build --output-on-failure
 ```
+
+Paperbox maintains the [native host and worker suites](thirdparty/paperbox/INSTALL.md).
 
 ### Optional Bubblewrap launcher (Linux)
 

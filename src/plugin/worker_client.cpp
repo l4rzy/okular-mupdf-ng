@@ -1,222 +1,128 @@
-// SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
-
 #include "plugin/worker_client.hpp"
-
-#include <chrono>
-#include <condition_variable>
-#include <fcntl.h>
-#include <memory>
-#include <mutex>
-#include <sys/mman.h>
-#include <unistd.h>
-
-#include "plugin/caching/epub_cache.hpp"
-#include "plugin/worker_transport.hpp"
+#include "plugin/caching/cache_root.hpp"
 #include "shared/logging.hpp"
+#include <paperbox/nss.hpp>
+
+#include <QFile>
+#include <QFileInfo>
+#include <QRect>
+#include <QStandardPaths>
+#include <chrono>
+#include <iterator>
+#include <memory>
+#include <span>
+#include <type_traits>
+#include <utility>
 
 namespace Mu::Plugin {
+namespace {
 
-using namespace ::Mu::Model;
+std::filesystem::path nativePath(const QString& path)
+{
+    return QFile::encodeName(path).toStdString();
+}
 
-// =============================================================================
-// Worker Thread & Process Lifecycle
-// =============================================================================
+} // namespace
 
 WorkerClient::WorkerClient(QObject* parent)
     : QObject(parent)
 {
-    qRegisterMetaType<std::vector<Model::PageLinks>>();
-    qRegisterMetaType<Model::ErrorCode>();
-    qRegisterMetaType<Model::ExportProgressNotification>();
-    // Keep the transport event loop independent from the generator event
-    // loop. This prevents socket waits and worker notifications from blocking
-    // UI-facing plugin calls.
-    m_lifecycle.timer.setSingleShot(true);
-    connect(&m_lifecycle.timer, &QTimer::timeout, this, &WorkerClient::restartWorker);
-    m_thread = new QThread();
-    m_transport = new WorkerTransport();
-    m_transport->moveToThread(m_thread);
-    connect(m_transport, &WorkerTransport::operationFailed, this, &WorkerClient::operationFailed, Qt::QueuedConnection);
-    connect(m_thread, &QThread::finished, m_transport, &QObject::deleteLater);
-    connect(
-        m_transport,
-        &WorkerTransport::processExited,
-        this,
-        [this](int exitCode) {
-            // The worker is gone; its cached handshake facts no longer apply.
-            m_lifecycle.info = { };
-            // A running document session ended with the process. Recovery is
-            // only complete once the generator revalidates and commits it.
-            m_lifecycle.setState(State::Recovering);
-            Q_EMIT workerDied(exitCode);
-            scheduleRestart();
-        },
-        Qt::QueuedConnection);
-    connect(m_transport, &WorkerTransport::ocrDone, this, &WorkerClient::ocrDone, Qt::QueuedConnection);
-    connect(m_transport, &WorkerTransport::pageLinksReady, this, &WorkerClient::pageLinksReady, Qt::QueuedConnection);
-    connect(m_transport, &WorkerTransport::exportProgress, this, &WorkerClient::exportProgress, Qt::QueuedConnection);
-    m_thread->start();
+    m_client.setEventWakeup(
+        [this] { QMetaObject::invokeMethod(this, &WorkerClient::deliverEvents, Qt::QueuedConnection); });
 }
 
 WorkerClient::~WorkerClient()
 {
-    // Stop on the transport thread before joining it; deleting the thread
-    // first could leave queued socket/process work accessing freed state.
-    stop();
-    m_thread->quit();
-    m_thread->wait();
-    delete m_thread;
+    m_client.setEventWakeup({ });
+    m_client.stop();
 }
 
 bool WorkerClient::start(const QString& binaryPath, const QStringList& tessDataDirectories)
 {
-    // A manual start resets the automatic-recovery budget and becomes the new
-    // baseline for subsequent crash recovery.
-    m_lifecycle.reset(binaryPath, tessDataDirectories);
-    const bool started = startWorker();
-    m_lifecycle.setState(started ? State::Ready : State::Stopped);
-    return started;
+    ::paperbox::LaunchOptions options;
+    QString path = binaryPath;
+    if (path.isEmpty())
+        path = qEnvironmentVariable("PAPERBOX_WORKER");
+#ifdef WORKER_BUILD_PATH
+    if (path.isEmpty() && QFileInfo(QStringLiteral(WORKER_BUILD_PATH)).isExecutable())
+        path = QStringLiteral(WORKER_BUILD_PATH);
+#endif // WORKER_BUILD_PATH
+    if (path.isEmpty() && QFileInfo(QStringLiteral(WORKER_INSTALL_PATH)).isExecutable())
+        path = QStringLiteral(WORKER_INSTALL_PATH);
+    if (path.isEmpty())
+        path = QStandardPaths::findExecutable(QStringLiteral("paperbox-worker"));
+    options.binary = nativePath(path);
+    for (const auto& directory : tessDataDirectories)
+        options.tessDataDirectories.push_back(nativePath(directory));
+    options.cacheRoot = Caching::cacheRoot();
+    const auto profile = qgetenv("MUPDFNG_WORKER_SANDBOX");
+    if (profile == "bwrap") {
+        const auto launcher = QStandardPaths::findExecutable(QStringLiteral("bwrap"));
+        if (launcher.isEmpty())
+            return false;
+        options.bubblewrap = nativePath(launcher);
+    } else if (!profile.isEmpty() && profile != "builtin") {
+        MU_LOG(warning, "Mu::Plugin", "Unknown MUPDFNG_WORKER_SANDBOX value. Falling back to the built-in sandbox.");
+    }
+    return m_client.start(std::move(options));
 }
 
-bool WorkerClient::startWorker()
+void WorkerClient::deliverEvents()
 {
-    // BlockingQueuedConnection is the synchronization boundary: the caller
-    // sees the completed transport transition, while all transport state
-    // remains thread-confined.
-    bool result = false;
-    const QString binaryPath = m_lifecycle.binary;
-    const QStringList tessDataDirectories = m_lifecycle.tessDataDirectories;
-    Model::PingResponse workerInfo;
-    QMetaObject::invokeMethod(
-        m_transport,
-        [this, transport = m_transport, binaryPath, tessDataDirectories, &result, &workerInfo] {
-            m_epubCache.reset();
-            result = transport->start(binaryPath, tessDataDirectories, &workerInfo);
-        },
-        Qt::BlockingQueuedConnection);
-    // The blocking call provides the happens-before edge for the cached info.
-    m_lifecycle.info = result ? workerInfo : Model::PingResponse { };
+    for (auto& event : m_client.takeEvents()) {
+        std::visit(
+            [this](auto&& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, ::paperbox::signal::OperationFailedEvent>)
+                    Q_EMIT operationFailed(QString::fromStdString(value.message), value.code);
+                else if constexpr (std::is_same_v<T, ::paperbox::signal::WorkerDiedEvent>)
+                    Q_EMIT workerDied(value.exitCode);
+                else if constexpr (std::is_same_v<T, ::paperbox::signal::WorkerRestartedEvent>)
+                    Q_EMIT workerRestarted();
+                else if constexpr (std::is_same_v<T, ::paperbox::signal::WorkerUnavailableEvent>)
+                    Q_EMIT workerUnavailable();
+                else if constexpr (std::is_same_v<T, ::paperbox::signal::OcrDoneEvent>)
+                    Q_EMIT ocrDone(value.jobId, value.page);
+                else if constexpr (std::is_same_v<T, ::paperbox::signal::PageLinksReadyEvent>)
+                    Q_EMIT pageLinksReady(value.epoch,
+                                          std::move(value.pages),
+                                          value.resourceLimited,
+                                          QString::fromStdString(value.error));
+                else if constexpr (std::is_same_v<T, ::paperbox::signal::ExportProgressEvent>)
+                    Q_EMIT exportProgress(std::move(value));
+            },
+            std::move(event));
+    }
+}
+
+Model::OpenStatus
+WorkerClient::open(const QString& path, const QString& password, QList<PageInfo>& pages, Model::DocumentType type)
+{
+    std::vector<PageInfo> native;
+    const auto result = m_client.open(nativePath(path), password.toStdString(), &native, type);
+    if (result == Model::OpenStatus::Success)
+        pages.assign(std::make_move_iterator(native.begin()), std::make_move_iterator(native.end()));
     return result;
 }
 
-void WorkerClient::stop()
+Model::OpenStatus WorkerClient::openData(const QByteArray& data,
+                                         const QString& password,
+                                         QList<PageInfo>& pages,
+                                         Model::DocumentType type)
 {
-    // Mark the stop before invoking transport cleanup so an intentional exit
-    // is not reported as a worker crash and restarted.
-    m_lifecycle.beginStop();
-    m_lifecycle.timer.stop();
-    if (m_transport)
-        QMetaObject::invokeMethod(
-            m_transport,
-            [this, transport = m_transport] {
-                m_epubCache.reset();
-                transport->stop();
-            },
-            Qt::BlockingQueuedConnection);
-    m_lifecycle.info = { };
-    m_lifecycle.setState(State::Stopped);
+    std::vector<PageInfo> native;
+    const auto bytes = std::as_bytes(std::span(data.constData(), static_cast<std::size_t>(data.size())));
+    const auto result = m_client.openData(bytes, password.toStdString(), &native, type);
+    if (result == Model::OpenStatus::Success)
+        pages.assign(std::make_move_iterator(native.begin()), std::make_move_iterator(native.end()));
+    return result;
 }
 
-bool WorkerClient::isConnected() const
+void WorkerClient::validateSignatures(QList<PageInfo>& pages, bool checkOcsp) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->isConnected(); });
-}
-
-std::optional<quint64> WorkerClient::workerMemoryBytes() const
-{
-    return sync([&](WorkerTransport* transport) { return transport->workerMemoryBytes(); });
-}
-
-// =============================================================================
-// Document Opening & Closing
-// =============================================================================
-
-OpenStatus WorkerClient::open(const QString& path, const QString& password, QList<PageInfo>& pages, DocumentType type)
-{
-    return sync(
-        [&](WorkerTransport* transport) {
-            m_epubCache.reset();
-            const bool cacheEpub = type == DocumentType::Epub;
-            const QString cachePath = cacheEpub ? Caching::EPUB::Cache::cacheFilePath(path, m_settings) : QString();
-            const auto cached = Caching::EPUB::Cache::loadAt(cachePath);
-            std::vector<std::uint8_t> accelerator;
-            if (cached && cached->accelerator)
-                accelerator.assign(cached->accelerator->cbegin(), cached->accelerator->cend());
-            std::vector<std::uint8_t> produced;
-            const auto status = transport->open(path, password, &pages, type, accelerator, &produced);
-            if (status == OpenStatus::Success && cacheEpub && transport->isConnected()) {
-                m_epubCache = EpubCacheSession {
-                    path, cachePath, Caching::EPUB::Cache::layoutKey(m_settings), transport->documentEpoch()
-                };
-                if (!produced.empty() && produced != accelerator) {
-                    const QByteArray bytes(reinterpret_cast<const char*>(produced.data()),
-                                           static_cast<qsizetype>(produced.size()));
-                    (void)Caching::EPUB::Cache::saveAcceleratorAt(cachePath, bytes);
-                }
-            }
-            return status;
-        },
-        OpenStatus::Failed);
-}
-
-OpenStatus
-WorkerClient::openData(const QByteArray& data, const QString& password, QList<PageInfo>& pages, DocumentType type)
-{
-    return sync(
-        [&](WorkerTransport* transport) {
-            m_epubCache.reset();
-            return transport->openData(data, password, &pages, type);
-        },
-        OpenStatus::Failed);
-}
-
-bool WorkerClient::close()
-{
-    return sync([&](WorkerTransport* transport) {
-        m_epubCache.reset();
-        return transport->close();
-    });
-}
-
-std::unique_ptr<QFile> WorkerClient::openSourceInput() const
-{
-    return sync([](WorkerTransport* transport) {
-        auto input = transport->openSourceInput();
-        if (input)
-            input->moveToThread(nullptr);
-        return input;
-    });
-}
-
-QString WorkerClient::epubCachePath(WorkerTransport* transport) const
-{
-    if (!m_epubCache)
-        return { };
-    if (m_epubCache->documentEpoch != transport->documentEpoch() || !transport->isConnected()) {
-        m_epubCache.reset();
-        return { };
-    }
-    const auto layoutKey = Caching::EPUB::Cache::layoutKey(m_settings);
-    if (m_epubCache->cachePath.isEmpty() || m_epubCache->layoutKey != layoutKey) {
-        m_epubCache->cachePath = Caching::EPUB::Cache::cacheFilePath(m_epubCache->sourcePath, m_settings);
-        m_epubCache->layoutKey = layoutKey;
-    }
-    return m_epubCache->cachePath;
-}
-
-// =============================================================================
-// Page Rendering, Text Extraction & OCR
-// =============================================================================
-
-quint64 WorkerClient::documentEpoch() const noexcept
-{
-    return m_transport ? m_transport->documentEpoch() : 0;
-}
-
-Model::ResolvedLink WorkerClient::resolveLink(const QString& uri) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->resolveLink(uri); });
+    paperbox::nss::validateDocumentSignatures(
+        m_client, { pages.data(), static_cast<std::size_t>(pages.size()) }, checkOcsp);
 }
 
 QImage WorkerClient::render(int page,
@@ -228,342 +134,118 @@ QImage WorkerClient::render(int page,
 {
     if (links)
         *links = { };
-    if (!shouldAbort)
-        return sync(
-            [&](WorkerTransport* transport) { return transport->render(page, width, height, tile, -1, links); });
-    if (shouldAbort() || !m_transport)
+    std::optional<Model::RenderTile> viewport;
+    if (!tile.isNull())
+        viewport = Model::RenderTile { tile.x(), tile.y(), tile.width(), tile.height() };
+    if (shouldAbort && shouldAbort())
         return { };
-
-    struct RenderState {
-        std::mutex mutex;
-        std::condition_variable completed;
-        bool cancelled = false;
-        bool done = false;
-        QImage image;
-        Model::RenderLinks links;
-        int cancellationFd = -1;
-        void* cookie = MAP_FAILED;
-
-        ~RenderState()
-        {
-            if (cookie != MAP_FAILED)
-                ::munmap(cookie, IPC::RenderCookieBytes);
-            if (cancellationFd >= 0)
-                ::close(cancellationFd);
-        }
-    };
-
-    const auto state = std::make_shared<RenderState>();
-    state->cancellationFd = ::memfd_create("mupdf-render-cancel", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-    if (state->cancellationFd >= 0 && ::ftruncate(state->cancellationFd, IPC::RenderCookieBytes) == 0
-        && ::fcntl(state->cancellationFd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_SEAL) == 0) {
-        state->cookie =
-            ::mmap(nullptr, IPC::RenderCookieBytes, PROT_READ | PROT_WRITE, MAP_SHARED, state->cancellationFd, 0);
-    }
-    if (state->cookie == MAP_FAILED) {
-        if (state->cancellationFd >= 0)
-            ::close(state->cancellationFd);
-        state->cancellationFd = -1;
-        MU_LOG(warning, "Mu::Plugin", "render cancellation cookie unavailable; active render will finish normally");
-    }
-    // Only owned inputs cross the thread boundary. The abort predicate may
-    // reference a PixmapRequest that is destroyed as soon as this call returns.
-    if (!QMetaObject::invokeMethod(
-            m_transport,
-            [transport = m_transport, state, page, width, height, tile, includeLinks = links != nullptr] {
-                {
-                    const std::lock_guard lock(state->mutex);
-                    if (state->cancelled)
-                        return;
-                }
-                // Once dispatched, finish the exchange, including receiving
-                // frame descriptors. Discarded images use normal lease cleanup.
-                QImage image = transport->render(
-                    page, width, height, tile, state->cancellationFd, includeLinks ? &state->links : nullptr);
-                {
-                    const std::lock_guard lock(state->mutex);
-                    if (!state->cancelled)
-                        state->image = std::move(image);
-                    state->done = true;
-                }
-                state->completed.notify_one();
-            },
-            Qt::QueuedConnection))
-        return { };
-
-    std::unique_lock lock(state->mutex);
-    for (;;) {
-        lock.unlock();
-        const bool cancelled = shouldAbort();
-        lock.lock();
-        if (cancelled) {
-            state->cancelled = true;
-            // MuPDF explicitly permits an unsynchronized, one-way abort update.
-            // This mapping belongs only to this job and outlives the active RPC.
-            if (state->cookie != MAP_FAILED)
-                *static_cast<volatile std::int32_t*>(state->cookie) = 1;
+    auto job = m_client.renderAsync(page, width, height, viewport, links != nullptr);
+    bool ready;
+    do {
+        ready = job.waitFor(std::chrono::milliseconds(10));
+        if (shouldAbort && shouldAbort()) {
+            job.cancel();
             return { };
         }
-        if (state->done) {
-            if (links)
-                *links = std::move(state->links);
-            return std::move(state->image);
-        }
-        // Completion wakes immediately; poll only the caller-owned abort flag.
-        state->completed.wait_for(lock, std::chrono::milliseconds(10));
-    }
+    } while (!ready);
+    auto result = job.take();
+    if (links)
+        *links = std::move(result.links);
+    if (!result.frame)
+        return { };
+    auto frame = std::make_unique<::paperbox::RenderedFrame>(std::move(result.frame));
+    const auto cleanup = [](void* pointer) {
+        delete static_cast<::paperbox::RenderedFrame*>(pointer);
+    };
+    QImage image(reinterpret_cast<const uchar*>(frame->pixels().data()),
+                 frame->width(),
+                 frame->height(),
+                 frame->stride(),
+                 QImage::Format_RGBA8888,
+                 cleanup,
+                 frame.get());
+    if (!image.isNull())
+        (void)frame.release();
+    return image;
 }
 
-std::vector<TextBox>
-WorkerClient::getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots, bool* success) const
+Model::DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& keys) const
 {
-    if (success)
-        *success = false;
-    return sync([&](WorkerTransport* transport) {
-        return transport->getTextBoxesForPage(page, dpiX, dpiY, skipAnnots, success);
-    });
+    std::vector<std::string> native;
+    native.reserve(static_cast<std::size_t>(keys.size()));
+    for (const auto& key : keys)
+        native.push_back(key.toStdString());
+    return m_client.getDocumentInfo(native);
+}
+
+Model::SignResponse
+WorkerClient::sign(const Model::SignOptions& options, const QString& password, const QString& target)
+{
+    auto bytes = password.toUtf8();
+    auto provider = paperbox::nss::makeSigningProvider({ bytes.constData(), static_cast<std::size_t>(bytes.size()) });
+    bytes.fill('\0');
+    return m_client.signToFile(options, std::move(provider), nativePath(target));
+}
+
+bool WorkerClient::exportDocument(const QString& target, const Model::ExportOptions& options)
+{
+    return m_client.exportDocument(nativePath(target), options);
+}
+
+std::optional<quint64> WorkerClient::startExport(const QString& target, const Model::ExportOptions& options) const
+{
+    return m_client.startExport(nativePath(target), options);
+}
+
+Model::ResolvedLink WorkerClient::resolveLink(const QString& uri) const
+{
+    return m_client.resolveLink(uri.toStdString());
 }
 
 std::optional<quint64> WorkerClient::startOcrPage(int page, const QString& language, int dpi) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->startOcrPage(page, language, dpi); });
+    return m_client.startOcrPage(page, language.toStdString(), dpi);
 }
 
-OcrResult WorkerClient::ocrResult(quint64 jobId) const
+bool WorkerClient::modifyAnnotation(int page, const QString& id, const Model::Annotation& value, bool appearance) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->ocrResult(jobId); });
-}
-
-bool WorkerClient::cancelOcrJobs() const
-{
-    return sync([&](WorkerTransport* transport) { return transport->cancelOcrJobs(); });
-}
-
-// =============================================================================
-// Document Inspection
-// =============================================================================
-
-std::vector<Font> WorkerClient::fonts(int page) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->fonts(page); });
-}
-
-std::optional<std::vector<EmbeddedFile>> WorkerClient::embeddedFiles() const
-{
-    return sync([&](WorkerTransport* transport) { return transport->embeddedFiles(); });
-}
-
-std::optional<std::vector<OutlineNode>> WorkerClient::synopsis(bool allowHeuristic, bool* generatedSynopsis) const
-{
-    if (generatedSynopsis)
-        *generatedSynopsis = false;
-    return sync([&](WorkerTransport* transport) {
-        const auto cachePath = epubCachePath(transport);
-        if (const auto cached = Caching::EPUB::Cache::loadAt(cachePath); cached && cached->outline)
-            return cached->outline;
-        const auto epoch = transport->documentEpoch();
-        auto outline = transport->synopsis(allowHeuristic, generatedSynopsis);
-        if (outline && !cachePath.isEmpty() && epoch == transport->documentEpoch() && transport->isConnected())
-            (void)Caching::EPUB::Cache::saveOutlineAt(cachePath, *outline);
-        return outline;
-    });
-}
-
-DocumentMetadata WorkerClient::getDocumentInfo(const QStringList& keys) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->getDocumentInfo(keys); });
-}
-
-// =============================================================================
-// Annotation & Form Mutations
-// =============================================================================
-
-std::optional<AnnotationHandle> WorkerClient::addAnnotation(int page, const Annotation& annotation) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->addAnnotation(page, annotation); });
-}
-
-bool WorkerClient::modifyAnnotation(int page,
-                                    const QString& id,
-                                    const Annotation& annotation,
-                                    bool appearanceChanged) const
-{
-    return sync([&](WorkerTransport* transport) {
-        return transport->modifyAnnotation(page, id, annotation, appearanceChanged);
-    });
+    return m_client.modifyAnnotation(page, id.toStdString(), value, appearance);
 }
 
 bool WorkerClient::removeAnnotation(int page, const QString& id) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->removeAnnotation(page, id); });
+    return m_client.removeAnnotation(page, id.toStdString());
+}
+
+void WorkerClient::stop()
+{
+    m_client.stop();
+}
+
+void WorkerClient::commitSessionReady()
+{
+    m_client.commitSessionReady();
+}
+
+void WorkerClient::commitSessionFailed()
+{
+    m_client.commitSessionFailed();
 }
 
 std::optional<Model::FormUpdateResponse> WorkerClient::updateForm(const Model::FormUpdateRequest& request) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->updateForm(request); });
+    return m_client.updateForm(request);
 }
 
 std::optional<Model::FormUpdateResponse> WorkerClient::resetForm(const Model::FormResetRequest& request) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->resetForm(request); });
+    return m_client.resetForm(request);
 }
 
 std::optional<Model::FormUpdateResponse>
 WorkerClient::clickFormButton(const Model::FormButtonClickRequest& request) const
 {
-    return sync([&](WorkerTransport* transport) { return transport->clickFormButton(request); });
-}
-
-// =============================================================================
-// Document Saving, Export & Signing
-// =============================================================================
-
-std::optional<std::vector<Model::OutputFormatInfo>> WorkerClient::outputFormats() const
-{
-    return sync([](WorkerTransport* transport) { return transport->outputFormats(); });
-}
-
-bool WorkerClient::exportDocument(const QString& target, const Model::ExportOptions& options)
-{
-    return sync([&](WorkerTransport* transport) { return transport->exportDocument(target, options); });
-}
-
-std::optional<quint64> WorkerClient::startExport(const QString& target, const Model::ExportOptions& options) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->startExport(target, options); });
-}
-
-SignResponse WorkerClient::sign(const SignRequest& request, const QString& password, const QString& target)
-{
-    return sync([&](WorkerTransport* transport) { return transport->signToFile(request, password, target); },
-                SignResponse { SigningResult::GenericError, "worker is unavailable" });
-}
-
-// =============================================================================
-// Layers, Settings & Worker Diagnostics
-// =============================================================================
-
-std::optional<Model::LayersResponse> WorkerClient::layers() const
-{
-    return sync([&](WorkerTransport* transport) { return transport->layers(); });
-}
-
-std::optional<Model::LayersResponse> WorkerClient::setLayer(const Model::SetLayerRequest& request) const
-{
-    return sync([&](WorkerTransport* transport) { return transport->setLayer(request); });
-}
-
-bool WorkerClient::setSettings(const DocumentSettings& settings)
-{
-    return sync([&](WorkerTransport* transport) {
-        if (!transport->setSettings(settings))
-            return false;
-        m_settings = settings;
-        return true;
-    });
-}
-
-SandboxStatus WorkerClient::sandboxStatus() const
-{
-    return m_lifecycle.info.sandbox;
-}
-
-std::string WorkerClient::engineVersion() const
-{
-    return m_lifecycle.info.engineVersion;
-}
-
-// =============================================================================
-// Restart Budget & Session State
-// =============================================================================
-
-void WorkerClient::LifeCycle::prune() noexcept
-{
-    const auto cutoff = std::chrono::steady_clock::now() - Window;
-    while (!restartTimes.empty() && restartTimes.front() <= cutoff)
-        restartTimes.pop_front();
-}
-
-void WorkerClient::LifeCycle::reset(const QString& binaryPath, const QStringList& directories)
-{
-    timer.stop();
-    binary = binaryPath;
-    tessDataDirectories = directories;
-    info = { };
-    stopping = false;
-    restartsDisabled = false;
-    attempts = 0;
-    restartTimes.clear();
-}
-
-bool WorkerClient::LifeCycle::budgetExhausted()
-{
-    prune();
-    return attempts >= MaxAttempts || restartTimes.size() >= MaxRestartsPerWindow;
-}
-
-int WorkerClient::LifeCycle::nextRestartDelayMs() noexcept
-{
-    static constexpr int DelaysMs[] = { 250, 500, 1000 };
-    return DelaysMs[attempts++];
-}
-
-void WorkerClient::LifeCycle::recordRestart()
-{
-    prune();
-    restartTimes.push_back(std::chrono::steady_clock::now());
-    ++sequence;
-    attempts = 0;
-}
-
-void WorkerClient::scheduleRestart()
-{
-    // A worker that repeatedly dies must not create an endless restart storm.
-    if (!m_lifecycle.canScheduleRestart() || m_lifecycle.timer.isActive())
-        return;
-    if (m_lifecycle.budgetExhausted()) {
-        m_lifecycle.disableRestarts();
-        m_lifecycle.timer.stop();
-        MU_LOG(critical,
-               "Mu::Plugin",
-               "worker restart limit reached; automatic recovery disabled recentRestarts="
-                   + std::to_string(m_lifecycle.recentRestarts())
-                   + " windowSeconds=" + std::to_string(LifeCycle::Window.count()));
-        m_lifecycle.setState(State::Failed);
-        Q_EMIT workerUnavailable();
-        return;
-    }
-    m_lifecycle.timer.start(m_lifecycle.nextRestartDelayMs());
-}
-
-void WorkerClient::restartWorker()
-{
-    // A successful restart only restores the process; the generator must
-    // reopen its document and commit the session before operations resume.
-    if (!m_lifecycle.canScheduleRestart() || isConnected())
-        return;
-    if (startWorker()) {
-        m_lifecycle.recordRestart();
-        m_lifecycle.setState(State::Recovering);
-        MU_LOG(warning,
-               "Mu::Plugin",
-               "worker revived restart=" + std::to_string(m_lifecycle.sequence)
-                   + " recentRestarts=" + std::to_string(m_lifecycle.recentRestarts())
-                   + " windowSeconds=" + std::to_string(LifeCycle::Window.count()));
-        Q_EMIT workerRestarted();
-        return;
-    }
-    scheduleRestart();
-}
-
-void WorkerClient::commitSessionReady()
-{
-    m_lifecycle.setState(State::Ready);
-}
-
-void WorkerClient::commitSessionFailed()
-{
-    m_lifecycle.setState(State::Failed);
+    return m_client.clickFormButton(request);
 }
 
 } // namespace Mu::Plugin

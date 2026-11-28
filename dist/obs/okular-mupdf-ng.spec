@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Keep these values in sync with cmake/mupdf.version and dist/obs/_service.
+# Keep these values in sync with thirdparty/paperbox/cmake/mupdf.version and dist/obs/_service.
 %global mupdf_version 1.28.6
 %global mupdf_sha256 dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
 %global __builddir build
@@ -49,6 +49,7 @@ BuildRequires:  pkgconfig(libbrotlidec)
 BuildRequires:  pkgconfig(libbrotlienc)
 BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(libseccomp)
+BuildRequires:  pkgconfig(libmd)
 BuildRequires:  pkgconfig(nss)
 BuildRequires:  pkgconfig(zlib)
 %if %{with tests}
@@ -72,9 +73,10 @@ Includes the mupdfng-cli command-line utility.
 %prep
 printf '%s  %s\n' '%{mupdf_sha256}' '%{SOURCE1}' | sha256sum --check --status
 %setup -q -a 1 -a 2
-test "$(sed -n '1p' cmake/mupdf.version)" = '%{mupdf_version}'
-test "$(sed -n '2p' cmake/mupdf.version)" = '%{mupdf_sha256}'
-sed -i 's/\r$//' thirdparty/allura/OFL.txt
+mv mupdf-%{mupdf_version}-source thirdparty/paperbox/thirdparty/
+test "$(sed -n '1p' thirdparty/paperbox/cmake/mupdf.version)" = '%{mupdf_version}'
+test "$(sed -n '2p' thirdparty/paperbox/cmake/mupdf.version)" = '%{mupdf_sha256}'
+sed -i 's/\r$//' thirdparty/paperbox/thirdparty/allura/OFL.txt
 
 %build
 export CARGO_NET_OFFLINE=true
@@ -82,7 +84,6 @@ export CARGO_NET_OFFLINE=true
     -DKDE_INSTALL_LIBDIR:PATH=%{_lib} \
     -DKDE_INSTALL_USE_QT_SYS_PATHS:BOOL=ON \
     -DUSE_SYSTEM_MUPDF:BOOL=OFF \
-    -DMUPDF_SOURCE_DIR:PATH="%{_builddir}/%{name}-%{version}/mupdf-%{mupdf_version}-source" \
     -DBUILD_TESTING:BOOL=%{with tests} \
     -DENABLE_BUILD_TREE_WORKER:BOOL=OFF \
     -DENABLE_MU_DEBUG:BOOL=OFF \
@@ -96,7 +97,7 @@ export CARGO_NET_OFFLINE=true
 # Strip runtime files when OBS debug package generation is disabled.
 %{__strip} --strip-unneeded --preserve-dates \
     "%{buildroot}%{_bindir}/mupdfng-cli" \
-    "%{buildroot}%{_libdir}/okular-mupdf-ng/mupdfng-worker" \
+    "%{buildroot}%{_libdir}/okular-mupdf-ng/paperbox-worker" \
     "%{buildroot}%{_libdir}/qt6/plugins/okular_generators/okularGenerator_mupdfng.so"
 %endif
 # RPM installs the canonical license copies separately.
@@ -110,11 +111,11 @@ ctest --test-dir %{__builddir} --output-on-failure --parallel %{_smp_build_ncpus
 %endif
 
 %files -f okular_mupdfng.lang
-%license COPYING thirdparty/mupdf-COPYING thirdparty/allura/OFL.txt thirdparty/xxhash/xxHash-LICENSE
+%license COPYING thirdparty/paperbox/thirdparty/mupdf-COPYING thirdparty/paperbox/thirdparty/allura/OFL.txt thirdparty/paperbox/thirdparty/xxhash/xxHash-LICENSE
 %doc README.md INSTALL.md MATURITY.md
 %{_bindir}/mupdfng-cli
 %dir %{_libdir}/okular-mupdf-ng
-%{_libdir}/okular-mupdf-ng/mupdfng-worker
+%{_libdir}/okular-mupdf-ng/paperbox-worker
 %{_libdir}/qt6/plugins/okular_generators/okularGenerator_mupdfng.so
 %{_datadir}/config.kcfg/mupdfngsettings.kcfg
 %{_datadir}/icons/hicolor/scalable/apps/mupdfng.svg

@@ -40,7 +40,7 @@ namespace Mu::Generator::Proxy::Form {
 // Form Proxy Registration & Lifetime
 // =============================================================================
 
-Coordinator::Coordinator(Model::FormBackend* backend, PageRefreshCallback refreshCallback)
+Coordinator::Coordinator(FormBackend* backend, PageRefreshCallback refreshCallback)
     : m_backend(backend)
     , m_refreshCallback(std::move(refreshCallback))
 {

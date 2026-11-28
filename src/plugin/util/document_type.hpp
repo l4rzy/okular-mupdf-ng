@@ -7,7 +7,7 @@
 #include <QByteArray>
 #include <QString>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Plugin::Util {
 

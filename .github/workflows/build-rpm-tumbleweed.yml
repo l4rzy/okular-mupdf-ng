@@ -53,6 +53,7 @@ jobs:
             kf6-kio-devel \
             libbrotli-devel \
             libjpeg8-devel \
+            libmd-devel \
             libseccomp-devel \
             make \
             mold \
@@ -83,6 +84,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Install Rust toolchain
         shell: sh
@@ -92,8 +94,10 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Download bundled MuPDF source
-        run: python3 ./scripts/download-mupdf.py
+      - name: Prepare Paperbox build inputs
+        run: |
+          python3 thirdparty/paperbox/script/download-mupdf.py
+          cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
 
       - name: Configure CMake
         run: |
@@ -136,7 +140,7 @@ jobs:
           requirements=$(rpm --requires -qp "$package")
           printf '%s\n' "$requirements" | grep -Fx okular
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
-          rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/mupdfng-worker$'
+          rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/paperbox-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfngsettings\.kcfg$'
           rpm --list -qp "$package" | grep -q '/icons/hicolor/scalable/apps/mupdfng\.svg$'
           rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'

@@ -5,7 +5,7 @@
 
 #include <QStringList>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Tools::Cli {
 

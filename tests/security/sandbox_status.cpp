@@ -1,13 +1,16 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 #include <sstream>
 
-#include "shared/protocol/zpp_codec.hpp"
 #include "shared/sandbox_report.hpp"
 
-using namespace Mu::Model;
+using namespace paperbox::model;
+using namespace Mu::Cli;
 
 class TestSandboxStatus : public QObject {
     Q_OBJECT
@@ -50,7 +53,7 @@ private slots:
     void evaluatesPolicy_data()
     {
         QTest::addColumn<SandboxStatus>("status");
-        QTest::addColumn<IsolationLevel>("isolation");
+        QTest::addColumn<IsolationLevel>("expected");
         QTest::newRow("default") << SandboxStatus { } << IsolationLevel::Unknown;
         QTest::newRow("empty-protections") << SandboxStatus { "linux", "profile", { }, { } } << IsolationLevel::Unknown;
         for (const auto* platform : { "linux", "freebsd", "future-os" }) {
@@ -101,58 +104,23 @@ private slots:
     void evaluatesPolicy()
     {
         QFETCH(SandboxStatus, status);
-        QFETCH(IsolationLevel, isolation);
-        QCOMPARE(status.isolation(), isolation);
-        QCOMPARE(status.isFullyHardened(), isolation == IsolationLevel::Full);
+        QFETCH(IsolationLevel, expected);
+        QCOMPARE(isolation(status), expected);
+        QCOMPARE(status.isFullyHardened(), expected == IsolationLevel::Full);
         // Missing platform/profile metadata leaves the overall isolation unknown.
         if (!status.platform.empty() && !status.profile.empty())
-            QCOMPARE(status.isPartiallyActive(), isolation == IsolationLevel::Degraded);
+            QCOMPARE(status.isPartiallyActive(), expected == IsolationLevel::Degraded);
     }
 
-    void roundTripsReport()
+    void escapesJsonDiagnostics()
     {
-        SandboxStatus status { "future-os",
-                               "profile.v3",
-                               { { "future-os.control",
-                                   ProtectionCategory::Transport,
-                                   ProtectionState::Enforced,
-                                   true,
-                                   "3",
-                                   "control diagnostic" },
-                                 { "future-os.optional",
-                                   ProtectionCategory::Other,
-                                   ProtectionState::Unavailable,
-                                   false,
-                                   { },
-                                   "optional diagnostic" } },
-                               { "first diagnostic", "second diagnostic" } };
-        ResponseMessage message { 42, PingResponse { "compat", 123, status, "engine", false }, { } };
-        std::string error;
-        auto bytes = Mu::IPC::ZppCodec::encode(message, &error);
-        QVERIFY2(bytes.has_value(), error.c_str());
-        ResponseMessage decoded;
-        QVERIFY2(Mu::IPC::ZppCodec::decode(*bytes, &decoded, &error), error.c_str());
-        const auto* ping = std::get_if<PingResponse>(&decoded.payload);
-        QVERIFY(ping);
-        const auto& report = ping->sandbox;
-        QCOMPARE(report.platform, status.platform);
-        QCOMPARE(report.profile, status.profile);
-        QCOMPARE(report.diagnostics, status.diagnostics);
-        QCOMPARE(report.protections.size(), status.protections.size());
-        for (std::size_t i = 0; i < status.protections.size(); ++i) {
-            const auto& actual = report.protections[i];
-            const auto& expected = status.protections[i];
-            QCOMPARE(actual.id, expected.id);
-            QCOMPARE(actual.category, expected.category);
-            QCOMPARE(actual.state, expected.state);
-            QCOMPARE(actual.required, expected.required);
-            QCOMPARE(actual.version, expected.version);
-            QCOMPARE(actual.diagnostic, expected.diagnostic);
-        }
-        QVERIFY(report.isFullyHardened());
-        // Version 18 used the incompatible Linux-specific sandbox layout.
-        (*bytes)[4] = std::byte { 18 };
-        QVERIFY(!Mu::IPC::ZppCodec::decode(*bytes, &decoded, &error));
+        const SandboxStatus status { "linux", "profile", { }, { "quoted \"text\"\nbackslash \\" } };
+        std::ostringstream output;
+        printSandboxStatusJson(output, status);
+        const auto report = QJsonDocument::fromJson(QByteArray::fromStdString(output.str()));
+        QVERIFY(report.isObject());
+        QCOMPARE(report.object().value("diagnostics").toArray().at(0).toString(),
+                 QStringLiteral("quoted \"text\"\nbackslash \\"));
     }
 };
 

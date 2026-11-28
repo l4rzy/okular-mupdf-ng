@@ -10,10 +10,10 @@ export QT_QPA_PLATFORM = offscreen
 export CARGO_NET_OFFLINE = true
 
 BUILD_DIR = build-debian
-MUPDF_VERSION := $(shell sed -n '1p' cmake/mupdf.version)
-MUPDF_SHA256 := $(shell sed -n '2p' cmake/mupdf.version)
+MUPDF_VERSION := $(shell sed -n '1p' thirdparty/paperbox/cmake/mupdf.version)
+MUPDF_SHA256 := $(shell sed -n '2p' thirdparty/paperbox/cmake/mupdf.version)
 MUPDF_ARCHIVE = mupdf-$(MUPDF_VERSION)-source.tar.gz
-MUPDF_SOURCE_DIR = $(CURDIR)/$(BUILD_DIR)/mupdf-source
+MUPDF_SOURCE_DIR = thirdparty/paperbox/thirdparty/mupdf-$(MUPDF_VERSION)-source
 BUILD_TESTING = $(if $(filter nocheck,$(DEB_BUILD_OPTIONS) $(DEB_BUILD_PROFILES)),OFF,ON)
 
 %:
@@ -36,7 +36,6 @@ override_dh_auto_configure:
 		-DKDE_INSTALL_SYSCONFDIR=/etc \
 		-DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
 		-DUSE_SYSTEM_MUPDF=OFF \
-		-DMUPDF_SOURCE_DIR:PATH='$(MUPDF_SOURCE_DIR)' \
 		-DENABLE_LTO=OFF \
 		-DBUILD_TESTING=$(BUILD_TESTING) \
 		-DENABLE_BUILD_TREE_WORKER=OFF \

@@ -3,6 +3,7 @@
   <service name="tar_scm" mode="serveronly">
     <param name="url">https://github.com/l4rzy/okular-mupdf-ng.git</param>
     <param name="scm">git</param>
+    <param name="submodules">enable</param>
     <param name="revision">@PARENT_TAG@</param>
     <param name="match-tag">v*</param>
     <param name="filename">okular-mupdf-ng</param>
@@ -36,7 +37,7 @@
        matching source checkout, then upload it. -->
   <service name="cargo_vendor" mode="manual">
     <param name="src">*okular-mupdf-ng-*.tar.gz</param>
-    <param name="cargotoml">src/worker/engine/kindle/Cargo.toml</param>
+    <param name="cargotoml">thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml</param>
     <param name="update">false</param>
     <param name="respect-lockfile">true</param>
     <param name="compression">gz</param>

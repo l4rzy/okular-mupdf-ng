@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator {
 

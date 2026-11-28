@@ -21,8 +21,7 @@
 #include <utility>
 #include <vector>
 
-#include "shared/model/geometry.hpp"
-#include "shared/protocol/limits.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Plugin::Xfdf {
 

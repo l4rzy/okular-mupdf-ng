@@ -7,8 +7,9 @@
 #include <okular/core/document.h>
 
 #include "generator/config/settings.hpp"
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 #include <optional>
+#include <utility>
 
 namespace Mu::Generator::Conversion {
 
@@ -19,6 +20,8 @@ namespace Mu::Generator::Conversion {
 /// is selected independently of the profile. Returns empty if emblem encoding fails.
 [[nodiscard]] std::optional<Model::SignatureAppearance>
 toModelSignatureAppearance(const Okular::NewSignatureData& data, const Config::SignatureAppearanceOptions& options);
+
+[[nodiscard]] std::pair<Okular::SigningResult, QString> toOkularSigningResult(const Model::SignResponse& result);
 
 } // namespace Mu::Generator::Conversion
 

@@ -1,0 +1,12 @@
+--- verification.cpp
++++ verification.cpp
+@@ -214,7 +214,8 @@
+         return false;
+     std::array<unsigned char, 64 * 1024> bytes;
+     while (length > 0) {
+-        const auto count = ::pread(fd, bytes.data(), std::min<std::int64_t>(length, bytes.size()), offset);
++        const auto size = static_cast<std::size_t>(std::min<std::int64_t>(length, bytes.size()));
++        const auto count = ::pread(fd, bytes.data(), size, offset);
+         if (count < 0 && errno == EINTR)
+             continue;
+         if (count <= 0 || PK11_DigestOp(hash, bytes.data(), static_cast<unsigned int>(count)) != SECSuccess)

@@ -6,8 +6,8 @@
 #include "generator/mupdfng.hpp"
 #include "generator/ui/window_menus.hpp"
 #include "mupdfngsettings.h"
+#include "paperbox_model.hpp"
 #include "plugin/crypto/nss.hpp"
-#include "shared/model/theme_colors.hpp"
 
 #include <KActionCollection>
 #include <KActionMenu>
@@ -32,14 +32,14 @@ constexpr int ShortNoticeMs = 1500;
 
 QIcon themePreviewIcon(Model::DocumentTheme theme)
 {
-    const auto backgroundRgb = Model::ThemeColor::splitRgb(Model::ThemeColor::getBackground(theme));
+    const auto backgroundRgb = Model::theme_color::splitRgb(Model::theme_color::getBackground(theme));
     const QColor background(backgroundRgb[0], backgroundRgb[1], backgroundRgb[2]);
     const QColor foreground = [&] {
         if (theme == Model::DocumentTheme::Twilight)
             return QColor(Qt::black);
         if (theme == Model::DocumentTheme::Default)
             return QColor(32, 33, 36);
-        const auto rgb = Model::ThemeColor::splitRgb(Model::ThemeColor::DarkForeground);
+        const auto rgb = Model::theme_color::splitRgb(Model::theme_color::DarkForeground);
         return QColor(rgb[0], rgb[1], rgb[2]);
     }();
     const QColor nearBackground((foreground.red() + 9 * background.red()) / 10,

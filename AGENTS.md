@@ -27,13 +27,13 @@
 
 # Targeted test execution
 ctest --test-dir build -R <test_pattern> --output-on-failure   # Run specific test by name
-ctest --test-dir build -L <label> --output-on-failure          # Run by label (security, worker, generator, etc.)
+ctest --test-dir build -L <label> --output-on-failure          # Run by label (security, generator, plugin, etc.)
 ctest --test-dir build -LE slow --output-on-failure            # Run all tests excluding the (unused) slow label
 ```
 
 # Architecture Map
 - `src/generator/`: Okular Generator UI plugin & settings (KDE / KF6 / Okular SDK).
-- `src/plugin/`: Pure-Qt host layer: worker bridge (IPC client, OCR scheduler) plus in-process libraries (NSS crypto, caching, utilities) shared with the generator.
-- `src/worker/`: Out-of-process sandboxed worker engine (MuPDF, OpenSSL, native C++, POSIX; no Qt/GUI).
-- `src/shared/`: Cross-layer data models, binary zpp::bits serialization, and transport abstractions.
-- `tests/`: Layered test suites corresponding to each layer (`generator/`, `plugin/`, `worker/`, `security/`, `integration/`, `corpus/`, `benchmark/`).
+- `src/plugin/`: Qt adapter for Paperbox and host-side OCR scheduling, certificate management, and XFDF.
+- `src/shared/`: Application logging, build information, and adapter interfaces.
+- `thirdparty/paperbox/`: Pinned native host, shared models, and sandboxed worker.
+- `tests/`: Okular generator, Qt adapter, and CLI suites. Paperbox maintains its native backend suites.

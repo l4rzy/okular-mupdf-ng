@@ -4,9 +4,12 @@
 #include "plugin/ocr/controller.hpp"
 
 #include <QtConcurrent/QtConcurrentRun>
+#include <paperbox/cache.hpp>
 
+#include "plugin/caching/cache_root.hpp"
 #include "plugin/ocr/constants.hpp"
-#include "shared/logging.hpp"
+#include "plugin/util/ocr_options.hpp"
+#include <paperbox/logging.hpp>
 
 namespace Mu::Plugin::OCR {
 
@@ -28,10 +31,7 @@ Controller::Controller(WorkerClient* backend, QObject* parent)
     connect(&m_retryTimer, &QTimer::timeout, this, &Controller::startNext);
 
     connect(m_backend, &WorkerClient::ocrDone, this, &Controller::finish);
-    connect(&m_cacheWatcher,
-            &QFutureWatcher<Caching::OCR::CacheLoadResult>::finished,
-            this,
-            &Controller::cacheLoadFinished);
+    connect(&m_cacheWatcher, &decltype(m_cacheWatcher)::finished, this, &Controller::cacheLoadFinished);
 }
 
 void Controller::observeVisiblePages(const QList<VisiblePage>& visiblePages,
@@ -80,13 +80,13 @@ void Controller::observe(int page, Config config, std::optional<NativeTextObserv
 // Ready Results & Invalidation
 // =============================================================================
 
-std::optional<QVector<Caching::OCR::CacheItem>> Controller::takeReady(int page)
+std::optional<std::vector<Model::TextBox>> Controller::takeReady(int page)
 {
     QMutexLocker locker(&m_readyMutex);
     const auto ready = m_readyResults.find(page);
     if (ready == m_readyResults.end())
         return std::nullopt;
-    const auto boxes = std::move(ready.value());
+    auto boxes = std::move(ready.value());
     m_readyResults.erase(ready);
     return boxes;
 }
@@ -112,7 +112,7 @@ void Controller::invalidate()
     m_queue.clear();
     m_retry.clear();
     if (m_activeJob) {
-        m_backend->cancelOcrJobs();
+        m_backend->paperboxClient().cancelOcrJobs();
         m_activeJob.reset();
     }
     m_nativeTextBoxCounts.clear();
@@ -124,7 +124,7 @@ void Controller::invalidate()
 // Result Delivery & Scheduling
 // =============================================================================
 
-void Controller::deliver(int page, QVector<Caching::OCR::CacheItem> boxes, CompletionSource source)
+void Controller::deliver(int page, std::vector<Model::TextBox> boxes, CompletionSource source)
 {
     {
         QMutexLocker locker(&m_readyMutex);
@@ -149,7 +149,8 @@ bool Controller::shouldSchedulePage(int page)
         // Only focus justifies a native-text RPC; neighbours are cache hints.
         if (page != m_focus.focus())
             return false;
-        const auto boxes = m_backend->getTextBoxesForPage(page, m_config.dpiX, m_config.dpiY, /*skipAnnots=*/true);
+        const auto boxes =
+            m_backend->paperboxClient().getTextBoxesForPage(page, m_config.dpiX, m_config.dpiY, /*skipAnnots=*/true);
         count = m_nativeTextBoxCounts.insert(page, boxes.size());
     }
     return count.value() < m_config.triggerThreshold;
@@ -184,14 +185,19 @@ void Controller::startNext()
     if (!page)
         return;
 
-    const auto key = Caching::OCR::Cache::normalizeKey(m_config.documentHash, m_config.language, m_config.dpi);
-    if (!key) {
+    int dpi = m_config.dpi;
+    auto language = Util::normalizeOcrLanguage(m_config.language, dpi);
+    if (m_config.documentHash.isEmpty() || language.isEmpty()) {
         m_queue.pushFront(*page, m_focus.focus(), Constant::STALE_RADIUS);
         return;
     }
-    m_pendingCache = PendingCache { *page, *key };
+    m_pendingCache = CacheRequest { *page, std::move(language), dpi };
     m_cacheWatcher.setFuture(
-        QtConcurrent::run([page = *page, key = *key] { return Caching::OCR::Cache::load(key, page); }));
+        QtConcurrent::run([root = Caching::cacheRoot(),
+                           page = *page,
+                           hash = m_config.documentHash.toStdString(),
+                           language = m_pendingCache->language.toStdString(),
+                           dpi] { return paperbox::loadCachedOcr(root, hash, page, language, dpi); }));
 }
 
 // =============================================================================
@@ -208,20 +214,20 @@ void Controller::cacheLoadFinished()
         return;
     }
 
-    const auto pending = std::move(*m_pendingCache);
+    auto [page, language, dpi] = std::move(*m_pendingCache);
     m_pendingCache.reset();
-    const auto cached = m_cacheWatcher.result();
-    if (cached.present) {
-        m_retry.clear(pending.page);
-        deliver(pending.page, cached.items, CompletionSource::CacheLoaded);
-    } else if (pending.page == m_focus.focus()) {
+    auto cached = m_cacheWatcher.result();
+    if (cached) {
+        m_retry.clear(page);
+        deliver(page, std::move(*cached), CompletionSource::CacheLoaded);
+    } else if (page == m_focus.focus()) {
         // Neighbours only probe the cache. A miss starts recognition only if
         // this page is still focused when the asynchronous lookup completes.
-        if (const auto job = m_backend->startOcrPage(pending.page, pending.key.language, pending.key.dpi)) {
-            m_activeJob = ActiveJob { *job, pending.page, pending.key };
-            Q_EMIT started(pending.page);
+        if (const auto job = m_backend->startOcrPage(page, language, dpi)) {
+            m_activeJob = ActiveJob { *job, { page, std::move(language), dpi } };
+            Q_EMIT started(page);
         } else {
-            handleFailure(pending.page);
+            handleFailure(page);
         }
         return;
     }
@@ -231,20 +237,24 @@ void Controller::cacheLoadFinished()
 void Controller::finish(quint64 jobId, int page)
 {
     // Ignore late worker notifications for canceled or superseded jobs.
-    if (!m_activeJob || jobId != m_activeJob->jobId || page != m_activeJob->page)
+    if (!m_activeJob || jobId != m_activeJob->jobId || page != m_activeJob->request.page)
         return;
-    const ActiveJob active = std::move(*m_activeJob);
+    const auto request = std::move(m_activeJob->request);
     m_activeJob.reset();
-    const auto result = m_backend->ocrResult(jobId);
+    auto result = m_backend->paperboxClient().ocrResult(jobId);
     if (result.status != Model::OcrStatus::Success) {
         handleFailure(page);
         return;
     }
 
     m_retry.clear(page);
-    QVector<Caching::OCR::CacheItem> boxes = Caching::OCR::Cache::convertToCacheItems(result.boxes);
-    Caching::OCR::Cache::save(active.cacheKey, page, boxes);
-    deliver(page, std::move(boxes), CompletionSource::OcrCompleted);
+    paperbox::storeCachedOcr(Caching::cacheRoot(),
+                             m_config.documentHash.toStdString(),
+                             page,
+                             request.language.toStdString(),
+                             request.dpi,
+                             result.boxes);
+    deliver(page, std::move(result.boxes), CompletionSource::OcrCompleted);
     startNext();
 }
 
@@ -257,7 +267,8 @@ void Controller::handleFailure(int page)
     }
 
     m_retry.clear(page);
-    MU_LOG(warning, "Mu::Plugin::OCR", "OCR failed repeatedly for page " + std::to_string(page));
+    paperbox::log::write(
+        paperbox::log::Level::Warning, "Mu::Plugin::OCR", "OCR failed repeatedly for page " + std::to_string(page));
     Q_EMIT failed(page);
 }
 

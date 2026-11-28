@@ -3,7 +3,7 @@
 #ifndef MU_GENERATOR_CONFIG_OKULAR_EMBLEM_HPP
 #define MU_GENERATOR_CONFIG_OKULAR_EMBLEM_HPP
 
-#include "shared/protocol/limits.hpp"
+#include "paperbox_model.hpp"
 
 #include <QBuffer>
 #include <QImage>

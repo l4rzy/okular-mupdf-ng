@@ -204,18 +204,18 @@ Okular::TextPage* textPage(const std::vector<Model::TextBox>& boxes, qreal width
 Okular::TextPage* mergedTextPage(const std::vector<Model::TextBox>& nativeBoxes,
                                  qreal width,
                                  qreal height,
-                                 const QVector<Plugin::Caching::OCR::CacheItem>& additions)
+                                 const std::vector<Model::TextBox>& additions)
 {
     std::unique_ptr<Okular::TextPage> result(textPage(nativeBoxes, width, height));
     if (!std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0)
         return result.release();
     for (const auto& box : additions) {
-        if (box.ch.isEmpty())
+        if (box.text.empty())
             continue;
-        const auto area = normalizeTextArea(box.l, box.t, box.r, box.b, 1.0, 1.0);
+        const auto area = normalizeTextArea(box.left, box.top, box.right, box.bottom, 1.0, 1.0);
         if (!area)
             continue;
-        result->append(box.ch, *area);
+        result->append(QString::fromStdString(box.text), *area);
     }
     // Page::setTextPage applies Okular's geometric reading-order analysis.
     return result.release();

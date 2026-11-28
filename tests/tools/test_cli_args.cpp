@@ -301,7 +301,7 @@ private slots:
         const QString engineVersion = QString::fromUtf8(::Mu::MUPDF_VERSION.data());
         const QString text = Cli::versionText(engineVersion, QStringLiteral("Worker"));
         QVERIFY(text.startsWith(QStringLiteral("mupdfng-cli ")));
-        QVERIFY(text.contains(QString::fromUtf8(::Mu::IPC::COMPAT.data())));
+        QVERIFY(text.contains(QString::fromUtf8(::Mu::VERSION.data())));
         QVERIFY(text.contains(QStringLiteral("Worker: MuPDF")));
         QVERIFY(text.contains(engineVersion));
     }
@@ -325,7 +325,7 @@ private slots:
         QFETCH(QString, engineLine);
         const std::optional<bool> origin = systemMuPdf < 0 ? std::nullopt : std::optional<bool>(systemMuPdf != 0);
         const QString expected =
-            QStringLiteral("mupdfng-cli %1\n%2\n").arg(QString::fromUtf8(::Mu::IPC::COMPAT.data()), engineLine);
+            QStringLiteral("mupdfng-cli %1\n%2\n").arg(QString::fromUtf8(::Mu::VERSION.data()), engineLine);
         QCOMPARE(Cli::versionText(QStringLiteral("1.2.3"), source, origin, { }), expected);
     }
 
@@ -343,7 +343,7 @@ private slots:
         QFETCH(std::string, gitBuild);
         QFETCH(QString, suffix);
         const QString expected = QStringLiteral("mupdfng-cli %1%2\nWorker: MuPDF 1.2.3 (bundled, patched)\n")
-                                     .arg(QString::fromUtf8(::Mu::IPC::COMPAT.data()), suffix);
+                                     .arg(QString::fromUtf8(::Mu::VERSION.data()), suffix);
         QCOMPARE(Cli::versionText(QStringLiteral("1.2.3"), QStringLiteral("Worker"), false, gitBuild), expected);
     }
 

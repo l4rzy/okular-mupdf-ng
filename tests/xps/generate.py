@@ -9,7 +9,7 @@ from xml.sax.saxutils import quoteattr
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parent
-FONT = ROOT.parents[1] / "thirdparty/allura"
+FONT = ROOT.parents[1] / "thirdparty/paperbox/thirdparty/allura"
 REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 

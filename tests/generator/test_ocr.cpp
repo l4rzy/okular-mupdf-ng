@@ -15,9 +15,11 @@
 #include <QCursor>
 #include <QDateTime>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFile>
 #include <QImage>
 #include <QLabel>
+#include <QLocale>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMenuBar>
@@ -34,6 +36,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QToolButton>
 #include <okular/core/action.h>
 #include <okular/core/document.h>
 #include <okular/core/generator.h>
@@ -48,8 +51,9 @@
 #include "generator/config/document_settings.hpp"
 #include "generator/config/settings.hpp"
 #include "generator/okular_compat.hpp"
-#include "plugin/caching/ocr_cache.hpp"
+#include "plugin/caching/cache_root.hpp"
 #include "plugin/worker_client.hpp"
+#include <paperbox/cache.hpp>
 #if !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
 #include "generator/page/placeholder.hpp"
 #endif // !MU_OKULAR_PAGE_PLACEHOLDER_COLOR
@@ -130,12 +134,12 @@ private:
         const auto hash = metadata.values.find("hash");
         if (hash == metadata.values.end())
             return false;
-        const QString documentHash = QString::fromStdString(hash->second);
+        const auto cacheRoot = Mu::Plugin::Caching::cacheRoot();
         for (int page = 0; page < pageText.size(); ++page) {
-            QVector<Mu::Plugin::Caching::OCR::CacheItem> items;
+            std::vector<Mu::Model::TextBox> items;
             if (!pageText.at(page).isEmpty())
-                items.append({ pageText.at(page), 0.05, top, 0.95, bottom });
-            if (!Mu::Plugin::Caching::OCR::Cache::save(documentHash, page, QStringLiteral("eng"), 150, items))
+                items.push_back({ pageText.at(page).toStdString(), 0.05, top, 0.95, bottom });
+            if (!paperbox::storeCachedOcr(cacheRoot, hash->second, page, "eng", 150, items))
                 return false;
         }
         return true;
@@ -173,6 +177,53 @@ private slots:
              { QStringLiteral(TEST_PDF_PATH), QStringLiteral(TEST_EPUB_PATH), QStringLiteral(TEST_MOBI_PATH) })
             QVERIFY(
                 Mu::Generator::Config::writeDocumentSettings(Mu::Generator::Config::documentSettingsKey(path), { }));
+    }
+
+    void displaysCacheSizes_data()
+    {
+        QTest::addColumn<qint64>("size");
+        QTest::newRow("empty") << qint64(0);
+        QTest::newRow("populated") << qint64(2048);
+    }
+
+    void displaysCacheSizes()
+    {
+        QFETCH(qint64, size);
+        const auto settings = KSharedConfig::openConfig(QStringLiteral("okular-mupdf-ngrc"));
+        KConfigGroup general(settings, QStringLiteral("General"));
+        general.writeEntry("SandboxEnforcement", "Relaxed");
+        settings->sync();
+        const QString root = QString::fromStdString(Mu::Plugin::Caching::cacheRoot().string());
+        const QString directory = root + QStringLiteral("/ocr/cache-size-test");
+        QVERIFY(QDir().mkpath(directory));
+        const auto cleanup = qScopeGuard([&] { QDir(directory).removeRecursively(); });
+        if (size > 0) {
+            QFile cache(directory + QStringLiteral("/p0_eng_150dpiv2.bin"));
+            QVERIFY(cache.open(QIODevice::WriteOnly));
+            QVERIFY(cache.resize(size));
+        }
+
+        const QString path = QStringLiteral(TEST_PDF_PATH);
+        Okular::Document document(nullptr);
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForFile(path)),
+                 Okular::Document::OpenSuccess);
+        auto* client = document.guiClient();
+        QVERIFY(client);
+        auto* actions = client->actionCollection();
+        auto* theme = actions->action(QStringLiteral("mupdf_theme"));
+        QVERIFY(theme);
+        auto* config = qobject_cast<Okular::ConfigInterface*>(theme->parent());
+        QVERIFY(config);
+        KConfigSkeleton hostSettings;
+        KConfigDialog dialog(nullptr, QStringLiteral("cache-size-test"), &hostSettings);
+        config->addPages(&dialog);
+        auto* storage = dialog.findChild<QToolButton*>(QStringLiteral("cacheStorageButton"));
+        QVERIFY(storage);
+        storage->click();
+
+        const auto formatted = QLocale().formattedDataSize(size);
+        QTRY_COMPARE(storage->text(), QStringLiteral("Using %1").arg(formatted));
+        QVERIFY(storage->menu()->actions().at(2)->text().endsWith(QStringLiteral("(%1)").arg(formatted)));
     }
 
     void ocrMenuAvailability_data()

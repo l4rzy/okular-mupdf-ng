@@ -68,7 +68,7 @@ void restoreReflowPosition(Okular::Document* doc,
              index <= std::min(static_cast<int>(doc->pages()) - 1, target.pageNumber + 8);
              ++index) {
             bool success = false;
-            auto next = worker.getTextBoxesForPage(index, width, pageHeight, true, &success);
+            auto next = worker.paperboxClient().getTextBoxesForPage(index, width, pageHeight, true, &success);
             if (!success || boxes.size() + next.size() > 100'000) {
                 boxes.clear();
                 break;
@@ -158,7 +158,8 @@ bool Main::applyDocumentSettings(const Config::DocumentSettings& settings)
     const double oldY = oldViewport.rePos.enabled ? std::clamp(oldViewport.rePos.normalizedY, 0.0, 1.0) : 0;
     const double progress = (page + oldY) / doc->pages();
     const auto snippet = Conversion::captureReflowText(
-        m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), true), oldY * doc->page(page)->height());
+        m_worker.paperboxClient().getTextBoxesForPage(page, dpi().width(), dpi().height(), true),
+        oldY * doc->page(page)->height());
     doc->closeDocument();
     if (doc->openDocument(path, url, mime, password) != Okular::Document::OpenSuccess) {
         Config::writeDocumentSettings(key, previous);

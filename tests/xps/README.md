@@ -15,6 +15,6 @@ Regenerate from the repository root:
 python3 tests/xps/generate.py
 ```
 
-The generator uses only the Python standard library and produces deterministic ZIP packages. Text and graphics are original. Every package includes the repository's Allura font and its SIL Open Font License from `thirdparty/allura/`.
+The generator uses only the Python standard library and produces deterministic ZIP packages. Text and graphics are original. Every package includes the repository's Allura font and its SIL Open Font License from `thirdparty/paperbox/thirdparty/allura/`.
 
 The worker XPS suite opens each fixture, renders every page, checks text extraction, verifies link targets, and checks mixed page dimensions. These fixtures exercise specific features; they are not a format conformance corpus.

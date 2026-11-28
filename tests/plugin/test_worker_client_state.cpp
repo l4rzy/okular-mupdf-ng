@@ -3,9 +3,7 @@
 
 #include <QTest>
 
-#include "plugin/util/request_timeout.hpp"
 #include "plugin/worker_client.hpp"
-#include "shared/transport/common.hpp"
 
 using Mu::Plugin::WorkerClient;
 using State = Mu::Plugin::WorkerClient::State;
@@ -15,54 +13,15 @@ class TestWorkerClientState : public QObject {
 
 private Q_SLOTS:
 
-    void bookRequestTimeouts_data()
-    {
-        QTest::addColumn<int>("kind");
-        QTest::addColumn<int>("timeout");
-        QTest::newRow("kindle-open") << 0 << Mu::IPC::Timeout::ExportMs;
-        QTest::newRow("epub-open") << 1 << Mu::IPC::Timeout::GenericOpMs;
-        QTest::newRow("epub-export") << 2 << Mu::IPC::Timeout::ExportMs;
-        QTest::newRow("azw3-export") << 3 << Mu::IPC::Timeout::ExportMs;
-        QTest::newRow("ordinary-save") << 4 << Mu::IPC::Timeout::GenericOpMs;
-        QTest::newRow("pdf-print") << 5 << 30'000;
-        QTest::newRow("pdf-flatten") << 6 << 30'000;
-        QTest::newRow("pdf-with-references") << 7 << 30'000;
-        QTest::newRow("pdf-background-submission") << 8 << Mu::IPC::Timeout::GenericOpMs;
-    }
-
-    void bookRequestTimeouts()
-    {
-        QFETCH(int, kind);
-        QFETCH(int, timeout);
-        Mu::Model::RequestPayload payload;
-        if (kind < 2) {
-            Mu::Model::OpenRequest open;
-            open.documentType = kind == 0 ? Mu::Model::DocumentType::Kindle : Mu::Model::DocumentType::Epub;
-            payload = open;
-        } else {
-            Mu::Model::ExportRequest request;
-            request.options.formatId = kind == 2 ? "epub" : kind == 3 ? "azw3" : "pdf";
-            request.options.profileId = kind < 4 ? ::Mu::Model::ExportProfileId::Converted
-                : kind == 4                      ? ::Mu::Model::ExportProfileId::Native
-                : kind == 5                      ? ::Mu::Model::ExportProfileId::Print
-                : kind == 6                      ? ::Mu::Model::ExportProfileId::Flattened
-                : kind == 7                      ? ::Mu::Model::ExportProfileId::WithReferences
-                                                 : ::Mu::Model::ExportProfileId::SourceWithReferences;
-            request.asynchronous = kind == 8;
-            payload = request;
-        }
-        QCOMPARE(Mu::Plugin::Util::requestTimeoutFor(payload), timeout);
-    }
-
     void initialStateIsStoppedAndNotOperational()
     {
         WorkerClient client;
-        QCOMPARE(client.state(), State::Stopped);
+        QCOMPARE(client.paperboxClient().state(), State::Stopped);
         QVERIFY(!client.operational());
 
         // Stopping an unstarted client is idempotent and keeps it gated.
         client.stop();
-        QCOMPARE(client.state(), State::Stopped);
+        QCOMPARE(client.paperboxClient().state(), State::Stopped);
         QVERIFY(!client.operational());
     }
 
@@ -71,12 +30,12 @@ private Q_SLOTS:
         WorkerClient client;
 
         client.commitSessionReady();
-        QCOMPARE(client.state(), State::Ready);
+        QCOMPARE(client.paperboxClient().state(), State::Ready);
         QVERIFY(client.operational());
 
         // A redundant commit leaves the session ready.
         client.commitSessionReady();
-        QCOMPARE(client.state(), State::Ready);
+        QCOMPARE(client.paperboxClient().state(), State::Ready);
         QVERIFY(client.operational());
     }
 
@@ -87,12 +46,12 @@ private Q_SLOTS:
         QVERIFY(client.operational());
 
         client.commitSessionFailed();
-        QCOMPARE(client.state(), State::Failed);
+        QCOMPARE(client.paperboxClient().state(), State::Failed);
         QVERIFY(!client.operational());
 
         // A newly committed session restores operational access.
         client.commitSessionReady();
-        QCOMPARE(client.state(), State::Ready);
+        QCOMPARE(client.paperboxClient().state(), State::Ready);
         QVERIFY(client.operational());
     }
 
@@ -110,8 +69,36 @@ private Q_SLOTS:
         WorkerClient client;
         int checks = 0;
         QVERIFY(client.render(0, 100, 100, { }, [&] { return abortAfter && ++checks >= abortAfter; }).isNull());
-        QCOMPARE(client.state(), State::Stopped);
+        QCOMPARE(client.paperboxClient().state(), State::Stopped);
         client.stop();
+    }
+
+    void retainedFrameAndCancellation_data()
+    {
+        QTest::addColumn<QRect>("tile");
+        QTest::newRow("full-page") << QRect();
+        QTest::newRow("tile") << QRect(12, 16, 48, 32);
+    }
+
+    void retainedFrameAndCancellation()
+    {
+        QFETCH(QRect, tile);
+        WorkerClient client;
+        QVERIFY(client.start(QStringLiteral(WORKER_BUILD_PATH)));
+        QList<WorkerClient::PageInfo> pages;
+        QCOMPARE(client.open(QStringLiteral(TEST_PDF_PATH), { }, pages), Mu::Model::OpenStatus::Success);
+
+        int checks = 0;
+        QVERIFY(client.render(0, 128, 128, tile, [&] { return ++checks > 1; }).isNull());
+        QVERIFY(checks >= 2);
+        Mu::Model::RenderLinks links;
+        const QImage frame = client.render(0, 128, 128, tile, { }, &links);
+        QVERIFY(!frame.isNull());
+        QCOMPARE(frame.size(), tile.isNull() ? QSize(128, 128) : tile.size());
+
+        const QImage expected = frame.copy();
+        client.stop();
+        QCOMPARE(frame, expected);
     }
 };
 

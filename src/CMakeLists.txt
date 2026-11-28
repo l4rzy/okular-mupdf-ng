@@ -1,43 +1,12 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Qt-free code shared by the plugin and the sandboxed worker: transport
-# channels, logging, model validation, and the zpp serialization codec.
-add_library(ng_shared STATIC
-  shared/transport/ctrl_channel.cpp
-  shared/transport/fd_channel.cpp
-  shared/transport/poll.cpp
-  shared/logging.cpp
-  shared/model/validation.cpp
-  shared/model/export.cpp
-  shared/protocol/zpp_codec.cpp
-)
-add_dependencies(ng_shared ng_build_info)
-set_target_properties(ng_shared PROPERTIES
-    AUTOMOC OFF
-    AUTORCC OFF
-    AUTOUIC OFF
-    POSITION_INDEPENDENT_CODE ON
-)
-target_include_directories(ng_shared PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-target_include_directories(ng_shared SYSTEM PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty # zpp_bits.h for the codec
-)
+add_library(ng_shared INTERFACE)
+target_include_directories(ng_shared INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_GENERATED_INCLUDE_DIR}")
+target_link_libraries(ng_shared INTERFACE Paperbox::paperbox)
 if(MU_DEBUG_BUILD)
-    target_compile_definitions(ng_shared PRIVATE MU_DEBUG_ENABLED)
+    target_compile_definitions(ng_shared INTERFACE MU_DEBUG_ENABLED)
 endif()
-
-if(MU_DEBUG_BUILD)
-    add_library(ng_ipc_debug STATIC shared/protocol/ipc_debug.cpp)
-    set_target_properties(ng_ipc_debug PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    target_include_directories(ng_ipc_debug PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(ng_ipc_debug PUBLIC ng_shared)
-    target_compile_definitions(ng_ipc_debug PRIVATE MU_DEBUG_ENABLED)
-endif()
-
-add_subdirectory(worker)
 
 add_library(ng_cli_layout STATIC tools/cli/layout_config.cpp)
 set_target_properties(ng_cli_layout PROPERTIES AUTOMOC OFF POSITION_INDEPENDENT_CODE ON)
@@ -68,81 +37,28 @@ target_link_libraries(mupdfng-cli PRIVATE
 target_compile_definitions(mupdfng-cli PRIVATE
     TESSDATA_DIR="${TESSDATA_DIR}"
 )
-if(MU_DEBUG_BUILD)
-    target_compile_definitions(mupdfng-cli PRIVATE MU_DEBUG_ENABLED)
-endif()
+add_dependencies(mupdfng-cli ng_build_info)
 install(TARGETS mupdfng-cli
     DESTINATION "${CMAKE_INSTALL_BINDIR}"
 )
 
-# In-process host libraries: consumed by the worker bridge AND directly by the
-# generator for local work (NSS, caches, helpers). Only WorkerClient crosses
-# the process boundary; nothing here may depend on generator/Okular types.
-add_library(ng_plugin_cache STATIC
-  plugin/caching/cache_file.cpp
-  plugin/caching/epub_cache.cpp
-  plugin/caching/pdf_toc_cache.cpp
-  plugin/caching/ocr_cache.cpp
-  plugin/caching/vacuum.cpp
-)
-target_include_directories(ng_plugin_cache PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${MU_GENERATED_INCLUDE_DIR}
-)
-target_link_libraries(ng_plugin_cache PUBLIC Qt6::Core ng_shared ZLIB::ZLIB)
-
 add_library(ng_plugin_crypto STATIC
-  plugin/crypto/nss.cpp
-  plugin/crypto/nss_state.cpp
-  plugin/crypto/nss_signing.cpp
-  plugin/crypto/certificate_info.cpp
-  plugin/crypto/certificate_database.cpp
-)
-target_include_directories(ng_plugin_crypto PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${NSS_INCLUDE_DIRS}
-)
-target_link_libraries(ng_plugin_crypto PUBLIC Qt6::Core ng_shared ${NSS_LIBRARIES})
+    plugin/crypto/nss_state.cpp
+    plugin/crypto/certificate_database.cpp)
+target_link_libraries(ng_plugin_crypto PUBLIC Qt6::Core ng_shared Paperbox::nss)
 
-add_library(ng_plugin_worker STATIC
-  plugin/worker_client.cpp
-  plugin/worker_transport.cpp
-)
-target_include_directories(ng_plugin_worker PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${MU_GENERATED_INCLUDE_DIR}
-)
-target_link_libraries(ng_plugin_worker PUBLIC
-    Qt6::Core
-    Qt6::Gui
-    ng_plugin_cache
-    ng_plugin_crypto
-    ng_shared
-)
-target_link_libraries(ng_plugin_worker PRIVATE ng_plugin_util)
-if(MU_DEBUG_BUILD)
-    target_link_libraries(ng_plugin_worker PUBLIC ng_ipc_debug)
-endif()
-target_compile_definitions(ng_plugin_worker PRIVATE
-    WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}"
-)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_sources(ng_plugin_worker PRIVATE plugin/worker_launch.cpp)
-    target_compile_definitions(ng_plugin_worker PRIVATE
-        MU_BWRAP_TESSDATA_DIR="${TESSDATA_DIR}"
-        MU_BWRAP_SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
-    )
-endif()
+add_library(ng_plugin_worker STATIC plugin/worker_client.cpp)
+target_link_libraries(ng_plugin_worker PUBLIC Qt6::Core Qt6::Gui ng_shared Paperbox::nss PRIVATE ng_plugin_util)
+target_compile_definitions(ng_plugin_worker PRIVATE WORKER_INSTALL_PATH="${WORKER_INSTALL_PATH}")
+add_dependencies(ng_plugin_worker paperbox-worker)
 if(ENABLE_BUILD_TREE_WORKER)
-    target_compile_definitions(ng_plugin_worker PRIVATE
-        WORKER_BUILD_PATH="$<TARGET_FILE:mupdfng-worker>"
-    )
+    target_compile_definitions(ng_plugin_worker PRIVATE WORKER_BUILD_PATH="$<TARGET_FILE:paperbox-worker>")
 endif()
 
 add_library(ng_plugin_util STATIC
+  plugin/caching/cache_root.cpp
   plugin/util/document_type.cpp
   plugin/util/ocr_options.cpp
-  plugin/util/process_memory.cpp
   plugin/util/signature_image.cpp
   plugin/util/stamp_image.cpp
   plugin/util/render_image.cpp
@@ -152,13 +68,8 @@ add_library(ng_plugin_util STATIC
 target_include_directories(ng_plugin_util PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ng_plugin_util PUBLIC Qt6::Core Qt6::Gui ng_shared)
 
-set_target_properties(ng_plugin_cache ng_plugin_crypto ng_plugin_worker ng_plugin_util
+set_target_properties(ng_plugin_crypto ng_plugin_worker ng_plugin_util
     PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if(MU_DEBUG_BUILD)
-    foreach(target IN ITEMS ng_plugin_cache ng_plugin_crypto ng_plugin_worker ng_plugin_util)
-        target_compile_definitions(${target} PRIVATE MU_DEBUG_ENABLED)
-    endforeach()
-endif()
 
 if(NOT BUILD_OKULAR_GENERATOR)
     return()
@@ -166,7 +77,7 @@ endif()
 
 add_library(ng_plugin_ocr STATIC plugin/ocr/controller.cpp)
 target_include_directories(ng_plugin_ocr PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(ng_plugin_ocr PUBLIC Qt6::Concurrent ng_plugin_cache ng_plugin_worker)
+target_link_libraries(ng_plugin_ocr PUBLIC Qt6::Concurrent ng_plugin_worker PRIVATE ng_plugin_util)
 
 add_subdirectory(generator/config)
 
@@ -239,11 +150,10 @@ target_link_libraries(ng_generator_adapters PUBLIC
     ng_plugin_crypto
     ng_plugin_util
 )
-target_compile_definitions(ng_generator_adapters PRIVATE
-    TRANSLATION_DOMAIN="okular_mupdfng"
-    HAVE_NEW_SIGNATURE_API=1
-    MUPDF_FORMFIELD_REMOTE_SIGNING
-)
+# Okular's headers gate signature annotations behind this definition.
+target_compile_definitions(ng_generator_adapters
+    PUBLIC HAVE_NEW_SIGNATURE_API=1
+    PRIVATE TRANSLATION_DOMAIN="okular_mupdfng")
 
 add_library(ng_generator_signature STATIC generator/proxy/form/signature.cpp)
 target_include_directories(ng_generator_signature PUBLIC
@@ -260,10 +170,6 @@ target_link_libraries(ng_generator_signature PUBLIC
     ng_plugin_worker
     ng_generator_adapters
 )
-target_compile_definitions(ng_generator_signature PRIVATE
-    HAVE_NEW_SIGNATURE_API=1
-    MUPDF_FORMFIELD_REMOTE_SIGNING
-)
 set_target_properties(
     ng_plugin_ocr
     ng_generator_page_error
@@ -272,12 +178,6 @@ set_target_properties(
     PROPERTIES POSITION_INDEPENDENT_CODE ON
 )
 
-if(MU_DEBUG_BUILD)
-    target_compile_definitions(ng_plugin_ocr PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(ng_generator_page_error PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(ng_generator_adapters PRIVATE MU_DEBUG_ENABLED)
-    target_compile_definitions(ng_generator_signature PRIVATE MU_DEBUG_ENABLED)
-endif()
 
 set(okularGenerator_mupdfng_SRCS
   generator/mupdfng.cpp
@@ -308,9 +208,6 @@ kconfig_add_kcfg_files(mupdf_generator_settings_SRCS
 
 add_library(ng_generator_settings STATIC ${mupdf_generator_settings_SRCS})
 set_target_properties(ng_generator_settings PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if(MU_DEBUG_BUILD)
-    target_compile_definitions(ng_generator_settings PRIVATE MU_DEBUG_ENABLED)
-endif()
 target_compile_definitions(ng_generator_settings PRIVATE
     TESSDATA_DIR="${TESSDATA_DIR}"
     SIGNATURE_FONT_DIR="${SIGNATURE_FONT_DIR}"
@@ -322,7 +219,7 @@ target_include_directories(ng_generator_settings PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(ng_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets ng_plugin_cache ng_plugin_util)
+target_link_libraries(ng_generator_settings PUBLIC Qt6::Core KF6::ConfigWidgets ng_plugin_util)
 
 add_custom_target(ng_generator_settings_codegen
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mupdfngsettings.cpp
@@ -333,20 +230,17 @@ kcoreaddons_add_plugin(okularGenerator_mupdfng
     INSTALL_NAMESPACE "okular_generators"
     SOURCES ${okularGenerator_mupdfng_SRCS}
 )
+add_dependencies(okularGenerator_mupdfng ng_build_info)
 qt_add_resources(okularGenerator_mupdfng "mupdfng_xmlgui"
     PREFIX "/kxmlgui5/okular_mupdfng"
     BASE "generator/ui"
     FILES generator/ui/mupdfngui.rc)
 
-if(MU_DEBUG_BUILD)
-    target_compile_definitions(okularGenerator_mupdfng PRIVATE MU_DEBUG_ENABLED)
-endif()
 
 target_include_directories(okularGenerator_mupdfng PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${MU_GENERATED_INCLUDE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${NSS_INCLUDE_DIRS}
     ${OKULAR_CORE_INCLUDE_DIR}
 )
 
@@ -360,7 +254,6 @@ target_link_libraries(okularGenerator_mupdfng
     ng_generator_signature
     ng_generator_settings
     ng_generator_page_error
-    ng_plugin_cache
     ng_plugin_crypto
     ng_plugin_ocr
     ng_plugin_util
@@ -377,10 +270,6 @@ target_link_libraries(okularGenerator_mupdfng
     Qt6::Concurrent
     Qt6::Network
     Qt6::Xml
-    ZLIB::ZLIB
-    ${NSS_LIBRARIES}
 )
 target_compile_definitions(okularGenerator_mupdfng PRIVATE
-    TRANSLATION_DOMAIN="okular_mupdfng"
-    HAVE_NEW_SIGNATURE_API=1
-    MUPDF_FORMFIELD_REMOTE_SIGNING)
+    TRANSLATION_DOMAIN="okular_mupdfng")

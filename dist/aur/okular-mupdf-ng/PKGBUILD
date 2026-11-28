@@ -13,16 +13,32 @@ license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1 AND BSD-2-Clause')
 # Direct ELF dependencies of the installed CLI, worker, and generator (lddtree).
 depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
          'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
-         'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
+         'libgcc' 'libmd' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
 # Keep cargo unversioned so rustup can provide it; Cargo enforces rust-version.
 makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext' 'git'
              'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools' 'cargo')
 checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
 conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
 source=("$_pkgname::git+$url.git#tag=v$pkgver"
+        'paperbox::git+https://github.com/l4rzy/paperbox'
         "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz")
 sha256sums=('SKIP'
+            'SKIP'
             'dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101')
+
+prepare() {
+  cd "$srcdir/$_pkgname"
+  local vendor_dir=thirdparty
+  if git ls-files --error-unmatch thirdparty/paperbox > /dev/null 2>&1; then
+    git config submodule.thirdparty/paperbox.url "$srcdir/paperbox"
+    git -c protocol.file.allow=always submodule update --init -- thirdparty/paperbox
+    cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
+    vendor_dir=thirdparty/paperbox/thirdparty
+  fi
+  local mupdf_source="mupdf-$_mupdfver-source"
+  mkdir -p "$vendor_dir/$mupdf_source"
+  cp -a "$srcdir/$mupdf_source/." "$vendor_dir/$mupdf_source/"
+}
 
 build() {
   export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$srcdir=/usr/src/debug/$pkgname"
@@ -31,7 +47,6 @@ build() {
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKDE_INSTALL_LIBDIR=lib \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
-    -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
     -DBUILD_TESTING=ON \
     -DTESSDATA_DIR=/usr/share/tessdata
   cmake --build "$srcdir/build"

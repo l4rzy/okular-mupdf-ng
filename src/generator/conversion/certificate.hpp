@@ -5,7 +5,7 @@
 
 #include <okular/core/signatureutils.h>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator::Conversion {
 

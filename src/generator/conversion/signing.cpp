@@ -32,4 +32,25 @@ std::optional<Model::SignatureAppearance> toModelSignatureAppearance(const Okula
     return appearance;
 }
 
+std::pair<Okular::SigningResult, QString> toOkularSigningResult(const Model::SignResponse& result)
+{
+    const QString details = QString::fromStdString(result.details);
+    switch (result.result) {
+    case Model::SigningResult::Success:
+        return { Okular::SigningSuccess, { } };
+    case Model::SigningResult::FieldAlreadySigned:
+        return { Okular::FieldAlreadySigned, details };
+    case Model::SigningResult::KeyMissing:
+        return { Okular::KeyMissing, details };
+    case Model::SigningResult::WriteFailed:
+        return { Okular::SignatureWriteFailed, details };
+    case Model::SigningResult::UserCancelled:
+        return { Okular::UserCancelled, details };
+    case Model::SigningResult::BadPassphrase:
+        return { Okular::BadPassphrase, details };
+    default:
+        return { Okular::GenericSigningError, details };
+    }
+}
+
 } // namespace Mu::Generator::Conversion

@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "shared/model/geometry.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Plugin::Xfdf {
 

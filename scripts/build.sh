@@ -46,9 +46,28 @@ case "$1" in
     ;;
 esac
 
-if ! compgen -G 'thirdparty/mupdf*/Makefile' > /dev/null; then
-  python3 ./scripts/download-mupdf.py
+paperbox="thirdparty/paperbox"
+if [[ ! -f "$paperbox/CMakeLists.txt" ]]; then
+  echo "Run git submodule update --init thirdparty/paperbox first." >&2
+  exit 1
 fi
+
+# The system variant and explicit source paths supply their own MuPDF.
+bundled_mupdf=1
+for arg in "${@:2}"; do
+  case "$arg" in
+    -DUSE_SYSTEM_MUPDF=ON|-DUSE_SYSTEM_MUPDF:BOOL=ON|-DMUPDF_SOURCE_DIR=*|-DMUPDF_SOURCE_DIR:PATH=*|-DPAPERBOX_MUPDF_SOURCE_DIR=*|-DPAPERBOX_MUPDF_SOURCE_DIR:PATH=*)
+      bundled_mupdf=0
+      ;;
+  esac
+done
+if [[ "$bundled_mupdf" == 1 ]]; then
+  python3 "$paperbox/script/download-mupdf.py"
+fi
+
+manifest="$paperbox/src/worker/engine/kindle/Cargo.toml"
+cargo fetch --offline --locked --manifest-path "$manifest" ||
+  cargo fetch --locked --manifest-path "$manifest"
 
 echo "==> Configuring ($BUILD_TYPE) in $BUILD_DIR..."
 if [[ "$1" = "gcc" ]]; then

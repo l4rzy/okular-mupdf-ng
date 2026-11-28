@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "plugin/caching/epub_cache.hpp"
+#include "host/caching/epub_cache.hpp"
+#include "paperbox_model.hpp"
+#include "plugin/caching/cache_root.hpp"
 #include "support/genpdf.hpp"
 #include "support/synopsis.hpp"
 #include "support/text_inspection.hpp"
@@ -245,6 +247,49 @@ private slots:
         KConfigGroup(config, QStringLiteral("Advanced"))
             .writeEntry("CacheLastVacuum", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
         config->sync();
+    }
+
+    void openAndRender_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("mime");
+        QTest::newRow("pdf") << QStringLiteral(TEST_PDF_PATH) << QStringLiteral("application/pdf");
+        QTest::newRow("epub") << QStringLiteral(TEST_EPUB_DIR "/sample.epub") << QStringLiteral("application/epub+zip");
+        QTest::newRow("mobi") << QStringLiteral(TEST_MOBI_DIR "/toc-palmdoc.mobi")
+                              << QStringLiteral("application/x-mobipocket-ebook");
+        QTest::newRow("xps") << QStringLiteral(TEST_XPS_DIR "/text-links.xps")
+                             << QStringLiteral("application/vnd.ms-xpsdocument");
+        QTest::newRow("azw3") << QStringLiteral(TEST_MOBI_DIR "/sample.azw3")
+                              << QStringLiteral("application/vnd.amazon.mobi8-ebook");
+        QTest::newRow("kfx") << QStringLiteral(TEST_MOBI_DIR "/sample.kfx")
+                             << QStringLiteral("application/vnd.amazon.mobi8-ebook");
+    }
+
+    void openAndRender()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, mime);
+        Okular::Document document(nullptr);
+
+        class Observer : public Okular::DocumentObserver {
+        } observer;
+
+        document.addObserver(&observer);
+        const auto close = qScopeGuard([&] {
+            document.closeDocument();
+            document.removeObserver(&observer);
+        });
+        QCOMPARE(document.openDocument(path, QUrl::fromLocalFile(path), QMimeDatabase().mimeTypeForName(mime)),
+                 Okular::Document::OpenSuccess);
+        QCOMPARE(document.generatorInfo().pluginId(), QStringLiteral("okularGenerator_mupdfng"));
+        QVERIFY(QFile::exists(QStringLiteral(":/kxmlgui5/okular_mupdfng/mupdfngui.rc")));
+        QVERIFY(document.pages() > 0);
+        document.requestTextPage(0);
+        QTRY_VERIFY(document.page(0)->hasTextPage());
+        QVERIFY(!document.page(0)->text().trimmed().isEmpty());
+        document.requestPixmaps(
+            { new Okular::PixmapRequest(&observer, 0, 320, 450, 1, 0, Okular::PixmapRequest::Asynchronous) });
+        QTRY_VERIFY(document.page(0)->hasPixmap(&observer));
     }
 
     void nativeSaveCapabilities_data()
@@ -719,10 +764,13 @@ private slots:
         });
         reloadPluginSettings();
         QVERIFY(!QTest::currentTestFailed());
+        using Cache = paperbox::host::caching::epub::Cache;
         Mu::Model::DocumentSettings settings;
         settings.epub.fontSize = fontSize;
         settings.epub.pageSize = Mu::Model::EpubPageSize::Letter;
-        QVERIFY(!Mu::Plugin::Caching::EPUB::Cache::load(source, settings));
+        const auto cachePath =
+            Cache::cacheFilePath(Mu::Plugin::Caching::cacheRoot(), QFile::encodeName(source).constData(), settings);
+        QVERIFY(!Cache::loadAt(cachePath));
         Okular::DocumentObserver observer;
         Okular::Document document(nullptr);
         document.addObserver(&observer);
@@ -775,8 +823,8 @@ private slots:
                 };
                 QVERIFY(hasChapterLink());
             }
-            const auto cache = Mu::Plugin::Caching::EPUB::Cache::load(source, settings);
-            QVERIFY(cache && cache->accelerator && !cache->accelerator->isEmpty() && cache->outline);
+            const auto cache = Cache::loadAt(cachePath);
+            QVERIFY(cache && cache->accelerator && !cache->accelerator->empty() && cache->outline);
             const QString output = m_root.filePath(QStringLiteral("rem-%1-%2.pdf").arg(fontSize).arg(warm));
             QSignalSpy notices(&document, &Okular::Document::notice);
             QVERIFY(document.exportTo(output, Okular::ExportFormat::standardFormat(Okular::ExportFormat::PDF)));
@@ -826,9 +874,12 @@ private slots:
     {
         QFETCH(QString, fixture);
         const QString source = QStringLiteral(TEST_EPUB_DIR "/layout/") + fixture + QStringLiteral(".epub");
+        using Cache = paperbox::host::caching::epub::Cache;
         Mu::Model::DocumentSettings settings;
         settings.epub.pageSize = Mu::Model::EpubPageSize::A5;
-        QVERIFY(!Mu::Plugin::Caching::EPUB::Cache::load(source, settings));
+        const auto cachePath =
+            Cache::cacheFilePath(Mu::Plugin::Caching::cacheRoot(), QFile::encodeName(source).constData(), settings);
+        QVERIFY(!Cache::loadAt(cachePath));
         Okular::DocumentObserver observer;
         Okular::Document document(nullptr);
         document.addObserver(&observer);
@@ -863,8 +914,8 @@ private slots:
                     }
                 }
             }
-            const auto cache = Mu::Plugin::Caching::EPUB::Cache::load(source, settings);
-            QVERIFY(cache && cache->accelerator && !cache->accelerator->isEmpty() && cache->outline);
+            const auto cache = Cache::loadAt(cachePath);
+            QVERIFY(cache && cache->accelerator && !cache->accelerator->empty() && cache->outline);
             QCOMPARE(cache->outline->size(), std::size_t(2));
             QCOMPARE(cache->outline->front().title, std::string(warm ? "Cached diagram chapter" : "Diagram chapter"));
             QSignalSpy notices(&document, &Okular::Document::notice);
@@ -906,7 +957,7 @@ private slots:
                 // A distinguishable title proves the plugin consumes the persisted outline on reopen.
                 auto outline = *cache->outline;
                 outline.front().title = "Cached diagram chapter";
-                QVERIFY(Mu::Plugin::Caching::EPUB::Cache::saveOutline(source, settings, outline));
+                QVERIFY(Cache::saveOutlineAt(cachePath, outline));
             }
         }
     }

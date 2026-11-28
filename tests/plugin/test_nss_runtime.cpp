@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "paperbox_model.hpp"
 #include "plugin/crypto/certificate_database.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/crypto/nss_handles.hpp"
 #include "plugin/crypto/nss_internal.hpp"
 
-#include <QBuffer>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -118,20 +118,6 @@ bool initializeEmptyDatabase(const QString& directory)
                         QStringLiteral("-d"),
                         QStringLiteral("sql:") + directory,
                         QStringLiteral("--empty-password") });
-}
-
-bool writeFile(const QString& path, const QByteArray& data)
-{
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
-}
-
-QByteArray readFile(const QString& path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return { };
-    return file.readAll();
 }
 
 } // namespace
@@ -279,89 +265,30 @@ private slots:
         QVERIFY(::Mu::Plugin::Crypto::CertificateDatabase::listTrustedSigners(database, &error).isEmpty());
         QVERIFY2(error.isEmpty(), qPrintable(error));
 
-        const auto signingResult = ::Mu::Plugin::Crypto::createDetachedCmsFromDigest(
-            QStringLiteral("nickname"), { }, std::array<std::uint8_t, 32> { });
+        const auto signingResult = paperbox::nss::makeSigningProvider({ })({ "nickname", { } });
         QCOMPARE(signingResult.result, ::Mu::Model::SigningResult::GenericError);
-        QVERIFY(signingResult.details.contains(QStringLiteral("writable"), Qt::CaseInsensitive));
+        QVERIFY(
+            QString::fromStdString(signingResult.details).contains(QStringLiteral("writable"), Qt::CaseInsensitive));
         QVERIFY(::Mu::Plugin::Crypto::signingCertificates().isEmpty());
     }
 
     void noDbMode()
     {
-        if (QStandardPaths::findExecutable(QStringLiteral("openssl")).isEmpty())
-            QSKIP("openssl is required for the NSS NoDB runtime test");
-
         QTemporaryDir root;
         QVERIFY(root.isValid());
-        const QByteArray content = QByteArrayLiteral("detached PDF signature content\n");
-        const QString contentPath = root.filePath(QStringLiteral("content.bin"));
-        const QString keyPath = root.filePath(QStringLiteral("key.pem"));
-        const QString certificatePath = root.filePath(QStringLiteral("certificate.pem"));
-        const QString signaturePath = root.filePath(QStringLiteral("signature.der"));
-        QVERIFY(writeFile(contentPath, content));
-        QVERIFY(runCommand(QStringLiteral("openssl"),
-                           { QStringLiteral("req"),
-                             QStringLiteral("-x509"),
-                             QStringLiteral("-newkey"),
-                             QStringLiteral("rsa:2048"),
-                             QStringLiteral("-keyout"),
-                             keyPath,
-                             QStringLiteral("-out"),
-                             certificatePath,
-                             QStringLiteral("-nodes"),
-                             QStringLiteral("-subj"),
-                             QStringLiteral("/CN=NoDB PDF Signer"),
-                             QStringLiteral("-days"),
-                             QStringLiteral("1"),
-                             QStringLiteral("-sha256"),
-                             QStringLiteral("-addext"),
-                             QStringLiteral("keyUsage=critical,digitalSignature"),
-                             QStringLiteral("-addext"),
-                             QStringLiteral("extendedKeyUsage=emailProtection") }));
-        QVERIFY(runCommand(QStringLiteral("openssl"),
-                           { QStringLiteral("cms"),
-                             QStringLiteral("-sign"),
-                             QStringLiteral("-binary"),
-                             QStringLiteral("-in"),
-                             contentPath,
-                             QStringLiteral("-signer"),
-                             certificatePath,
-                             QStringLiteral("-inkey"),
-                             keyPath,
-                             QStringLiteral("-outform"),
-                             QStringLiteral("DER"),
-                             QStringLiteral("-out"),
-                             signaturePath,
-                             QStringLiteral("-md"),
-                             QStringLiteral("sha256"),
-                             QStringLiteral("-nosmimecap") }));
-
         const QString missingDatabase = root.filePath(QStringLiteral("missing/database"));
         QCOMPARE(::Mu::Plugin::Crypto::initializeNss(missingDatabase), ::Mu::Plugin::Crypto::NssRuntimeMode::NoDb);
         QCOMPARE(::Mu::Plugin::Crypto::activeNssMode(), ::Mu::Plugin::Crypto::NssRuntimeMode::NoDb);
         QVERIFY(::Mu::Plugin::Crypto::activeNssDatabasePath().isEmpty());
         QVERIFY(!::Mu::Plugin::Crypto::isNssDatabaseActive(missingDatabase));
 
-        const QByteArray signature = readFile(signaturePath);
-        QVERIFY(!signature.isEmpty());
-        QBuffer source;
-        source.setData(content);
-        QVERIFY(source.open(QIODevice::ReadOnly));
-        ::Mu::Model::SignatureField field;
-        field.signedField = true;
-        field.byteRange = { 0, content.size(), content.size(), 0 };
-        field.cmsSignature.assign(signature.cbegin(), signature.cend());
-        ::Mu::Plugin::Crypto::validateDetachedPdfSignature(field, source);
-        QCOMPARE(field.signatureStatus, ::Mu::Model::SignatureStatus::Valid);
-        QCOMPARE(field.certificateStatus, ::Mu::Model::CertificateStatus::UntrustedIssuer);
-
         QString error;
         QVERIFY(::Mu::Plugin::Crypto::CertificateDatabase::listCertificates(missingDatabase, &error).isEmpty());
         QVERIFY(error.contains(QStringLiteral("persistent"), Qt::CaseInsensitive));
-        const auto signingResult = ::Mu::Plugin::Crypto::createDetachedCmsFromDigest(
-            QStringLiteral("nickname"), { }, std::array<std::uint8_t, 32> { });
+        const auto signingResult = paperbox::nss::makeSigningProvider({ })({ "nickname", { } });
         QCOMPARE(signingResult.result, ::Mu::Model::SigningResult::GenericError);
-        QVERIFY(signingResult.details.contains(QStringLiteral("writable"), Qt::CaseInsensitive));
+        QVERIFY(
+            QString::fromStdString(signingResult.details).contains(QStringLiteral("writable"), Qt::CaseInsensitive));
     }
 
     void freshDatabaseMode()
@@ -407,30 +334,31 @@ private slots:
         QVERIFY2(CertificateDatabase::createSelfSignedCertificate(database.path(), options, &error), qPrintable(error));
         std::array<std::uint8_t, 32> digest { };
         digest.fill(0x5a);
-        const auto missing = createDetachedCmsFromDigest(QStringLiteral("missing-certificate"), { }, digest);
+        const auto missing = paperbox::nss::makeSigningProvider({ })({ "missing-certificate", digest });
         QCOMPARE(missing.result, ::Mu::Model::SigningResult::KeyMissing);
-        QVERIFY(missing.cms.isEmpty());
-        QVERIFY(!missing.details.isEmpty());
-        NssSlot slot(PK11_GetInternalKeySlot());
+        QVERIFY(missing.cms.empty());
+        QVERIFY(!missing.details.empty());
+        paperbox::nss::NssSlot slot(PK11_GetInternalKeySlot());
         QVERIFY(slot);
         // This runtime mode is a separate CTest process with its own database.
         // Changing the temporary token PIN cannot affect another test mode.
         QCOMPARE(PK11_ChangePW(slot.get(), "", "correct-test-pin"), SECSuccess);
         QCOMPARE(PK11_Logout(slot.get()), SECSuccess);
         QVERIFY(!PK11_IsLoggedIn(slot.get(), nullptr));
-        const auto rejected = createDetachedCmsFromDigest(options.nickname, QStringLiteral("wrong-test-pin"), digest);
+        const auto rejected =
+            paperbox::nss::makeSigningProvider("wrong-test-pin")({ options.nickname.toStdString(), digest });
         QCOMPARE(rejected.result, ::Mu::Model::SigningResult::BadPassphrase);
-        QVERIFY(rejected.cms.isEmpty());
-        QVERIFY(!rejected.details.contains(QStringLiteral("wrong-test-pin")));
+        QVERIFY(rejected.cms.empty());
+        QVERIFY(!rejected.details.contains("wrong-test-pin"));
         QVERIFY(!checkSigningCertificatePassword(options.nickname, QStringLiteral("wrong-test-pin")));
         // A correct token login restores signing after the failed attempts.
         QCOMPARE(PK11_CheckUserPassword(slot.get(), "correct-test-pin"), SECSuccess);
         QVERIFY(checkSigningCertificatePassword(options.nickname, QStringLiteral("correct-test-pin")));
         const auto signedDigest =
-            createDetachedCmsFromDigest(options.nickname, QStringLiteral("correct-test-pin"), digest);
+            paperbox::nss::makeSigningProvider("correct-test-pin")({ options.nickname.toStdString(), digest });
         QCOMPARE(signedDigest.result, ::Mu::Model::SigningResult::Success);
-        QVERIFY(!signedDigest.cms.isEmpty());
-        QVERIFY(signedDigest.details.isEmpty());
+        QVERIFY(!signedDigest.cms.empty());
+        QVERIFY(signedDigest.details.empty());
     }
 
     void urlSchemeDatabasePath()

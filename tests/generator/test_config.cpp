@@ -25,9 +25,10 @@
 #include "generator/config/certmanager/self_signed_dialog.hpp"
 #include "generator/config/document_settings.hpp"
 #include "generator/config/settings.hpp"
+#include "internal/model/validation_helpers.hpp"
 #include "mupdfngsettings.h"
+#include "paperbox_model.hpp"
 #include "plugin/crypto/nss.hpp"
-#include "shared/model/validation.hpp"
 
 using Mu::Generator::Config::SignatureEmblem;
 
@@ -248,7 +249,7 @@ private slots:
         QCOMPARE(Database::listTrustedSigners(path).size(), 0);
         tabs->setCurrentIndex(0);
         QCOMPARE(signing->rowCount(), 1);
-        QCOMPARE(::Mu::Plugin::Crypto::createDetachedCmsFromDigest(options.nickname, { }, { }).result,
+        QCOMPARE(paperbox::nss::makeSigningProvider({ })({ options.nickname.toStdString(), { } }).result,
                  ::Mu::Model::SigningResult::Success);
         QVERIFY2(Database::importTrustedSigner(path, der, options.nickname, &error), qPrintable(error));
         signing->selectRow(0);
@@ -484,7 +485,7 @@ private slots:
             for (const auto& epub : epubs) {
                 const auto settings = ::Mu::Generator::Config::documentSettingsFor(rendering, epub, 0);
                 std::string_view reason;
-                QVERIFY2(::Mu::Model::isValidDocumentSettings(settings, &reason), std::string(reason).c_str());
+                QVERIFY2(Mu::Model::isValidDocumentSettings(settings, &reason), std::string(reason).c_str());
             }
         }
     }

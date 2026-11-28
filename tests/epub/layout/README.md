@@ -12,7 +12,7 @@ They differ in `vertical-align: middle` versus `top`. They contain no material
 from commercial books. The original text, graphics, and generator are licensed
 under the repository's GPL-3.0-or-later license (copyright 2026 l4rzy).
 
-The unmodified Allura font comes from `thirdparty/allura/Allura-Regular.ttf`.
+The unmodified Allura font comes from `thirdparty/paperbox/thirdparty/allura/Allura-Regular.ttf`.
 It is Copyright 2010 The Allura Project Authors and licensed under the SIL Open
 Font License 1.1. Each EPUB includes the font's complete `OFL.txt` license.
 

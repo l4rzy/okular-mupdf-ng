@@ -6,7 +6,7 @@
 
 #include <QString>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator::CertificateManager {
 

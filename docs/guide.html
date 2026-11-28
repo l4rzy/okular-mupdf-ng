@@ -90,26 +90,25 @@
       <pre><code>mupdfng-cli sandbox
 mupdfng-cli sandbox --json</code></pre>
       <p>Example output when Bubblewrap is enabled:</p>
-      <pre><code>Sandbox: linux profile=mupdfng.linux.bwrap.v1 isolation=full
+      <pre><code>Sandbox: linux profile=paperbox.linux.bwrap.v1 isolation=full
   linux.no_new_privileges: enforced required=1 version=
   linux.namespaces: enforced required=1 version=
     Namespaces inherited from Bubblewrap launcher
   linux.resource_limits: enforced required=1 version=
   linux.landlock: enforced required=1 version=10
   linux.seccomp: enforced required=1 version=
-  linux.mdwe: enforced required=0 version=
-  linux.bubblewrap: enforced required=1 version=</code></pre>
+  linux.mdwe: enforced required=0 version=</code></pre>
       <p>On Linux, install Bubblewrap and start Okular or the CLI with
         <code>MUPDFNG_WORKER_SANDBOX=bwrap</code> to use the Bubblewrap profile.
         For example, run <code>MUPDFNG_WORKER_SANDBOX=bwrap mupdfng-cli sandbox</code>.
         Worker startup fails if <code>bwrap</code> is missing or cannot create its
         sandbox. An unset variable or any other value selects the default
-        <code>mupdfng.linux.v1</code> profile. The Landlock version and
+        <code>paperbox.linux.v1</code> profile. The Landlock version and
         protection states depend on the host.</p>
       <p>The report includes the platform, profile, isolation level, individual
         protections, and diagnostics. The native Linux profile requires
         no-new-privileges, namespaces, resource limits, Landlock, and seccomp;
-        memory protection is optional. The Bubblewrap profile also requires the
+        memory protection is optional. The Bubblewrap profile reports inherited namespaces and uses the
         launcher&rsquo;s filesystem isolation. JSON includes per-protection
         <code>diagnostic</code> fields and a general <code>diagnostics</code> array,
         with <code>policySatisfied</code> indicating full hardening. Exit code

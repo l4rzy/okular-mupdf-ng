@@ -5,9 +5,8 @@
 #define MU_PLUGIN_OCR_OCR_HPP
 
 // Convenience include for the complete OCR plugin surface used by the
-// generator: cache data, configuration constants, scheduling, and controller.
+// generator: configuration, scheduling, and controller.
 
-#include "plugin/caching/ocr_cache.hpp"
 #include "plugin/ocr/config.hpp"
 #include "plugin/ocr/constants.hpp"
 #include "plugin/ocr/controller.hpp"

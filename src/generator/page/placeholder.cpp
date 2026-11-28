@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/page/placeholder.hpp"
-#include "shared/model/theme_colors.hpp"
-#include "shared/protocol/limits.hpp"
+#include "paperbox_model.hpp"
 #include <QTransform>
 #include <okular/core/page.h>
 
@@ -12,7 +11,7 @@ namespace Mu::Generator::Page {
 void Placeholder::setTheme(Model::DocumentTheme theme)
 {
     const QColor color =
-        theme == Model::DocumentTheme::Default ? QColor { } : QColor::fromRgb(Model::ThemeColor::getBackground(theme));
+        theme == Model::DocumentTheme::Default ? QColor { } : QColor::fromRgb(Model::theme_color::getBackground(theme));
     if (color == m_color)
         return;
     m_color = color;

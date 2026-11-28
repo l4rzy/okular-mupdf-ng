@@ -15,9 +15,8 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "paperbox_model.hpp"
 #include "plugin/ocr/config.hpp"
-#include "shared/model/types.hpp"
-#include "shared/protocol/limits.hpp"
 
 namespace Mu::Generator::Config {
 
@@ -210,6 +209,9 @@ std::uint32_t readPrintScaleMode();
 void writePrintScaleMode(std::uint32_t mode);
 // Last cache vacuum time from the hidden Advanced setting. Invalid when the
 // vacuum never ran or the stored value is malformed.
+inline constexpr int CacheRetentionDays = 90;
+inline constexpr int CacheVacuumIntervalDays = 7;
+
 QDateTime readCacheLastVacuum();
 void writeCacheLastVacuum(const QDateTime& time);
 

@@ -47,7 +47,8 @@ def generate_reports(build_dir: Path) -> None:
     # headers, and vendor dependencies out of the coverage denominator.
     sources = [str(path) for path in sorted((source_dir / "src").rglob("*"))
                if path.suffix in {".cpp", ".hpp", ".c", ".h"}]
-    sources = ["-sources", *sources]
+    worker_source = "thirdparty/paperbox/src/worker/main.cpp"
+    sources = ["-sources", *sources, str(source_dir / worker_source)]
     with (report_dir / "llvm-cov.txt").open("w") as report:
         subprocess.run([llvm_cov, "show", *objects, "-show-branches=count",
                         "-use-color=false", *sources], stdout=report, check=True)
@@ -61,7 +62,7 @@ def generate_reports(build_dir: Path) -> None:
         [llvm_cov, "export", *objects, "-summary-only", *sources], text=True))
     covered = {Path(file["filename"]).resolve(): file["summary"]["lines"]["covered"]
                for data in summary["data"] for file in data["files"]}
-    for required in ["src/worker/main.cpp", "src/generator/mupdfng.cpp"]:
+    for required in [worker_source, "src/generator/mupdfng.cpp"]:
         if covered.get(source_dir / required, 0) == 0:
             raise RuntimeError(f"Missing executed coverage for {required}")
     print(f"Merged {len(profiles)} profiles from {len(binaries)} binaries")

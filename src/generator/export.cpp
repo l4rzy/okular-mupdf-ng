@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "shared/model/export.hpp"
 #include "generator/conversion/text.hpp"
 #include "generator/conversion/xfdf.hpp"
 #include "generator/mupdfng.hpp"
+#include "paperbox_model.hpp"
 #include <KLocalizedString>
 #include <QIcon>
 #include <QMimeDatabase>
@@ -70,7 +70,7 @@ const ExportAction WorkerExports[] {
 bool supportsExport(const std::vector<Model::OutputFormatInfo>& formats, const ExportAction& action)
 {
     return Model::findExportProfile(formats,
-                                    { action.format, action.profile },
+                                    { action.format, action.profile, { } },
                                     action.asynchronous,
                                     std::numeric_limits<std::int32_t>::max())
         != nullptr;
@@ -82,7 +82,7 @@ bool supportsExport(const std::vector<Model::OutputFormatInfo>& formats, const E
 Okular::ExportFormat::List Main::exportFormats() const
 {
     Okular::ExportFormat::List formats { Okular::ExportFormat::standardFormat(Okular::ExportFormat::PlainText) };
-    if (const auto available = m_worker.outputFormats()) {
+    if (const auto available = m_worker.paperboxClient().outputFormats()) {
         for (const auto& action : WorkerExports) {
             if (!supportsExport(*available, action))
                 continue;
@@ -111,13 +111,13 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
 {
     if (!workerReady())
         return false;
-    const auto available = m_worker.outputFormats();
+    const auto available = m_worker.paperboxClient().outputFormats();
     if (!available)
         return false;
     for (const auto& action : WorkerExports) {
         if (!format.mimeType().inherits(QString::fromLatin1(action.mime)) || !supportsExport(*available, action))
             continue;
-        const Model::ExportOptions options { action.format, action.profile };
+        const Model::ExportOptions options { action.format, action.profile, { } };
         if (action.asynchronous) {
             Q_EMIT notice(i18n("Starting to export to PDF."), NoticeMs);
             return m_worker.startExport(fileName, options).has_value();
@@ -167,8 +167,8 @@ bool Main::exportTo(const QString& fileName, const Okular::ExportFormat& format)
         if (!workerReady())
             return false;
         bool extracted = false;
-        const auto boxes =
-            m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), /*skipAnnots=*/true, &extracted);
+        const auto boxes = m_worker.paperboxClient().getTextBoxesForPage(
+            page, dpi().width(), dpi().height(), /*skipAnnots=*/true, &extracted);
         if (!extracted)
             return false;
         stream << Conversion::plainText(boxes);

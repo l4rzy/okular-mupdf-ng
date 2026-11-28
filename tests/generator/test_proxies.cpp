@@ -21,7 +21,6 @@
 #include "generator/conversion/document.hpp"
 #include "generator/proxy/annotation.hpp"
 #include "plugin/util/stamp_image.hpp"
-#include "shared/protocol/limits.hpp"
 
 #include "generator/conversion/text.hpp"
 #include "generator/proxy/embedded_file.hpp"
@@ -35,9 +34,9 @@
 #include "generator/proxy/form/signature.hpp"
 #include "generator/proxy/form/text.hpp"
 #include "generator/ui/printing.hpp"
+#include "paperbox_model.hpp"
 #include "plugin/worker_client.hpp"
-#include "shared/model/form_backend.hpp"
-#include "shared/model/types.hpp"
+#include "shared/form_backend.hpp"
 #include <okular/core/page.h>
 
 using TextBoxes = std::vector<::Mu::Model::TextBox>;
@@ -57,7 +56,7 @@ static std::optional<Model::FormUpdateResponse> echoFormUpdate(const Model::Form
     return response;
 }
 
-class FormBackendFake final : public Model::FormBackend {
+class FormBackendFake final : public Mu::FormBackend {
 public:
     std::optional<Model::FormUpdateResponse> updateForm(const Model::FormUpdateRequest& request) const override
     {
@@ -403,7 +402,7 @@ private slots:
         QVERIFY(directory.isValid());
         const QString path = directory.filePath(QStringLiteral("signed.pdf"));
         ::Mu::Plugin::WorkerClient backend;
-        QVERIFY(!backend.isConnected());
+        QVERIFY(!backend.paperboxClient().isConnected());
         ::Mu::Generator::Proxy::Form::Signature proxy(1, { }, nullBackend ? nullptr : &backend);
         const Okular::NewSignatureData data;
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0)
@@ -681,7 +680,7 @@ private slots:
         QFETCH(double, dimension);
         QFETCH(bool, valid);
         const TextBoxes boxes { { "a", 0.0, 0.0, 1.0, 1.0, true } };
-        const QVector<::Mu::Plugin::Caching::OCR::CacheItem> ocr { { QStringLiteral("ocr"), 0.0, 0.0, 0.5, 0.5 } };
+        const std::vector<Mu::Model::TextBox> ocr { { "ocr", 0.0, 0.0, 0.5, 0.5 } };
         for (const auto& size : { QSizeF(dimension, 100.0), QSizeF(100.0, dimension) }) {
             std::unique_ptr<Okular::TextPage> page(
                 ::Mu::Generator::Conversion::textPage(boxes, size.width(), size.height()));
@@ -715,9 +714,9 @@ private slots:
                                     { "valid", 20.0, 20.0, 30.0, 30.0, true } };
             std::unique_ptr<Okular::TextPage> page(::Mu::Generator::Conversion::textPage(boxes, 100.0, 100.0));
             QCOMPARE(page->text(), QStringLiteral("valid\n"));
-            const QVector<::Mu::Plugin::Caching::OCR::CacheItem> ocr {
-                { QStringLiteral("invalid"), values[0], values[1], values[2], values[3] },
-                { QStringLiteral("valid"), 0.2, 0.2, 0.3, 0.3 },
+            const std::vector<Mu::Model::TextBox> ocr {
+                { "invalid", values[0], values[1], values[2], values[3] },
+                { "valid", 0.2, 0.2, 0.3, 0.3 },
             };
             std::unique_ptr<Okular::TextPage> merged(
                 ::Mu::Generator::Conversion::mergedTextPage({ }, 100.0, 100.0, ocr));

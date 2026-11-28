@@ -9,15 +9,25 @@ arch=('x86_64')
 url="https://github.com/l4rzy/okular-mupdf-ng"
 license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1 AND BSD-2-Clause')
 # The system MuPDF pulls its third-party libraries in transitively.
-depends=('okular' 'qt6-base' 'nss' 'libseccomp' 'libmupdf')
+depends=('okular' 'qt6-base' 'nss' 'libmd' 'libseccomp' 'libmupdf')
 # Keep cargo unversioned so rustup can provide it; Cargo enforces rust-version.
 makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext' 'git'
              'make' 'mupdf' 'ninja' 'pkgconf' 'python' 'qt6-tools' 'cargo')
 checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
 provides=('okular-mupdf-ng')
 conflicts=('okular-mupdf-ng' 'okular-mupdf-ng-git')
-source=("$_pkgname::git+$url.git#tag=v$pkgver")
-sha256sums=('SKIP')
+source=("$_pkgname::git+$url.git#tag=v$pkgver"
+        'paperbox::git+https://github.com/l4rzy/paperbox')
+sha256sums=('SKIP'
+            'SKIP')
+
+prepare() {
+  cd "$srcdir/$_pkgname"
+  git ls-files --error-unmatch thirdparty/paperbox > /dev/null 2>&1 || return 0
+  git config submodule.thirdparty/paperbox.url "$srcdir/paperbox"
+  git -c protocol.file.allow=always submodule update --init -- thirdparty/paperbox
+  cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
+}
 
 build() {
   export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$srcdir=/usr/src/debug/$pkgname"

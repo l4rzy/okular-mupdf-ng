@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Create the OBS Rust dependency archive under src/worker/engine/kindle/."""
+"""Create the OBS Rust dependency archive for the Paperbox worker."""
 
 import argparse
 from pathlib import Path
@@ -12,7 +12,7 @@ import tempfile
 
 
 def createVendorArchive(root: Path, output: Path, offline: bool = False) -> None:
-    manifest_directory = Path("src/worker/engine/kindle")
+    manifest_directory = Path("thirdparty/paperbox/src/worker/engine/kindle")
     manifest = root / manifest_directory / "Cargo.toml"
     # Stage beside the output so replacing an existing archive is atomic.
     with tempfile.TemporaryDirectory(prefix=".vendor-boko-", dir=output.parent) as temporary:

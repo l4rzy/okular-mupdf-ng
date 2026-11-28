@@ -19,7 +19,6 @@ option(ENABLE_SANITIZERS "Enable Address/LeakSanitizer instrumentation" OFF)
 option(ENABLE_COVERAGE "Enable LLVM source-based coverage instrumentation" OFF)
 option(ENABLE_LTO "Enable supported LTO in optimized CMake configurations" ON)
 option(DISABLE_WORKER_SANDBOX "Disable worker sandboxing for diagnostic builds" OFF)
-add_compile_definitions(MU_DISABLE_WORKER_SANDBOX=$<BOOL:${DISABLE_WORKER_SANDBOX}>)
 find_package(PkgConfig REQUIRED)
 include(FeatureSummary)
 if(BUILD_OKULAR_GENERATOR)
@@ -88,30 +87,20 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(MU_IS_DEBUG_BUILD ON)
 endif()
 
-# CJK fallback policy for the bundled MuPDF engine. Source Han Serif has the
-# best fidelity (~24 MiB) while the Droid fonts trade per-locale coverage for a
-# much smaller worker. Ignored when USE_SYSTEM_MUPDF=ON, since the system
-# library decides its own embedded fonts. Changing this in an existing build
-# directory requires removing build/mupdf/<profile> so the archives rebuild.
-set(MUPDF_CJK_FALLBACK "droidfull" CACHE STRING
-    "Bundled MuPDF CJK fallback: sourcehan | droidfull | droid | none")
+option(USE_SYSTEM_MUPDF "Use the system MuPDF package instead of bundled MuPDF" OFF)
+option(MUPDF_OPTIMIZED_BUILD "Build bundled MuPDF with the release profile" ON)
+option(ENABLE_FORM_JAVASCRIPT "Enable PDF form JavaScript support" ON)
+set(MUPDF_CJK_FALLBACK "droidfull" CACHE STRING "Bundled MuPDF CJK fallback")
 set_property(CACHE MUPDF_CJK_FALLBACK PROPERTY STRINGS sourcehan droidfull droid none)
-string(TOLOWER "${MUPDF_CJK_FALLBACK}" _mupdf_cjk_fallback)
-if(NOT _mupdf_cjk_fallback MATCHES "^(sourcehan|droidfull|droid|none)$")
-    message(FATAL_ERROR
-        "Invalid MUPDF_CJK_FALLBACK='${MUPDF_CJK_FALLBACK}' (expected sourcehan | droidfull | droid | none)")
-endif()
-
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mupdf.cmake")
-
 set(TESSDATA_DIR "/usr/share/tessdata" CACHE PATH "Path to tesseract tessdata directory")
 set(SIGNATURE_FONT_DIR "${CMAKE_INSTALL_FULL_DATADIR}/okular-mupdf-ng" CACHE PATH
     "Directory containing the bundled signature font")
+set(PAPERBOX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/paperbox")
+if(NOT EXISTS "${PAPERBOX_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Paperbox is missing. Run git submodule update --init thirdparty/paperbox.")
+endif()
+file(STRINGS "${PAPERBOX_SOURCE_DIR}/cmake/mupdf.version" MUPDF_REQUIRED_VERSION LIMIT_COUNT 1)
 
-find_package(Threads REQUIRED)
-find_package(ZLIB REQUIRED)
-pkg_check_modules(NSS REQUIRED nss)
-pkg_check_modules(SECCOMP QUIET libseccomp)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 if(BUILD_OKULAR_GENERATOR)
     find_package(Okular6 REQUIRED)
@@ -157,8 +146,54 @@ configure_file(
     @ONLY)
 
 set(MUPDF_WORKER_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/okular-mupdf-ng")
-set(WORKER_INSTALL_PATH "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/mupdfng-worker"
-    CACHE PATH "Installed path of the mupdfng-worker binary")
+set(default_worker_path "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/paperbox-worker")
+if(WORKER_INSTALL_PATH STREQUAL "${CMAKE_INSTALL_FULL_LIBDIR}/okular-mupdf-ng/mupdfng-worker")
+    # Refresh the previous default in existing build trees.
+    unset(WORKER_INSTALL_PATH CACHE)
+endif()
+set(WORKER_INSTALL_PATH "${default_worker_path}" CACHE PATH "Installed path of the paperbox-worker binary")
+# Keep Paperbox's archives private to the plugin and CLI. Install just the
+# worker executable from the subproject, along with our existing assets.
+function(add_paperbox)
+    set(BUILD_SHARED_LIBS OFF)
+    set(PAPERBOX_BUILD_HOST ON)
+    set(PAPERBOX_BUILD_WORKER ON)
+    set(PAPERBOX_BUILD_NSS ON)
+    set(PAPERBOX_BUILD_TESTING OFF)
+    set(PAPERBOX_BUILD_QT_TESTS OFF)
+    set(PAPERBOX_DEBUG_BUILD "${MU_DEBUG_BUILD}")
+    set(PAPERBOX_DISABLE_WORKER_SANDBOX "${DISABLE_WORKER_SANDBOX}")
+    set(PAPERBOX_USE_SYSTEM_MUPDF "${USE_SYSTEM_MUPDF}")
+    set(PAPERBOX_MUPDF_OPTIMIZED_BUILD "${MUPDF_OPTIMIZED_BUILD}")
+    set(PAPERBOX_MUPDF_CJK_FALLBACK "${MUPDF_CJK_FALLBACK}" CACHE STRING "Paperbox MuPDF CJK fallback" FORCE)
+    if(NOT PAPERBOX_MUPDF_SOURCE_DIR AND MUPDF_SOURCE_DIR AND EXISTS "${MUPDF_SOURCE_DIR}/Makefile")
+        set(PAPERBOX_MUPDF_SOURCE_DIR "${MUPDF_SOURCE_DIR}" CACHE PATH "Path to patched MuPDF sources" FORCE)
+    endif()
+    add_subdirectory("${PAPERBOX_SOURCE_DIR}" paperbox EXCLUDE_FROM_ALL)
+endfunction()
+add_paperbox()
+# Apply the NSS read-size fix to a build-tree copy until the pinned Paperbox
+# revision includes it.
+find_program(PAPERBOX_PATCH_EXECUTABLE patch REQUIRED)
+set(paperbox_nss_dir "${PAPERBOX_SOURCE_DIR}/src/internal/nss")
+set(paperbox_nss_verification "${paperbox_nss_dir}/verification.cpp")
+set(paperbox_nss_patch "${CMAKE_CURRENT_SOURCE_DIR}/cmake/paperbox-nss-read-size.patch")
+set(paperbox_nss_patched "${CMAKE_CURRENT_BINARY_DIR}/paperbox/verification.cpp")
+add_custom_command(OUTPUT "${paperbox_nss_patched}"
+    COMMAND "${PAPERBOX_PATCH_EXECUTABLE}" --force --fuzz=0 --silent
+        --output "${paperbox_nss_patched}" "${paperbox_nss_verification}" "${paperbox_nss_patch}"
+    DEPENDS "${paperbox_nss_verification}" "${paperbox_nss_patch}"
+    VERBATIM)
+add_custom_target(paperbox_nss_read_size_fix DEPENDS "${paperbox_nss_patched}")
+add_dependencies(paperbox_nss paperbox_nss_read_size_fix)
+set_source_files_properties("${paperbox_nss_verification}"
+    TARGET_DIRECTORY paperbox_nss PROPERTIES HEADER_FILE_ONLY ON)
+target_sources(paperbox_nss PRIVATE "${paperbox_nss_patched}")
+target_include_directories(paperbox_nss PRIVATE "${paperbox_nss_dir}")
+
+set_target_properties(paperbox-worker PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
+install(TARGETS paperbox-worker RUNTIME DESTINATION "${MUPDF_WORKER_INSTALL_DIR}")
 add_subdirectory(src)
 
 if(BUILD_OKULAR_GENERATOR)
@@ -169,19 +204,18 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/COPYING"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME copyright)
 install(FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/allura/Allura-Regular.ttf"
+    "${PAPERBOX_SOURCE_DIR}/thirdparty/allura/Allura-Regular.ttf"
     DESTINATION "${SIGNATURE_FONT_DIR}")
 install(FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/allura/OFL.txt"
+    "${PAPERBOX_SOURCE_DIR}/thirdparty/allura/OFL.txt"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME Allura-OFL.txt)
-install(FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/xxhash/xxHash-LICENSE"
+install(FILES "${PAPERBOX_SOURCE_DIR}/thirdparty/xxhash/xxHash-LICENSE"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng")
 # MuPDF is AGPL-3.0-or-later; ship its license text alongside the plugin. Only
 # MuPDF's own license is redistributed here, not its bundled sub-dependencies.
 install(FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/mupdf-COPYING"
+    "${PAPERBOX_SOURCE_DIR}/thirdparty/mupdf-COPYING"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/okular-mupdf-ng"
     RENAME MuPDF-COPYING)
 
@@ -190,7 +224,7 @@ message(STATUS "Manifest version: ${MU_COMPAT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "LTO for optimized configurations: ${MU_LTO_ENABLED}")
 message(STATUS "LLVM coverage instrumentation: ${ENABLE_COVERAGE}")
-message(STATUS "MuPDF build profile: ${MUPDF_BUILD_PROFILE}")
+message(STATUS "System MuPDF in Paperbox worker: ${USE_SYSTEM_MUPDF}")
 message(STATUS "MuPDF CJK fallback: ${MUPDF_CJK_FALLBACK}")
 message(STATUS "PDF form JavaScript: ${ENABLE_FORM_JAVASCRIPT}")
 message(STATUS "Mu debug diagnostics: ${MU_DEBUG_BUILD}")
@@ -198,7 +232,6 @@ message(STATUS "Worker install path: ${WORKER_INSTALL_PATH}")
 message(STATUS "Build-tree worker: ${ENABLE_BUILD_TREE_WORKER}")
 message(STATUS "Tessdata directory: ${TESSDATA_DIR}")
 message(STATUS "Signature font directory: ${SIGNATURE_FONT_DIR}")
-message(STATUS "Seccomp support: ${SECCOMP_FOUND}")
 message(STATUS "================================================================")
 
 # Both build profiles expose the standard BUILD_TESTING option.

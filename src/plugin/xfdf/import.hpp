@@ -12,8 +12,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include "paperbox_model.hpp"
 #include "plugin/xfdf/types.hpp"
-#include "shared/protocol/limits.hpp"
 
 namespace Mu::Plugin::Xfdf {
 

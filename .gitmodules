@@ -1,0 +1,3 @@
+[submodule "thirdparty/paperbox"]
+	path = thirdparty/paperbox
+	url = https://github.com/l4rzy/paperbox

@@ -53,12 +53,9 @@ pid_t workerPid()
         if (!valid || ::getpeername(fd, reinterpret_cast<sockaddr*>(&address), &size) != 0
             || address.sun_family != AF_UNIX)
             continue;
-        const QString endpoint =
-            QFileInfo(
-                QString::fromLocal8Bit(address.sun_path,
-                                       static_cast<qsizetype>(::strnlen(address.sun_path, sizeof(address.sun_path)))))
-                .fileName();
-        if (!endpoint.startsWith(prefix) || !endpoint.endsWith(QLatin1String("-ctrl.sock")))
+        const QFileInfo endpoint(QString::fromLocal8Bit(
+            address.sun_path, static_cast<qsizetype>(::strnlen(address.sun_path, sizeof(address.sun_path)))));
+        if (endpoint.fileName() != QLatin1String("ctrl.sock") || !endpoint.dir().dirName().startsWith(prefix))
             continue;
         ucred peer { };
         size = sizeof(peer);
@@ -475,7 +472,7 @@ private slots:
         QVERIFY(sentinel.open(QIODevice::ReadOnly));
         QCOMPARE(sentinel.readAll(), QByteArray("existing destination"));
         QVERIFY(QDir(directory.path())
-                    .entryList({ QStringLiteral(".mupdfng-worker-*") }, QDir::Files | QDir::Hidden)
+                    .entryList({ QStringLiteral(".paperbox-worker-*") }, QDir::Files | QDir::Hidden)
                     .isEmpty());
     }
 

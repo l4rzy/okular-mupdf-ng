@@ -8,7 +8,7 @@ import zlib
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED, ZIP_STORED
 
 ROOT = Path(__file__).resolve().parent
-FONT = ROOT.parents[2] / "thirdparty/allura"
+FONT = ROOT.parents[2] / "thirdparty/paperbox/thirdparty/allura"
 
 
 def png():

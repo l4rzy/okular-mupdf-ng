@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Keep these values in sync with cmake/mupdf.version.
+# Keep these values in sync with thirdparty/paperbox/cmake/mupdf.version.
 %global mupdf_version 1.28.6
 %global mupdf_sha256 dc85000640a45d90ca9b77b061f6ca67cce0c4d4fbecf8819647baf573eef101
 %global _vpath_builddir build
@@ -14,7 +14,7 @@ Release:        1%{?dist}
 Summary:        Secure and fast MuPDF-based backend for Okular
 License:        AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1 AND BSD-2-Clause
 URL:            https://github.com/l4rzy/okular-mupdf-ng
-Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source0:        %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 Source1:        https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/%{mupdf_version}/mupdf-%{mupdf_version}-source.tar.gz
 
 BuildRequires:  cmake >= 3.20
@@ -47,6 +47,7 @@ BuildRequires:  pkgconfig(libbrotlidec)
 BuildRequires:  pkgconfig(libbrotlienc)
 BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(libseccomp)
+BuildRequires:  pkgconfig(libmd)
 BuildRequires:  pkgconfig(nss)
 BuildRequires:  pkgconfig(zlib)
 %if %{with tests}
@@ -68,18 +69,19 @@ Includes the mupdfng-cli command-line utility.
 %prep
 printf '%s  %s\n' '%{mupdf_sha256}' '%{SOURCE1}' | sha256sum --check --status
 %setup -q -a 1
-test "$(sed -n '1p' cmake/mupdf.version)" = '%{mupdf_version}'
-test "$(sed -n '2p' cmake/mupdf.version)" = '%{mupdf_sha256}'
-sed -i 's/\r$//' thirdparty/allura/OFL.txt
+mv mupdf-%{mupdf_version}-source thirdparty/paperbox/thirdparty/
+test "$(sed -n '1p' thirdparty/paperbox/cmake/mupdf.version)" = '%{mupdf_version}'
+test "$(sed -n '2p' thirdparty/paperbox/cmake/mupdf.version)" = '%{mupdf_sha256}'
+sed -i 's/\r$//' thirdparty/paperbox/thirdparty/allura/OFL.txt
 
 %build
 # Enable Internet access in the COPR project's build options for Cargo.
+cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
 %cmake -G Ninja \
     -DKDE_INSTALL_LIBDIR:PATH=%{_lib} \
     -DKDE_INSTALL_SBINDIR:PATH=%{_sbindir} \
     -DKDE_INSTALL_USE_QT_SYS_PATHS:BOOL=ON \
     -DUSE_SYSTEM_MUPDF:BOOL=OFF \
-    -DMUPDF_SOURCE_DIR:PATH="%{_builddir}/%{name}-%{version}/mupdf-%{mupdf_version}-source" \
     -DBUILD_TESTING:BOOL=%{with tests} \
     -DENABLE_BUILD_TREE_WORKER:BOOL=OFF \
     -DENABLE_MU_DEBUG:BOOL=OFF \
@@ -99,11 +101,11 @@ ctest --test-dir %{_vpath_builddir} --output-on-failure --parallel %{_smp_build_
 %endif
 
 %files -f okular_mupdfng.lang
-%license COPYING thirdparty/mupdf-COPYING thirdparty/allura/OFL.txt thirdparty/xxhash/xxHash-LICENSE
+%license COPYING thirdparty/paperbox/thirdparty/mupdf-COPYING thirdparty/paperbox/thirdparty/allura/OFL.txt thirdparty/paperbox/thirdparty/xxhash/xxHash-LICENSE
 %doc README.md INSTALL.md MATURITY.md
 %{_bindir}/mupdfng-cli
 %dir %{_libdir}/okular-mupdf-ng
-%{_libdir}/okular-mupdf-ng/mupdfng-worker
+%{_libdir}/okular-mupdf-ng/paperbox-worker
 %{_libdir}/qt6/plugins/okular_generators/okularGenerator_mupdfng.so
 %{_datadir}/config.kcfg/mupdfngsettings.kcfg
 %{_datadir}/icons/hicolor/scalable/apps/mupdfng.svg

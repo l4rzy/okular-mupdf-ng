@@ -9,7 +9,7 @@
 #include <functional>
 #include <optional>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Okular {
 

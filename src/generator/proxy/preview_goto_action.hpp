@@ -4,7 +4,7 @@
 #ifndef MU_GENERATOR_PROXY_PREVIEW_GOTO_ACTION_HPP
 #define MU_GENERATOR_PROXY_PREVIEW_GOTO_ACTION_HPP
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 #include <okular/core/action.h>
 

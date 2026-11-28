@@ -195,10 +195,7 @@ private:
     void refreshPaperColor();
     void loadLayers();
     void refreshDocumentText(std::uint64_t revision);
-    void applyOcrResult(int page,
-                        QVector<Plugin::Caching::OCR::CacheItem> boxes,
-                        std::uint64_t revision,
-                        bool notifyCompletion);
+    void applyOcrResult(int page, std::vector<Model::TextBox> boxes, std::uint64_t revision, bool notifyCompletion);
     // Builds the "Using MuPDF ..." description shown by Okular's About dialog,
     // mirroring the poppler generator's GeneratorExtraDescription.
     QString generatorExtraDescription() const;

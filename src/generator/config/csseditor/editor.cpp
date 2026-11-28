@@ -7,8 +7,7 @@
 #include <QSignalBlocker>
 
 #include "highlighter.hpp"
-#include "shared/model/types.hpp"
-#include "shared/model/validation.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Generator {
 

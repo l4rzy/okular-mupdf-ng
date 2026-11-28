@@ -7,9 +7,9 @@
 #include <QTest>
 #include <QVector>
 
+#include "paperbox_model.hpp"
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
-#include "shared/protocol/limits.hpp"
 
 #include <cmath>
 

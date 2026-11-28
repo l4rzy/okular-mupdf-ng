@@ -4,9 +4,8 @@
 
 #include "generator/mupdfng.hpp"
 #include "generator/ui/window_menus.hpp"
+#include "paperbox_model.hpp"
 #include "shared/build_info.hpp"
-#include "shared/model/export.hpp"
-#include "shared/model/theme_colors.hpp"
 
 #include <okular/core/fileprinter.h>
 #include <okular/core/page.h>
@@ -34,7 +33,9 @@
 #include <QTimer>
 #include <QUrl>
 #include <atomic>
+#include <chrono>
 #include <functional>
+#include <paperbox/cache.hpp>
 #include <vector>
 
 #include "generator/config/settings.hpp"
@@ -47,16 +48,14 @@
 #include "generator/proxy/form/construction.hpp"
 #include "generator/proxy/form/coordinator.hpp"
 #include "mupdfngsettings.h"
-#include "plugin/caching/vacuum.hpp"
+#include "plugin/caching/cache_root.hpp"
 #include "plugin/crypto/nss.hpp"
 #include "plugin/ocr/ocr.hpp"
 #include "plugin/util/document_type.hpp"
 #include "plugin/util/render_image.hpp"
 #include "plugin/util/signature_image.hpp"
 #include "plugin/util/temp_dir.hpp"
-#include "shared/compat.hpp"
 #include "shared/logging.hpp"
-#include "shared/transport/common.hpp"
 
 K_PLUGIN_CLASS_WITH_JSON(::Mu::Generator::Main, "manifest.json")
 
@@ -168,12 +167,12 @@ Main::Main(QObject* parent, const QVariantList& args)
     // Step 3: Start the isolated worker. The worker binary path is embedded at compile time by CMake.
     // WorkerClient::start() will also try PATH and install-dir fallbacks.
     if (!m_worker.start(QString(), Config::readTessDataDirectories())) {
-        MU_LOG(warning, "Mu::Generator::Main", "failed to start mupdfng-worker");
+        MU_LOG(warning, "Mu::Generator::Main", "failed to start paperbox-worker");
     }
     // Step 4: Invalidate asynchronous UI state before handling worker failure.
     connect(&m_worker, &Plugin::WorkerClient::workerDied, this, [this](int code) {
         m_linkPreview.reset();
-        MU_LOG(warning, "Mu::Generator::Main", std::string("mupdfng-worker died with code ") + std::to_string(code));
+        MU_LOG(warning, "Mu::Generator::Main", std::string("paperbox-worker died with code ") + std::to_string(code));
         m_ocrController->reset();
         m_annotationProxy.setAvailable(false);
         m_formCoordinator->setAvailable(false);
@@ -239,7 +238,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         &Plugin::WorkerClient::pageLinksReady,
         this,
         [this](quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, QString error) {
-            if (epoch != m_worker.documentEpoch())
+            if (epoch != m_worker.paperboxClient().documentEpoch())
                 return;
             for (const auto& pageLinks : pages) {
                 if (pageLinks.page >= 0 && pageLinks.page < m_okularPages.size())
@@ -261,7 +260,7 @@ Main::Main(QObject* parent, const QVariantList& args)
         &m_worker,
         &Plugin::WorkerClient::exportProgress,
         this,
-        [this](const Model::ExportProgressNotification& progress) {
+        [this](const paperbox::signal::ExportProgressEvent& progress) {
             switch (progress.phase) {
             case Model::ExportPhase::CreatingPages:
                 Q_EMIT notice(i18n("Creating PDF pages: %1 of %2…", progress.completed, progress.total), NoticeMs);
@@ -283,9 +282,7 @@ Main::Main(QObject* parent, const QVariantList& args)
     connect(m_ocrController.get(),
             &Plugin::OCR::Controller::completed,
             this,
-            [this](int page,
-                   QVector<Plugin::Caching::OCR::CacheItem> boxes,
-                   Plugin::OCR::Controller::CompletionSource source) {
+            [this](int page, std::vector<Model::TextBox> boxes, Plugin::OCR::Controller::CompletionSource source) {
                 applyOcrResult(page,
                                std::move(boxes),
                                m_layerRevision.load(),
@@ -322,20 +319,22 @@ Main::~Main()
 // refreshed on the generator thread so KConfig writes stay off the pool.
 void Main::scheduleCacheVacuum()
 {
-    namespace Vacuum = Plugin::Caching::Vacuum;
     // One scan per process: Okular builds a Main per open document, and every
     // instance reads the throttle timestamp before any of them writes it back.
     static std::atomic_bool claimed = false;
     if (claimed.exchange(true))
         return;
-    if (!Vacuum::shouldVacuum(Config::readCacheLastVacuum(), QDateTime::currentDateTimeUtc()))
+    const auto last = Config::readCacheLastVacuum();
+    const auto now = QDateTime::currentDateTimeUtc();
+    if (last.isValid() && last <= now && last.addDays(Config::CacheVacuumIntervalDays) > now)
         return;
     // Deferred past construction so generator startup never blocks on cache
     // I/O; bound to this so a torn-down generator cancels the pending start.
     QTimer::singleShot(0, this, [this] {
         const QPointer<Main> guard(this);
-        QThreadPool::globalInstance()->start(QRunnable::create([guard] {
-            const auto result = Vacuum::vacuumStaleCaches(QDateTime::currentDateTimeUtc());
+        QThreadPool::globalInstance()->start(QRunnable::create([guard, root = Plugin::Caching::cacheRoot()] {
+            const auto cutoff = std::chrono::system_clock::now() - std::chrono::days(Config::CacheRetentionDays);
+            const auto result = paperbox::pruneCaches(root, cutoff);
             MU_LOG(debug,
                    "Mu::Generator::Main",
                    std::string("cache vacuum removed ") + std::to_string(result.filesRemoved) + " files in "
@@ -407,7 +406,8 @@ bool Main::reparseConfig()
         !reopenForJavaScript && (renderingSettingsChanged || (formJavaScriptChanged && !deferJavaScript));
 
     // Propagate changed settings to the worker process.
-    if (pushWorkerSettings && workerReady() && !m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb)))
+    if (pushWorkerSettings && workerReady()
+        && !m_worker.paperboxClient().setSettings(m_settings.documentSettings(m_paperColorRgb)))
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after configuration reload");
 
     if (reopenForJavaScript) {
@@ -533,18 +533,8 @@ void Main::initPages(QVector<Okular::Page*>& pages, QList<Plugin::WorkerClient::
 
     // Publish final statuses with the pages. Okular snapshots signature
     // validity when it builds the signature sidebar.
-    if (m_document.type == Model::DocumentType::Pdf) {
-        std::vector<Model::SignatureField*> signatures;
-        for (auto& page : pageInfos)
-            for (auto& field : page.signatureFields)
-                if (field.signedField)
-                    signatures.push_back(&field);
-        if (!signatures.empty()) {
-            if (auto source = m_worker.openSourceInput())
-                Plugin::Crypto::validateDetachedPdfSignatures(
-                    std::move(signatures), *source, MuPDFNGSettings::self()->useOcsp());
-        }
-    }
+    if (m_document.type == Model::DocumentType::Pdf)
+        m_worker.validateSignatures(pageInfos, MuPDFNGSettings::self()->useOcsp());
 
     for (Plugin::WorkerClient::PageInfo& pageInfo : pageInfos) {
         const QSizeF s(pageInfo.geometry.widthPoints * dpi().width() / 72.0,
@@ -610,7 +600,7 @@ bool Main::prepareDocumentOpen(const QString& settingsKey)
 
     loadDocumentSettings(settingsKey);
     refreshPaperColor();
-    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+    if (!m_worker.paperboxClient().setSettings(m_settings.documentSettings(m_paperColorRgb))) {
         MU_LOG(warning, "Mu::Generator::Main", "failed to push render settings before opening the document");
         return false;
     }
@@ -621,7 +611,7 @@ bool Main::prepareDocumentOpen(const QString& settingsKey)
 Okular::Document::OpenResult
 Main::loadDocumentWithPassword(const QString& fileName, QVector<Okular::Page*>& pages, const QString& password)
 {
-    if (!m_worker.isConnected()) {
+    if (!m_worker.paperboxClient().isConnected()) {
         MU_LOG(warning, "Mu::Generator::Main", "worker is not connected; cannot open document");
         return Okular::Document::OpenError;
     }
@@ -663,7 +653,7 @@ Okular::Document::OpenResult Main::loadDocumentFromDataWithPassword(const QByteA
                                                                     QVector<Okular::Page*>& pages,
                                                                     const QString& password)
 {
-    if (!m_worker.isConnected()) {
+    if (!m_worker.paperboxClient().isConnected()) {
         MU_LOG(warning, "Mu::Generator::Main", "worker is not connected; cannot open document data");
         return Okular::Document::OpenError;
     }
@@ -721,7 +711,7 @@ void Main::warnIfRepairedDocument(const Model::DocumentMetadata& info)
 // offers no banner retraction when the preference flips off mid-session.
 void Main::notifyDegradedSandbox()
 {
-    auto sandboxStatus = m_worker.sandboxStatus();
+    auto sandboxStatus = m_worker.paperboxClient().sandboxStatus();
 
     auto warningMessage = [sandboxStatus]() {
         if (sandboxStatus.isPartiallyActive())
@@ -741,20 +731,20 @@ void Main::notifyDegradedSandbox()
 QString Main::generatorExtraDescription() const
 {
     QString engineVersion = i18n("Unknown");
-    if (m_worker.isConnected()) {
-        const std::string workerVersion = m_worker.engineVersion();
+    if (m_worker.paperboxClient().isConnected()) {
+        const std::string workerVersion = m_worker.paperboxClient().engineVersion();
         if (!workerVersion.empty())
             engineVersion = QString::fromStdString(workerVersion);
     }
 
-    QString result = m_worker.usesSystemMuPdf() ? i18n("MuPDF: %1 (system library)", engineVersion)
-                                                : i18n("MuPDF: %1 (bundled, patched)", engineVersion);
+    QString result = m_worker.paperboxClient().usesSystemMuPdf() ? i18n("MuPDF: %1 (system library)", engineVersion)
+                                                                 : i18n("MuPDF: %1 (bundled, patched)", engineVersion);
     if (!Mu::GIT_BUILD.empty()) {
         const QString gitBuild = QString::fromUtf8(Mu::GIT_BUILD.data(), static_cast<qsizetype>(Mu::GIT_BUILD.size()));
         result.prepend(i18n("[git build: %1]", gitBuild) + QLatin1Char('\n'));
     }
 
-    const Model::SandboxStatus status = m_worker.sandboxStatus();
+    const Model::SandboxStatus status = m_worker.paperboxClient().sandboxStatus();
     if (status.isFullyHardened()) {
         result += QStringLiteral("\n") + i18n("Sandbox: Fully hardened [OK]");
     } else if (status.isPartiallyActive()) {
@@ -765,14 +755,14 @@ QString Main::generatorExtraDescription() const
     const QString profile = status.profile.empty() ? i18n("Unknown") : QString::fromStdString(status.profile);
     result += QStringLiteral("\n") + i18n("Sandbox profile: %1", profile);
 
-    if (m_worker.isConnected()) {
-        const std::optional<quint64> workerMemory = m_worker.workerMemoryBytes();
+    if (m_worker.paperboxClient().isConnected()) {
+        const std::optional<quint64> workerMemory = m_worker.paperboxClient().workerMemoryBytes();
         const QString memoryText =
             workerMemory ? QLocale().formattedDataSize(static_cast<qint64>(*workerMemory)) : i18n("unknown");
         result += QStringLiteral("\n") + i18n("Worker memory: %1", memoryText);
     }
 
-    result += QStringLiteral("\n") + i18n("Worker restarts: %1", m_worker.restartCount());
+    result += QStringLiteral("\n") + i18n("Worker restarts: %1", m_worker.paperboxClient().restartCount());
 
     return result;
 }
@@ -781,7 +771,7 @@ QString Main::generatorExtraDescription() const
 bool Main::sandboxGated() const
 {
     return Config::readSandboxEnforcement() == Config::SandboxEnforcement::Strict
-        && !m_worker.sandboxStatus().isFullyHardened();
+        && !m_worker.paperboxClient().sandboxStatus().isFullyHardened();
 }
 
 // Gates every worker-backed generator operation on an explicit session state.
@@ -796,7 +786,7 @@ bool Main::workerReady() const
 void Main::closeWorkerDocument()
 {
     m_linkPreview.reset();
-    m_worker.close();
+    m_worker.paperboxClient().close();
 }
 
 // Localized Strict-gate guidance shown on the placeholder card and in
@@ -804,7 +794,7 @@ void Main::closeWorkerDocument()
 QString Main::sandboxGateMessage() const
 {
     QStringList diagnostics;
-    for (const auto& diagnostic : m_worker.sandboxStatus().diagnostics)
+    for (const auto& diagnostic : m_worker.paperboxClient().sandboxStatus().diagnostics)
         diagnostics.push_back(QString::fromStdString(diagnostic));
     const QString reason = diagnostics.join(QStringLiteral("; "));
     return i18n("The worker sandbox is not fully hardened and sandbox enforcement is Strict.\n"
@@ -1005,10 +995,7 @@ void Main::observeOcrFocus(std::optional<Plugin::OCR::NativeTextObservation> nat
         std::move(nativeText));
 }
 
-void Main::applyOcrResult(int page,
-                          QVector<Plugin::Caching::OCR::CacheItem> boxes,
-                          std::uint64_t revision,
-                          bool notifyCompletion)
+void Main::applyOcrResult(int page, std::vector<Model::TextBox> boxes, std::uint64_t revision, bool notifyCompletion)
 {
     if (revision != m_layerRevision.load() || page < 0 || page >= m_okularPages.size())
         return;
@@ -1023,13 +1010,14 @@ void Main::applyOcrResult(int page,
     QMutexLocker locker(userMutex());
     auto* target = m_okularPages.at(page);
     bool success = false;
-    const auto native = m_worker.getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
+    const auto native =
+        m_worker.paperboxClient().getTextBoxesForPage(page, dpi().width(), dpi().height(), true, &success);
     if (!success)
         return;
     auto* textPage = Conversion::mergedTextPage(native, target->width(), target->height(), boxes);
     target->setTextPage(textPage);
     Q_EMIT signalTextGenerationDone(target, textPage);
-    if (!boxes.isEmpty() && notifyCompletion && ocrSettings().notify)
+    if (!boxes.empty() && notifyCompletion && ocrSettings().notify)
         Q_EMIT notice(i18n("OCR completed for page %1", page + 1), ShortNoticeMs);
 }
 
@@ -1050,7 +1038,7 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
     // so any failure here leaves the UI and availability state unchanged.
     QList<Plugin::WorkerClient::PageInfo> pages;
     refreshPaperColor();
-    if (!m_worker.setSettings(m_settings.documentSettings(m_paperColorRgb))) {
+    if (!m_worker.paperboxClient().setSettings(m_settings.documentSettings(m_paperColorRgb))) {
         MU_LOG(warning, "Mu::Generator::Main", "failed to apply settings after worker restart");
         return false;
     }
@@ -1077,11 +1065,13 @@ bool Main::reopenWorkerDocument(bool markFormChangesDirty)
 
     // Restore the layer state before rebuilding the UI.
     if (metadata.capabilities.layers) {
-        const auto layers = m_worker.layers();
+        const auto layers = m_worker.paperboxClient().layers();
         if (!layers
             || (m_layersModel
-                && !m_layersModel->restoreLayers(
-                    *layers, [this](const Model::SetLayerRequest& request) { return m_worker.setLayer(request); }))
+                && !m_layersModel->restoreLayers(*layers,
+                                                 [this](const Model::SetLayerRequest& request) {
+                                                     return m_worker.paperboxClient().setLayer(request);
+                                                 }))
             || (!m_layersModel && !layers->entries.empty())) {
             closeWorkerDocument();
             return false;
@@ -1275,7 +1265,7 @@ const Okular::DocumentSynopsis* Main::generateDocumentSynopsis()
     const bool allowHeuristic = m_document.heuristicSynopsisEnabled;
     locker.unlock();
     bool generated = false;
-    const auto nodes = m_worker.synopsis(allowHeuristic, &generated);
+    const auto nodes = m_worker.paperboxClient().synopsis(allowHeuristic, &generated);
     if (!nodes)
         return nullptr;
     auto synopsis = Conversion::documentSynopsis(*nodes);
@@ -1302,7 +1292,7 @@ Okular::FontInfo::List Main::fontsForPage(int page)
     if (m_pageError.isActive())
         return { };
     if (workerReady()) {
-        const std::vector<Model::Font> source = m_worker.fonts(page);
+        const std::vector<Model::Font> source = m_worker.paperboxClient().fonts(page);
         Okular::FontInfo::List result;
         for (const auto& font : source) {
             result.append(Conversion::fromModel(font));
@@ -1325,7 +1315,7 @@ void Main::updatePagePlaceholder(Model::DocumentTheme theme)
     // unthemed pages use Okular's normal background without visiting this code.
     m_hasPagePlaceholder = enabled;
 #if MU_OKULAR_PAGE_PLACEHOLDER_COLOR
-    const QColor color = QColor::fromRgb(Model::ThemeColor::getBackground(theme));
+    const QColor color = QColor::fromRgb(Model::theme_color::getBackground(theme));
     for (auto* page : m_okularPages)
         page->setPlaceholderColor(color);
 #else // MU_OKULAR_PAGE_PLACEHOLDER_COLOR
@@ -1431,7 +1421,7 @@ QImage Main::image(Okular::PixmapRequest* request)
         // Cancellation is optional; discarding obsolete images remains mandatory.
         const std::function<bool()> cancellation =
             m_cancelObsoleteRenders.load() ? shouldAbort : std::function<bool()> { };
-        const auto workerEpoch = m_worker.documentEpoch();
+        const auto workerEpoch = m_worker.paperboxClient().documentEpoch();
         bool includeLinks = false;
         {
             QMutexLocker lock(&m_linkMutex);
@@ -1466,7 +1456,7 @@ QImage Main::image(Okular::PixmapRequest* request)
         if (includeLinks && links.generation && links.error.empty()) {
             auto install = [this, request, pageNum, workerEpoch, revision, links = std::move(links.links)] {
                 QMutexLocker lock(&m_linkMutex);
-                if (workerEpoch != m_worker.documentEpoch() || revision != m_layerRevision.load()
+                if (workerEpoch != m_worker.paperboxClient().documentEpoch() || revision != m_layerRevision.load()
                     || request->shouldAbortRender() || m_installedLinkPages.contains(pageNum) || pageNum < 0
                     || pageNum >= m_okularPages.size())
                     return;
@@ -1497,7 +1487,7 @@ void Main::loadLayers()
     m_defaultLayerVisibility = true;
     if (!m_document.capabilities.layers)
         return;
-    const auto layers = m_worker.layers();
+    const auto layers = m_worker.paperboxClient().layers();
     if (!layers) {
         Q_EMIT warning(i18n("The PDF layers could not be loaded."), WarningMs);
         return;
@@ -1508,7 +1498,7 @@ void Main::loadLayers()
         if (!workerReady())
             return std::optional<Model::LayersResponse> { };
         m_linkPreview.reset();
-        return m_worker.setLayer(request);
+        return m_worker.paperboxClient().setLayer(request);
     });
     connect(m_layersModel.get(), &LayersModel::changeFailed, this, [this] {
         Q_EMIT warning(i18n("The PDF layer visibility could not be changed."), WarningMs);
@@ -1591,7 +1581,7 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
         if (!workerReady())
             return nullptr;
         const std::vector<Model::TextBox> workerBoxes =
-            m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
+            m_worker.paperboxClient().getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true);
         return finish(Conversion::textPage(workerBoxes, request->page()->width(), request->page()->height()));
     }
 
@@ -1599,8 +1589,8 @@ Okular::TextPage* Main::textPage(Okular::TextRequest* request)
     // Both cached and fresh results use the same merge with the current native layer.
     if (workerReady()) {
         bool success = false;
-        const std::vector<Model::TextBox> workerBoxes =
-            m_worker.getTextBoxesForPage(pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true, &success);
+        const std::vector<Model::TextBox> workerBoxes = m_worker.paperboxClient().getTextBoxesForPage(
+            pageNum, dpi().width(), dpi().height(), /*skipAnnots=*/true, &success);
         if (!success)
             return nullptr;
         if (m_defaultLayerVisibility.load()) {
@@ -1631,10 +1621,10 @@ QVariant Main::metaData(const QString& key, const QVariant& option) const
     if (key == QLatin1String("NamedViewport") && workerReady() && !option.toString().isEmpty()) {
         // Okular's public named-destination API is synchronous. Only this URI
         // is resolved; speculative hover resolution uses the preview pool.
-        const auto epoch = m_worker.documentEpoch();
+        const auto epoch = m_worker.paperboxClient().documentEpoch();
         const auto target = m_worker.resolveLink(option.toString());
-        if (epoch == m_worker.documentEpoch() && target.valid && !target.external && target.viewport.page >= 0
-            && target.viewport.page < m_okularPages.size()) {
+        if (epoch == m_worker.paperboxClient().documentEpoch() && target.valid && !target.external
+            && target.viewport.page >= 0 && target.viewport.page < m_okularPages.size()) {
 #if OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
             return QVariant::fromValue(Conversion::viewportFromModel(target.viewport));
 #else // OKULAR_VERSION >= QT_VERSION_CHECK(26, 11, 70)
@@ -1687,7 +1677,7 @@ const QList<Okular::EmbeddedFile*>* Main::embeddedFiles() const
     if (!m_embeddedFilesCache) {
         if (!workerReady())
             return nullptr;
-        const auto source = m_worker.embeddedFiles();
+        const auto source = m_worker.paperboxClient().embeddedFiles();
         if (!source)
             return nullptr;
         m_embeddedFilesCache = std::make_unique<QList<Okular::EmbeddedFile*>>();
@@ -1720,7 +1710,7 @@ bool Main::save(const QString& fileName, SaveOptions options, QString* errorText
         return false;
     }
     if (workerReady()) {
-        if (m_worker.exportDocument(fileName, Model::nativePdfExportOptions()))
+        if (m_worker.exportDocument(fileName, { "pdf", Model::ExportProfileId::Native, { } }))
             return true;
         if (errorText)
             *errorText = i18n("Failed to save PDF document.");
@@ -1864,8 +1854,7 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
             return { Okular::GenericSigningError, QStringLiteral("Could not render signature emblem") };
         appearance->backgroundImage = Plugin::Util::SignatureImage::prepareBackgroundImage(
             data.backgroundImagePath(), rect.width(), rect.height());
-        const auto result = m_worker.sign({ { },
-                                            data.page() >= 0 ? data.page() : 0,
+        const auto result = m_worker.sign({ data.page() >= 0 ? data.page() : 0,
                                             { rect.left, rect.top, rect.right, rect.bottom },
                                             data.certNickname().toStdString(),
                                             commonName.toStdString(),
@@ -1873,22 +1862,7 @@ std::pair<Okular::SigningResult, QString> Main::signResult(const Okular::NewSign
                                             std::move(*appearance) },
                                           data.password(),
                                           rFilename);
-        switch (result.result) {
-        case Model::SigningResult::Success:
-            return { Okular::SigningSuccess, QString() };
-        case Model::SigningResult::FieldAlreadySigned:
-            return { Okular::FieldAlreadySigned, QString::fromStdString(result.details) };
-        case Model::SigningResult::KeyMissing:
-            return { Okular::KeyMissing, QString::fromStdString(result.details) };
-        case Model::SigningResult::WriteFailed:
-            return { Okular::SignatureWriteFailed, QString::fromStdString(result.details) };
-        case Model::SigningResult::UserCancelled:
-            return { Okular::UserCancelled, QString::fromStdString(result.details) };
-        case Model::SigningResult::BadPassphrase:
-            return { Okular::BadPassphrase, QString::fromStdString(result.details) };
-        default:
-            return { Okular::GenericSigningError, QString::fromStdString(result.details) };
-        }
+        return Conversion::toOkularSigningResult(result);
     }
     return { Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable") };
 }

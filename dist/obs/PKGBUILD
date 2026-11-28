@@ -11,14 +11,14 @@ license=('AGPL-3.0-or-later AND GPL-3.0-or-later AND OFL-1.1 AND BSD-2-Clause')
 # Direct ELF dependencies of the installed CLI, worker, and generator (lddtree).
 depends=('brotli' 'freetype2' 'glibc' 'kconfig' 'kconfigwidgets'
          'kcoreaddons' 'ki18n' 'kio' 'kwidgetsaddons' 'kxmlgui' 'libjpeg-turbo'
-         'libgcc' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
+         'libgcc' 'libmd' 'libseccomp' 'libstdc++' 'nspr' 'nss' 'okular' 'qt6-base' 'zlib')
 makedepends=('cmake>=3.20' 'extra-cmake-modules>=6.3.0' 'gcc' 'gettext'
              'make' 'ninja' 'patch' 'pkgconf' 'python' 'qt6-tools' 'rust>=1.91')
 checkdepends=('openssl' 'tesseract-data-eng' 'ttf-dejavu')
 optdepends=('tesseract-data-eng: English OCR language data; install other tesseract-data packages for additional languages')
 conflicts=('okular-mupdf-ng-dynamic' 'okular-mupdf-ng-git')
 
-# Keep the MuPDF version and checksum in sync with cmake/mupdf.version and _service.
+# Keep the MuPDF version and checksum in sync with thirdparty/paperbox/cmake/mupdf.version and _service.
 _mupdfver=1.28.6
 source=("$pkgname-$pkgver.tar.gz"
         "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$_mupdfver/mupdf-$_mupdfver-source.tar.gz"
@@ -32,9 +32,12 @@ sha256sums=('SKIP'
 
 prepare() {
   cd "$srcdir/$pkgname-$pkgver"
+  local mupdf_source="mupdf-$_mupdfver-source"
+  mkdir -p "thirdparty/paperbox/thirdparty/$mupdf_source"
+  cp -a "$srcdir/$mupdf_source/." "thirdparty/paperbox/thirdparty/$mupdf_source/"
   tar -xzf "$srcdir/vendor.tar.gz"
-  test "$(sed -n '1p' cmake/mupdf.version)" = "$_mupdfver"
-  test "$(sed -n '2p' cmake/mupdf.version)" = "${sha256sums[1]}"
+  test "$(sed -n '1p' thirdparty/paperbox/cmake/mupdf.version)" = "$_mupdfver"
+  test "$(sed -n '2p' thirdparty/paperbox/cmake/mupdf.version)" = "${sha256sums[1]}"
   local manifest_version
   manifest_version=$(python -c 'import json; print(json.load(open("src/generator/manifest.json"))["KPlugin"]["Version"])')
   if [[ "$manifest_version" != "$pkgver" ]]; then
@@ -50,7 +53,6 @@ build() {
     -DKDE_INSTALL_LIBDIR=lib \
     -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
     -DUSE_SYSTEM_MUPDF=OFF \
-    -DMUPDF_SOURCE_DIR="$srcdir/mupdf-$_mupdfver-source" \
     -DBUILD_TESTING=ON \
     -DENABLE_BUILD_TREE_WORKER=OFF \
     -DENABLE_MU_DEBUG=OFF \

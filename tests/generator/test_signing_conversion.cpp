@@ -18,6 +18,30 @@ class TestGeneratorSigningConversion : public QObject {
 
 private slots:
 
+    void mapsSigningResult_data()
+    {
+        using Result = Mu::Model::SigningResult;
+        QTest::addColumn<Result>("result");
+        QTest::addColumn<Okular::SigningResult>("expected");
+        QTest::newRow("success") << Result::Success << Okular::SigningSuccess;
+        QTest::newRow("already-signed") << Result::FieldAlreadySigned << Okular::FieldAlreadySigned;
+        QTest::newRow("key-missing") << Result::KeyMissing << Okular::KeyMissing;
+        QTest::newRow("write-failed") << Result::WriteFailed << Okular::SignatureWriteFailed;
+        QTest::newRow("cancelled") << Result::UserCancelled << Okular::UserCancelled;
+        QTest::newRow("bad-passphrase") << Result::BadPassphrase << Okular::BadPassphrase;
+        QTest::newRow("generic-error") << Result::GenericError << Okular::GenericSigningError;
+    }
+
+    void mapsSigningResult()
+    {
+        QFETCH(Mu::Model::SigningResult, result);
+        QFETCH(Okular::SigningResult, expected);
+        const auto converted = Mu::Generator::Conversion::toOkularSigningResult({ result, "Worker diagnostic" });
+        QCOMPARE(converted.first, expected);
+        QCOMPARE(converted.second,
+                 expected == Okular::SigningSuccess ? QString() : QStringLiteral("Worker diagnostic"));
+    }
+
     void buildsDefaultAppearanceFromSignatureData()
     {
         Okular::NewSignatureData data;

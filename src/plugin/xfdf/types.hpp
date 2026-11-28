@@ -6,7 +6,7 @@
 
 #include <QVector>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Mu::Plugin::Xfdf {
 

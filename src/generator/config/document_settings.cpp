@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "generator/config/document_settings.hpp"
-#include "shared/model/validation.hpp"
+#include "paperbox_model.hpp"
 
 #include <KConfig>
 #include <KConfigGroup>

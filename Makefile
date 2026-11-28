@@ -1,6 +1,6 @@
 .PHONY: all dev gcc release asan test fuzz format clean
 
-FUZZ_BUILD_DIR ?= build-ipc-fuzz
+FUZZ_BUILD_DIR ?= build-ipc-fuzz/paperbox
 FUZZ_CXX ?= clang++
 FUZZ_ARGS ?= -max_len=65536 -rss_limit_mb=2048 -max_total_time=30
 
@@ -22,7 +22,7 @@ test:
 	@./scripts/build.sh test
 
 fuzz:
-	cmake -S tests/fuzz -B "$(FUZZ_BUILD_DIR)" -DCMAKE_CXX_COMPILER="$(FUZZ_CXX)" -DCMAKE_BUILD_TYPE=Debug
+	cmake -S thirdparty/paperbox/test/fuzz -B "$(FUZZ_BUILD_DIR)" -DCMAKE_CXX_COMPILER="$(FUZZ_CXX)" -DCMAKE_BUILD_TYPE=Debug
 	cmake --build "$(FUZZ_BUILD_DIR)"
 	ctest --test-dir "$(FUZZ_BUILD_DIR)" --output-on-failure
 	"$(FUZZ_BUILD_DIR)/ipc_fuzz_seeds" "$(FUZZ_BUILD_DIR)/corpus-codec"

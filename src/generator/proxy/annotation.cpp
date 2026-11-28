@@ -41,31 +41,6 @@ bool setStampImage(Model::Annotation& model, const QString& symbol)
     return true;
 }
 
-// =============================================================================
-// Signature Result & Preview Helpers
-// =============================================================================
-
-std::pair<Okular::SigningResult, QString> signingResult(const Model::SignResponse& result)
-{
-    const QString details = QString::fromStdString(result.details);
-    switch (result.result) {
-    case Model::SigningResult::Success:
-        return { Okular::SigningSuccess, { } };
-    case Model::SigningResult::FieldAlreadySigned:
-        return { Okular::FieldAlreadySigned, details };
-    case Model::SigningResult::KeyMissing:
-        return { Okular::KeyMissing, details };
-    case Model::SigningResult::WriteFailed:
-        return { Okular::SignatureWriteFailed, details };
-    case Model::SigningResult::UserCancelled:
-        return { Okular::UserCancelled, details };
-    case Model::SigningResult::BadPassphrase:
-        return { Okular::BadPassphrase, details };
-    default:
-        return { Okular::GenericSigningError, details };
-    }
-}
-
 // Draws the pending signature snippet inside @p rect. Text uses raster pixel
 // sizes because the target is a device-space page image, not a widget.
 void drawSignaturePreview(QPainter& painter, const QRectF& rect)
@@ -121,7 +96,7 @@ void Annotation::trackStamp(const Okular::Annotation* annotation)
 
 bool Annotation::supports(Capability capability) const
 {
-    return m_available && m_backend && m_backend->isConnected()
+    return m_available && m_backend && m_backend->paperboxClient().isConnected()
         && (capability == Addition || capability == Modification || capability == Removal);
 }
 
@@ -149,7 +124,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
             // Only the backend state can change between registration and
             // invocation: page was validated on addition and the lambda dies
             // with its owning signature object.
-            if (!backend || !backend->isConnected())
+            if (!backend || !backend->paperboxClient().isConnected())
                 return std::make_pair(Okular::GenericSigningError, QStringLiteral("MuPDF worker is unavailable"));
             const Okular::NormalizedRect bounds = signature->boundingRectangle();
             if (!std::isfinite(bounds.left) || !std::isfinite(bounds.top) || !std::isfinite(bounds.right)
@@ -165,15 +140,15 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
                 return { Okular::GenericSigningError, QStringLiteral("Could not render signature emblem") };
             appearance->backgroundImage =
                 Plugin::Util::SignatureImage::prepareBackgroundImage(imagePath, bounds.width(), bounds.height());
-            return signingResult(backend->sign({ { },
-                                                 page,
-                                                 { bounds.left, bounds.top, bounds.right, bounds.bottom },
-                                                 data.certNickname().toStdString(),
-                                                 commonName.toStdString(),
-                                                 -1,
-                                                 std::move(*appearance) },
-                                               data.password(),
-                                               fileName));
+            return Conversion::toOkularSigningResult(
+                backend->sign({ page,
+                                { bounds.left, bounds.top, bounds.right, bounds.bottom },
+                                data.certNickname().toStdString(),
+                                commonName.toStdString(),
+                                -1,
+                                std::move(*appearance) },
+                              data.password(),
+                              fileName));
         };
 #if OKULAR_VERSION >= QT_VERSION_CHECK(25, 8, 0) // Pair-returning signing API.
         signature->setSignFunction(sign);
@@ -188,7 +163,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
         signature->setFlags(signature->flags() | Okular::Annotation::ExternallyDrawn);
         return;
     }
-    if (!m_backend || !m_backend->isConnected())
+    if (!m_backend || !m_backend->paperboxClient().isConnected())
         return;
     auto model = Conversion::toModel(annotation);
     if (!model)
@@ -197,7 +172,7 @@ void Annotation::notifyAddition(Okular::Annotation* annotation, int page)
         if (!setStampImage(*model, stamp->stampIconName()))
             return;
     }
-    const auto result = m_backend->addAnnotation(page, *model);
+    const auto result = m_backend->paperboxClient().addAnnotation(page, *model);
     if (result) {
         const QString id = QString::fromStdString(result->value);
         annotation->setNativeId(id);
@@ -218,7 +193,7 @@ void Annotation::notifyModification(const Okular::Annotation* annotation, int pa
         updatePendingSignature(signature);
         return;
     }
-    if (!m_backend || !m_backend->isConnected())
+    if (!m_backend || !m_backend->paperboxClient().isConnected())
         return;
     auto model = Conversion::toModel(annotation);
     if (!model)
@@ -247,7 +222,7 @@ void Annotation::notifyRemoval(Okular::Annotation* annotation, int page)
         clearPendingSignature();
         return;
     }
-    if (!m_backend || !m_backend->isConnected())
+    if (!m_backend || !m_backend->paperboxClient().isConnected())
         return;
     const QString id = annotation->nativeId().toString();
     if (id.isEmpty())

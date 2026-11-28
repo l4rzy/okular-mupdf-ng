@@ -1,14 +1,23 @@
 # SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 # SPDX-License-Identifier: GPL-3.0-or-later
 find_program(LDD_EXECUTABLE ldd REQUIRED)
-execute_process(COMMAND "${LDD_EXECUTABLE}" "${CLI_PATH}"
-    RESULT_VARIABLE status OUTPUT_VARIABLE dependencies ERROR_VARIABLE error)
-if(NOT status EQUAL 0)
-    message(FATAL_ERROR "Cannot inspect CLI dependencies: ${error}")
+function(check_dependencies executable forbidden)
+    execute_process(COMMAND "${LDD_EXECUTABLE}" "${executable}"
+        RESULT_VARIABLE status OUTPUT_VARIABLE dependencies ERROR_VARIABLE error)
+    if(NOT status EQUAL 0)
+        message(FATAL_ERROR "Cannot inspect dependencies of ${executable}: ${error}")
+    endif()
+    if(dependencies MATCHES "${forbidden}")
+        message(FATAL_ERROR "${executable} has a forbidden runtime dependency:\n${dependencies}")
+    endif()
+endfunction()
+
+check_dependencies("${CLI_PATH}" "lib(KF[0-9]|Okular|paperbox|mupdf)")
+check_dependencies("${WORKER_PATH}" "lib(Qt[0-9]|Okular|KF[0-9]|paperbox)")
+if(DEFINED PLUGIN_PATH)
+    check_dependencies("${PLUGIN_PATH}" "lib(paperbox|mupdf)")
 endif()
-if(dependencies MATCHES "(libKF[0-9]|libOkular)")
-    message(FATAL_ERROR "CLI must not link KDE or Okular libraries:\n${dependencies}")
-endif()
+
 file(GLOB cli_sources "${CLI_SOURCE_DIR}/*.cpp" "${CLI_SOURCE_DIR}/*.hpp")
 foreach(source IN LISTS cli_sources)
     file(READ "${source}" contents)

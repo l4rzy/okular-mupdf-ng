@@ -7,7 +7,7 @@
 #include <QWidget>
 #include <optional>
 
-#include "plugin/caching/vacuum.hpp"
+#include <paperbox/cache.hpp>
 
 class Ui_MuPDFNGSettingsWidgetBase;
 
@@ -25,8 +25,8 @@ public:
 private:
     void setupToolTips();
     void updateManageCertificatesButton();
-    void refreshCacheUsage(std::optional<Plugin::Caching::Vacuum::CacheKind> vacuum = std::nullopt);
-    void updateCacheMenu(const Plugin::Caching::Vacuum::CacheUsage* usage = nullptr);
+    void refreshCacheUsage(std::optional<paperbox::CacheKind> vacuum = std::nullopt);
+    void updateCacheMenu(const paperbox::CacheUsage* usage = nullptr);
     /// Refreshes the signature preview from the widgets' pending state so it
     /// tracks unapplied changes.
     void updateSignaturePreview();

@@ -63,6 +63,7 @@ jobs:
             kf6-ki18n-devel \
             kf6-kio-devel \
             libjpeg-turbo-devel \
+            libmd-devel \
             libseccomp-devel \
             make \
             mold \
@@ -91,6 +92,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Install Rust toolchain
         shell: sh
@@ -100,8 +102,10 @@ jobs:
           "$HOME/.cargo/bin/rustc" --version
           "$HOME/.cargo/bin/cargo" --version
 
-      - name: Download bundled MuPDF source
-        run: python3 ./scripts/download-mupdf.py
+      - name: Prepare Paperbox build inputs
+        run: |
+          python3 thirdparty/paperbox/script/download-mupdf.py
+          cargo fetch --locked --manifest-path thirdparty/paperbox/src/worker/engine/kindle/Cargo.toml
 
       - name: Configure CMake
         run: |
@@ -147,7 +151,7 @@ jobs:
             printf '%s\n' "$requirements" | grep -Fx bubblewrap
           fi
           rpm --list -qp "$package" | grep -q '/okular_generators/okularGenerator_mupdfng\.so$'
-          rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/mupdfng-worker$'
+          rpm --list -qp "$package" | grep -q '/okular-mupdf-ng/paperbox-worker$'
           rpm --list -qp "$package" | grep -q '/mupdfngsettings\.kcfg$'
           rpm --list -qp "$package" | grep -q '/icons/hicolor/scalable/apps/mupdfng\.svg$'
           rpm --list -qp "$package" | grep -q '/doc/okular-mupdf-ng/copyright$'
@@ -156,7 +160,7 @@ jobs:
           validation_root=$(mktemp -d)
           rpm2cpio "$package" | (cd "$validation_root" && cpio --extract --make-directories --quiet)
           plugin=$(find "$validation_root" -type f -name okularGenerator_mupdfng.so -print -quit)
-          worker=$(find "$validation_root" -type f -name mupdfng-worker -print -quit)
+          worker=$(find "$validation_root" -type f -name paperbox-worker -print -quit)
           test -n "$plugin"
           test -n "$worker"
           file "$plugin" | grep -q "$ELF_ARCH"

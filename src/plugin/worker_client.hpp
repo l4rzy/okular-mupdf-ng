@@ -7,57 +7,35 @@
 #include <QImage>
 #include <QObject>
 #include <QStringList>
-#include <QThread>
-#include <QTimer>
 
-#include <atomic>
-#include <chrono>
-#include <deque>
 #include <functional>
-#include <type_traits>
-#include <utility>
 
-#include "shared/model/form_backend.hpp"
-#include "shared/model/types.hpp"
-
-class QFile;
+#include "paperbox_model.hpp"
+#include "shared/form_backend.hpp"
+#include <paperbox/client.hpp>
 
 namespace Mu::Plugin {
 
-class WorkerTransport;
-
-/**
- * Thread-marshalled document client with EPUB cache policy.
- *
- * The generator calls this object from its own thread; each operation is
- * marshalled to WorkerTransport, which owns the sockets and process. The
- * blocking calls are deliberate: callers receive a complete result while
- * transport state remains confined to one thread.
- */
-class WorkerClient final : public QObject, public Model::FormBackend {
+// Qt adapter for Paperbox operations and events.
+class WorkerClient final : public QObject, public FormBackend {
     Q_OBJECT
 
 public:
     /// Worker process/session lifecycle. The process can be running while the
     /// generator has not yet confirmed its document session (Recovering); user
     /// operations must be gated on State::Ready.
-    enum class State { Stopped, Ready, Recovering, Failed };
+    using State = ::paperbox::State;
 
     using PageInfo = Model::PageInfo;
     explicit WorkerClient(QObject* parent = nullptr);
     ~WorkerClient() override;
     bool start(const QString& binaryPath, const QStringList& tessDataDirectories = { });
     void stop();
-    bool isConnected() const;
-    /// Resident memory of the worker process in bytes; nullopt when unavailable.
-    std::optional<quint64> workerMemoryBytes() const;
 
-    /// Successful automatic restarts over this client's lifetime, excluding initial starts.
-    [[nodiscard]] quint64 restartCount() const noexcept { return m_lifecycle.sequence; }
+    /// Use Paperbox directly for document operations with native types.
+    [[nodiscard]] const ::paperbox::WorkerClient& paperboxClient() const noexcept { return m_client; }
 
-    [[nodiscard]] State state() const noexcept { return m_lifecycle.current(); }
-
-    [[nodiscard]] bool operational() const noexcept { return state() == State::Ready; }
+    [[nodiscard]] bool operational() const noexcept { return m_client.state() == State::Ready; }
 
     /// Marks recovery complete after the generator revalidated its document.
     void commitSessionReady();
@@ -71,8 +49,7 @@ public:
                                const QString& password,
                                QList<PageInfo>& pages,
                                Model::DocumentType type = Model::DocumentType::Pdf);
-    bool close();
-    [[nodiscard]] std::unique_ptr<QFile> openSourceInput() const;
+    void validateSignatures(QList<PageInfo>& pages, bool checkOcsp) const;
     /// Cancellation is checked on the calling thread and sets the active
     /// render's shared MuPDF abort flag. The terminal response is still drained
     /// on the transport thread, including any frame produced before cancellation.
@@ -83,29 +60,12 @@ public:
                   const std::function<bool()>& shouldAbort = { },
                   Model::RenderLinks* links = nullptr);
     Model::ResolvedLink resolveLink(const QString& uri) const;
-    [[nodiscard]] quint64 documentEpoch() const noexcept;
-    std::vector<Model::TextBox>
-    getTextBoxesForPage(int page, qreal dpiX, qreal dpiY, bool skipAnnots = false, bool* success = nullptr) const;
     Model::DocumentMetadata getDocumentInfo(const QStringList& keys = { }) const;
     std::optional<quint64> startOcrPage(int page, const QString& language, int dpi) const;
-    Model::OcrResult ocrResult(quint64 jobId) const;
-    bool cancelOcrJobs() const;
-    std::vector<Model::Font> fonts(int page) const;
-    /// Empty collections are successful; nullopt preserves retrieval failure.
-    std::optional<std::vector<Model::EmbeddedFile>> embeddedFiles() const;
-    /// Empty outlines are successful; nullopt preserves retrieval failure.
-    /// Disabling the PDF fallback also bypasses cached generated outlines.
-    std::optional<std::vector<Model::OutlineNode>> synopsis(bool allowHeuristic = true,
-                                                            bool* generatedSynopsis = nullptr) const;
-    std::optional<Model::LayersResponse> layers() const;
-    std::optional<Model::LayersResponse> setLayer(const Model::SetLayerRequest& request) const;
-    bool setSettings(const Model::DocumentSettings& settings);
-    std::optional<std::vector<Model::OutputFormatInfo>> outputFormats() const;
     bool exportDocument(const QString& target, const Model::ExportOptions& options);
     /// Returns immediately; completion arrives via exportProgress.
     std::optional<quint64> startExport(const QString& target, const Model::ExportOptions& options) const;
-    Model::SignResponse sign(const Model::SignRequest& request, const QString& password, const QString& target);
-    std::optional<Model::AnnotationHandle> addAnnotation(int page, const Model::Annotation& annotation) const;
+    Model::SignResponse sign(const Model::SignOptions& request, const QString& password, const QString& target);
     bool
     modifyAnnotation(int page, const QString& id, const Model::Annotation& annotation, bool appearanceChanged) const;
     bool removeAnnotation(int page, const QString& id) const;
@@ -113,10 +73,6 @@ public:
     std::optional<Model::FormUpdateResponse> resetForm(const Model::FormResetRequest& request) const override;
     std::optional<Model::FormUpdateResponse>
     clickFormButton(const Model::FormButtonClickRequest& request) const override;
-    [[nodiscard]] Model::SandboxStatus sandboxStatus() const;
-    [[nodiscard]] std::string engineVersion() const;
-
-    [[nodiscard]] bool usesSystemMuPdf() const noexcept { return m_lifecycle.info.systemMuPdf; }
 
 signals:
     void operationFailed(const QString& message, Model::ErrorCode code);
@@ -127,98 +83,11 @@ signals:
     void workerUnavailable();
     void ocrDone(quint64 jobId, int page);
     void pageLinksReady(quint64 epoch, std::vector<Model::PageLinks> pages, bool resourceLimited, const QString& error);
-    void exportProgress(Model::ExportProgressNotification progress);
+    void exportProgress(::paperbox::signal::ExportProgressEvent progress);
 
 private:
-    struct EpubCacheSession {
-        QString sourcePath;
-        QString cachePath;
-        QByteArray layoutKey;
-        quint64 documentEpoch = 0;
-    };
-
-    /// Called only on the transport thread. A document boundary invalidates
-    /// the session before cached data can be returned or persisted.
-    QString epubCachePath(WorkerTransport* transport) const;
-
-    // Everything tied to the worker process lifecycle: launch configuration,
-    // restart-budget policy, cached handshake facts, the restart timer, and
-    // the observable state used for operation gating.
-    struct LifeCycle {
-        // Launch configuration, reused for every restart.
-        QString binary;
-        QStringList tessDataDirectories;
-        Model::PingResponse info;
-
-        // Restart budget: at most MaxAttempts delayed retries, and no more
-        // than MaxRestartsPerWindow successful restarts within Window.
-        static constexpr int MaxAttempts = 3;
-        static constexpr std::size_t MaxRestartsPerWindow = 2;
-        static constexpr std::chrono::seconds Window { 5 };
-
-        QTimer timer;
-        bool stopping = false;
-        bool restartsDisabled = false;
-        int attempts = 0;
-        std::deque<std::chrono::steady_clock::time_point> restartTimes;
-        // Lifetime total, retained when the recovery budget is reset.
-        quint64 sequence = 0;
-
-        // Generator render threads read this; the client thread writes it.
-        std::atomic<State> state { State::Stopped };
-
-        void reset(const QString& binaryPath, const QStringList& directories);
-
-        void beginStop() noexcept { stopping = true; }
-
-        [[nodiscard]] bool canScheduleRestart() const noexcept { return !stopping && !restartsDisabled; }
-
-        [[nodiscard]] bool budgetExhausted();
-        [[nodiscard]] int nextRestartDelayMs() noexcept;
-        void recordRestart();
-
-        void disableRestarts() noexcept { restartsDisabled = true; }
-
-        [[nodiscard]] std::size_t recentRestarts() const noexcept { return restartTimes.size(); }
-
-        [[nodiscard]] State current() const noexcept { return state.load(); }
-
-        void setState(State value) noexcept { state.store(value); }
-
-    private:
-        void prune() noexcept;
-    };
-
-    // Restart policy is owned by the client thread; transport failures are
-    // converted into bounded, delayed recovery attempts here.
-    bool startWorker();
-    void scheduleRestart();
-    void restartWorker();
-
-    // Runs a transport call on the transport thread and returns its result,
-    // seeded with a failure value so a failed dispatch cannot masquerade as
-    // success. BlockingQueuedConnection is the synchronization boundary while
-    // all transport state stays thread-confined.
-    template <class Fn, class Result = std::invoke_result_t<Fn, WorkerTransport*>>
-    Result sync(Fn&& fn, Result initial = { }) const
-    {
-        Result result = std::move(initial);
-        if (!m_transport)
-            return result;
-        QMetaObject::invokeMethod(
-            m_transport,
-            [t = m_transport, fn = std::forward<Fn>(fn), &result] { result = fn(t); },
-            Qt::BlockingQueuedConnection);
-        return result;
-    }
-
-    QThread* m_thread = nullptr;
-    WorkerTransport* m_transport = nullptr;
-    LifeCycle m_lifecycle;
-    // Accessed only inside sync() or the startup dispatch on the transport
-    // thread, alongside the document state whose epoch guards this cache.
-    Model::DocumentSettings m_settings;
-    mutable std::optional<EpubCacheSession> m_epubCache;
+    void deliverEvents();
+    ::paperbox::WorkerClient m_client;
 };
 
 } // namespace Mu::Plugin

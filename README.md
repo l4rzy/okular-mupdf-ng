@@ -127,16 +127,16 @@ unless otherwise indicated.
 
 Third-party components retain their respective licenses and copyright notices:
 
+- **Paperbox**: [GPL v3 or later](thirdparty/paperbox/COPYING).
 - **MuPDF**, including its [signature emblem](src/generator/config/mupdf_emblem.hpp):
-  [GNU Affero General Public License v3.0 or later](thirdparty/mupdf-COPYING)
+  [GNU Affero General Public License v3.0 or later](thirdparty/paperbox/thirdparty/mupdf-COPYING)
   (`AGPL-3.0-or-later`). The worker links against MuPDF; its license applies to
   the engine as well as the emblem. GPLv3 permits this combination, with the
   AGPL's network-interaction requirements applying to the combined work; see
   [GPLv3 section 13](https://www.gnu.org/licenses/gpl-3.0.html#section13).
-- **Allura font**: [SIL Open Font License 1.1](thirdparty/allura/OFL.txt).
-- **zpp::bits**: [MIT License](thirdparty/zpp/LICENSE).
-- **cxxopts**: [MIT License](thirdparty/cxxopts/LICENSE).
-- **boko**: [GPLv3 License](thirdparty/boko/LICENSE).
+- **Allura font**: [SIL Open Font License 1.1](thirdparty/paperbox/thirdparty/allura/OFL.txt).
+- **zpp::bits**: [MIT License](thirdparty/paperbox/thirdparty/zpp/LICENSE).
+- **boko**: [GPLv3 License](thirdparty/paperbox/thirdparty/boko/LICENSE).
 
 Other dependencies and bundled resources, including fonts embedded by MuPDF,
 retain their upstream licenses. This summary does not replace the full license

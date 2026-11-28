@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "shared/model/form_backend.hpp"
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
+#include "shared/form_backend.hpp"
 
 namespace Okular {
 
@@ -67,7 +67,7 @@ public:
     using PageRefreshCallback =
         std::function<void(const std::vector<Okular::FormField*>&, const std::vector<int>&, bool changed)>;
 
-    explicit Coordinator(Model::FormBackend* backend, PageRefreshCallback refreshCallback = nullptr);
+    explicit Coordinator(FormBackend* backend, PageRefreshCallback refreshCallback = nullptr);
     ~Coordinator() = default;
 
     // Handles are worker field identities; pointers are non-owning proxy views.
@@ -106,7 +106,7 @@ private:
     [[nodiscard]] bool applyResponse(const Model::FormUpdateResponse& response);
 
     // The backend and registered IField instances are owned elsewhere.
-    Model::FormBackend* m_backend = nullptr;
+    FormBackend* m_backend = nullptr;
     PageRefreshCallback m_refreshCallback;
     std::unordered_map<std::string, IField*> m_fields;
     bool m_available = true;

@@ -8,7 +8,7 @@
 #include <QVector>
 #include <vector>
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 
 namespace Okular {
 

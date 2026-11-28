@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -68,7 +69,7 @@ private slots:
         const auto errorOutput = cli.readAllStandardError();
         QVERIFY2(!output.isEmpty(), errorOutput.constData());
         QCOMPARE(errorOutput.contains("Falling back to the built-in sandbox."), mode == "unknown");
-        const auto profile = wrapped ? QStringLiteral("mupdfng.linux.bwrap.v1") : QStringLiteral("mupdfng.linux.v1");
+        const auto profile = wrapped ? QStringLiteral("paperbox.linux.bwrap.v1") : QStringLiteral("paperbox.linux.v1");
         if (json) {
             QJsonParseError error;
             const auto document = QJsonDocument::fromJson(output, &error);
@@ -90,7 +91,6 @@ private slots:
                 }
             }
             QVERIFY(ids.contains("linux.seccomp"));
-            QCOMPARE(ids.contains("linux.bubblewrap"), wrapped);
             const auto isolation = report.value("isolation").toString();
             QCOMPARE(cli.exitCode(), isolation == "full" ? 0 : isolation == "degraded" ? 1 : 2);
         } else {
@@ -102,12 +102,30 @@ private slots:
                                         "    Namespaces inherited from Bubblewrap launcher\n"
                                         "  linux.resource_limits:"));
             }
-            QCOMPARE(output.contains("linux.bubblewrap: enforced"), wrapped);
             QCOMPARE(cli.exitCode(),
                      output.contains("isolation=full")           ? 0
                          : output.contains("isolation=degraded") ? 1
                                                                  : 2);
         }
+    }
+
+    void discoversWorkerOnPath()
+    {
+        QProcess cli;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.remove(QStringLiteral("PAPERBOX_WORKER"));
+        environment.remove(QStringLiteral("MUPDFNG_WORKER_SANDBOX"));
+        const QFileInfo worker(QStringLiteral(WORKER_BUILD_PATH));
+        QCOMPARE(worker.fileName(), QStringLiteral("paperbox-worker"));
+        environment.insert(QStringLiteral("PATH"),
+                           worker.absolutePath() + QLatin1Char(':') + environment.value("PATH"));
+        cli.setProcessEnvironment(environment);
+        cli.start(QStringLiteral(MUPDFNG_CLI_PATH), { "sandbox", "--json" });
+        QVERIFY(cli.waitForFinished(30000));
+        QCOMPARE(cli.exitStatus(), QProcess::NormalExit);
+        const auto report = QJsonDocument::fromJson(cli.readAllStandardOutput());
+        QVERIFY2(report.isObject(), cli.readAllStandardError().constData());
+        QCOMPARE(report.object().value("platform").toString(), QStringLiteral("linux"));
     }
 
     void reportsSandboxStartupFailure()

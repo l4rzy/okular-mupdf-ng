@@ -32,12 +32,9 @@
 #include <optional>
 #include <utility>
 
-#include "plugin/crypto/certificate_info_internal.hpp"
 #include "plugin/crypto/nss.hpp"
-#include "plugin/crypto/nss_error_internal.hpp"
 #include "plugin/crypto/nss_handles.hpp"
-#include "plugin/crypto/nss_internal.hpp"
-#include "shared/logging.hpp"
+#include <paperbox/logging.hpp>
 
 namespace Mu::Plugin::Crypto::CertificateDatabase {
 
@@ -48,7 +45,7 @@ pkcs12UnicodeAsciiConversion(PRBool, unsigned char*, unsigned int, unsigned char
 
 // RAII guard for NSS process-global UCS-2 / ASCII conversion function.
 // Note: NSS does not provide an API to query the previous conversion function pointer.
-// The guard serializes exclusive process-wide access via Internal::nssMutex().
+// The guard serializes exclusive process-wide access via paperbox::nss::nssMutex().
 class Pkcs12ConversionGuard {
 public:
     explicit Pkcs12ConversionGuard(std::mutex& mutex)
@@ -112,12 +109,12 @@ bool ensureCertificateDatabase(const QString& databasePath, DatabaseAccess acces
 
 QString nssError()
 {
-    return Plugin::Crypto::Internal::nssErrorMessage(PR_GetError());
+    return QString::fromStdString(paperbox::nss::nssErrorMessage(PR_GetError()));
 }
 
 QString nssError(PRErrorCode error)
 {
-    return Plugin::Crypto::Internal::nssErrorMessage(error);
+    return QString::fromStdString(paperbox::nss::nssErrorMessage(error));
 }
 
 // =============================================================================
@@ -241,13 +238,13 @@ PRBool pkcs12UnicodeAsciiConversion(PRBool,
     return PR_TRUE;
 }
 
-using SlotHandle = Plugin::Crypto::NssSlot;
-using CertificateHandle = Plugin::Crypto::NssCertificate;
-using PrivateKeyHandle = Plugin::Crypto::NssPrivateKey;
-using PublicKeyHandle = Plugin::Crypto::NssPublicKey;
-using DecoderHandle = Plugin::Crypto::NssPkcs12Decoder;
+using SlotHandle = paperbox::nss::NssSlot;
+using CertificateHandle = paperbox::nss::NssCertificate;
+using PrivateKeyHandle = paperbox::nss::NssPrivateKey;
+using PublicKeyHandle = paperbox::nss::NssPublicKey;
+using DecoderHandle = paperbox::nss::NssPkcs12Decoder;
 
-using ArenaHandle = Plugin::Crypto::NssArena;
+using ArenaHandle = paperbox::nss::NssArena;
 
 // =============================================================================
 // Certificate Identity, Lookup & Decoding
@@ -281,7 +278,7 @@ CertificateHandle findCertificateInSlot(PK11SlotInfo* slot, const QByteArray& fi
 {
     if (!slot || fingerprint.size() != QCryptographicHash::hashLength(QCryptographicHash::Sha256))
         return nullptr;
-    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot));
+    paperbox::nss::NssCertificateList certificates(PK11_ListCertsInSlot(slot));
     if (!certificates)
         return nullptr;
     for (CERTCertListNode* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
@@ -344,7 +341,7 @@ QSet<QByteArray> certificateFingerprintsInSlot(PK11SlotInfo* slot)
     QSet<QByteArray> fingerprints;
     if (!slot)
         return fingerprints;
-    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot));
+    paperbox::nss::NssCertificateList certificates(PK11_ListCertsInSlot(slot));
     if (!certificates)
         return fingerprints;
     for (CERTCertListNode* node = CERT_LIST_HEAD(certificates.get()); !CERT_LIST_END(node, certificates.get());
@@ -375,10 +372,11 @@ SECStatus deleteCertificateInSlot(PK11SlotInfo* slot, CERTCertificate* certifica
 // PKCS #11 delete calls also destroy the key objects.
 QString keyRollbackSuffix(PrivateKeyHandle priv, PublicKeyHandle pub)
 {
-    if (::Mu::Plugin::Crypto::deleteTokenKeypair(std::move(priv), std::move(pub)))
+    if (paperbox::nss::deleteTokenKeypair(std::move(priv), std::move(pub)))
         return { };
-    MU_LOG(
-        warning, "Mu::Plugin", std::string("Could not remove generated NSS key material: ") + nssError().toStdString());
+    paperbox::log::write(paperbox::log::Level::Warning,
+                         "Mu::Plugin",
+                         std::string("Could not remove generated NSS key material: ") + nssError().toStdString());
     return QStringLiteral(" The generated key material could not be removed: %1").arg(nssError());
 }
 
@@ -527,7 +525,7 @@ bool generateSigningKeypair(
     if (!privKey || !pubKey) {
         // The helper consumes both handles; key generation already failed, so
         // its cleanup status is intentionally not reported.
-        (void)::Mu::Plugin::Crypto::deleteTokenKeypair(std::move(*privateKey), std::move(*publicKey));
+        (void)paperbox::nss::deleteTokenKeypair(std::move(*privateKey), std::move(*publicKey));
         setError(error, QStringLiteral("Could not generate the signing key"));
         return false;
     }
@@ -631,13 +629,13 @@ QList<CertificateRecord> listManagedCertificates(const QString& databasePath, bo
     clearError(error);
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadOnly, error))
         return { };
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
     SlotHandle slot(PK11_GetInternalKeySlot());
     if (!slot) {
         setError(error, nssError());
         return { };
     }
-    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
+    paperbox::nss::NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
     QList<CertificateRecord> result;
     if (!certificates)
         return result;
@@ -657,7 +655,7 @@ QList<CertificateRecord> listManagedCertificates(const QString& databasePath, bo
         }
         const CertificateIdentity identity = certificateIdentity(slot.get(), node->cert);
         if (!identity.sha256Fingerprint.isEmpty())
-            result.append({ Plugin::Crypto::Internal::describeCertificate(node->cert), identity });
+            result.append({ paperbox::nss::describeCertificate(node->cert), identity });
     }
     return result;
 }
@@ -684,11 +682,11 @@ inspectSignerCertificate(const QString& databasePath, const QByteArray& data, QS
     clearError(error);
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadOnly, error))
         return std::nullopt;
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
     const auto certificate = decodeSignerCertificate(data, error);
     if (!certificate)
         return std::nullopt;
-    return Plugin::Crypto::Internal::describeCertificate(certificate.get());
+    return paperbox::nss::describeCertificate(certificate.get());
 }
 
 bool importTrustedSigner(const QString& databasePath, const QByteArray& data, const QString& nickname, QString* error)
@@ -701,7 +699,7 @@ bool importTrustedSigner(const QString& databasePath, const QByteArray& data, co
     }
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
     auto certificate = decodeSignerCertificate(data, error);
     if (!certificate)
         return false;
@@ -713,7 +711,7 @@ bool importTrustedSigner(const QString& databasePath, const QByteArray& data, co
     const auto fingerprint = certificateFingerprint(certificate.get());
     auto existing = findCertificateInSlot(slot.get(), fingerprint);
     const QByteArray nameBytes = name.toUtf8();
-    Plugin::Crypto::NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
+    paperbox::nss::NssCertificateList certificates(PK11_ListCertsInSlot(slot.get()));
     if (!certificates) {
         setError(error, nssError());
         return false;
@@ -759,7 +757,7 @@ bool removeSignerTrust(const QString& databasePath, const CertificateIdentity& i
     clearError(error);
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
     SlotHandle slot(PK11_GetInternalKeySlot());
     auto certificate = matchesSlot(identity, slot.get()) ? findCertificateInSlot(slot.get(), identity.sha256Fingerprint)
                                                          : CertificateHandle();
@@ -801,7 +799,7 @@ bool importCertificate(const QString& databasePath, const QByteArray& data, cons
     }
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
     QByteArray package = data;
     CertificateHandle certificate(CERT_DecodeCertFromPackage(package.data(), static_cast<int>(package.size())));
     if (!certificate) {
@@ -851,7 +849,7 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
     // NSS receives an already-Unicode password below. Keep its legacy
     // UCS-2/ASCII conversion from transforming those bytes a second time.
     {
-        Pkcs12ConversionGuard conversionGuard(Plugin::Crypto::Internal::nssMutex());
+        Pkcs12ConversionGuard conversionGuard(paperbox::nss::nssMutex());
         SlotHandle slot(PK11_GetInternalKeySlot());
         if (!slot) {
             setError(error, nssError());
@@ -911,9 +909,10 @@ bool importPkcs12(const QString& databasePath, const QByteArray& data, const QSt
                 // failure, not a skip.
                 if (!certificate || deleteCertificateInSlot(slot.get(), certificate.get()) != SECSuccess) {
                     ++rollbackFailures;
-                    MU_LOG(warning,
-                           "Mu::Plugin",
-                           std::string("Could not roll back imported certificate: ") + nssError().toStdString());
+                    paperbox::log::write(paperbox::log::Level::Warning,
+                                         "Mu::Plugin",
+                                         std::string("Could not roll back imported certificate: ")
+                                             + nssError().toStdString());
                 }
             }
             QString message = QStringLiteral("The PKCS#12 bundle could not be imported: %1").arg(nssError(importError));
@@ -948,7 +947,7 @@ bool createSelfSignedCertificate(const QString& databasePath,
         return false;
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
 
     bool validSubject = true;
     const QByteArray distinguishedNameBytes = buildDistinguishedNameBytes(options, commonName, country, &validSubject);
@@ -973,10 +972,10 @@ bool createSelfSignedCertificate(const QString& databasePath,
     if (!generateSigningKeypair(slot, options.signingKey, &privateKeyHandle, &publicKeyHandle, error))
         return false;
 
-    Plugin::Crypto::NssSubjectPublicKeyInfo publicKeyInfo(SECKEY_CreateSubjectPublicKeyInfo(publicKeyHandle.get()));
-    Plugin::Crypto::NssCertificateRequest request(
+    paperbox::nss::NssSubjectPublicKeyInfo publicKeyInfo(SECKEY_CreateSubjectPublicKeyInfo(publicKeyHandle.get()));
+    paperbox::nss::NssCertificateRequest request(
         publicKeyInfo ? CERT_CreateCertificateRequest(subject, publicKeyInfo.get(), nullptr) : nullptr);
-    Plugin::Crypto::NssValidity validity(CERT_CreateValidity(validFrom, validUntil));
+    paperbox::nss::NssValidity validity(CERT_CreateValidity(validFrom, validUntil));
     CERTCertificate* unsignedCertificate = request && validity
         ? CERT_CreateCertificate(QRandomGenerator::global()->generate() | 1U, subject, validity.get(), request.get())
         : nullptr;
@@ -1005,7 +1004,7 @@ bool deleteCertificate(const QString& databasePath, const CertificateIdentity& i
     clearError(error);
     if (!ensureCertificateDatabase(databasePath, DatabaseAccess::ReadWrite, error))
         return false;
-    std::lock_guard<std::mutex> lock(Plugin::Crypto::Internal::nssMutex());
+    std::lock_guard<std::mutex> lock(paperbox::nss::nssMutex());
     SlotHandle slot(PK11_GetInternalKeySlot());
     if (!matchesSlot(identity, slot.get())) {
         setError(error, QStringLiteral("The selected certificate was not found"));

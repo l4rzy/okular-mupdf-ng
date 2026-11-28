@@ -19,8 +19,10 @@ inline QString stripLangSuffix(const QString& lang)
     return clean;
 }
 
-/// Maps the configured OCR quality level to its target DPI. Unknown values use
-/// the balanced default so they do not accidentally request the slowest mode.
+/// Normalizes the configured OCR model name for both recognition and cache lookups.
+/// A DPI suffix supplies the resolution when none was explicitly selected.
+QString normalizeOcrLanguage(const QString& language, int& dpi);
+
 float qualityToDpi(int quality);
 
 } // namespace Mu::Plugin::Util

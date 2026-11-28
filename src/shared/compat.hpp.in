@@ -5,20 +5,12 @@
 
 namespace Mu {
 
-// MuPDF version this project builds against (cmake/mupdf.version). The
+// MuPDF version pinned by Paperbox. The
 // worker additionally reports its runtime MuPDF version in the ping response.
 inline constexpr std::string_view MUPDF_VERSION = "@MUPDF_REQUIRED_VERSION@";
 
-// Cache identity includes the linked package version and bundled patch variant.
-inline constexpr std::string_view MUPDF_CACHE_ID = "@MUPDF_CACHE_ID@";
+inline constexpr std::string_view VERSION = "@MU_COMPAT_VERSION@";
 
 } // namespace Mu
-
-namespace Mu::IPC {
-
-// Compatibility version and wire revision (DocumentSettings includes documentTheme).
-inline constexpr std::string_view COMPAT = "@MU_COMPAT_VERSION@";
-
-} // namespace Mu::IPC
 
 #endif // MU_SHARED_COMPAT_HPP

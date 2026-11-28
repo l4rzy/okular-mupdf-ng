@@ -1,47 +1,18 @@
 // SPDX-FileCopyrightText: 2026 l4rzy <me@23ro.org>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "paperbox_model.hpp"
 #include "plugin/crypto/nss.hpp"
-#include "plugin/crypto/nss_error_internal.hpp"
-#include "plugin/crypto/nss_handles.hpp"
 #include "plugin/crypto/nss_internal.hpp"
-
-#pragma push_macro("slots")
-#undef slots
-#include <cert.h>
-#include <nss.h>
-#include <ocsp.h>
-#include <prerror.h>
-#pragma pop_macro("slots")
+#include <paperbox/logging.hpp>
 
 #include <QDir>
 #include <QFileInfo>
 #include <QUrl>
-
-#include <mutex>
-
-#include "shared/logging.hpp"
+#include <iterator>
+#include <utility>
 
 namespace Mu::Plugin::Crypto::Internal {
-
-// =============================================================================
-// NSS Synchronization & Error Reporting
-// =============================================================================
-
-std::mutex& nssMutex()
-{
-    static std::mutex mutex;
-    return mutex;
-}
-
-QString nssErrorMessage(PRErrorCode error)
-{
-    // Translate the current NSS error code without changing global NSS state.
-    const char* name = PR_ErrorToName(error);
-    return QStringLiteral("NSS operation failed: %1 (%2)")
-        .arg(name ? QString::fromLatin1(name) : QStringLiteral("unknown error"))
-        .arg(error);
-}
 
 namespace {
 
@@ -146,157 +117,76 @@ QString defaultSystemNssDbPath()
 
 } // namespace Mu::Plugin::Crypto
 
+namespace Mu::Plugin::Crypto {
 namespace {
 
-using Mu::Plugin::Crypto::NssRuntimeMode;
-
-QString g_nssDatabaseIdentity;
-NssRuntimeMode g_nssMode = NssRuntimeMode::Unavailable;
-
-// =============================================================================
-// Persistent Runtime Initialization Helpers
-// =============================================================================
-
-bool isPersistentMode(NssRuntimeMode mode)
-{
-    return mode == NssRuntimeMode::ReadOnly || mode == NssRuntimeMode::ReadWrite;
-}
-
-void initializeInternalToken()
-{
-    Mu::Plugin::Crypto::NssSlot slot(PK11_GetInternalKeySlot());
-    if (!slot) {
-        MU_LOG(warning, "Mu::Plugin::Crypto", "Unable to access the NSS internal key slot");
-        return;
-    }
-    if (!PK11_NeedUserInit(slot.get()))
-        return;
-    if (PK11_InitPin(slot.get(), "", "") != SECSuccess) {
-        const PRErrorCode error = PR_GetError();
-        MU_LOG(warning,
-               "Mu::Plugin::Crypto",
-               std::string("Unable to initialize the NSS internal key slot (PR_GetError code: ") + std::to_string(error)
-                   + ")");
-    }
-}
-
-void recordNssRuntime(NssRuntimeMode mode, const QString& databaseIdentity = { })
-{
-    CERT_SetUsePKIXForValidation(PR_TRUE);
-    // NSS defaults to hard-fail. Configure our runtime once so unavailable
-    // OCSP responses preserve chain trust, while verified revocation fails.
-    if (CERT_SetOCSPFailureMode(ocspMode_FailureIsNotAVerificationFailure) != SECSuccess) {
-        MU_LOG(critical, "Mu::Plugin::Crypto", "Unable to configure NSS OCSP soft-fail policy");
-        g_nssMode = NssRuntimeMode::Unavailable;
-        return;
-    }
-    g_nssMode = mode;
-    g_nssDatabaseIdentity = isPersistentMode(mode) ? databaseIdentity : QString { };
-}
-
-void logPersistentInitializationFailure(const char* access, const QString& databaseIdentity, PRErrorCode error)
-{
-    MU_LOG(warning,
-           "Mu::Plugin::Crypto",
-           std::string("Error initializing ") + access + " NSS cert DB at " + databaseIdentity.toStdString()
-               + " (PR_GetError code: " + std::to_string(error) + ")");
-}
-
-// Creates the directory of a *defaulted* database selection. chooseNssDbPath()
-// only returns directories that already exist, except for the final
-// ~/.pki/nssdb fallback, so this is the single point where a missing default
-// database directory is created. Explicit caller paths are deliberately never
-// created: a typo must degrade to NoDB mode instead of silently initializing
-// an empty database.
 void ensureDefaultDatabaseDirectory(const QString& databaseIdentity)
 {
     const QString databaseDir = Mu::Plugin::Crypto::Internal::stripNssScheme(databaseIdentity);
     if (databaseDir.isEmpty() || QFileInfo(databaseDir).isDir())
         return;
     if (!QDir().mkpath(databaseDir))
-        MU_LOG(warning,
-               "Mu::Plugin::Crypto",
-               std::string("Unable to create the default NSS database directory at ") + databaseDir.toStdString());
+        paperbox::log::write(paperbox::log::Level::Warning,
+                             "Mu::Plugin::Crypto",
+                             std::string("Unable to create the default NSS database directory at ")
+                                 + databaseDir.toStdString());
 }
 
 } // namespace
 
-namespace Mu::Plugin::Crypto {
-
-// =============================================================================
-// Runtime Initialization & Active Database State
-// =============================================================================
-
 NssRuntimeMode initializeNss(const QString& databasePath)
 {
-    const QString requestedPath = databasePath.trimmed();
-    const bool defaultedDatabase = requestedPath.isEmpty();
-    const QString configuredPath = defaultedDatabase ? defaultSystemNssDbPath() : requestedPath;
-    const QString databaseIdentity = Internal::canonicalNssDatabasePath(configuredPath);
-    if (defaultedDatabase)
-        ensureDefaultDatabaseDirectory(databaseIdentity);
-    std::lock_guard<std::mutex> lock(Internal::nssMutex());
-
-    if (NSS_IsInitialized()) {
-        // NSS initialization is process-global and one-way. An explicit path
-        // must identify the already-active persistent database.
-        if (g_nssMode == NssRuntimeMode::Unavailable)
+    const auto requestedPath = databasePath.trimmed();
+    if (!requestedPath.isEmpty()) {
+        const auto identity = Internal::canonicalNssDatabasePath(requestedPath);
+        if (identity.isEmpty() && paperbox::nss::activeRuntime().mode != NssRuntimeMode::Unavailable)
             return NssRuntimeMode::Unavailable;
-        if (!requestedPath.isEmpty() && (!isPersistentMode(g_nssMode) || g_nssDatabaseIdentity != databaseIdentity))
-            return NssRuntimeMode::Unavailable;
-        return g_nssMode;
+        return paperbox::nss::initializeNss(identity.toStdString());
     }
-
-    if (!databaseIdentity.isEmpty()) {
-        const QByteArray nssPathBytes = databaseIdentity.toUtf8();
-        if (NSS_InitReadWrite(nssPathBytes.constData()) == SECSuccess) {
-            initializeInternalToken();
-            recordNssRuntime(NssRuntimeMode::ReadWrite, databaseIdentity);
-            return g_nssMode;
-        }
-        const PRErrorCode readWriteError = PR_GetError();
-
-        if (NSS_Init(nssPathBytes.constData()) == SECSuccess) {
-            recordNssRuntime(NssRuntimeMode::ReadOnly, databaseIdentity);
-            return g_nssMode;
-        }
-        logPersistentInitializationFailure("read/write", databaseIdentity, readWriteError);
-        logPersistentInitializationFailure("read-only", databaseIdentity, PR_GetError());
-    }
-
-    // NoDB still supports CMS integrity checks using certificates embedded in
-    // the signature, but it does not provide a persistent trust or key store.
-    MU_LOG(warning, "Mu::Plugin::Crypto", "Falling back to NSS NoDB mode");
-    if (NSS_NoDB_Init(nullptr) == SECSuccess) {
-        recordNssRuntime(NssRuntimeMode::NoDb);
-        return g_nssMode;
-    }
-
-    MU_LOG(critical, "Mu::Plugin::Crypto", "Failed to initialize NSS even in NoDB mode");
-    return NssRuntimeMode::Unavailable;
+    const auto runtime = paperbox::nss::activeRuntime();
+    if (runtime.mode != NssRuntimeMode::Unavailable)
+        return runtime.mode;
+    const auto identity = Internal::canonicalNssDatabasePath(defaultSystemNssDbPath());
+    ensureDefaultDatabaseDirectory(identity);
+    return paperbox::nss::initializeNss(identity.toStdString());
 }
 
 NssRuntimeMode activeNssMode()
 {
-    std::lock_guard<std::mutex> lock(Internal::nssMutex());
-    return NSS_IsInitialized() ? g_nssMode : NssRuntimeMode::Unavailable;
+    return paperbox::nss::activeRuntime().mode;
 }
 
 QString activeNssDatabasePath()
 {
-    std::lock_guard<std::mutex> lock(Internal::nssMutex());
-    if (!NSS_IsInitialized() || !isPersistentMode(g_nssMode) || g_nssDatabaseIdentity.isEmpty())
-        return { };
-    return Internal::stripNssScheme(g_nssDatabaseIdentity);
+    return Internal::stripNssScheme(QString::fromStdString(paperbox::nss::activeRuntime().database));
 }
 
 bool isNssDatabaseActive(const QString& databasePath)
 {
-    const QString requestedPath = databasePath.trimmed();
-    const QString requestedIdentity = Internal::canonicalNssDatabasePath(requestedPath);
-    std::lock_guard<std::mutex> lock(Internal::nssMutex());
-    return NSS_IsInitialized() && isPersistentMode(g_nssMode)
-        && (requestedPath.isEmpty() || g_nssDatabaseIdentity == requestedIdentity);
+    const auto runtime = paperbox::nss::activeRuntime();
+    const auto requested = databasePath.trimmed();
+    return !runtime.database.empty()
+        && (requested.isEmpty() || runtime.database == Internal::canonicalNssDatabasePath(requested).toStdString());
+}
+
+QList<Model::Certificate> signingCertificates()
+{
+    auto certificates = paperbox::nss::signingCertificates();
+    return { std::make_move_iterator(certificates.begin()), std::make_move_iterator(certificates.end()) };
+}
+
+QString signingCertificateCommonName(const QString& nickname)
+{
+    return QString::fromStdString(paperbox::nss::signingCertificateCommonName(nickname.toStdString()));
+}
+
+bool checkSigningCertificatePassword(const QString& nickname, const QString& password)
+{
+    auto bytes = password.toUtf8();
+    const auto result = paperbox::nss::checkSigningCertificatePassword(
+        nickname.toStdString(), std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())));
+    bytes.fill('\0');
+    return result;
 }
 
 } // namespace Mu::Plugin::Crypto

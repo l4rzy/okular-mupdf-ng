@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "shared/model/types.hpp"
+#include "paperbox_model.hpp"
 #include <QImage>
 #include <QPixmap>
 #include <okular/core/observer.h>

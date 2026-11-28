@@ -15,12 +15,12 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include "paperbox_model.hpp"
 #include "plugin/util/document_type.hpp"
 #include "plugin/worker_client.hpp"
 #include "plugin/xfdf/export.hpp"
 #include "plugin/xfdf/import.hpp"
 #include "shared/compat.hpp"
-#include "shared/model/export.hpp"
 #include "shared/sandbox_report.hpp"
 #include "tools/cli/cli_args.hpp"
 #include "tools/cli/layout_config.hpp"
@@ -129,9 +129,10 @@ QString workerVersionText()
     Mu::Plugin::WorkerClient client;
     if (!client.start(QString()))
         return { };
-    const QString version = QString::fromStdString(client.engineVersion());
-    const QString text =
-        version.isEmpty() ? QString() : versionText(version, QStringLiteral("Worker"), client.usesSystemMuPdf());
+    const QString version = QString::fromStdString(client.paperboxClient().engineVersion());
+    const QString text = version.isEmpty()
+        ? QString()
+        : versionText(version, QStringLiteral("Worker"), client.paperboxClient().usesSystemMuPdf());
     client.stop();
     return text;
 }
@@ -157,12 +158,12 @@ int runSandboxCheck(const SandboxOptions& options)
         reportError(QStringLiteral("could not start the worker process"));
         return ExitJobFailed;
     }
-    const auto status = client.sandboxStatus();
+    const auto status = client.paperboxClient().sandboxStatus();
     client.stop();
     if (options.json)
-        Mu::Model::printSandboxStatusJson(std::cout, status);
+        Mu::Cli::printSandboxStatusJson(std::cout, status);
     else
-        Mu::Model::printSandboxStatusHuman(std::cout, status);
+        Mu::Cli::printSandboxStatusHuman(std::cout, status);
     return status.isFullyHardened() ? 0 : status.isPartiallyActive() ? 1 : 2;
 }
 
@@ -238,12 +239,12 @@ int runOcr(Mu::Plugin::WorkerClient& client, const OcrOptions& options)
     QTimer::singleShot(options.shared.timeoutSeconds * 1000, &loop, &QEventLoop::quit);
     loop.exec();
     if (doneId != *jobId) {
-        client.cancelOcrJobs();
+        client.paperboxClient().cancelOcrJobs();
         reportError(QStringLiteral("OCR timed out"));
         return ExitTimeout;
     }
 
-    const Mu::Model::OcrResult result = client.ocrResult(*jobId);
+    const Mu::Model::OcrResult result = client.paperboxClient().ocrResult(*jobId);
     if (result.status != Mu::Model::OcrStatus::Success) {
         reportError(QStringLiteral("OCR failed"));
         return ExitJobFailed;
@@ -295,19 +296,19 @@ int runExportDocument(Mu::Plugin::WorkerClient& client, const ExportOptions& opt
                           options.pages };
         break;
     case ExportFormat::Epub:
-        exportOptions = { "epub", ::Mu::Model::ExportProfileId::Converted };
+        exportOptions = { "epub", ::Mu::Model::ExportProfileId::Converted, { } };
         break;
     case ExportFormat::Azw3:
-        exportOptions = { "azw3", ::Mu::Model::ExportProfileId::Converted };
+        exportOptions = { "azw3", ::Mu::Model::ExportProfileId::Converted, { } };
         break;
     case ExportFormat::Markdown:
-        exportOptions = { "md", ::Mu::Model::ExportProfileId::Converted };
+        exportOptions = { "md", ::Mu::Model::ExportProfileId::Converted, { } };
         break;
     default:
         return ExitJobFailed;
     }
     if (options.useLayout) {
-        if (!client.setSettings(readLayoutConfig())) {
+        if (!client.paperboxClient().setSettings(readLayoutConfig())) {
             reportError(QStringLiteral("failed to apply ePUB layout settings"));
             return ExitJobFailed;
         }
@@ -318,7 +319,7 @@ int runExportDocument(Mu::Plugin::WorkerClient& client, const ExportOptions& opt
     const qsizetype pageCount = openDocument(client, file, QString::fromStdString(options.shared.password), type);
     if (pageCount < 0)
         return ExitJobFailed;
-    const auto formats = client.outputFormats();
+    const auto formats = client.paperboxClient().outputFormats();
     std::string error;
     if (!formats
         || !Mu::Model::findExportProfile(
@@ -470,7 +471,7 @@ int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
     int skipped = parsed.skipped;
     for (int page = 0; page < parsed.pages.size(); ++page) {
         for (const Mu::Model::Annotation& annotation : parsed.pages.at(page).annotations) {
-            if (client.addAnnotation(page, annotation))
+            if (client.paperboxClient().addAnnotation(page, annotation))
                 ++applied;
             else
                 ++skipped;
@@ -485,7 +486,7 @@ int runImport(Mu::Plugin::WorkerClient& client, const ImportOptions& options)
         return ExitJobFailed;
     }
     if (!client.exportDocument(QString::fromStdString(options.output),
-                               { "pdf", ::Mu::Model::ExportProfileId::Native })) {
+                               { "pdf", ::Mu::Model::ExportProfileId::Native, { } })) {
         reportError(QStringLiteral("could not write %1").arg(QString::fromStdString(options.output)));
         return ExitJobFailed;
     }
@@ -540,7 +541,7 @@ int run(const Command& command)
     } else if (command.kind == Command::Kind::Import)
         code = runImport(client, command.importOptions);
 
-    client.close();
+    client.paperboxClient().close();
     client.stop();
     return code;
 }

@@ -6,7 +6,7 @@ repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 build_dir="$repo_dir/build"
 
 if [[ ! -f "$build_dir/bin/okular_generators/okularGenerator_mupdfng.so" ||
-      ! -x "$build_dir/bin/mupdfng-worker" ]]; then
+      ! -x "$build_dir/bin/paperbox-worker" ]]; then
     echo "Build the plugin and worker first: ./scripts/build.sh dev" >&2
     exit 1
 fi

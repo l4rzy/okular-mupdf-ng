@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plugin/util/stamp_image.hpp"
-#include "shared/protocol/limits.hpp"
+#include "paperbox_model.hpp"
 
 #include <QBuffer>
 #include <QFileInfo>

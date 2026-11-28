@@ -23,12 +23,15 @@ pkgbase = okular-mupdf-ng-dynamic
 	depends = okular
 	depends = qt6-base
 	depends = nss
+	depends = libmd
 	depends = libseccomp
 	depends = libmupdf
 	provides = okular-mupdf-ng
 	conflicts = okular-mupdf-ng
 	conflicts = okular-mupdf-ng-git
 	source = okular-mupdf-ng::git+https://github.com/l4rzy/okular-mupdf-ng.git#tag=v0.6.5
+	source = paperbox::git+https://github.com/l4rzy/paperbox
+	sha256sums = SKIP
 	sha256sums = SKIP
 
 pkgname = okular-mupdf-ng-dynamic
